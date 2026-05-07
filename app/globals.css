@@ -5049,6 +5049,101 @@ button.toolbar-icon-button,
   color: transparent;
 }
 
+.app-notes-panel {
+  align-content: start;
+}
+
+.app-notes-section {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-notes-heading {
+  color: #858990;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.app-notes-display,
+.app-notes-editor {
+  width: 100%;
+  min-height: 82px;
+  border: 1px solid rgba(23, 25, 35, 0.06);
+  border-radius: 12px;
+  background: #f1f1f2;
+  color: var(--text);
+  padding: 10px;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-notes-display {
+  cursor: pointer;
+}
+
+.app-notes-display.is-empty {
+  color: #8a8d93;
+  font-weight: 650;
+}
+
+.app-notes-display:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.app-notes-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.app-notes-textarea {
+  width: 100%;
+  min-height: 92px;
+  border: 0;
+  border-radius: 10px;
+  outline: none;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+  padding: 9px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.app-notes-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.app-notes-actions button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.10);
+  color: #2563eb;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.app-notes-actions button:last-child {
+  background: #2563eb;
+  color: white;
+}
+
+.app-notes-actions button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
 .app-channel-pills {
   display: flex;
   flex-wrap: wrap;
