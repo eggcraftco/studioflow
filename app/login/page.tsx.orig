@@ -1,0 +1,97 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { auth, googleProvider } from "@/lib/firebase/client";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { LoadingScreen } from "@/components/LoadingScreen";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!loading && user) router.replace("/dashboard");
+  }, [loading, router, user]);
+
+  async function handleEmailLogin(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.replace("/dashboard");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Login failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      router.replace("/dashboard");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Google login failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading || user) return <LoadingScreen />;
+
+  return (
+    <main className="page-shell" style={{ display: "grid", placeItems: "center" }}>
+      <section className="card" style={{ width: "100%", maxWidth: 460, padding: 30 }}>
+        <div className="pill">StudioFlow Web Portal</div>
+        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "18px 0 8px" }}>
+          Sign in to your workspace
+        </h1>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Use the same account as the StudioFlow app.
+        </p>
+
+        <form onSubmit={handleEmailLogin} className="grid" style={{ marginTop: 22 }}>
+          <input
+            className="input"
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={event => setEmail(event.target.value)}
+            required
+          />
+          <input
+            className="input"
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={event => setPassword(event.target.value)}
+            required
+          />
+          {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+          <button className="button" type="submit" disabled={submitting}>
+            Sign in
+          </button>
+        </form>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
+          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+          <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>or</span>
+          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+        </div>
+
+        <button className="button secondary" style={{ width: "100%" }} onClick={handleGoogleLogin} disabled={submitting}>
+          Continue with Google
+        </button>
+      </section>
+    </main>
+  );
+}
