@@ -163,13 +163,13 @@ export function OrderListCard({
                 className="order-customer-name-link"
                 href={customerHref}
                 onClick={event => event.stopPropagation()}
-                title="Open customer"
+                title={order.customerName}
                 aria-label={`Open ${order.customerName} in Customers`}
               >
                 <strong>{order.customerName}</strong>
               </Link>
             ) : (
-              <strong>{order.customerName}</strong>
+              <strong title={order.customerName}>{order.customerName}</strong>
             )}
             {deliveryCountdown ? (
               <span className={`order-delivery-badge ${dueTone(order)}`}>

@@ -20,6 +20,7 @@ export type WorkspaceContext = {
   ownerUid: string;
   role: string;
   roleLabel: string;
+  memberAccess: WorkspaceMemberAccess;
   billingPlan: StudioBillingPlan;
   billingPlanSource: string;
   billingPlanName: string;
@@ -34,6 +35,27 @@ export type WorkspaceContext = {
   currentMemberPhotoURL: string;
   entitlements: PlanEntitlements;
 };
+
+export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
+  { key: "orders", label: "Orders", description: "Order list, order detail and order edits." },
+  { key: "dashboard", label: "Dashboard", description: "Dashboard and workspace analytics." },
+  { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
+  { key: "customers", label: "Customers", description: "Customer list and contact directory." },
+  { key: "quickReply", label: "Quick Reply", description: "Quick Reply page and AI reply tools." },
+  { key: "settings", label: "Settings", description: "Main Settings navigation." },
+  { key: "teamAccess", label: "Team Access", description: "Team members and access controls." },
+  { key: "clientFiles", label: "Client Files", description: "Client file upload, rename and delete." },
+  { key: "financialInfo", label: "Financial Info", description: "Prices, profit, dashboard finance and finance cards." },
+  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." }
+] as const;
+
+export type WorkspaceMemberAccessKey = (typeof WORKSPACE_MEMBER_ACCESS_OPTIONS)[number]["key"];
+export type WorkspaceMemberAccess = Record<WorkspaceMemberAccessKey, boolean>;
+
+export const WORKSPACE_MEMBER_ACCESS_DEFAULTS: WorkspaceMemberAccess = WORKSPACE_MEMBER_ACCESS_OPTIONS.reduce((acc, option) => {
+  acc[option.key] = true;
+  return acc;
+}, {} as WorkspaceMemberAccess);
 
 export type DashboardCounts = {
   orderCount: number;
@@ -259,6 +281,18 @@ export type ToDoDetail = {
   isDone: boolean;
 };
 
+export type WorkSessionDetail = {
+  id: string;
+  title: string;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  durationSeconds: number;
+  createdAt: Date | null;
+  createdByUid: string;
+  createdByEmail: string;
+  source: string;
+};
+
 export type HistoryLogDetail = {
   id: string;
   title: string;
@@ -311,6 +345,7 @@ export type OrderDetail = {
   extraStatuses: Record<string, string>;
   clientFiles: ClientFileDetail[];
   todoItems: ToDoDetail[];
+  workSessions: WorkSessionDetail[];
   historyLog: HistoryLogDetail[];
 };
 
@@ -403,6 +438,42 @@ function workspaceMemberRole(companyData: Record<string, unknown>, uid: string, 
   return memberExists ? normalizeWorkspaceRole(memberFallback, "") : "";
 }
 
+export function normalizeWorkspaceMemberAccess(value: unknown, forceFullAccess = false): WorkspaceMemberAccess {
+  const output: WorkspaceMemberAccess = { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
+  if (forceFullAccess) return output;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return output;
+
+  const raw = value as Record<string, unknown>;
+  WORKSPACE_MEMBER_ACCESS_OPTIONS.forEach(option => {
+    if (typeof raw[option.key] === "boolean") output[option.key] = raw[option.key] as boolean;
+  });
+  return output;
+}
+
+export function workspaceAccessAllows(access: WorkspaceMemberAccess | undefined, key: WorkspaceMemberAccessKey) {
+  return access?.[key] !== false;
+}
+
+function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string, isOwner = false): WorkspaceMemberAccess {
+  if (isOwner) return normalizeWorkspaceMemberAccess(null, true);
+  const members = companyData.members && typeof companyData.members === "object" && !Array.isArray(companyData.members)
+    ? companyData.members as Record<string, unknown>
+    : {};
+  const memberData = members[uid] && typeof members[uid] === "object" && !Array.isArray(members[uid])
+    ? members[uid] as Record<string, unknown>
+    : {};
+  const memberAccess = companyData.memberAccess && typeof companyData.memberAccess === "object" && !Array.isArray(companyData.memberAccess)
+    ? companyData.memberAccess as Record<string, unknown>
+    : {};
+  const rootAccess = memberAccess[uid] && typeof memberAccess[uid] === "object" && !Array.isArray(memberAccess[uid])
+    ? memberAccess[uid] as Record<string, unknown>
+    : {};
+  const inlineAccess = memberData.access && typeof memberData.access === "object" && !Array.isArray(memberData.access)
+    ? memberData.access as Record<string, unknown>
+    : {};
+  return normalizeWorkspaceMemberAccess({ ...inlineAccess, ...rootAccess });
+}
+
 function resolveRole(companyData: Record<string, unknown>, uid: string, companyId: string) {
   const ownerUid = stringValue(companyData.ownerUid, companyId);
   if (uid === ownerUid || uid === companyId) return "owner";
@@ -463,6 +534,7 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     ownerUid,
     role,
     roleLabel: roleLabel(role),
+    memberAccess: workspaceMemberAccess(companyData, uid, normalizeWorkspaceRole(role) === "owner"),
     billingPlan: entitlements.plan,
     billingPlanSource: stringValue(companyData.billingPlanSource, hasBillingPlan ? "workspace" : "legacy_default"),
     billingPlanName: stringValue(companyData.billingPlanName, entitlements.title),
@@ -1021,6 +1093,28 @@ function mapTodoItems(value: unknown): ToDoDetail[] {
   });
 }
 
+function mapWorkSessions(value: unknown): WorkSessionDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const session = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(session.id, `work-${index}`),
+      title: stringValue(session.title, "Work session"),
+      startedAt: dateValue(session.startedAt),
+      endedAt: dateValue(session.endedAt),
+      durationSeconds: numberValue(session.durationSeconds, 0),
+      createdAt: dateValue(session.createdAt),
+      createdByUid: stringValue(session.createdByUid, ""),
+      createdByEmail: stringValue(session.createdByEmail, ""),
+      source: stringValue(session.source, "")
+    };
+  }).sort((first, second) => {
+    if (!first.endedAt && second.endedAt) return -1;
+    if (first.endedAt && !second.endedAt) return 1;
+    return (second.startedAt?.getTime() ?? 0) - (first.startedAt?.getTime() ?? 0);
+  });
+}
+
 function mapHistoryLog(value: unknown): HistoryLogDetail[] {
   if (!Array.isArray(value)) return [];
   return value.map((item, index) => {
@@ -1111,6 +1205,7 @@ function mapOrderDetailSnapshot(
       storagePath: ""
     }),
     todoItems: mapTodoItems(data.todoItems),
+    workSessions: mapWorkSessions(data.workSessions),
     historyLog: mapHistoryLog(data.historyLog)
   };
 }
@@ -1151,6 +1246,7 @@ export type TeamMemberDetail = {
   photoURL: string;
   role: string;
   roleLabel: string;
+  access: WorkspaceMemberAccess;
   addedAt: Date | null;
   isOwner: boolean;
 };
@@ -1186,6 +1282,7 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       photoURL: stringValue(memberData.photoURL, uid === ownerUid ? stringValue(companyData.ownerPhotoURL, "") : ""),
       role,
       roleLabel: roleLabel(role),
+      access: workspaceMemberAccess(companyData, uid, uid === ownerUid || normalizeWorkspaceRole(role) === "owner"),
       addedAt: dateValue(memberData.addedAt) ?? dateValue(memberData.updatedAt),
       isOwner: uid === ownerUid || normalizeWorkspaceRole(role) === "owner"
     };
@@ -1199,6 +1296,7 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       photoURL: stringValue(companyData.ownerPhotoURL, ""),
       role: "owner",
       roleLabel: "Owner",
+      access: normalizeWorkspaceMemberAccess(null, true),
       addedAt: dateValue(companyData.createdAt),
       isOwner: true
     });

@@ -21,6 +21,7 @@ import {
   loadWorkspaceContext,
   loadWorkspaceOrderOptions,
   loadWorkspaceSettingsOverview,
+  workspaceAccessAllows,
   type ClientFileListItem,
   type OrderOptionItem,
   type WorkspaceSettingsOverview,
@@ -75,6 +76,10 @@ export default function FilesPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "clientFiles")) {
+          router.replace("/orders");
+          return;
+        }
         setWorkspace(loadedWorkspace);
 
         const [loadedFiles, loadedOrders, loadedUploadSafetySettings] = await Promise.all([

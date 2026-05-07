@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { MemberAccessEditor } from "@/components/MemberAccessEditor";
+import { AddTeamMemberForm, MemberProfileEditor } from "@/components/TeamMemberAccessForm";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   loadTeamAccessData,
@@ -13,10 +15,13 @@ import {
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
 import {
+  addTeamMember,
   approveJoinRequest,
   declineJoinRequest,
   removeTeamMember,
   syncAcceptedJoinRequests,
+  updateTeamMemberAccess,
+  updateTeamMemberProfile,
   updateTeamMemberRole,
   WEB_TEAM_ROLES
 } from "@/lib/studioflow/teamActions";
@@ -227,9 +232,26 @@ export default function TeamPage() {
         <section className="card" style={{ padding: 22 }}>
           <div className="pill">Members</div>
           <h2 style={{ margin: "12px 0 14px" }}>Workspace members</h2>
+          {canManageTeam ? (
+            <AddTeamMemberForm
+              disabled={Boolean(actioning)}
+              saving={actioning === "add-member"}
+              onAdd={input => runTeamAction(
+                "add-member",
+                () => addTeamMember(workspace!, input),
+                "Team member added."
+              )}
+            />
+          ) : (
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Only the workspace owner on StudioFlow Team can add members and customize their access.
+            </p>
+          )}
           <div className="grid" style={{ gap: 10 }}>
             {members.map(member => {
               const changingKey = `role-${member.id}`;
+              const accessKey = `access-${member.id}`;
+              const profileKey = `profile-${member.id}`;
               const removeKey = `remove-${member.id}`;
               const canChangeRole = canManageTeam && !member.isOwner;
               return (
@@ -287,6 +309,31 @@ export default function TeamPage() {
                       </>
                     ) : null}
                   </div>
+                  {canChangeRole ? (
+                    <MemberProfileEditor
+                      member={member}
+                      disabled={Boolean(actioning)}
+                      saving={actioning === profileKey}
+                      onSave={profile => runTeamAction(
+                        profileKey,
+                        () => updateTeamMemberProfile(workspace!, member, profile),
+                        "Member profile updated."
+                      )}
+                    />
+                  ) : null}
+                  <MemberAccessEditor
+                    access={member.access}
+                    disabled={!canChangeRole || Boolean(actioning)}
+                    saving={actioning === accessKey}
+                    ownerLocked={member.isOwner}
+                    onChange={nextAccess => {
+                      runTeamAction(
+                        accessKey,
+                        () => updateTeamMemberAccess(workspace!, member, nextAccess),
+                        "Member access updated."
+                      );
+                    }}
+                  />
                 </article>
               );
             })}

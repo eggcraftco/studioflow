@@ -12,6 +12,7 @@ import {
   loadWorkspaceContext,
   loadWorkspaceCustomers,
   loadWorkspaceSettingsOverview,
+  workspaceAccessAllows,
   type CustomerDirectoryItem,
   type CustomerOrderSummary,
   type WorkspaceContext,
@@ -116,6 +117,10 @@ export default function CustomersPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "customers")) {
+          router.replace("/orders");
+          return;
+        }
         setWorkspace(loadedWorkspace);
 
         const [loadedCustomers, loadedMoneySettings] = await Promise.all([

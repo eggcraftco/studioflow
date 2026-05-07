@@ -15,6 +15,7 @@ export const ORDER_DETAIL_CARD_IDS = [
   "notes",
   "clientFiles",
   "todo",
+  "workTime",
   "financial",
   "status",
   "shipping",
@@ -42,7 +43,7 @@ const DEFAULT_VISIBILITY = ORDER_DETAIL_CARD_IDS.reduce((output, cardId) => {
 export const DEFAULT_ORDER_DETAIL_CARD_COLUMNS: OrderDetailCardId[][] = [
   ["preview", "summary"],
   ["customer", "materials", "delivery", "notes", "clientFiles"],
-  ["priority", "todo", "financial", "status", "shipping", "schedule", "historyLog"]
+  ["priority", "todo", "workTime", "financial", "status", "shipping", "schedule", "historyLog"]
 ];
 
 export const DEFAULT_ORDER_DETAIL_CARD_LAYOUT: OrderDetailCardLayout = {

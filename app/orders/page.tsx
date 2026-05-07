@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
@@ -18,11 +18,18 @@ import {
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
   subscribeOrderDetail,
+  workspaceAccessAllows,
   type OrderDetail,
   type OrderListItem,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import {
+  canEditOrderFullyForRole,
+  canEditOrderStatusForRole,
+  deleteOrderFromWeb,
+  updateOrderFromWeb
+} from "@/lib/studioflow/orders";
 import {
   filterAndSortOrders,
   type OrderQuickFilterId,
@@ -34,6 +41,33 @@ import { OrderDetailContent } from "./OrderDetailContent";
 function isWorkflowOnly(role: string) {
   const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
   return normalized === "workflow" || normalized === "workflowonly";
+}
+
+function applyOrderListPatch(order: OrderListItem, patch: Partial<OrderDetail>): OrderListItem {
+  return {
+    ...order,
+    ...(patch.customerName !== undefined ? { customerName: patch.customerName } : {}),
+    ...(patch.designName !== undefined ? { designName: patch.designName } : {}),
+    ...(patch.watchRef !== undefined ? { watchRef: patch.watchRef } : {}),
+    ...(patch.status !== undefined ? { status: patch.status } : {}),
+    ...(patch.designStatus !== undefined ? { designStatus: patch.designStatus } : {}),
+    ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+    ...(patch.risk !== undefined ? { risk: patch.risk } : {}),
+    ...(patch.riskReason !== undefined ? { riskReason: patch.riskReason } : {}),
+    ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+    ...(patch.emailAddress !== undefined ? { emailAddress: patch.emailAddress } : {}),
+    ...(patch.instagramUsername !== undefined ? { instagramUsername: patch.instagramUsername } : {}),
+    ...(patch.whatsappNumber !== undefined ? { whatsappNumber: patch.whatsappNumber } : {}),
+    ...(patch.paidAmount !== undefined ? { paidAmount: patch.paidAmount } : {}),
+    ...(patch.remainingAmount !== undefined ? { remainingAmount: patch.remainingAmount } : {}),
+    ...(patch.paymentDate !== undefined ? { paymentDate: patch.paymentDate } : {}),
+    ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+    ...(patch.isDispatched !== undefined ? { isDispatched: patch.isDispatched } : {}),
+    ...(patch.isDelivered !== undefined ? { isDelivered: patch.isDelivered } : {}),
+    ...(patch.customFields !== undefined ? { customFields: patch.customFields } : {}),
+    ...(patch.extraStatuses !== undefined ? { extraStatuses: patch.extraStatuses } : {}),
+    ...(patch.designLink !== undefined ? { previewImageUrl: patch.designLink } : {})
+  };
 }
 
 export default function OrdersPage() {
@@ -54,6 +88,9 @@ export default function OrdersPage() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
   const [moneySettings, setMoneySettings] = useState<WorkspaceSettingsOverview | null>(null);
+  const [orderContextMenu, setOrderContextMenu] = useState<{ orderId: string; x: number; y: number } | null>(null);
+  const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
+  const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-orders-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
 
   useEffect(() => {
@@ -76,6 +113,10 @@ export default function OrdersPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")) {
+          router.replace("/settings?section=account");
+          return;
+        }
         setWorkspace(loadedWorkspace);
 
         const [loadedOrders, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([
@@ -167,6 +208,22 @@ export default function OrdersPage() {
     return () => window.removeEventListener("studioflow-order-created", handleCreatedOrder);
   }, [workspace]);
 
+  useEffect(() => {
+    if (!orderContextMenu) return;
+    const closeMenu = () => setOrderContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [orderContextMenu]);
+
   async function refreshSelectedOrder() {
     if (!workspace || !selectedOrderId) return;
     const [loadedOrder, loadedOrders] = await Promise.all([
@@ -176,6 +233,105 @@ export default function OrdersPage() {
     setSelectedOrder(loadedOrder);
     setOrders(loadedOrders);
   }
+
+  function applyOptimisticOrderPatch(patch: Partial<OrderDetail>) {
+    setSelectedOrder(current => current && current.id === selectedOrderId ? { ...current, ...patch } : current);
+    setOrders(current => current.map(order => order.id === selectedOrderId ? applyOrderListPatch(order, patch) : order));
+  }
+
+  function contextMenuPosition(x: number, y: number) {
+    const width = 230;
+    const height = 190;
+    return {
+      x: Math.min(x, window.innerWidth - width - 12),
+      y: Math.min(y, window.innerHeight - height - 12)
+    };
+  }
+
+  function openOrderContextMenu(event: MouseEvent, order: OrderListItem) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedOrderId(order.id);
+    const nextPosition = contextMenuPosition(event.clientX, event.clientY);
+    setOrderContextMenu({ orderId: order.id, ...nextPosition });
+  }
+
+  function optimisticStatusPatch(orderId: string, status: string) {
+    const extraStatuses = orders.find(order => order.id === orderId)?.extraStatuses ?? {};
+    const nextExtraStatuses = Object.fromEntries(Object.keys(extraStatuses).map(key => [key, status]));
+    setOrders(current => current.map(order => order.id === orderId
+      ? { ...order, designStatus: status, status, extraStatuses: nextExtraStatuses }
+      : order
+    ));
+    setSelectedOrder(current => current?.id === orderId
+      ? { ...current, designStatus: status, status, extraStatuses: nextExtraStatuses }
+      : current
+    );
+    return nextExtraStatuses;
+  }
+
+  async function saveOrderStatusFromMenu(order: OrderListItem, status: "Done" | "Cancelled") {
+    if (!workspace) return;
+    if (!canEditOrderStatusForRole(workspace.role)) {
+      setOrderActionError("Your workspace role cannot edit this order.");
+      return;
+    }
+
+    setOrderContextMenu(null);
+    setOrderActionError(null);
+    setOrderActionStatus(status === "Done" ? "Marking order as done..." : "Cancelling order...");
+    const nextExtraStatuses = optimisticStatusPatch(order.id, status);
+    try {
+      await updateOrderFromWeb(workspace, {
+        orderId: order.id,
+        designStatus: status,
+        paintingStatus: status,
+        details: { extraStatuses: nextExtraStatuses }
+      });
+      setOrderActionStatus(status === "Done" ? "Order marked as done." : "Order cancelled.");
+    } catch (actionError) {
+      setOrderActionStatus(null);
+      setOrderActionError(actionError instanceof Error ? actionError.message : "Could not update this order.");
+      if (workspace && selectedOrderId === order.id) {
+        await refreshSelectedOrder().catch(() => undefined);
+      } else {
+        loadRecentOrders(workspace.id).then(setOrders).catch(() => undefined);
+      }
+    }
+  }
+
+  async function deleteOrderFromMenu(order: OrderListItem) {
+    if (!workspace) return;
+    if (!canEditOrderFullyForRole(workspace.role)) {
+      setOrderActionError("Your workspace role cannot delete orders.");
+      return;
+    }
+    const confirmed = window.confirm(`Delete "${order.customerName || "this order"}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setOrderContextMenu(null);
+    setOrderActionError(null);
+    setOrderActionStatus("Deleting order...");
+    const nextOrders = orders.filter(item => item.id !== order.id);
+    setOrders(nextOrders);
+    if (selectedOrderId === order.id) {
+      setSelectedOrder(null);
+      setSelectedOrderId(nextOrders[0]?.id || "");
+    }
+
+    try {
+      await deleteOrderFromWeb(workspace, order.id);
+      setOrderActionStatus("Order deleted.");
+    } catch (deleteError) {
+      setOrderActionStatus(null);
+      setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete this order.");
+      loadRecentOrders(workspace.id).then(setOrders).catch(() => undefined);
+    }
+  }
+
+  const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
+  const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
+  const canDeleteOrders = workspace ? canEditOrderFullyForRole(workspace.role) : false;
 
   if (loading || !user) return <LoadingScreen />;
 
@@ -233,13 +389,20 @@ export default function OrdersPage() {
             </div>
           ) : null}
 
+          {orderActionStatus ? <p className="orders-sidebar-message">{orderActionStatus}</p> : null}
+          {orderActionError ? <p className="orders-sidebar-error">{orderActionError}</p> : null}
+
           {filteredOrders.length === 0 && !loadingOrders ? (
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>No orders found for this workspace yet.</p>
           ) : null}
 
           <div className="orders-list">
             {filteredOrders.map(order => (
-              <div key={order.id} id={`orders-sidebar-order-${order.id}`}>
+              <div
+                key={order.id}
+                id={`orders-sidebar-order-${order.id}`}
+                onContextMenu={event => openOrderContextMenu(event, order)}
+              >
                 <OrderListCard
                   order={order}
                   selected={order.id === selectedOrderId}
@@ -252,6 +415,57 @@ export default function OrdersPage() {
               </div>
             ))}
           </div>
+
+          {orderContextMenu && contextOrder ? (
+            <div
+              className="order-list-context-menu"
+              style={{ left: orderContextMenu.x, top: orderContextMenu.y }}
+              role="menu"
+              onClick={event => event.stopPropagation()}
+            >
+              {contextOrder.customerName.trim() ? (
+                <a
+                  role="menuitem"
+                  href={`/customers?customerName=${encodeURIComponent(contextOrder.customerName.trim())}`}
+                  className="order-list-context-row"
+                >
+                  <span aria-hidden="true">◉</span>
+                  Open Customer
+                </a>
+              ) : null}
+              <button
+                role="menuitem"
+                type="button"
+                className="order-list-context-row"
+                disabled={!canUseOrderContextActions}
+                onClick={() => void saveOrderStatusFromMenu(contextOrder, "Done")}
+              >
+                <span aria-hidden="true">✓</span>
+                Mark as Done
+              </button>
+              <button
+                role="menuitem"
+                type="button"
+                className="order-list-context-row"
+                disabled={!canUseOrderContextActions}
+                onClick={() => void saveOrderStatusFromMenu(contextOrder, "Cancelled")}
+              >
+                <span aria-hidden="true">×</span>
+                Cancel Order
+              </button>
+              <div className="order-list-context-divider" />
+              <button
+                role="menuitem"
+                type="button"
+                className="order-list-context-row danger"
+                disabled={!canDeleteOrders}
+                onClick={() => void deleteOrderFromMenu(contextOrder)}
+              >
+                <span aria-hidden="true">⌫</span>
+                Delete
+              </button>
+            </div>
+          ) : null}
         </aside>
 
         <button
@@ -284,9 +498,7 @@ export default function OrdersPage() {
               order={selectedOrder}
               workspace={workspace}
               onReloadOrder={refreshSelectedOrder}
-              onOptimisticOrderPatch={patch => {
-                setSelectedOrder(current => current && current.id === selectedOrderId ? { ...current, ...patch } : current);
-              }}
+              onOptimisticOrderPatch={applyOptimisticOrderPatch}
               onBlockHeadingSettingsChange={setBlockHeadingSettings}
               moneySettings={moneySettings}
             />

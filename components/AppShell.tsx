@@ -9,7 +9,9 @@ import {
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  workspaceAccessAllows,
   type DashboardFinanceOrder,
+  type WorkspaceMemberAccessKey,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
@@ -30,6 +32,15 @@ const NAV_ITEMS: Array<{ href: string; label: string; icon: NavIconName } | { la
   { href: "/settings", label: "Settings", icon: "settings" }
 ];
 
+const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
+  "/orders": "orders",
+  "/dashboard": "dashboard",
+  "/schedule": "schedule",
+  "/customers": "customers",
+  "/quick-reply": "quickReply",
+  "/settings": "settings"
+};
+
 function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
   if (hidden) return hiddenMoneyLabel(moneySymbol(settings));
   return formatStudioMoney(value, settings);
@@ -38,6 +49,10 @@ function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
 function isWorkflowOnly(role: string) {
   const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
   return normalized === "workflow" || normalized === "workflowonly";
+}
+
+function memberCanAccess(workspace: WorkspaceContext | null, key: WorkspaceMemberAccessKey) {
+  return workspace ? workspaceAccessAllows(workspace.memberAccess, key) : true;
 }
 
 function orderInCurrentMonth(order: DashboardFinanceOrder) {
@@ -170,8 +185,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
 
+        const canLoadFinance = !isWorkflowOnly(loadedWorkspace.role) &&
+          memberCanAccess(loadedWorkspace, "dashboard") &&
+          memberCanAccess(loadedWorkspace, "financialInfo");
         const [loadedOrders, loadedSettings] = await Promise.all([
-          isWorkflowOnly(loadedWorkspace.role) ? Promise.resolve([]) : loadDashboardFinanceOrders(loadedWorkspace.id),
+          canLoadFinance ? loadDashboardFinanceOrders(loadedWorkspace.id) : Promise.resolve([]),
           loadWorkspaceSettingsOverview(loadedWorkspace.id)
         ]);
         if (cancelled) return;
@@ -312,7 +330,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handleEscape);
   }, [mobileNavOpen]);
 
-  const canSeeToolbarFinance = Boolean(workspace && !isWorkflowOnly(workspace.role));
+  const canSeeToolbarFinance = Boolean(
+    workspace &&
+    !isWorkflowOnly(workspace.role) &&
+    memberCanAccess(workspace, "dashboard") &&
+    memberCanAccess(workspace, "financialInfo")
+  );
   const monthNet = useMemo(
     () => financeOrders.filter(orderInCurrentMonth).reduce((total, order) => total + swiftOrderNetProfit(order), 0),
     [financeOrders]
@@ -325,6 +348,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const avatarText = initials(workspace?.currentMemberDisplayName || user?.displayName || user?.email);
   const canCreateToolbarOrder = Boolean(
     workspace &&
+    memberCanAccess(workspace, "orders") &&
     canCreateOrdersForRole(workspace.role) &&
     workspace.entitlements.features.orders_create
   );
@@ -397,6 +421,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <nav className={mobileNavOpen ? "toolbar-nav native-toolbar-nav is-open" : "toolbar-nav native-toolbar-nav"} aria-label="Main navigation">
             {NAV_ITEMS.map(item => {
               if ("href" in item && item.href === "/dashboard" && !canSeeToolbarFinance) return null;
+              if ("href" in item) {
+                const accessKey = NAV_ACCESS_BY_HREF[item.href];
+                if (accessKey && !memberCanAccess(workspace, accessKey)) return null;
+              }
               if (!("href" in item)) {
                 return (
                   <span key={item.label} className="nav-pill native-nav-pill disabled" aria-disabled="true">

@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   loadQuickReplySettings,
   loadWorkspaceContext,
+  workspaceAccessAllows,
   type QuickReplySettings,
   type QuickReplyTemplateItem,
   type WorkspaceContext
@@ -106,6 +107,10 @@ export default function QuickReplyPage() {
       setError("");
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "quickReply")) {
+          router.replace("/orders");
+          return;
+        }
         const loadedSettings = await loadQuickReplySettings(loadedWorkspace.id);
         if (cancelled) return;
         setWorkspace(loadedWorkspace);

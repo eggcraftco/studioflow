@@ -14,6 +14,7 @@ import {
   loadDashboardFinanceOrders,
   loadWorkspaceSettingsOverview,
   loadWorkspaceContext,
+  workspaceAccessAllows,
   type DashboardWidgetVisibility,
   type DashboardCounts,
   type DashboardFinanceOrder,
@@ -304,7 +305,11 @@ export default function DashboardPage() {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
-        if (isWorkflowOnly(loadedWorkspace.role)) {
+        if (
+          isWorkflowOnly(loadedWorkspace.role) ||
+          !workspaceAccessAllows(loadedWorkspace.memberAccess, "dashboard") ||
+          !workspaceAccessAllows(loadedWorkspace.memberAccess, "financialInfo")
+        ) {
           router.replace("/orders");
           return;
         }

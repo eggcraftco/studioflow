@@ -7,6 +7,8 @@ import { signOut } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { MemberAccessEditor } from "@/components/MemberAccessEditor";
+import { AddTeamMemberForm, MemberProfileEditor } from "@/components/TeamMemberAccessForm";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth } from "@/lib/firebase/client";
 import { ACCOUNT_AVATAR_ACCEPT, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -19,6 +21,7 @@ import {
   loadWorkspaceExportData,
   loadWorkspaceSettingsOverview,
   normalizeWorkspaceRole,
+  workspaceAccessAllows,
   type JoinRequestDetail,
   type DashboardCounts,
   type CompanyNumberSetting,
@@ -39,7 +42,7 @@ import {
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
-import { approveJoinRequest, declineJoinRequest, removeTeamMember, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
+import { addTeamMember, approveJoinRequest, declineJoinRequest, removeTeamMember, syncAcceptedJoinRequests, updateTeamMemberAccess, updateTeamMemberProfile, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 
 type SettingsSectionId =
@@ -120,6 +123,18 @@ function roleOptionLabel(role: string) {
   return WEB_TEAM_ROLES.find(option => option.value === role)?.label ?? "Member";
 }
 
+function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
+  if (!workspace) return true;
+  if (sectionId === "account" || sectionId === "about") return true;
+  if (!workspaceAccessAllows(workspace.memberAccess, "settings")) return false;
+  if (sectionId === "team-access") return workspaceAccessAllows(workspace.memberAccess, "teamAccess");
+  if (sectionId === "quick-reply") return workspaceAccessAllows(workspace.memberAccess, "quickReply");
+  if (sectionId === "financial" || sectionId === "plan-access") return workspaceAccessAllows(workspace.memberAccess, "financialInfo");
+  if (sectionId === "pdf" || sectionId === "data") return workspaceAccessAllows(workspace.memberAccess, "exportData");
+  if (sectionId === "safety-uploads") return workspaceAccessAllows(workspace.memberAccess, "clientFiles");
+  return true;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -189,9 +204,13 @@ export default function SettingsPage() {
     };
   }, [user]);
 
+  const visibleSections = useMemo(
+    () => SETTINGS_SECTIONS.filter(section => canSeeSettingsSection(workspace, section.id)),
+    [workspace]
+  );
   const selectedSection = useMemo(
-    () => SETTINGS_SECTIONS.find(section => section.id === activeSection) ?? SETTINGS_SECTIONS[0],
-    [activeSection]
+    () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "account") ?? SETTINGS_SECTIONS[0],
+    [activeSection, visibleSections]
   );
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
@@ -246,7 +265,7 @@ export default function SettingsPage() {
             <p>{t("Choose a section to edit.")}</p>
           </div>
           <div className="settings-section-list">
-            {SETTINGS_SECTIONS.map(section => (
+            {visibleSections.map(section => (
               <button
                 key={section.id}
                 className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
@@ -2874,9 +2893,24 @@ function TeamAccessSection({
 
       <section className="card app-card">
         <CardTitle icon="customer" eyebrow="Members" title="Workspace members" />
+        {canManageTeam ? (
+          <AddTeamMemberForm
+            disabled={Boolean(actioning)}
+            saving={actioning === "add-member"}
+            onAdd={input => runTeamAction(
+              "add-member",
+              () => addTeamMember(workspace, input),
+              "Team member added."
+            )}
+          />
+        ) : (
+          <p className="muted-copy">Only the workspace owner on StudioFlow Team can add members and customize their access.</p>
+        )}
         <div className="settings-team-list">
           {members.map(member => {
             const changingKey = `role-${member.id}`;
+            const accessKey = `access-${member.id}`;
+            const profileKey = `profile-${member.id}`;
             const removeKey = `remove-${member.id}`;
             const canChangeRole = canManageTeam && !member.isOwner;
             return (
@@ -2925,6 +2959,31 @@ function TeamAccessSection({
                   ) : null}
                   {actioning === changingKey ? <span className="studio-pill">Updating...</span> : null}
                 </div>
+                {canChangeRole ? (
+                  <MemberProfileEditor
+                    member={member}
+                    disabled={Boolean(actioning)}
+                    saving={actioning === profileKey}
+                    onSave={profile => runTeamAction(
+                      profileKey,
+                      () => updateTeamMemberProfile(workspace, member, profile),
+                      "Member profile updated."
+                    )}
+                  />
+                ) : null}
+                <MemberAccessEditor
+                  access={member.access}
+                  disabled={!canChangeRole || Boolean(actioning)}
+                  saving={actioning === accessKey}
+                  ownerLocked={member.isOwner}
+                  onChange={nextAccess => {
+                    void runTeamAction(
+                      accessKey,
+                      () => updateTeamMemberAccess(workspace, member, nextAccess),
+                      "Member access updated."
+                    );
+                  }}
+                />
               </article>
             );
           })}

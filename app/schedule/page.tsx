@@ -17,6 +17,7 @@ import {
   loadScheduleOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  workspaceAccessAllows,
   type ScheduleOrderItem,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
@@ -401,6 +402,10 @@ export default function SchedulePage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "schedule")) {
+          router.replace("/orders");
+          return;
+        }
         setWorkspace(loadedWorkspace);
 
         const [loadedOrders, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([

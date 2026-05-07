@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -48,10 +48,12 @@ import {
 import {
   loadWorkspaceStatusOptions,
   loadTeamAccessData,
+  workspaceAccessAllows,
   type ClientFileDetail,
   type OrderDetail,
   type TeamMemberDetail,
   type ToDoDetail,
+  type WorkSessionDetail,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
@@ -76,6 +78,60 @@ function formatDateTime(date: Date | null) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
+}
+
+function formatTime(date: Date | null) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function workSessionDurationSeconds(session: WorkSessionDetail, now = new Date()) {
+  if (session.endedAt && session.startedAt) {
+    return Math.max(session.durationSeconds || 0, Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 1000));
+  }
+  if (session.startedAt) {
+    return Math.max(0, Math.floor((now.getTime() - session.startedAt.getTime()) / 1000));
+  }
+  return Math.max(session.durationSeconds || 0, 0);
+}
+
+function formatWorkDuration(seconds: number) {
+  const safeSeconds = Math.max(Math.floor(seconds), 0);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remainder = safeSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${remainder}s`;
+  return `${remainder}s`;
+}
+
+function workSessionDateKey(date: Date | null) {
+  if (!date) return "No date";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function groupWorkSessionsByDate(sessions: WorkSessionDetail[]) {
+  const groups = new Map<string, WorkSessionDetail[]>();
+  sessions.forEach(session => {
+    const key = workSessionDateKey(session.startedAt);
+    groups.set(key, [...(groups.get(key) ?? []), session]);
+  });
+  return Array.from(groups.entries()).map(([dateLabel, items]) => ({ dateLabel, items }));
+}
+
+function sortWorkSessions(sessions: WorkSessionDetail[]) {
+  return [...sessions].sort((first, second) => {
+    if (!first.endedAt && second.endedAt) return -1;
+    if (first.endedAt && !second.endedAt) return 1;
+    return (second.startedAt?.getTime() ?? 0) - (first.startedAt?.getTime() ?? 0);
+  });
+}
+
+function localWorkSessionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function statusCustomToggleStorageKey(toggle: HeadingItem) {
@@ -108,6 +164,22 @@ function dateFromInputValue(value: string | undefined) {
   if (!year || !month || !day) return null;
   const date = new Date(year, month - 1, day);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addDays(date: Date | null, days: number) {
+  if (!date || !Number.isFinite(days)) return null;
+  const next = new Date(date);
+  next.setDate(next.getDate() + Math.max(0, Math.round(days)));
+  return next;
+}
+
+function daysBetweenDates(start: Date | null, end: Date | null) {
+  if (!start || !end) return 0;
+  const startDay = new Date(start);
+  const endDay = new Date(end);
+  startDay.setHours(0, 0, 0, 0);
+  endDay.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((endDay.getTime() - startDay.getTime()) / (24 * 60 * 60 * 1000)));
 }
 
 function calendarDateValue(date: Date) {
@@ -850,6 +922,7 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
   notes: "Notes",
   clientFiles: "Client Files",
   todo: "To Do",
+  workTime: "Work Time",
   financial: "Financial Info",
   status: "Production Status",
   shipping: "Shipping & Tracking",
@@ -885,6 +958,7 @@ const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   notes: 220,
   clientFiles: 310,
   todo: 360,
+  workTime: 380,
   financial: 430,
   status: 260,
   shipping: 260,
@@ -945,6 +1019,43 @@ function materialDefaultCheckPatch(index: number, title: string, value: boolean)
 
 function materialToggleValue(order: OrderDetail, title: string) {
   return order.customToggles[`materials::${title}`] ?? false;
+}
+
+function webFinanceTaxAmount({
+  paidAmount,
+  remainingAmount,
+  watchPurchasePrice,
+  paymentFee,
+  deliveryCost,
+  taxRate,
+  taxType
+}: {
+  paidAmount: number;
+  remainingAmount: number;
+  watchPurchasePrice: number;
+  paymentFee: number;
+  deliveryCost: number;
+  taxRate: number;
+  taxType: string;
+}) {
+  if (!taxRate || !taxType) return 0;
+  const orderValue = paidAmount + remainingAmount;
+  if (taxType.trim().toLowerCase() === "profit") {
+    return Math.round(Math.max(orderValue - watchPurchasePrice - paymentFee - deliveryCost, 0) * taxRate) / 100;
+  }
+  return Math.round(orderValue * taxRate) / 100;
+}
+
+function parseFinanceNumber(value: string | number) {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.max(0, value) : null;
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const compact = trimmed.replace(/[^\d,.-]/g, "");
+  const normalized = compact.includes(",") && !compact.includes(".")
+    ? compact.replace(",", ".")
+    : compact.replace(/,/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
 }
 
 const SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1";
@@ -1039,6 +1150,8 @@ function clampColumnWidth(value: number | undefined) {
   return Math.min(Math.max(Number(value), 260), 800);
 }
 
+const MAX_DESKTOP_CARD_COLUMNS = 8;
+
 function cardHeight(layout: OrderDetailCardLayout, cardId: OrderDetailCardId) {
   const savedHeight = layout.cardHeights[cardId];
   if (Number.isFinite(savedHeight)) return Math.min(Math.max(Number(savedHeight), 160), 1200);
@@ -1055,10 +1168,10 @@ function effectiveCardHeight(
 
 function measuredCardMinimumHeight(cardId: OrderDetailCardId, frame: Element | null) {
   if (cardId === "clientFiles") return measuredClientFilesMinimumHeight(frame);
+  if (cardId === "historyLog") return measuredHistoryLogMinimumHeight(frame);
 
   const fixedMinimums: Partial<Record<OrderDetailCardId, number>> = {
-    preview: 220,
-    historyLog: 260
+    preview: 220
   };
   const fixedMinimum = fixedMinimums[cardId];
   if (fixedMinimum) return fixedMinimum;
@@ -1137,6 +1250,39 @@ function measuredClientFilesMinimumHeight(frame: Element | null) {
   return Math.min(Math.max(Math.ceil(cardPadding + titleHeight + panelHeight + 4), 220), 1200);
 }
 
+function measuredHistoryLogMinimumHeight(frame: Element | null) {
+  const card = frame?.querySelector<HTMLElement>(".order-detail-card.is-history-card");
+  if (!card) return 210;
+
+  const cardStyle = window.getComputedStyle(card);
+  const cardPadding = (Number.parseFloat(cardStyle.paddingTop) || 0) + (Number.parseFloat(cardStyle.paddingBottom) || 0);
+  const titleHeight = elementOuterHeight(card.querySelector<HTMLElement>(".card-title"));
+  const panel = card.querySelector<HTMLElement>(".app-history-panel");
+  if (!panel) return 210;
+
+  const panelStyle = window.getComputedStyle(panel);
+  const panelPadding = (Number.parseFloat(panelStyle.paddingTop) || 0) + (Number.parseFloat(panelStyle.paddingBottom) || 0);
+  const panelGap = Number.parseFloat(panelStyle.rowGap || panelStyle.gap) || 0;
+  const headingHeight = elementOuterHeight(panel.querySelector<HTMLElement>(".app-history-heading"));
+  const empty = panel.querySelector<HTMLElement>(".app-history-empty");
+  const list = panel.querySelector<HTMLElement>(".app-history-list");
+  const childHeights = [headingHeight].filter(height => height > 0);
+
+  if (empty) {
+    childHeights.push(elementOuterHeight(empty));
+  } else if (list) {
+    const listStyle = window.getComputedStyle(list);
+    const listGap = Number.parseFloat(listStyle.rowGap || listStyle.gap) || 0;
+    const rows = Array.from(list.querySelectorAll<HTMLElement>(".app-history-entry"));
+    const visibleRows = rows.slice(0, 3);
+    const visibleRowsHeight = visibleRows.reduce((total, row) => total + elementOuterHeight(row), 0);
+    childHeights.push(visibleRowsHeight + Math.max(visibleRows.length - 1, 0) * listGap);
+  }
+
+  const panelHeight = panelPadding + childHeights.reduce((total, height) => total + height, 0) + Math.max(childHeights.length - 1, 0) * panelGap;
+  return Math.min(Math.max(Math.ceil(cardPadding + titleHeight + panelHeight + 4), 210), 1200);
+}
+
 function sameMeasuredMinimums(
   first: Partial<Record<OrderDetailCardId, number>>,
   second: Partial<Record<OrderDetailCardId, number>>
@@ -1155,6 +1301,12 @@ function cardProfileColor(layout: OrderDetailCardLayout, cardId: OrderDetailCard
 
 function flattenedColumns(columns: OrderDetailCardId[][]) {
   return columns.flat();
+}
+
+function columnWidthsForCount(widths: number[], columnCount: number) {
+  const nextWidths = widths.slice(0, Math.max(columnCount, widths.length)).map(width => clampColumnWidth(width));
+  while (nextWidths.length < columnCount) nextWidths.push(350);
+  return nextWidths;
 }
 
 function layoutWithCardSize(
@@ -1209,6 +1361,7 @@ export function OrderDetailContent({
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [orderActionsOpen, setOrderActionsOpen] = useState(false);
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
@@ -1217,6 +1370,8 @@ export function OrderDetailContent({
   const savingLayoutRef = useRef(false);
   const [draggingCardId, setDraggingCardId] = useState<OrderDetailCardId | null>(null);
   const [dragOverCardId, setDragOverCardId] = useState<OrderDetailCardId | null>(null);
+  const [dragOverCardCue, setDragOverCardCue] = useState<{ cardId: OrderDetailCardId; placement: "before" | "after" } | null>(null);
+  const [dragOverColumnIndex, setDragOverColumnIndex] = useState<number | null>(null);
   const [resizingCardId, setResizingCardId] = useState<OrderDetailCardId | null>(null);
   const resizingCardIdRef = useRef<OrderDetailCardId | null>(null);
   const [measuredCardMinimums, setMeasuredCardMinimums] = useState<Partial<Record<OrderDetailCardId, number>>>({});
@@ -1243,6 +1398,20 @@ export function OrderDetailContent({
   const [savingFinanceField, setSavingFinanceField] = useState<string | null>(null);
   const [inlineStatus, setInlineStatus] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orderActionsOpen) return;
+    const closeMenu = () => setOrderActionsOpen(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOrderActionsOpen(false);
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [orderActionsOpen]);
   const [savingInlineField, setSavingInlineField] = useState<string | null>(null);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const [previewLinkEditing, setPreviewLinkEditing] = useState(false);
@@ -1276,6 +1445,13 @@ export function OrderDetailContent({
   const [savingScheduleAction, setSavingScheduleAction] = useState<string | null>(null);
   const [calendarStatus, setCalendarStatus] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [newWorkSessionTitle, setNewWorkSessionTitle] = useState("");
+  const [workTimeStatus, setWorkTimeStatus] = useState<string | null>(null);
+  const [workTimeError, setWorkTimeError] = useState<string | null>(null);
+  const [savingWorkTimeAction, setSavingWorkTimeAction] = useState<string | null>(null);
+  const [workTimeNow, setWorkTimeNow] = useState(() => new Date());
+  const [optimisticWorkSessions, setOptimisticWorkSessions] = useState<WorkSessionDetail[] | null>(null);
+  const pendingWorkTimeActionRef = useRef<{ action: NonNullable<UpdateOrderInput["workTime"]>["action"]; sessionId: string } | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [workspaceStatusOptions, setWorkspaceStatusOptions] = useState<string[]>(DEFAULT_STATUS_OPTIONS);
   const independentCardLayout = useMemo(
@@ -1284,22 +1460,24 @@ export function OrderDetailContent({
   );
   const isOrderCardLayoutIndependent = Boolean(independentCardLayout);
 
-  const canSeeFinance = useMemo(() => !isWorkflowOnly(workspace.role), [workspace.role]);
+  const canSeeFinance = useMemo(() => !isWorkflowOnly(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "financialInfo"), [workspace.memberAccess, workspace.role]);
   const canSeeAdvancedFinance = Boolean(workspace.entitlements.features.financial_advanced && canSeeFinance);
+  const canAccessOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
   const canUseClientFiles = Boolean(workspace.entitlements.features.client_files);
-  const canManageClientFiles = Boolean(canUseClientFiles && canManageClientFilesForRole(workspace.role));
+  const canManageClientFiles = Boolean(canUseClientFiles && workspaceAccessAllows(workspace.memberAccess, "clientFiles") && canManageClientFilesForRole(workspace.role));
   const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access);
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
   const canUseLiteWorkspaceCards = workspace.billingPlan !== "demo";
-  const canEditOrderFully = canEditOrderFullyForRole(workspace.role);
-  const canEditOrderStatus = canEditOrderStatusForRole(workspace.role);
+  const canEditOrderFully = Boolean(canAccessOrders && canEditOrderFullyForRole(workspace.role));
+  const canEditOrderStatus = Boolean(canAccessOrders && canEditOrderStatusForRole(workspace.role));
   const canEditWorkflowFields = canEditOrderStatus;
   const money = (value: number, hidden = false) => orderMoney(value, hidden, moneySettings);
   const canInlineEditFinance = Boolean(canSeeFinance && canEditOrderFully);
   const canInlineEditFullDetails = canEditOrderDetailsForRole(workspace.role);
   const canEditToDoItems = canEditWorkflowFields;
-  const canEditScheduleItems = canEditWorkflowFields;
+  const canEditScheduleItems = Boolean(canEditWorkflowFields && workspaceAccessAllows(workspace.memberAccess, "schedule"));
+  const canEditWorkTime = canEditWorkflowFields;
   const canEditCardLayout = Boolean(canCustomizeCards && canEditWorkflowFields);
   const canNotifyScheduleItems = workspace.billingPlan !== "demo";
   const canUseCalendarExport = workspace.billingPlan !== "demo";
@@ -1401,6 +1579,41 @@ export function OrderDetailContent({
       setNewTodoAssignedToUid("");
     }
   }, [canSeeTeamAssignment, newTodoAssignedToUid, todoFilter]);
+
+  useEffect(() => {
+    const clockWorkSessions = optimisticWorkSessions ?? order.workSessions;
+    const hasRunningSession = clockWorkSessions.some(session => Boolean(session.startedAt && !session.endedAt));
+    if (!hasRunningSession) {
+      setWorkTimeNow(new Date());
+      return;
+    }
+
+    setWorkTimeNow(new Date());
+    const interval = window.setInterval(() => setWorkTimeNow(new Date()), 1000);
+    return () => window.clearInterval(interval);
+  }, [optimisticWorkSessions, order.workSessions]);
+
+  useEffect(() => {
+    setOptimisticWorkSessions(null);
+    pendingWorkTimeActionRef.current = null;
+  }, [order.id]);
+
+  useEffect(() => {
+    const pending = pendingWorkTimeActionRef.current;
+    if (!pending) return;
+
+    const serverSession = order.workSessions.find(session => session.id === pending.sessionId);
+    const resolved = pending.action === "delete"
+      ? !serverSession
+      : pending.action === "stop"
+        ? Boolean(serverSession?.endedAt)
+        : Boolean(serverSession);
+
+    if (resolved) {
+      pendingWorkTimeActionRef.current = null;
+      setOptimisticWorkSessions(null);
+    }
+  }, [order.workSessions]);
 
   useEffect(() => {
     const serverSignature = todoItemsSignature(order.todoItems);
@@ -1555,7 +1768,8 @@ export function OrderDetailContent({
   }, [blockHeadingSettings?.specialNoteSections]);
 
   const desktopColumns = useMemo(() => {
-    const sourceColumns = cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder];
+    const sourceColumns = (cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder])
+      .slice(0, MAX_DESKTOP_CARD_COLUMNS);
     const columns = sourceColumns.map((column, index) => ({
       id: `column-${index}`,
       index,
@@ -1568,8 +1782,25 @@ export function OrderDetailContent({
       if (column.cards.length > 0) lastVisibleIndex = index;
     });
 
-    return lastVisibleIndex < 0 ? [] : columns.slice(0, lastVisibleIndex + 1);
-  }, [canSeeFinance, cardLayout]);
+    if (lastVisibleIndex < 0) return [];
+
+    const visibleColumnCount = lastVisibleIndex + 1;
+    const columnCount = draggingCardId
+      ? Math.min(MAX_DESKTOP_CARD_COLUMNS, Math.max(columns.length, visibleColumnCount + 1))
+      : visibleColumnCount;
+
+    while (columns.length < columnCount) {
+      const index = columns.length;
+      columns.push({
+        id: `column-${index}`,
+        index,
+        width: clampColumnWidth(cardLayout.columnWidths[index]),
+        cards: []
+      });
+    }
+
+    return columns.slice(0, columnCount);
+  }, [canSeeFinance, cardLayout, draggingCardId]);
   const visibleMobileCards = useMemo(
     () => cardLayout.mobileCardOrder.filter(cardId => cardLayout.visibility[cardId] && (canSeeFinance || cardId !== "financial")),
     [canSeeFinance, cardLayout]
@@ -1593,6 +1824,7 @@ export function OrderDetailContent({
       notes: "notes",
       clientFiles: "folderPerson",
       todo: "checklist",
+      workTime: "timer",
       financial: "finance",
       status: "paintbrush",
       shipping: "airplane",
@@ -1942,17 +2174,36 @@ export function OrderDetailContent({
     event.dataTransfer.setData("text/plain", cardId);
     setDraggingCardId(cardId);
     setDragOverCardId(null);
+    setDragOverCardCue(null);
+    setDragOverColumnIndex(null);
   }
 
   function handleCardDragOver(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId) {
     if (!draggingCardId || draggingCardId === cardId || !canCustomizeCards || !layoutReady || savingLayout) return;
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
+    const targetBox = event.currentTarget.getBoundingClientRect();
+    const relativeY = event.clientY - targetBox.top;
+    const placement = relativeY > targetBox.height / 2 ? "after" : "before";
     setDragOverCardId(cardId);
+    setDragOverCardCue(current => (
+      current?.cardId === cardId && current.placement === placement ? current : { cardId, placement }
+    ));
+    setDragOverColumnIndex(null);
+  }
+
+  function handleCardDragLeave(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId) {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return;
+    if (relatedTarget instanceof Element && relatedTarget.closest("[data-card-insert-drop-zone='true']")) return;
+    if (dragOverCardId === cardId) setDragOverCardId(null);
+    if (dragOverCardCue?.cardId === cardId) setDragOverCardCue(null);
   }
 
   function handleCardDrop(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId) {
     event.preventDefault();
+    event.stopPropagation();
     if (!layoutReady) return;
     const droppedCardId = event.dataTransfer.getData("text/plain") as OrderDetailCardId || draggingCardId;
     const targetBox = event.currentTarget.getBoundingClientRect();
@@ -1960,15 +2211,99 @@ export function OrderDetailContent({
 
     setDraggingCardId(null);
     setDragOverCardId(null);
+    setDragOverCardCue(null);
+    setDragOverColumnIndex(null);
 
     const currentOrder = isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder;
     if (!droppedCardId || !currentOrder.includes(droppedCardId)) return;
     reorderCardByDrop(droppedCardId, cardId, insertAfter);
   }
 
+  function handleCardInsertDragOver(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId, insertAfter: boolean) {
+    if (!draggingCardId || draggingCardId === cardId || !canCustomizeCards || !layoutReady || savingLayout) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverCardId(cardId);
+    setDragOverCardCue({ cardId, placement: insertAfter ? "after" : "before" });
+    setDragOverColumnIndex(null);
+  }
+
+  function handleCardInsertDrop(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId, insertAfter: boolean) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!layoutReady) return;
+
+    const droppedCardId = event.dataTransfer.getData("text/plain") as OrderDetailCardId || draggingCardId;
+    setDraggingCardId(null);
+    setDragOverCardId(null);
+    setDragOverCardCue(null);
+    setDragOverColumnIndex(null);
+
+    const currentOrder = isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder;
+    if (!droppedCardId || !currentOrder.includes(droppedCardId)) return;
+    reorderCardByDrop(droppedCardId, cardId, insertAfter);
+  }
+
+  function moveCardToColumn(sourceCardId: OrderDetailCardId, targetColumnIndex: number) {
+    if (isNarrowLayout || targetColumnIndex < 0 || targetColumnIndex >= MAX_DESKTOP_CARD_COLUMNS) return;
+
+    const nextColumns = (cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder])
+      .slice(0, MAX_DESKTOP_CARD_COLUMNS)
+      .map(column => column.filter(cardId => cardId !== sourceCardId));
+
+    while (nextColumns.length <= targetColumnIndex) nextColumns.push([]);
+    nextColumns[targetColumnIndex].push(sourceCardId);
+
+    void persistLayout({
+      ...cardLayout,
+      columns: nextColumns,
+      columnWidths: columnWidthsForCount(cardLayout.columnWidths, nextColumns.length),
+      cardOrder: flattenedColumns(nextColumns)
+    }, "Card order saved.");
+  }
+
+  function handleColumnDragOver(event: DragEvent<HTMLDivElement>, columnIndex: number) {
+    if (!draggingCardId || !canCustomizeCards || !layoutReady || savingLayout || isNarrowLayout) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverCardId(null);
+    setDragOverCardCue(null);
+    if (dragOverColumnIndex !== columnIndex) {
+      setDragOverColumnIndex(columnIndex);
+    }
+  }
+
+  function handleColumnDragLeave(event: DragEvent<HTMLDivElement>, columnIndex: number) {
+    const relatedTarget = event.relatedTarget;
+    if (
+      dragOverColumnIndex === columnIndex &&
+      relatedTarget instanceof Node &&
+      !event.currentTarget.contains(relatedTarget)
+    ) {
+      setDragOverColumnIndex(null);
+    }
+  }
+
+  function handleColumnDrop(event: DragEvent<HTMLDivElement>, columnIndex: number) {
+    event.preventDefault();
+    if (!layoutReady) return;
+
+    const droppedCardId = event.dataTransfer.getData("text/plain") as OrderDetailCardId || draggingCardId;
+    setDraggingCardId(null);
+    setDragOverCardId(null);
+    setDragOverCardCue(null);
+    setDragOverColumnIndex(null);
+
+    if (!droppedCardId || !cardLayout.cardOrder.includes(droppedCardId)) return;
+    moveCardToColumn(droppedCardId, columnIndex);
+  }
+
   function handleCardDragEnd() {
     setDraggingCardId(null);
     setDragOverCardId(null);
+    setDragOverCardCue(null);
+    setDragOverColumnIndex(null);
   }
 
   function resetCardLayout() {
@@ -2356,6 +2691,65 @@ export function OrderDetailContent({
     setOrderActionStatus(message && message.includes("No changes") ? message : null);
   }
 
+  function applyOptimisticFinancePatch(patch: FinancePatch) {
+    const previousOrderValue = order.paidAmount + order.remainingAmount;
+    let orderValue = typeof patch.orderValue === "number" ? Math.max(0, patch.orderValue) : previousOrderValue;
+    let paidAmount = order.paidAmount;
+    let remainingAmount = order.remainingAmount;
+
+    if (typeof patch.orderValue === "number") {
+      paidAmount = Math.min(paidAmount, orderValue);
+      remainingAmount = Math.max(orderValue - paidAmount, 0);
+    }
+    if (typeof patch.paidAmount === "number") {
+      paidAmount = Math.min(Math.max(0, patch.paidAmount), orderValue);
+      remainingAmount = Math.max(orderValue - paidAmount, 0);
+    }
+    if (typeof patch.remainingAmount === "number") {
+      remainingAmount = Math.max(0, patch.remainingAmount);
+      orderValue = paidAmount + remainingAmount;
+    }
+    if (patch.fullPaymentReceived) {
+      paidAmount = orderValue;
+      remainingAmount = 0;
+    }
+
+    const watchPurchasePrice = typeof patch.watchPurchasePrice === "number" ? Math.max(0, patch.watchPurchasePrice) : order.watchPurchasePrice;
+    let paymentFee = typeof patch.paymentFee === "number" ? Math.max(0, patch.paymentFee) : order.paymentFee;
+    const deliveryCost = typeof patch.deliveryCost === "number" ? Math.max(0, patch.deliveryCost) : order.deliveryCost;
+    const taxRate = typeof patch.taxRate === "number" ? Math.max(0, patch.taxRate) : (order.taxRate || moneySettings?.defaultTaxRate || 0);
+    const taxType = typeof patch.taxType === "string" ? patch.taxType : (order.taxType || moneySettings?.taxCalculationType || "");
+    const paymentMethod = typeof patch.paymentMethod === "string" ? patch.paymentMethod : order.paymentMethod;
+
+    if (patch.paymentFee === undefined && (patch.orderValue !== undefined || patch.paidAmount !== undefined || patch.remainingAmount !== undefined || patch.fullPaymentReceived)) {
+      paymentFee = Math.round(orderValue * (moneySettings?.feePercentage ?? 3)) / 100;
+    }
+
+    const taxAmount = webFinanceTaxAmount({
+      paidAmount,
+      remainingAmount,
+      watchPurchasePrice,
+      paymentFee,
+      deliveryCost,
+      taxRate,
+      taxType
+    });
+    const netProfit = paidAmount + remainingAmount - watchPurchasePrice - paymentFee - deliveryCost - taxAmount;
+
+    onOptimisticOrderPatch?.({
+      paidAmount,
+      remainingAmount,
+      watchPurchasePrice,
+      paymentFee,
+      deliveryCost,
+      taxRate,
+      taxType,
+      taxAmount,
+      netProfit,
+      paymentMethod
+    });
+  }
+
   async function saveFinancePatch(patch: FinancePatch, fieldLabel: string) {
     if (!canInlineEditFinance) {
       setFinanceError("Your workspace role cannot edit financial info.");
@@ -2365,18 +2759,34 @@ export function OrderDetailContent({
     setFinanceError(null);
     setFinanceStatus(null);
     setSavingFinanceField(fieldLabel);
+    applyOptimisticFinancePatch(patch);
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
         finance: patch
       });
-      await onReloadOrder();
     } catch (financeFailure) {
+      await onReloadOrder();
       setFinanceStatus(null);
       setFinanceError(financeFailure instanceof Error ? financeFailure.message : "Could not update financial info.");
     } finally {
       setSavingFinanceField(null);
     }
+  }
+
+  function savePaidFinanceValue(value: string | number) {
+    const paidAmount = parseFinanceNumber(value);
+    if (paidAmount === null) return;
+    const currentOrderValue = order.paidAmount + order.remainingAmount;
+    const patch: FinancePatch = { paidAmount };
+    if (paidAmount > currentOrderValue) patch.orderValue = paidAmount;
+    return saveFinancePatch(patch, "Paid");
+  }
+
+  function saveMoneyFinanceValue(field: "remainingAmount" | "watchPurchasePrice" | "paymentFee" | "deliveryCost" | "taxRate", value: string | number, fieldLabel: string) {
+    const parsed = parseFinanceNumber(value);
+    if (parsed === null) return;
+    return saveFinancePatch({ [field]: parsed }, fieldLabel);
   }
 
   function applyOptimisticDetailsPatch(patch: DetailsPatch) {
@@ -2390,15 +2800,42 @@ export function OrderDetailContent({
     if (typeof patch.whatsappNumber === "string") nextPatch.whatsappNumber = patch.whatsappNumber;
     if (typeof patch.instagramUsername === "string") nextPatch.instagramUsername = patch.instagramUsername;
     if (typeof patch.notes === "string") nextPatch.notes = patch.notes;
+    if (patch.customFields && typeof patch.customFields === "object") {
+      const nextCustomFields = { ...order.customFields };
+      Object.entries(patch.customFields).forEach(([key, value]) => {
+        const nextValue = String(value ?? "");
+        if (nextValue.trim()) nextCustomFields[key] = nextValue;
+        else delete nextCustomFields[key];
+      });
+      nextPatch.customFields = nextCustomFields;
+    }
     if (typeof patch.tiktokUsername === "string" || typeof patch.address === "string") {
       nextPatch.customFields = {
         ...order.customFields,
+        ...(nextPatch.customFields ?? {}),
         ...(typeof patch.address === "string" ? { communicationAddress: patch.address } : {}),
         ...(typeof patch.tiktokUsername === "string" ? { "communicationChannel::TikTok": patch.tiktokUsername } : {})
       };
     }
     if (Array.isArray(patch.communication)) nextPatch.communication = patch.communication;
-    if (typeof patch.deliveryTime === "number") nextPatch.deliveryTime = patch.deliveryTime;
+    let nextPaymentDate = order.paymentDate;
+    let nextDeliveryTime = order.deliveryTime;
+    if (typeof patch.paymentDate === "string") {
+      nextPaymentDate = dateFromInputValue(patch.paymentDate);
+      nextPatch.paymentDate = nextPaymentDate;
+    }
+    if (typeof patch.deliveryTime === "number") {
+      nextDeliveryTime = Math.max(0, Math.round(patch.deliveryTime));
+      nextPatch.deliveryTime = nextDeliveryTime;
+    }
+    if (typeof patch.deliveryDueDate === "string") {
+      const dueDate = dateFromInputValue(patch.deliveryDueDate);
+      nextPatch.dueDate = dueDate;
+      nextDeliveryTime = daysBetweenDates(nextPaymentDate, dueDate);
+      nextPatch.deliveryTime = nextDeliveryTime;
+    } else if (nextPatch.paymentDate !== undefined || nextPatch.deliveryTime !== undefined) {
+      nextPatch.dueDate = addDays(nextPaymentDate, nextDeliveryTime);
+    }
     if (typeof patch.courier === "string") nextPatch.courier = patch.courier;
     if (typeof patch.trackingNumber === "string") nextPatch.trackingNumber = patch.trackingNumber;
     if (typeof patch.isDispatched === "boolean") nextPatch.isDispatched = patch.isDispatched;
@@ -2413,6 +2850,20 @@ export function OrderDetailContent({
     if (typeof patch.invNotes === "string") nextPatch.invNotes = patch.invNotes;
     if (patch.extraStatuses) nextPatch.extraStatuses = { ...order.extraStatuses, ...patch.extraStatuses };
     if (patch.customToggles) nextPatch.customToggles = { ...order.customToggles, ...patch.customToggles };
+    if (patch.materialsDefaultToggles) {
+      const nextToggles = { ...order.customToggles, ...(nextPatch.customToggles ?? {}) };
+      Object.entries(patch.materialsDefaultToggles).forEach(([title, value]) => {
+        nextToggles[`materialsDefault::${title}`] = Boolean(value);
+      });
+      nextPatch.customToggles = nextToggles;
+    }
+    if (patch.materialsToggles) {
+      const nextToggles = { ...order.customToggles, ...(nextPatch.customToggles ?? {}) };
+      Object.entries(patch.materialsToggles).forEach(([title, value]) => {
+        nextToggles[`materials::${title}`] = Boolean(value);
+      });
+      nextPatch.customToggles = nextToggles;
+    }
     if (patch.statusNotesSupplier !== undefined) {
       nextPatch.customFields = {
         ...order.customFields,
@@ -2445,14 +2896,14 @@ export function OrderDetailContent({
     setInlineError(null);
     setInlineStatus(null);
     setSavingInlineField(fieldLabel);
+    applyOptimisticDetailsPatch(patch);
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
         details: patch
       });
-      applyOptimisticDetailsPatch(patch);
-      await onReloadOrder();
     } catch (saveFailure) {
+      await onReloadOrder();
       setInlineStatus(null);
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update order detail.");
     } finally {
@@ -2472,6 +2923,7 @@ export function OrderDetailContent({
 
     setInlineError(null);
     setPreviewActioning("link");
+    applyOptimisticDetailsPatch({ designLink: nextLink.trim() });
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
@@ -2481,8 +2933,8 @@ export function OrderDetailContent({
       });
       setPreviewLinkEditing(false);
       setPreviewMenuOpen(false);
-      await onReloadOrder();
     } catch (saveFailure) {
+      await onReloadOrder();
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update preview image.");
     } finally {
       setPreviewActioning(null);
@@ -2548,9 +3000,10 @@ export function OrderDetailContent({
           designLink: downloadURL
         }
       });
+      applyOptimisticDetailsPatch({ designLink: downloadURL });
       setPreviewMenuOpen(false);
-      await onReloadOrder();
     } catch (uploadFailure) {
+      await onReloadOrder();
       setInlineError(uploadFailure instanceof Error ? uploadFailure.message : "Could not upload preview image.");
     } finally {
       setPreviewActioning(null);
@@ -2567,17 +3020,17 @@ export function OrderDetailContent({
     setInlineError(null);
     setInlineStatus(null);
     setSavingInlineField(fieldLabel);
+    onOptimisticOrderPatch?.({
+      ...(patch.designStatus ? { designStatus: patch.designStatus } : {}),
+      ...(patch.paintingStatus ? { status: patch.paintingStatus } : {})
+    });
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
         ...patch
       });
-      onOptimisticOrderPatch?.({
-        ...(patch.designStatus ? { designStatus: patch.designStatus } : {}),
-        ...(patch.paintingStatus ? { status: patch.paintingStatus } : {})
-      });
-      await onReloadOrder();
     } catch (saveFailure) {
+      await onReloadOrder();
       setInlineStatus(null);
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update status.");
     } finally {
@@ -2594,14 +3047,14 @@ export function OrderDetailContent({
     setInlineError(null);
     setInlineStatus(null);
     setSavingInlineField(fieldLabel);
+    applyOptimisticDetailsPatch(patch);
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
         details: patch
       });
-      applyOptimisticDetailsPatch(patch);
-      await onReloadOrder();
     } catch (saveFailure) {
+      await onReloadOrder();
       setInlineStatus(null);
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update status.");
     } finally {
@@ -2919,6 +3372,114 @@ export function OrderDetailContent({
       priority: newSchedulePriority,
       notify: canNotifyScheduleItems && newScheduleNotify
     }, "Add reminder");
+  }
+
+  async function saveWorkTimePatch(patch: NonNullable<UpdateOrderInput["workTime"]>, label: string) {
+    if (!canEditWorkTime) {
+      setWorkTimeError("Your workspace role cannot edit Work Time.");
+      setWorkTimeStatus(null);
+      return;
+    }
+
+    const previousWorkSessions = optimisticWorkSessions ?? order.workSessions;
+    const now = new Date();
+    const nextWorkSessions = (() => {
+      if (patch.action === "start" || patch.action === "continue") {
+        const title = (patch.title || newWorkSessionTitle || "Work session").trim() || "Work session";
+        const sessionId = patch.newSessionId || (patch.action === "start" ? patch.sessionId : "") || localWorkSessionId();
+        return sortWorkSessions([
+          {
+            id: sessionId,
+            title,
+            startedAt: now,
+            endedAt: null,
+            durationSeconds: 0,
+            createdAt: now,
+            createdByUid: user?.uid || "",
+            createdByEmail: user?.email || "",
+            source: "web"
+          },
+          ...previousWorkSessions
+        ]);
+      }
+
+      if (patch.action === "stop") {
+        const targetId = patch.sessionId || previousWorkSessions.find(session => !session.endedAt)?.id || "";
+        return sortWorkSessions(previousWorkSessions.map(session => {
+          if (session.id !== targetId || session.endedAt || !session.startedAt) return session;
+          return {
+            ...session,
+            endedAt: now,
+            durationSeconds: workSessionDurationSeconds({ ...session, endedAt: now }, now)
+          };
+        }));
+      }
+
+      if (patch.action === "delete" && patch.sessionId) {
+        return previousWorkSessions.filter(session => session.id !== patch.sessionId);
+      }
+
+      return previousWorkSessions;
+    })();
+
+    setWorkTimeError(null);
+    setWorkTimeStatus(null);
+    setSavingWorkTimeAction(label);
+    setWorkTimeNow(now);
+    const pendingSessionId = patch.newSessionId
+      || patch.sessionId
+      || nextWorkSessions.find(session => !previousWorkSessions.some(previous => previous.id === session.id))?.id
+      || "";
+    if (pendingSessionId) {
+      pendingWorkTimeActionRef.current = {
+        action: patch.action,
+        sessionId: pendingSessionId
+      };
+    }
+    setOptimisticWorkSessions(nextWorkSessions);
+    onOptimisticOrderPatch?.({ workSessions: nextWorkSessions });
+    if (patch.action === "start") setNewWorkSessionTitle("");
+    try {
+      await updateOrderFromWeb(workspace, {
+        orderId: order.id,
+        workTime: patch
+      });
+      if (patch.action === "start") {
+        setWorkTimeStatus("Work timer started.");
+      } else if (patch.action === "continue") {
+        setWorkTimeStatus("Work timer continued.");
+      } else if (patch.action === "delete") {
+        setWorkTimeStatus("Work session deleted.");
+      } else {
+        setWorkTimeStatus("Work timer stopped.");
+      }
+    } catch (saveFailure) {
+      pendingWorkTimeActionRef.current = null;
+      setOptimisticWorkSessions(null);
+      onOptimisticOrderPatch?.({ workSessions: previousWorkSessions });
+      await onReloadOrder();
+      setWorkTimeStatus(null);
+      setWorkTimeError(saveFailure instanceof Error ? saveFailure.message : "Could not update Work Time.");
+    } finally {
+      setSavingWorkTimeAction(null);
+    }
+  }
+
+  function startWorkTimer() {
+    const title = newWorkSessionTitle.trim() || "Work session";
+    void saveWorkTimePatch({ action: "start", title, newSessionId: localWorkSessionId() }, "Start");
+  }
+
+  function stopWorkTimer(session?: WorkSessionDetail) {
+    void saveWorkTimePatch({ action: "stop", sessionId: session?.id }, "Stop");
+  }
+
+  function continueWorkTimer(session: WorkSessionDetail) {
+    void saveWorkTimePatch({ action: "continue", sessionId: session.id, newSessionId: localWorkSessionId(), title: session.title }, "Continue");
+  }
+
+  function deleteWorkTimer(session: WorkSessionDetail) {
+    void saveWorkTimePatch({ action: "delete", sessionId: session.id }, "Delete");
   }
 
   function exportOrderPdf() {
@@ -3402,14 +3963,19 @@ export function OrderDetailContent({
                 saving={savingInlineField === "Design Name"}
                 onSave={value => saveDetailsPatch({ designName: String(value) }, "Design Name")}
               />
-              <InlineValueRow
-                label="Reference"
-                value={order.watchRef || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Reference"}
-                onSave={value => saveDetailsPatch({ watchRef: String(value) }, "Reference")}
-              />
-              {order.designLink ? <AppValueRow label="Design Link" value="Open link" href={order.designLink} /> : <AppValueRow label="Design Link" value="" />}
+              {(blockHeadingSettings?.customFields ?? [])
+                .map(field => ({ id: field.id, title: field.title.trim() }))
+                .filter(field => Boolean(field.title))
+                .map(field => (
+                  <InlineValueRow
+                    key={field.id || field.title}
+                    label={field.title}
+                    value={order.customFields[field.title] || ""}
+                    disabled={!canInlineEditFullDetails}
+                    saving={savingInlineField === field.title}
+                    onSave={value => saveDetailsPatch({ customFields: { [field.title]: String(value) } }, field.title)}
+                  />
+                ))}
               <div className="app-card-divider" />
               <div className="app-subsection-title"><span>▱</span><strong>Communication</strong></div>
               <InlineValueRow
@@ -3500,9 +4066,17 @@ export function OrderDetailContent({
                       tone="positive"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Paid"}
-                      onSave={value => saveFinancePatch({ paidAmount: Number(value) }, "Paid")}
+                      onSave={savePaidFinanceValue}
                     />
-                    <DetailRow label="Remaining" value={money(order.remainingAmount, hideNumbers)} tone="positive" />
+                    <FinanceInlineRow
+                      label="Remaining"
+                      displayValue={money(order.remainingAmount, hideNumbers)}
+                      value={order.remainingAmount}
+                      tone="positive"
+                      disabled={!canInlineEditFinance}
+                      saving={savingFinanceField === "Remaining"}
+                      onSave={value => saveMoneyFinanceValue("remainingAmount", value, "Remaining")}
+                    />
                     <FinancePaymentReceivedRow
                       remainingAmount={order.remainingAmount}
                       disabled={!canInlineEditFinance || order.remainingAmount <= 0}
@@ -3527,7 +4101,7 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Cost (Base)"}
-                      onSave={value => saveFinancePatch({ watchPurchasePrice: Number(value) }, "Cost (Base)")}
+                      onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
                     <FinanceInlineRow
                       label="Platform Fee"
@@ -3536,7 +4110,7 @@ export function OrderDetailContent({
                       tone="negative-soft"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Platform Fee"}
-                      onSave={value => saveFinancePatch({ paymentFee: Number(value) }, "Platform Fee")}
+                      onSave={value => saveMoneyFinanceValue("paymentFee", value, "Platform Fee")}
                     />
                     <FinanceInlineRow
                       label="Shipping Cost"
@@ -3545,7 +4119,7 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Shipping Cost"}
-                      onSave={value => saveFinancePatch({ deliveryCost: Number(value) }, "Shipping Cost")}
+                      onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
                     />
                     <div className="app-card-divider" />
                     <FinanceInlineRow
@@ -3565,7 +4139,7 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "VAT Rate (%)"}
-                      onSave={value => saveFinancePatch({ taxRate: Number(value) }, "VAT Rate (%)")}
+                      onSave={value => saveMoneyFinanceValue("taxRate", value, "VAT Rate (%)")}
                     />
                     <DetailRow label="VAT Amount" value={money(order.taxAmount, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
@@ -3580,7 +4154,7 @@ export function OrderDetailContent({
                       tone="positive"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Paid"}
-                      onSave={value => saveFinancePatch({ paidAmount: Number(value) }, "Paid")}
+                      onSave={savePaidFinanceValue}
                     />
                     <FinanceInlineRow
                       label="Cost (Base)"
@@ -3589,7 +4163,7 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Cost (Base)"}
-                      onSave={value => saveFinancePatch({ watchPurchasePrice: Number(value) }, "Cost (Base)")}
+                      onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
                     <LockedInline title="Advanced financial fields" note="Remaining, VAT, shipping, platform fee and final profit are available from StudioFlow Lite." />
                   </>
@@ -3871,6 +4445,127 @@ export function OrderDetailContent({
             </div>
           </section>
         );
+      case "workTime": {
+        const sessions = optimisticWorkSessions ?? order.workSessions;
+        const runningSession = sessions.find(session => Boolean(session.startedAt && !session.endedAt));
+        const totalSeconds = sessions.reduce((sum, session) => sum + workSessionDurationSeconds(session, workTimeNow), 0);
+        const groups = groupWorkSessionsByDate(sessions);
+        return (
+          <section key={cardId} className="card order-detail-card is-work-time-card">
+            {renderCardTitle(cardId)}
+            <div className="app-card-panel app-work-time-panel">
+              <div className="app-work-total">
+                <span>Total Work Time</span>
+                <strong>{formatWorkDuration(totalSeconds)}</strong>
+              </div>
+              {runningSession ? (
+                <div className="app-work-active">
+                  <div>
+                    <span>Running now</span>
+                    <strong>{runningSession.title}</strong>
+                    <small>{formatTime(runningSession.startedAt)} started</small>
+                  </div>
+                  <b>{formatWorkDuration(workSessionDurationSeconds(runningSession, workTimeNow))}</b>
+                </div>
+              ) : null}
+              {canEditWorkTime ? (
+                <div className="app-work-controls">
+                  <input
+                    type="text"
+                    value={newWorkSessionTitle}
+                    onChange={event => setNewWorkSessionTitle(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === "Enter" && !runningSession && !savingWorkTimeAction) startWorkTimer();
+                    }}
+                    placeholder="Work title..."
+                    disabled={Boolean(runningSession || savingWorkTimeAction)}
+                  />
+                  {runningSession ? (
+                    <button type="button" className="danger" disabled={Boolean(savingWorkTimeAction)} onClick={() => stopWorkTimer(runningSession)}>
+                      Stop
+                    </button>
+                  ) : (
+                    <button type="button" disabled={Boolean(savingWorkTimeAction)} onClick={startWorkTimer}>
+                      Start
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="app-work-locked">Your workspace role can view Work Time but cannot edit it.</div>
+              )}
+              {workTimeStatus ? <p className="file-action-status">{workTimeStatus}</p> : null}
+              {workTimeError ? <p className="file-action-error">{workTimeError}</p> : null}
+              {groups.length === 0 ? (
+                <div className="app-work-empty">
+                  <span>◷</span>
+                  <strong>No work sessions yet.</strong>
+                  <p>Start a timer when you begin work on this order.</p>
+                </div>
+              ) : (
+                <div className="app-work-session-list">
+                  {groups.map(group => {
+                    const groupSeconds = group.items.reduce((sum, item) => sum + workSessionDurationSeconds(item, workTimeNow), 0);
+                    return (
+                      <div key={group.dateLabel} className="app-work-group">
+                        <div className="app-work-group-heading">
+                          <strong>{group.dateLabel}</strong>
+                          <span>{formatWorkDuration(groupSeconds)}</span>
+                        </div>
+                        {group.items.map(session => (
+                          <article key={session.id} className="app-work-session-row">
+                            <div>
+                              <strong>{session.title}</strong>
+                              <p>{formatTime(session.startedAt)} → {session.endedAt ? formatTime(session.endedAt) : "Running"}</p>
+                              <small>{session.createdByEmail || session.source || "StudioFlow"}</small>
+                            </div>
+                            <b>{formatWorkDuration(workSessionDurationSeconds(session, workTimeNow))}</b>
+                            {canEditWorkTime ? (
+                              <div className="app-work-session-actions">
+                                {session.endedAt ? (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(runningSession || savingWorkTimeAction)}
+                                    onClick={() => continueWorkTimer(session)}
+                                    title="Continue"
+                                    aria-label="Continue work session"
+                                  >
+                                    <WorkTimeActionIcon name="continue" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="danger"
+                                    disabled={Boolean(savingWorkTimeAction)}
+                                    onClick={() => stopWorkTimer(session)}
+                                    title="Stop"
+                                    aria-label="Stop work session"
+                                  >
+                                    <WorkTimeActionIcon name="stop" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="danger subtle"
+                                  disabled={Boolean(savingWorkTimeAction)}
+                                  onClick={() => deleteWorkTimer(session)}
+                                  title="Delete"
+                                  aria-label="Delete work session"
+                                >
+                                  <WorkTimeActionIcon name="delete" />
+                                </button>
+                              </div>
+                            ) : null}
+                          </article>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      }
       case "historyLog":
         return (
           <section key={cardId} className="card order-detail-card is-history-card">
@@ -4327,8 +5022,15 @@ export function OrderDetailContent({
     }
   }
 
+  function renderedCardHeight(cardId: OrderDetailCardId) {
+    if (cardId === "historyLog" && order.historyLog.length === 0) {
+      return Math.max(measuredCardMinimums.historyLog || 210, 210);
+    }
+    return effectiveCardHeight(cardLayout, cardId, measuredCardMinimums);
+  }
+
   function renderDesktopCardFrame(cardId: OrderDetailCardId, columnIndex: number) {
-    const renderedHeight = effectiveCardHeight(cardLayout, cardId, measuredCardMinimums);
+    const renderedHeight = renderedCardHeight(cardId);
     const frameStyle: CSSProperties = {
       height: `${renderedHeight}px`,
       minHeight: `${renderedHeight}px`
@@ -4350,7 +5052,7 @@ export function OrderDetailContent({
         className={frameClassName}
         data-card-color={cardProfileColor(cardLayout, cardId)}
         onDragOver={event => handleCardDragOver(event, cardId)}
-        onDragLeave={() => dragOverCardId === cardId ? setDragOverCardId(null) : undefined}
+        onDragLeave={event => handleCardDragLeave(event, cardId)}
         onDrop={event => handleCardDrop(event, cardId)}
         style={frameStyle}
       >
@@ -4370,6 +5072,15 @@ export function OrderDetailContent({
         </button>
         {renderCardMenu(cardId)}
         {renderCard(cardId)}
+        {draggingCardId && draggingCardId !== cardId ? (
+          <div
+            className="order-detail-card-after-drop-strip"
+            data-card-insert-drop-zone="true"
+            onDragOver={event => handleCardInsertDragOver(event, cardId, true)}
+            onDrop={event => handleCardInsertDrop(event, cardId, true)}
+            aria-hidden="true"
+          />
+        ) : null}
         {canCustomizeCards && layoutReady ? (
           <>
             <button
@@ -4399,8 +5110,24 @@ export function OrderDetailContent({
     );
   }
 
+  function renderCardInsertDropZone(cardId: OrderDetailCardId, placement: "before" | "after") {
+    const insertAfter = placement === "after";
+
+    return (
+      <div
+        key={`${cardId}-${placement}-drop-zone`}
+        className={["order-detail-card-insert-drop-zone", `is-${placement}`].join(" ")}
+        data-card-insert-drop-zone="true"
+        onDragOver={event => handleCardInsertDragOver(event, cardId, insertAfter)}
+        onDrop={event => handleCardInsertDrop(event, cardId, insertAfter)}
+      >
+        <span>Drop card here</span>
+      </div>
+    );
+  }
+
   function renderMobileCardFrame(cardId: OrderDetailCardId) {
-    const renderedHeight = effectiveCardHeight(cardLayout, cardId, measuredCardMinimums);
+    const renderedHeight = renderedCardHeight(cardId);
     const frameStyle: CSSProperties = {
       height: `${renderedHeight}px`,
       minHeight: `${renderedHeight}px`
@@ -4446,12 +5173,40 @@ export function OrderDetailContent({
           <p>{order.designName}</p>
         </div>
         <div className="order-toolbar-pills">
-          <button className="button secondary" type="button" onClick={exportOrderPdf}>
-            Export PDF
-          </button>
-          <button className="button secondary customize-button" type="button" onClick={() => setCustomizeOpen(open => !open)}>
-            Customize cards
-          </button>
+          <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
+            <button
+              className="button secondary order-actions-button"
+              type="button"
+              onClick={event => {
+                event.stopPropagation();
+                setOrderActionsOpen(open => !open);
+              }}
+            >
+              Actions
+            </button>
+            {orderActionsOpen ? (
+              <div className="order-actions-menu-panel">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderActionsOpen(false);
+                    exportOrderPdf();
+                  }}
+                >
+                  Export PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderActionsOpen(false);
+                    setCustomizeOpen(true);
+                  }}
+                >
+                  Customize cards
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -4572,7 +5327,7 @@ export function OrderDetailContent({
                     dragOverCardId === cardId ? "is-drop-target" : ""
                   ].filter(Boolean).join(" ")}
                   onDragOver={event => handleCardDragOver(event, cardId)}
-                  onDragLeave={() => dragOverCardId === cardId ? setDragOverCardId(null) : undefined}
+                  onDragLeave={event => handleCardDragLeave(event, cardId)}
                   onDrop={event => handleCardDrop(event, cardId)}
                 >
                   <div className="customize-card-main">
@@ -4638,15 +5393,49 @@ export function OrderDetailContent({
             onLostPointerCapture={endWorkspacePan}
           >
             <div className="order-detail-canvas">
-              {desktopColumns.map(column => (
-                <div
-                  key={column.id}
-                  className="order-detail-column"
-                  style={{ width: `${column.width}px` }}
-                >
-                  {column.cards.map(cardId => renderDesktopCardFrame(cardId, column.index))}
-                </div>
-              ))}
+              {desktopColumns.map(column => {
+                const isEmptyColumn = column.cards.length === 0;
+                const showColumnDropTarget = Boolean(draggingCardId && (isEmptyColumn || dragOverColumnIndex === column.index));
+
+                return (
+                  <div
+                    key={column.id}
+                    className={[
+                      "order-detail-column",
+                      draggingCardId ? "can-drop-card" : "",
+                      isEmptyColumn ? "is-empty" : "",
+                      dragOverColumnIndex === column.index ? "is-column-drop-target" : ""
+                    ].filter(Boolean).join(" ")}
+                    onDragOver={event => handleColumnDragOver(event, column.index)}
+                    onDragLeave={event => handleColumnDragLeave(event, column.index)}
+                    onDrop={event => handleColumnDrop(event, column.index)}
+                    style={{ width: `${column.width}px` }}
+                  >
+                    {column.cards.map(cardId => (
+                      <Fragment key={cardId}>
+                        {draggingCardId && dragOverCardCue?.cardId === cardId && dragOverCardCue.placement === "before"
+                          ? renderCardInsertDropZone(cardId, "before")
+                          : null}
+                        {renderDesktopCardFrame(cardId, column.index)}
+                        {draggingCardId && dragOverCardCue?.cardId === cardId && dragOverCardCue.placement === "after"
+                          ? renderCardInsertDropZone(cardId, "after")
+                          : null}
+                      </Fragment>
+                    ))}
+                    {showColumnDropTarget ? (
+                      <div
+                        className={[
+                          "order-detail-empty-column-drop",
+                          isEmptyColumn ? "is-empty-target" : "is-append-target"
+                        ].join(" ")}
+                        aria-hidden="true"
+                      >
+                        Drop card here
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -4803,10 +5592,6 @@ function OrderEditModal({
               <label>
                 Design name
                 <input className="input" value={form.designName} onChange={event => updateField("designName", event.target.value)} disabled={saving} />
-              </label>
-              <label>
-                Reference / watch model
-                <input className="input" value={form.watchRef} onChange={event => updateField("watchRef", event.target.value)} disabled={saving} />
               </label>
               <div className="add-order-two-col">
                 <label>
@@ -5614,6 +6399,7 @@ function FinanceInlineRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
+  const cancellingRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(String(value ?? ""));
@@ -5621,13 +6407,34 @@ function FinanceInlineRow({
 
   async function submit() {
     if (disabled || saving) return;
-    const nextValue = mode === "number" ? Number(draft) : draft;
-    if (mode === "number" && (!Number.isFinite(Number(nextValue)) || Number(nextValue) < 0)) {
+    const nextValue = mode === "number" ? parseFinanceNumber(draft) : draft;
+    if (mode === "number" && nextValue === null) {
       setEditing(false);
       return;
     }
     setEditing(false);
-    await onSave(nextValue);
+    if (nextValue !== null) await onSave(nextValue);
+  }
+
+  function cancelEdit() {
+    cancellingRef.current = true;
+    setDraft(String(value ?? ""));
+    setEditing(false);
+    window.setTimeout(() => {
+      cancellingRef.current = false;
+    }, 0);
+  }
+
+  function saveOnBlur() {
+    if (cancellingRef.current) return;
+    void submit();
+  }
+
+  function startEditing() {
+    if (disabled || saving) return;
+    const shouldStartBlank = mode === "number" && parseFinanceNumber(value) === 0;
+    setDraft(shouldStartBlank ? "" : String(value ?? ""));
+    setEditing(true);
   }
 
   return (
@@ -5647,7 +6454,7 @@ function FinanceInlineRow({
               await onSave(event.target.value);
             }}
             onKeyDown={event => {
-              if (event.key === "Escape") setEditing(false);
+              if (event.key === "Escape") cancelEdit();
             }}
           >
             {options.map(option => <option key={option} value={option}>{option}</option>)}
@@ -5668,10 +6475,10 @@ function FinanceInlineRow({
               autoFocus
               value={draft}
               disabled={saving}
-              onBlur={() => setEditing(false)}
+              onBlur={saveOnBlur}
               onChange={event => setDraft(event.target.value)}
               onKeyDown={event => {
-                if (event.key === "Escape") setEditing(false);
+                if (event.key === "Escape") cancelEdit();
               }}
             />
           </form>
@@ -5681,9 +6488,7 @@ function FinanceInlineRow({
           className={["finance-value-pill", toneClass(tone)].filter(Boolean).join(" ")}
           type="button"
           disabled={disabled || saving}
-          onClick={() => {
-            if (!disabled && !saving) setEditing(true);
-          }}
+          onClick={startEditing}
           title={disabled ? "This field is read-only for your role or plan." : "Click to edit"}
         >
           {saving ? "Saving..." : displayValue}
@@ -5762,6 +6567,36 @@ function ClientFileActionIcon({ name }: { name: ClientFileActionIconName }) {
 
   return (
     <svg className="client-file-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M5 7h14" />
+      <path d="M9 7V5h6v2" />
+      <path d="M8 10v9h8v-9" />
+      <path d="M10.5 12.5v4" />
+      <path d="M13.5 12.5v4" />
+    </svg>
+  );
+}
+
+type WorkTimeActionIconName = "continue" | "stop" | "delete";
+
+function WorkTimeActionIcon({ name }: { name: WorkTimeActionIconName }) {
+  if (name === "continue") {
+    return (
+      <svg className="app-work-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    );
+  }
+
+  if (name === "stop") {
+    return (
+      <svg className="app-work-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7 7h10v10H7z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="app-work-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M5 7h14" />
       <path d="M9 7V5h6v2" />
       <path d="M8 10v9h8v-9" />

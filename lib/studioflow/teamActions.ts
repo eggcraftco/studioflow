@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
-import type { JoinRequestDetail, TeamMemberDetail, WorkspaceContext } from "@/lib/studioflow/firestore";
+import type { JoinRequestDetail, TeamMemberDetail, WorkspaceContext, WorkspaceMemberAccess } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 
 export const WEB_TEAM_ROLES = [
@@ -10,6 +10,14 @@ export const WEB_TEAM_ROLES = [
 ] as const;
 
 export type WebTeamRole = (typeof WEB_TEAM_ROLES)[number]["value"];
+
+export type TeamMemberInput = {
+  uid: string;
+  email?: string;
+  displayName?: string;
+  role?: string;
+  access?: WorkspaceMemberAccess;
+};
 
 type CallableResult = {
   ok?: boolean;
@@ -59,11 +67,39 @@ export async function declineJoinRequest(workspace: WorkspaceContext, request: J
   });
 }
 
+export async function addTeamMember(workspace: WorkspaceContext, input: TeamMemberInput) {
+  return callTeamFunction("addWorkspaceTeamMember", {
+    companyId: workspace.id,
+    memberUid: input.uid,
+    email: input.email || "",
+    displayName: input.displayName || "",
+    role: normalizeRole(input.role || "member"),
+    access: input.access
+  });
+}
+
+export async function updateTeamMemberProfile(workspace: WorkspaceContext, member: TeamMemberDetail, profile: { displayName: string; email: string }) {
+  return callTeamFunction("updateWorkspaceMemberProfile", {
+    companyId: workspace.id,
+    memberUid: member.id,
+    displayName: profile.displayName,
+    email: profile.email
+  });
+}
+
 export async function updateTeamMemberRole(workspace: WorkspaceContext, member: TeamMemberDetail, role: string) {
   return callTeamFunction("updateWorkspaceMemberRole", {
     companyId: workspace.id,
     memberUid: member.id,
     role: normalizeRole(role)
+  });
+}
+
+export async function updateTeamMemberAccess(workspace: WorkspaceContext, member: TeamMemberDetail, access: WorkspaceMemberAccess) {
+  return callTeamFunction("updateWorkspaceMemberAccess", {
+    companyId: workspace.id,
+    memberUid: member.id,
+    access
   });
 }
 

@@ -63,11 +63,13 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     materialsToggles?: Record<string, boolean>;
     statusNotesSupplier?: string;
     notes?: string;
+    customFields?: Record<string, string>;
     specialNotes?: Record<string, string>;
   };
   finance?: {
     orderValue?: number;
     paidAmount?: number;
+    remainingAmount?: number;
     watchPurchasePrice?: number;
     paymentFee?: number;
     deliveryCost?: number;
@@ -99,6 +101,12 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     notify?: boolean;
     hours?: number;
   };
+  workTime?: {
+    action: "start" | "continue" | "stop" | "delete";
+    title?: string;
+    sessionId?: string;
+    newSessionId?: string;
+  };
 };
 
 export type UpdateOrderResult = {
@@ -106,6 +114,13 @@ export type UpdateOrderResult = {
   orderId?: string;
   changed?: boolean;
   historyCount?: number;
+  message?: string;
+  [key: string]: unknown;
+};
+
+export type DeleteOrderResult = {
+  ok?: boolean;
+  orderId?: string;
   message?: string;
   [key: string]: unknown;
 };
@@ -145,6 +160,12 @@ function friendlyUpdateOrderError(error: unknown) {
   if (/workflow/i.test(message)) return "Workflow Only can edit order details, but cannot edit finance fields.";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot edit this order.";
   return message || "Could not update the order. Please try again.";
+}
+
+function friendlyDeleteOrderError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/permission|role|denied/i.test(message)) return "Your workspace role cannot delete orders.";
+  return message || "Could not delete the order. Please try again.";
 }
 
 function extensionForPreviewImage(file: File) {
@@ -217,6 +238,28 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
     }, "Saving order changes to cloud.");
   } catch (error) {
     throw new Error(friendlyUpdateOrderError(error));
+  }
+}
+
+export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
+  if (!canEditOrderFullyForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot delete orders.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "deleteWebOrder");
+      const response = await callable({
+        companyId: workspace.id,
+        orderId
+      });
+      if (response.data?.ok === false) {
+        throw new Error(response.data?.message || "Could not delete the order.");
+      }
+      return response.data;
+    }, "Deleting order from cloud.");
+  } catch (error) {
+    throw new Error(friendlyDeleteOrderError(error));
   }
 }
 
