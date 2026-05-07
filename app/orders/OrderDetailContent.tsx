@@ -1546,6 +1546,13 @@ export function OrderDetailContent({
       .filter(item => item.title.length > 0) ?? [];
     return saved.length > 0 ? saved : DEFAULT_QUICK_REMINDERS;
   }, [blockHeadingSettings?.scheduleQuickReminders]);
+  const specialNoteSections = useMemo(() => {
+    const saved = blockHeadingSettings?.specialNoteSections
+      ?.map(item => ({ id: item.id.trim(), title: item.title.trim() }))
+      .filter(item => item.id.length > 0 && item.title.length > 0) ?? [];
+    const hasPrimary = saved.some(item => item.id === PRIMARY_SPECIAL_NOTE_ID);
+    return hasPrimary ? saved : [{ id: PRIMARY_SPECIAL_NOTE_ID, title: "Special Notes" }, ...saved];
+  }, [blockHeadingSettings?.specialNoteSections]);
 
   const desktopColumns = useMemo(() => {
     const sourceColumns = cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder];
@@ -2382,6 +2389,7 @@ export function OrderDetailContent({
     if (typeof patch.emailAddress === "string") nextPatch.emailAddress = patch.emailAddress;
     if (typeof patch.whatsappNumber === "string") nextPatch.whatsappNumber = patch.whatsappNumber;
     if (typeof patch.instagramUsername === "string") nextPatch.instagramUsername = patch.instagramUsername;
+    if (typeof patch.notes === "string") nextPatch.notes = patch.notes;
     if (typeof patch.tiktokUsername === "string" || typeof patch.address === "string") {
       nextPatch.customFields = {
         ...order.customFields,
@@ -2411,6 +2419,16 @@ export function OrderDetailContent({
         ...(nextPatch.customFields ?? {}),
         "status::notesSupplier": String(patch.statusNotesSupplier ?? "")
       };
+    }
+    if (patch.specialNotes && typeof patch.specialNotes === "object") {
+      const nextCustomFields = { ...order.customFields, ...(nextPatch.customFields ?? {}) };
+      Object.entries(patch.specialNotes).forEach(([sectionId, value]) => {
+        const key = specialNoteCustomFieldKey(sectionId);
+        if (!key) return;
+        if (String(value ?? "").trim()) nextCustomFields[key] = String(value ?? "");
+        else delete nextCustomFields[key];
+      });
+      nextPatch.customFields = nextCustomFields;
     }
 
     if (Object.keys(nextPatch).length > 0) {
@@ -4284,15 +4302,23 @@ export function OrderDetailContent({
           <section key={cardId} className="card order-detail-card">
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-notes-panel">
-              <p style={{ whiteSpace: "pre-wrap", color: order.notes ? "var(--text)" : "var(--muted)" }}>
-                {order.notes || "No notes added."}
-              </p>
-              {Object.keys(order.customFields).length > 0 ? (
-                <div style={{ marginTop: 14 }}>
-                  <h3 className="compact-subheading">Custom fields</h3>
-                  {Object.entries(order.customFields).map(([key, value]) => <DetailRow key={key} label={key} value={value} />)}
-                </div>
-              ) : null}
+              {specialNoteSections.map(section => {
+                const isPrimary = section.id === PRIMARY_SPECIAL_NOTE_ID;
+                const value = isPrimary ? order.notes : specialNoteValue(order.customFields, section.id);
+                return (
+                  <InlineNotesField
+                    key={section.id}
+                    title={section.title}
+                    value={value}
+                    disabled={!canInlineEditFullDetails}
+                    saving={savingInlineField === `Note ${section.id}`}
+                    onSave={nextValue => saveDetailsPatch(
+                      isPrimary ? { notes: nextValue } : { specialNotes: { [section.id]: nextValue } },
+                      `Note ${section.id}`
+                    )}
+                  />
+                );
+              })}
             </div>
           </section>
         );
@@ -4853,6 +4879,20 @@ type HeadingListKey =
 
 const PRIMARY_SPECIAL_NOTE_ID = "00000000-0000-0000-0000-000000000101";
 
+function specialNoteCustomFieldKey(sectionId: string) {
+  const cleanId = sectionId.trim();
+  if (!cleanId || cleanId === PRIMARY_SPECIAL_NOTE_ID) return "";
+  return `specialNote::${cleanId.toUpperCase()}`;
+}
+
+function specialNoteValue(customFields: Record<string, string>, sectionId: string) {
+  const cleanId = sectionId.trim();
+  const canonicalKey = specialNoteCustomFieldKey(cleanId);
+  const legacyKey = cleanId ? `specialNote::${cleanId}` : "";
+  const lowerKey = cleanId ? `specialNote::${cleanId.toLowerCase()}` : "";
+  return customFields[canonicalKey] ?? customFields[legacyKey] ?? customFields[lowerKey] ?? "";
+}
+
 function webHeadingId() {
   return globalThis.crypto?.randomUUID?.() ?? `heading-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -5356,6 +5396,77 @@ function InlineValueRow({
           title={disabled ? "This field is read-only for your role." : "Click to edit"}
         >
           {saving ? "Saving..." : (displayValue ?? value)}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InlineNotesField({
+  title,
+  value,
+  disabled,
+  saving,
+  onSave
+}: {
+  title: string;
+  value: string;
+  disabled: boolean;
+  saving: boolean;
+  onSave: (value: string) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [editing, value]);
+
+  async function submit() {
+    if (disabled || saving) return;
+    setEditing(false);
+    await onSave(draft);
+  }
+
+  return (
+    <div className="app-notes-section">
+      <div className="app-notes-heading">{title}</div>
+      {editing && !disabled ? (
+        <div className="app-notes-editor">
+          <textarea
+            className="app-notes-textarea"
+            autoFocus
+            value={draft}
+            disabled={saving}
+            placeholder="Add note here..."
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Escape") {
+                setDraft(value);
+                setEditing(false);
+              }
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          <div className="app-notes-actions">
+            <button type="button" onClick={() => { setDraft(value); setEditing(false); }} disabled={saving}>Cancel</button>
+            <button type="button" onClick={() => { void submit(); }} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+          </div>
+        </div>
+      ) : (
+        <button
+          className={["app-notes-display", value ? "" : "is-empty"].filter(Boolean).join(" ")}
+          type="button"
+          disabled={disabled || saving}
+          onClick={() => {
+            if (!disabled && !saving) setEditing(true);
+          }}
+          title={disabled ? "This field is read-only for your role." : "Click to edit"}
+        >
+          {saving ? "Saving..." : (value || "Add note here...")}
         </button>
       )}
     </div>
