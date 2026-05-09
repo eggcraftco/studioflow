@@ -41,7 +41,7 @@ import {
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
-import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
+import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 
 type SettingsSectionId =
@@ -3077,6 +3077,7 @@ function TeamAccessSection({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  const [requestOwnerCompanyId, setRequestOwnerCompanyId] = useState("");
 
   useEffect(() => {
     setRequestRoles(previous => {
@@ -3126,6 +3127,17 @@ function TeamAccessSection({
     }
   }
 
+  async function submitAccessRequest() {
+    const cleanCompanyId = requestOwnerCompanyId.trim();
+    if (!cleanCompanyId || actioning) return;
+    await runTeamAction(
+      "request-access",
+      () => requestWorkspaceAccess(cleanCompanyId),
+      "Access request sent. The workspace owner can approve it from Team Access."
+    );
+    setRequestOwnerCompanyId("");
+  }
+
   return (
     <div className="settings-stack">
       <section className="card app-card">
@@ -3149,6 +3161,50 @@ function TeamAccessSection({
         </div>
         {status ? <p className="layout-status">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
+      </section>
+
+      <section className="card app-card team-access-entry-card">
+        <CardTitle icon="customer" eyebrow="Access" title="Invite and request access" />
+        <div className="team-access-entry-grid">
+          <div className="team-access-entry-panel">
+            <div className="team-access-entry-heading">
+              <strong>Invite People</strong>
+              <span>{isOwner ? hasTeamPlan ? "Share this with the person you want to invite." : "Team plan required" : "Owner only"}</span>
+            </div>
+            <p className="muted-copy">Share your Company ID. The other person sends a request from their Account or Team Access screen, then you approve it here.</p>
+            {isOwner && hasTeamPlan ? (
+              <div className="team-access-id-box">
+                <code>{workspace.id}</code>
+                <button className="button secondary" type="button" onClick={() => copyText(workspace.id, "Company ID copied")}>Copy</button>
+              </div>
+            ) : (
+              <p className="muted-copy">{isOwner ? "Upgrade to StudioFlow Team to approve new members." : "Only the workspace owner can invite and approve new members."}</p>
+            )}
+          </div>
+
+          <form className="team-access-entry-panel" onSubmit={event => {
+            event.preventDefault();
+            void submitAccessRequest();
+          }}>
+            <div className="team-access-entry-heading">
+              <strong>Request Access</strong>
+              <span>Available on every role and plan</span>
+            </div>
+            <p className="muted-copy">Enter the owner’s Company ID to ask for access to another workspace.</p>
+            <div className="team-access-request-row">
+              <input
+                className="input"
+                value={requestOwnerCompanyId}
+                onChange={event => setRequestOwnerCompanyId(event.target.value)}
+                placeholder="Owner Company ID"
+                disabled={Boolean(actioning)}
+              />
+              <button className="button" type="submit" disabled={!requestOwnerCompanyId.trim() || Boolean(actioning)}>
+                {actioning === "request-access" ? "Sending..." : "Send"}
+              </button>
+            </div>
+          </form>
+        </div>
       </section>
 
       <section className="card app-card">

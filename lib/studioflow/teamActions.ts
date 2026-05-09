@@ -82,6 +82,12 @@ export async function declineJoinRequest(workspace: WorkspaceContext, request: J
   });
 }
 
+export async function requestWorkspaceAccess(ownerCompanyId: string) {
+  return callTeamFunction("requestWorkspaceAccess", {
+    ownerCompanyId: ownerCompanyId.trim()
+  });
+}
+
 export async function addTeamMember(workspace: WorkspaceContext, input: TeamMemberInput) {
   return callTeamFunction("addWorkspaceTeamMember", {
     companyId: workspace.id,

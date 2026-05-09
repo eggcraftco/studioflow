@@ -19,6 +19,7 @@ import {
   deleteWorkspaceCustomRole,
   declineJoinRequest,
   removeTeamMember,
+  requestWorkspaceAccess,
   saveWorkspaceCustomRole,
   syncAcceptedJoinRequests,
   updateTeamMemberRole,
@@ -57,6 +58,7 @@ export default function TeamPage() {
   const [joinRequests, setJoinRequests] = useState<JoinRequestDetail[]>([]);
   const [customRoles, setCustomRoles] = useState<WorkspaceCustomRole[]>([]);
   const [requestRoles, setRequestRoles] = useState<Record<string, string>>({});
+  const [requestOwnerCompanyId, setRequestOwnerCompanyId] = useState("");
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [actioning, setActioning] = useState("");
   const [message, setMessage] = useState("");
@@ -172,6 +174,17 @@ export default function TeamPage() {
     }
   }
 
+  async function submitAccessRequest() {
+    const cleanCompanyId = requestOwnerCompanyId.trim();
+    if (!cleanCompanyId || actioning) return;
+    await runTeamAction(
+      "request-access",
+      () => requestWorkspaceAccess(cleanCompanyId),
+      "Access request sent. The workspace owner can approve it from Team Access."
+    );
+    setRequestOwnerCompanyId("");
+  }
+
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -205,6 +218,57 @@ export default function TeamPage() {
             </button>
             {copied ? <p style={{ color: "var(--muted)", margin: "10px 0 0" }}>{copied}</p> : null}
           </div>
+        </div>
+      </section>
+
+      <section className="card team-access-entry-card" style={{ padding: 22, marginBottom: 18 }}>
+        <div className="pill">Access</div>
+        <h2 style={{ margin: "12px 0 12px" }}>Invite and request access</h2>
+        <div className="team-access-entry-grid">
+          <div className="team-access-entry-panel">
+            <div className="team-access-entry-heading">
+              <strong>Invite People</strong>
+              <span>{isOwner ? hasTeamPlan ? "Share this Company ID" : "Team plan required" : "Owner only"}</span>
+            </div>
+            <p style={{ color: "var(--muted)", margin: 0 }}>
+              Share your Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.
+            </p>
+            {isOwner && hasTeamPlan ? (
+              <div className="team-access-id-box">
+                <code>{workspace?.id ?? ""}</code>
+                <button className="button secondary" type="button" onClick={() => copyText(workspace?.id ?? "", "Company ID copied")} disabled={!workspace?.id}>Copy</button>
+              </div>
+            ) : (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                {isOwner ? "Upgrade to StudioFlow Team to approve new members." : "Only the workspace owner can invite and approve new members."}
+              </p>
+            )}
+          </div>
+
+          <form className="team-access-entry-panel" onSubmit={event => {
+            event.preventDefault();
+            void submitAccessRequest();
+          }}>
+            <div className="team-access-entry-heading">
+              <strong>Request Access</strong>
+              <span>Every role and plan</span>
+            </div>
+            <p style={{ color: "var(--muted)", margin: 0 }}>
+              Enter another owner’s Company ID to ask for access to their workspace.
+            </p>
+            <div className="team-access-request-row">
+              <input
+                className="input"
+                value={requestOwnerCompanyId}
+                onChange={event => setRequestOwnerCompanyId(event.target.value)}
+                placeholder="Owner Company ID"
+                disabled={Boolean(actioning)}
+              />
+              <button className="button" type="submit" disabled={!requestOwnerCompanyId.trim() || Boolean(actioning)}>
+                {actioning === "request-access" ? "Sending..." : "Send"}
+              </button>
+            </div>
+          </form>
         </div>
       </section>
 

@@ -926,6 +926,69 @@ th {
   align-items: center;
 }
 
+.team-access-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.team-access-entry-panel {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(247, 248, 250, 0.82);
+}
+
+.team-access-entry-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.team-access-entry-heading strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.team-access-entry-heading span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.team-access-id-box,
+.team-access-request-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-access-id-box code {
+  min-width: 0;
+  flex: 1;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.30);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-access-request-row .input {
+  min-width: 0;
+  flex: 1;
+}
+
 .settings-team-list {
   display: grid;
   gap: 10px;
@@ -10601,6 +10664,16 @@ body[data-studio-theme="dark"] .member-access-section-cards .member-access-toggl
 
 body[data-studio-theme="dark"] .member-access-section-actions b {
   background: rgba(255, 255, 255, 0.08);
+}
+
+body[data-studio-theme="dark"] .team-access-entry-panel {
+  background: #242424;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+body[data-studio-theme="dark"] .team-access-id-box code {
+  background: #303030;
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 body[data-studio-theme="dark"] .dashboard-workspace {
