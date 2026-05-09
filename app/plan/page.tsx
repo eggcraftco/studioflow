@@ -23,7 +23,7 @@ import { createStripeCustomerPortalSession } from "@/lib/studioflow/billingActio
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
   orders_read: "View existing orders",
-  orders_create: "Create new orders",
+  orders_create: "Create new projects",
   export_data: "Export existing data",
   financial_basic: "Basic finance: Paid + Cost",
   financial_advanced: "Advanced finance: VAT, fees, remaining, profit",

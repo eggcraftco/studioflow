@@ -21,10 +21,25 @@ export const metadata: Metadata = {
     : undefined
 };
 
+function ThemeBootstrapScript() {
+  const script = `
+try {
+  var storedTheme = window.localStorage.getItem("studioflow-app-theme");
+  if (storedTheme === "light" || storedTheme === "dark") {
+    document.documentElement.dataset.studioTheme = storedTheme;
+    document.body.dataset.studioTheme = storedTheme;
+  }
+} catch (error) {}
+`;
+
+  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+}
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <ThemeBootstrapScript />
         <AuthProvider>
           <PricePrivacyProvider>{children}</PricePrivacyProvider>
         </AuthProvider>

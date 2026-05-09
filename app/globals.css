@@ -17,6 +17,16 @@
   --danger-soft: rgba(255, 59, 48, 0.12);
 }
 
+html[data-studio-theme="light"] {
+  color-scheme: light;
+  background: #eceff3;
+}
+
+html[data-studio-theme="dark"] {
+  color-scheme: dark;
+  background: #141414;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -26,6 +36,11 @@ body {
   background: #eceff3;
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body[data-studio-theme="light"] {
+  color-scheme: light;
+  background: #eceff3;
 }
 
 body[data-studio-theme="dark"] {
@@ -1679,16 +1694,18 @@ th {
 }
 
 .workspace-studio-fallback-preview {
+  gap: 12px;
   justify-content: center;
 }
 
 .workspace-studio-fallback-preview .workspace-studio-mark {
-  width: 25px;
-  height: 25px;
+  width: 38px;
+  height: 38px;
 }
 
 .workspace-studio-fallback-preview .workspace-studio-text {
-  font-size: 22px;
+  font-size: 30px;
+  font-weight: 950;
 }
 
 .native-logo-mark {
@@ -5688,8 +5705,8 @@ button.toolbar-icon-button,
 }
 
 .customize-card-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 .customize-drag-handle {
@@ -6290,8 +6307,8 @@ button.toolbar-icon-button,
 }
 
 .order-detail-card .card-title-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 .order-detail-card .card-title-text {
@@ -6550,14 +6567,14 @@ button.toolbar-icon-button,
 
 .app-preview-actions {
   position: absolute;
-  left: 10px;
-  bottom: 10px;
+  left: 14px;
+  bottom: 14px;
   z-index: 2;
 }
 
 .app-preview-float {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   display: inline-grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -7002,6 +7019,7 @@ button.toolbar-icon-button,
 
 .app-customer-panel .app-channel-pills span,
 .app-customer-panel .app-channel-pills button {
+  width: 100%;
   min-width: 0;
   justify-content: center;
   padding: 5px 7px;
@@ -7010,6 +7028,10 @@ button.toolbar-icon-button,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-customer-panel .app-channel-pills .app-channel-pill-text {
+  width: 100%;
 }
 
 .app-channel-pills button:not(:disabled) {
@@ -7201,6 +7223,14 @@ button.toolbar-icon-button,
 
 .finance-inline-row {
   align-items: center;
+}
+
+.app-financial-panel .detail-row {
+  border-bottom: 0;
+}
+
+.app-financial-panel .app-card-divider {
+  margin: 7px 0;
 }
 
 .finance-inline-message {
@@ -7903,7 +7933,7 @@ button.toolbar-icon-button,
 
 .app-schedule-inline-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(112px, 0.65fr) 74px;
+  grid-template-columns: minmax(190px, 1fr) minmax(112px, 0.58fr) 74px;
   gap: 8px;
   align-items: end;
 }
@@ -7931,6 +7961,9 @@ button.toolbar-icon-button,
 
 .app-schedule-date-control input[type="datetime-local"] {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-schedule-note {
@@ -7970,7 +8003,7 @@ button.toolbar-icon-button,
   gap: 8px;
 }
 
-@container (max-width: 520px) {
+@container (max-width: 680px) {
   .app-schedule-inline-controls {
     grid-template-columns: minmax(0, 1fr) 74px;
   }
@@ -9717,6 +9750,22 @@ button.toolbar-icon-button,
     display: none;
   }
 
+  .card-layout-lock-button {
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 10px;
+  }
+
+  .card-layout-lock-button span:not(:first-child) {
+    display: none;
+  }
+
+  .order-card-layout-lock-handle {
+    display: none;
+  }
+
   .order-detail-card-frame.has-drag-handle .order-detail-card > .card-title {
     padding-left: 0;
   }
@@ -9809,7 +9858,9 @@ body[data-studio-theme="dark"] .toolbar-icon-button,
 body[data-studio-theme="dark"] .toolbar-avatar,
 body[data-studio-theme="dark"] .toolbar-net-strip span,
 body[data-studio-theme="dark"] .sidebar-toggle-button,
-body[data-studio-theme="dark"] .toolbar-role-strip span {
+body[data-studio-theme="dark"] .toolbar-role-strip span,
+body[data-studio-theme="dark"] .card-layout-lock-button,
+body[data-studio-theme="dark"] .order-card-layout-lock-handle {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.12);
   color: #a9a9a9;
@@ -9958,7 +10009,20 @@ body[data-studio-theme="dark"] .app-schedule-empty {
 
 body[data-studio-theme="dark"] .app-preview-empty {
   background: #282828;
-  color: #a5a5a5;
+  color: #a8a8a8;
+}
+
+body[data-studio-theme="dark"] .order-detail-card.is-preview-card {
+  border-color: transparent;
+  background: #202020;
+}
+
+body[data-studio-theme="dark"] .order-detail-card.is-preview-card .app-preview-stage {
+  background: transparent;
+}
+
+body[data-studio-theme="dark"] .order-detail-card.is-preview-card .app-preview-icon {
+  color: #8f8f8f;
 }
 
 body[data-studio-theme="dark"] .order-detail-card.is-preview-card .card-title-icon {
@@ -9967,10 +10031,10 @@ body[data-studio-theme="dark"] .order-detail-card.is-preview-card .card-title-ic
 }
 
 body[data-studio-theme="dark"] .app-preview-float {
-  background: rgba(0, 0, 0, 0.42);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.82);
-  box-shadow: none;
+  background: rgba(12, 12, 12, 0.66);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.24);
 }
 
 body[data-studio-theme="dark"] .app-preview-link-editor {

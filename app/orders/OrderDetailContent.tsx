@@ -7,6 +7,7 @@ import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle"
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
+import { studioT } from "@/lib/studioflow/language";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -1414,6 +1415,8 @@ export function OrderDetailContent({
 }) {
   const { user } = useAuth();
   const { hideNumbers } = usePricePrivacy();
+  const detailLanguage = moneySettings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, detailLanguage);
   const [fileActionStatus, setFileActionStatus] = useState<string | null>(null);
   const [fileActionError, setFileActionError] = useState<string | null>(null);
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
@@ -1554,7 +1557,7 @@ export function OrderDetailContent({
   const canEditScheduleItems = Boolean(canEditWorkflowFields && workspaceAccessAllows(workspace.memberAccess, "schedule"));
   const canEditWorkTime = canEditWorkflowFields;
   const canEditCardLayout = Boolean(canCustomizeCards && canEditWorkflowFields);
-  const canMoveResizeCards = Boolean(canCustomizeCards && layoutReady && !cardsLocked);
+  const canMoveResizeCards = Boolean(canEditCardLayout && layoutReady && !cardsLocked);
   const canNotifyScheduleItems = workspace.billingPlan !== "demo";
   const canUseCalendarExport = workspace.billingPlan !== "demo";
   const showCommunicationTelephone = blockHeadingSettings?.communicationShowTelephone ?? true;
@@ -1952,7 +1955,7 @@ export function OrderDetailContent({
       notes: "notes",
       clientFiles: "folderPerson",
       todo: "checklist",
-      workTime: "timer",
+      workTime: "workTime",
       financial: "finance",
       status: "paintbrush",
       shipping: "airplane",
@@ -2167,6 +2170,10 @@ export function OrderDetailContent({
       setLayoutError("Card customization is available from StudioFlow Lite.");
       return;
     }
+    if (!canEditCardLayout) {
+      setLayoutError("Your workspace role cannot edit card layout.");
+      return;
+    }
     if (!user) {
       setLayoutError("Sign in again to save card customization.");
       return;
@@ -2225,7 +2232,7 @@ export function OrderDetailContent({
 
   function setCardColor(cardId: OrderDetailCardId, color: string) {
     setOpenCardMenuId(null);
-    if (!canCustomizeCards || savingLayout) return;
+    if (!canEditCardLayout || savingLayout) return;
 
     const nextColors = { ...cardLayout.cardColors };
     if (color === "Default") {
@@ -2307,7 +2314,7 @@ export function OrderDetailContent({
   }
 
   function handleCardDragStart(event: DragEvent<HTMLButtonElement>, cardId: OrderDetailCardId) {
-    if (!canCustomizeCards || !layoutReady || savingLayout) {
+    if (!canMoveResizeCards || savingLayout) {
       event.preventDefault();
       return;
     }
@@ -2321,7 +2328,7 @@ export function OrderDetailContent({
   }
 
   function handleCardDragOver(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId) {
-    if (!draggingCardId || draggingCardId === cardId || !canCustomizeCards || !layoutReady || savingLayout) return;
+    if (!draggingCardId || draggingCardId === cardId || !canMoveResizeCards || savingLayout) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
@@ -2346,7 +2353,7 @@ export function OrderDetailContent({
   function handleCardDrop(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId) {
     event.preventDefault();
     event.stopPropagation();
-    if (!layoutReady) return;
+    if (!canMoveResizeCards) return;
     const droppedCardId = event.dataTransfer.getData("text/plain") as OrderDetailCardId || draggingCardId;
     const targetBox = event.currentTarget.getBoundingClientRect();
     const insertAfter = event.clientY > targetBox.top + targetBox.height / 2;
@@ -2362,7 +2369,7 @@ export function OrderDetailContent({
   }
 
   function handleCardInsertDragOver(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId, insertAfter: boolean) {
-    if (!draggingCardId || draggingCardId === cardId || !canCustomizeCards || !layoutReady || savingLayout) return;
+    if (!draggingCardId || draggingCardId === cardId || !canMoveResizeCards || savingLayout) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
@@ -2374,7 +2381,7 @@ export function OrderDetailContent({
   function handleCardInsertDrop(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId, insertAfter: boolean) {
     event.preventDefault();
     event.stopPropagation();
-    if (!layoutReady) return;
+    if (!canMoveResizeCards) return;
 
     const droppedCardId = event.dataTransfer.getData("text/plain") as OrderDetailCardId || draggingCardId;
     setDraggingCardId(null);
@@ -2406,7 +2413,7 @@ export function OrderDetailContent({
   }
 
   function handleColumnDragOver(event: DragEvent<HTMLDivElement>, columnIndex: number) {
-    if (!draggingCardId || !canCustomizeCards || !layoutReady || savingLayout || isNarrowLayout) return;
+    if (!draggingCardId || !canMoveResizeCards || savingLayout || isNarrowLayout) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDragOverCardId(null);
@@ -2429,7 +2436,7 @@ export function OrderDetailContent({
 
   function handleColumnDrop(event: DragEvent<HTMLDivElement>, columnIndex: number) {
     event.preventDefault();
-    if (!layoutReady) return;
+    if (!canMoveResizeCards) return;
 
     const droppedCardId = event.dataTransfer.getData("text/plain") as OrderDetailCardId || draggingCardId;
     setDraggingCardId(null);
@@ -2532,7 +2539,7 @@ export function OrderDetailContent({
     columnIndex: number,
     mode: "height" | "corner"
   ) {
-    if (!canCustomizeCards || !layoutReady || savingLayoutRef.current || (isNarrowLayout && mode === "corner")) return;
+    if (!canMoveResizeCards || savingLayoutRef.current || (isNarrowLayout && mode === "corner")) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -3743,8 +3750,13 @@ export function OrderDetailContent({
 
   function renderCardMenu(cardId: OrderDetailCardId) {
     const menuOpen = openCardMenuId === cardId;
-    const locked = !canCustomizeCards || !layoutReady;
+    const locked = !canEditCardLayout || !layoutReady;
     const headingAvailable = WEB_BLOCK_HEADING_CARD_IDS.has(cardId);
+    const lockedNote = !canCustomizeCards
+      ? "Card customization is available from StudioFlow Lite."
+      : !canEditCardLayout
+        ? "Your workspace role cannot edit card layout."
+        : "Card layout is loading.";
 
     return (
       <div className="order-card-menu-wrap">
@@ -3760,7 +3772,7 @@ export function OrderDetailContent({
           <div className="order-card-menu-panel">
             {locked ? (
               <p className="order-card-menu-note">
-                {canCustomizeCards ? "Card layout is loading." : "Card customization is available from StudioFlow Lite."}
+                {t(lockedNote)}
               </p>
             ) : null}
             {cardId === "todo" ? (
@@ -5378,7 +5390,11 @@ export function OrderDetailContent({
             <span />
           </button>
         ) : (
-          <span className="order-card-layout-lock-handle" title={cardsLocked ? "Layout locked" : "Card customization is available from StudioFlow Lite."} aria-label={cardsLocked ? "Layout locked" : "Card customization locked"}>
+          <span
+            className="order-card-layout-lock-handle"
+            title={cardsLocked ? t("Layout locked") : t("Card customization is available from StudioFlow Lite.")}
+            aria-label={cardsLocked ? t("Layout locked") : t("Card customization locked")}
+          >
             <CardIconGlyph icon="lock" />
           </span>
         )}
@@ -5490,11 +5506,12 @@ export function OrderDetailContent({
             className={["card-layout-lock-button", cardsLocked ? "is-locked" : "is-unlocked"].join(" ")}
             type="button"
             onClick={toggleCardsLocked}
-            title={cardsLocked ? "Unlock cards" : "Lock cards"}
+            title={cardsLocked ? t("Unlock cards") : t("Lock cards")}
+            aria-label={cardsLocked ? t("Unlock cards") : t("Lock cards")}
             aria-pressed={cardsLocked}
           >
-            <CardIconGlyph icon="lock" />
-            <span>{cardsLocked ? "Cards Locked" : "Cards Unlocked"}</span>
+            <CardIconGlyph icon={cardsLocked ? "lock" : "unlock"} />
+            <span>{cardsLocked ? t("Cards Locked") : t("Cards Unlocked")}</span>
           </button>
           <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
             <button
@@ -5584,14 +5601,14 @@ export function OrderDetailContent({
           >
             <div className="customize-cards-header">
               <div>
-                <h2 id="workspace-blocks-title">Workspace Blocks</h2>
-                <p>Show or hide the cards you want to see in the order detail workspace.</p>
+                <h2 id="workspace-blocks-title">{t("Workspace Blocks")}</h2>
+                <p>{t("Show or hide the cards you want to see in the project detail workspace.")}</p>
               </div>
               <div className="workspace-blocks-actions">
-                <button className="button secondary" type="button" onClick={resetCardLayout} disabled={!canCustomizeCards || savingLayout}>
-                  Reset
+                <button className="button secondary" type="button" onClick={resetCardLayout} disabled={!canEditCardLayout || savingLayout}>
+                  {t("Reset")}
                 </button>
-                <button className="workspace-blocks-close" type="button" onClick={() => setCustomizeOpen(false)} aria-label="Close Workspace Blocks">
+                <button className="workspace-blocks-close" type="button" onClick={() => setCustomizeOpen(false)} aria-label={t("Close Workspace Blocks")}>
                   ×
                 </button>
               </div>
@@ -5599,17 +5616,23 @@ export function OrderDetailContent({
 
             {!layoutReady ? (
               <div className="mini-panel compact-mini-panel">
-                <CardTitle icon="storage" eyebrow="Loading" title="Card layout is loading." />
+                <CardTitle icon="storage" eyebrow={t("Loading")} title={t("Card layout is loading.")} />
               </div>
             ) : null}
 
             {!canCustomizeCards ? (
               <div className="mini-panel locked-panel compact-mini-panel">
-                <CardTitle icon="lock" eyebrow="Locked" title="Card customization is available from StudioFlow Lite." />
+                <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Card customization is available from StudioFlow Lite.")} />
               </div>
             ) : null}
 
-            {canCustomizeCards && layoutReady ? (
+            {canCustomizeCards && !canEditCardLayout ? (
+              <div className="mini-panel locked-panel compact-mini-panel">
+                <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Your workspace role cannot edit card layout.")} />
+              </div>
+            ) : null}
+
+            {canEditCardLayout && layoutReady ? (
               <div className="workspace-layout-mode-card">
                 <CardTitle
                   icon={isOrderCardLayoutIndependent ? "folderPerson" : "storage"}
@@ -5661,7 +5684,7 @@ export function OrderDetailContent({
                       <input
                         type="checkbox"
                         checked={cardLayout.visibility[cardId]}
-                        disabled={!canCustomizeCards || savingLayout}
+                        disabled={!canEditCardLayout || savingLayout}
                         onChange={() => toggleCardVisibility(cardId)}
                       />
                       <span>{cardLabel(cardId)}</span>
@@ -5672,7 +5695,7 @@ export function OrderDetailContent({
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={!canCustomizeCards || savingLayout || index === 0}
+                        disabled={!canEditCardLayout || savingLayout || index === 0}
                         onClick={() => moveCard(cardId, -1)}
                       >
                         Move Up
@@ -5680,7 +5703,7 @@ export function OrderDetailContent({
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={!canCustomizeCards || savingLayout || index === customizeCardOrder.length - 1}
+                        disabled={!canEditCardLayout || savingLayout || index === customizeCardOrder.length - 1}
                         onClick={() => moveCard(cardId, 1)}
                       >
                         Move Down

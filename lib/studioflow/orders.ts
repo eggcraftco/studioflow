@@ -154,12 +154,12 @@ export function canEditOrderDetailsForRole(role: string) {
 function friendlyCreateOrderError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (/plan.*limit|order limit|failed-precondition/i.test(message)) {
-    return "Your current plan has reached its order limit. Upgrade the workspace plan to add more orders.";
+    return "Your current plan has reached its project limit. Upgrade the workspace plan to add more projects.";
   }
   if (/permission|role|denied/i.test(message)) {
-    return "Your workspace role cannot create orders.";
+    return "Your workspace role cannot create projects.";
   }
-  return message || "Could not create the order. Please try again.";
+  return message || "Could not create the project. Please try again.";
 }
 
 function friendlyUpdateOrderError(error: unknown) {
@@ -203,11 +203,11 @@ function previewFileName(extension: string) {
 
 export async function createOrderFromWeb(workspace: WorkspaceContext, input: Partial<CreateOrderInput> = {}) {
   if (!workspace.entitlements.features.orders_create) {
-    throw new Error("Creating orders is not available on the current workspace plan.");
+    throw new Error("Creating projects is not available on the current workspace plan.");
   }
 
   if (!canCreateOrdersForRole(workspace.role)) {
-    throw new Error("Your workspace role cannot create orders.");
+    throw new Error("Your workspace role cannot create projects.");
   }
 
   try {
@@ -218,10 +218,10 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
         ...input
       });
       if (response.data?.ok === false || !response.data?.orderId) {
-        throw new Error(response.data?.message || "Could not create the order.");
+        throw new Error(response.data?.message || "Could not create the project.");
       }
       return response.data;
-    }, "Saving new order to cloud.");
+    }, "Saving new project to cloud.");
   } catch (error) {
     throw new Error(friendlyCreateOrderError(error));
   }

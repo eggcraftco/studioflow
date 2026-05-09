@@ -306,6 +306,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         try {
           const storedTheme = window.localStorage.getItem(storedThemeKey);
           if (storedTheme === "light" || storedTheme === "dark") {
+            document.documentElement.dataset.studioTheme = storedTheme;
             document.body.dataset.studioTheme = storedTheme;
           }
         } catch {
@@ -321,6 +322,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     function applyTheme() {
       const resolvedTheme = activeTheme === "System" ? (media.matches ? "dark" : "light") : activeTheme.toLowerCase();
       if (resolvedTheme !== "light" && resolvedTheme !== "dark") return;
+      document.documentElement.dataset.studioTheme = resolvedTheme;
       document.body.dataset.studioTheme = resolvedTheme;
       try {
         window.localStorage.setItem(storedThemeKey, resolvedTheme);
@@ -404,12 +406,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     if (!canCreateOrdersForRole(workspace.role)) {
-      setOrderCreateError(t("Your workspace role cannot create orders."));
+      setOrderCreateError(t("Your workspace role cannot create projects."));
       return;
     }
 
     if (!workspace.entitlements.features.orders_create) {
-      setOrderCreateError(t("Creating orders is not available on this workspace plan."));
+      setOrderCreateError(t("Creating projects is not available on this workspace plan."));
       return;
     }
 
@@ -418,7 +420,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       const result = await createOrderFromWeb(workspace);
       handleOrderCreated(result.orderId || "");
     } catch (createError) {
-      setOrderCreateError(createError instanceof Error ? createError.message : t("Could not create the order. Please try again."));
+      setOrderCreateError(createError instanceof Error ? createError.message : t("Could not create the project. Please try again."));
     } finally {
       setCreatingOrder(false);
     }

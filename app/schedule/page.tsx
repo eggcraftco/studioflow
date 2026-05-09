@@ -715,12 +715,12 @@ export default function SchedulePage() {
     setScheduleError("");
 
     if (!canCreateOrdersForRole(workspace.role)) {
-      setScheduleError("Your workspace role cannot create orders.");
+      setScheduleError(t("Your workspace role cannot create projects."));
       return;
     }
 
     if (!workspace.entitlements.features.orders_create) {
-      setScheduleError("Creating orders is not available on this workspace plan.");
+      setScheduleError(t("Creating projects is not available on this workspace plan."));
       return;
     }
 
@@ -740,9 +740,9 @@ export default function SchedulePage() {
         setAnchorDate(today);
       }
       window.dispatchEvent(new CustomEvent("studioflow-order-created", { detail: { orderId: result.orderId || "" } }));
-      setScheduleStatus("New order added to schedule.");
+      setScheduleStatus(t("New project added to schedule."));
     } catch (createError) {
-      setScheduleError(createError instanceof Error ? createError.message : "Could not create a new order.");
+      setScheduleError(createError instanceof Error ? createError.message : t("Could not create a new project."));
     } finally {
       setCreatingScheduleOrder(false);
     }
@@ -879,7 +879,7 @@ export default function SchedulePage() {
                 type="button"
                 disabled={!canCreateScheduleOrder || creatingScheduleOrder}
                 onClick={addScheduleOrder}
-                title={canCreateScheduleOrder ? t("Create a new scheduled order") : t("Your plan or role cannot create orders")}
+                title={canCreateScheduleOrder ? t("Create a new scheduled project") : t("Your plan or role cannot create projects")}
               >
                 {creatingScheduleOrder ? t("Adding...") : `+ ${t("New Project")}`}
               </button>

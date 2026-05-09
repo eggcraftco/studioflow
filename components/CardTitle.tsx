@@ -17,6 +17,7 @@ export type CardIcon =
   | "historyClock"
   | "language"
   | "lock"
+  | "unlock"
   | "notes"
   | "orders"
   | "paintbrush"
@@ -27,6 +28,7 @@ export type CardIcon =
   | "storage"
   | "tasks"
   | "timer"
+  | "workTime"
   | "warningTriangle";
 
 const ICON_PATHS: Record<CardIcon, string[]> = {
@@ -46,6 +48,7 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   historyClock: ["M4 6v5h5", "M4.5 11A8 8 0 1 0 7 5", "M12 8v5l3 2"],
   language: ["M4 5h9M7 5c.8 4.5 3.2 7.4 7 9", "M12 5c-.8 4.5-3.2 7.4-7 9", "M14 19l3-7 3 7M15.2 16h3.6"],
   lock: ["M7 11V8a5 5 0 0 1 10 0v3", "M6 11h12v10H6V11Z"],
+  unlock: ["M7 11V8a5 5 0 0 1 9.4-2.4", "M6 11h12v10H6V11Z"],
   notes: ["M6 3h9l3 3v15H6V3Z", "M14 3v4h4", "M8 12h8M8 16h6"],
   orders: ["M6 3h12v18H6V3Z", "M9 7h6M9 11h6M9 15h4"],
   paintbrush: ["M14 4l6 6-7 7-6-6 7-7Z", "M6 12l6 6", "M5 14c-2 2-2 5-2 7 2 0 5 0 7-2"],
@@ -56,6 +59,7 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   storage: ["M4 7c0-2 16-2 16 0v10c0 2-16 2-16 0V7Z", "M4 7c0 2 16 2 16 0", "M4 12c0 2 16 2 16 0"],
   tasks: ["m5 7 2 2 4-4", "M13 8h6", "m5 15 2 2 4-4", "M13 16h6"],
   timer: ["M10 2h4", "M12 14V9", "M16.2 5.8l1.4-1.4", "M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"],
+  workTime: ["M12 7v5l3 2", "M19 12a7 7 0 1 1-2.05-4.95", "M19 4v5h-5"],
   warningTriangle: ["M12 3 2 21h20L12 3Z", "M12 9v5", "M12 17h.01"]
 };
 
