@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { MemberAccessEditor } from "@/components/MemberAccessEditor";
 import {
+  WORKSPACE_CARD_ACCESS_OPTIONS,
   WORKSPACE_MEMBER_ACCESS_DEFAULTS,
+  WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
   type WorkspaceCustomRole,
   type WorkspaceMemberAccess
 } from "@/lib/studioflow/firestore";
@@ -45,7 +47,8 @@ function defaultRole(): EditableRole {
 
 function roleDescription(role: WorkspaceCustomRole) {
   const access = normalizeAccess(role.access);
-  const hidden = Object.entries(access).filter(([key, enabled]) => key !== "assignedProjectsOnly" && enabled === false).length;
+  const hiddenMenus = WORKSPACE_NAVIGATION_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
+  const hiddenCards = WORKSPACE_CARD_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const assignedScope = access.assignedProjectsOnly === true ? " · assigned projects only" : "";
   const base = WEB_TEAM_ROLES.find(option => option.value === role.baseRole)?.label ?? "Member";
   const baseDetail = role.baseRole === "viewer"
@@ -53,9 +56,13 @@ function roleDescription(role: WorkspaceCustomRole) {
     : role.baseRole === "workflow"
       ? "non-finance workflow behavior"
       : "member edit behavior";
-  return hidden === 0
+  const hiddenParts = [
+    hiddenMenus > 0 ? `${hiddenMenus} menu${hiddenMenus === 1 ? "" : "s"} hidden` : "",
+    hiddenCards > 0 ? `${hiddenCards} card${hiddenCards === 1 ? "" : "s"} hidden` : ""
+  ].filter(Boolean);
+  return hiddenParts.length === 0
     ? `${base} with ${baseDetail}${assignedScope}`
-    : `${base} with ${hidden} hidden area${hidden === 1 ? "" : "s"}${assignedScope}`;
+    : `${base} with ${hiddenParts.join(" · ")}${assignedScope}`;
 }
 
 export function CustomRoleManager({ roles, disabled = false, savingKey = "", onSave, onDelete }: CustomRoleManagerProps) {

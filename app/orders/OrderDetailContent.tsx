@@ -57,6 +57,7 @@ import {
   type TeamMemberDetail,
   type ToDoDetail,
   type WorkSessionDetail,
+  type WorkspaceMemberAccessKey,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
@@ -953,6 +954,24 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
   historyLog: "History / Log"
 };
 
+const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
+  preview: "cardPreview",
+  summary: "cardSummary",
+  customer: "cardCustomer",
+  materials: "cardMaterials",
+  priority: "cardPriority",
+  delivery: "cardDelivery",
+  notes: "cardNotes",
+  clientFiles: "cardClientFiles",
+  todo: "cardTodo",
+  workTime: "cardWorkTime",
+  financial: "cardFinancial",
+  status: "cardStatus",
+  shipping: "cardShipping",
+  schedule: "cardSchedule",
+  historyLog: "cardHistoryLog"
+};
+
 const CARD_COLOR_OPTIONS = ["Default", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink"] as const;
 const DEFAULT_STATUS_OPTIONS = ["New", "Not Yet", "In Progress", "Done", "Cancelled"];
 const PRIORITY_OPTIONS = ["Low", "Normal", "High", "Urgent"];
@@ -1575,6 +1594,13 @@ export function OrderDetailContent({
     || showCommunicationChannel
     || showCommunicationCustomerNotes;
 
+  function canShowOrderCard(cardId: OrderDetailCardId) {
+    if (!workspaceAccessAllows(workspace.memberAccess, CARD_ACCESS_KEYS[cardId])) return false;
+    if (cardId === "financial") return canSeeFinance;
+    if (cardId === "clientFiles") return workspaceAccessAllows(workspace.memberAccess, "clientFiles");
+    return true;
+  }
+
   function toggleCardsLocked() {
     setCardsLocked(current => {
       const next = !current;
@@ -1905,7 +1931,7 @@ export function OrderDetailContent({
       id: `column-${index}`,
       index,
       width: clampColumnWidth(cardLayout.columnWidths[index]),
-      cards: column.filter(cardId => cardLayout.visibility[cardId] && (canSeeFinance || cardId !== "financial"))
+      cards: column.filter(cardId => cardLayout.visibility[cardId] && canShowOrderCard(cardId))
     }));
 
     let lastVisibleIndex = columns.findIndex(column => column.cards.length > 0);
@@ -1931,14 +1957,14 @@ export function OrderDetailContent({
     }
 
     return columns.slice(0, columnCount);
-  }, [canSeeFinance, cardLayout, draggingCardId]);
+  }, [canSeeFinance, cardLayout, draggingCardId, workspace.memberAccess]);
   const visibleMobileCards = useMemo(
-    () => cardLayout.mobileCardOrder.filter(cardId => cardLayout.visibility[cardId] && (canSeeFinance || cardId !== "financial")),
-    [canSeeFinance, cardLayout]
+    () => cardLayout.mobileCardOrder.filter(cardId => cardLayout.visibility[cardId] && canShowOrderCard(cardId)),
+    [canSeeFinance, cardLayout, workspace.memberAccess]
   );
   const allCardsHidden = visibleMobileCards.length === 0;
   const customizeCardOrder = (isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder)
-    .filter(cardId => canSeeFinance || cardId !== "financial");
+    .filter(cardId => canShowOrderCard(cardId));
 
   function cardLabel(cardId: OrderDetailCardId) {
     return CARD_LABELS[cardId];

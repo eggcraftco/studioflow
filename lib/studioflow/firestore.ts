@@ -36,7 +36,7 @@ export type WorkspaceContext = {
   entitlements: PlanEntitlements;
 };
 
-export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
+export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
   { key: "orders", label: "Orders", description: "Order list, order detail and order edits." },
   { key: "dashboard", label: "Dashboard", description: "Dashboard and workspace analytics." },
   { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
@@ -46,8 +46,35 @@ export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
   { key: "teamAccess", label: "Team Access", description: "Team members and access controls." },
   { key: "clientFiles", label: "Client Files", description: "Client file upload, rename and delete." },
   { key: "financialInfo", label: "Financial Info", description: "Prices, profit, dashboard finance and finance cards." },
-  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." },
+  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." }
+] as const;
+
+export const WORKSPACE_CARD_ACCESS_OPTIONS = [
+  { key: "cardPreview", label: "Preview", description: "Preview image and visual reference card." },
+  { key: "cardSummary", label: "Order Summary", description: "Project summary, value-safe overview and due status." },
+  { key: "cardCustomer", label: "Customer & Communication", description: "Customer details, channels and contact fields." },
+  { key: "cardMaterials", label: "Materials & Inventory", description: "Material checklist and inventory notes." },
+  { key: "cardPriority", label: "Priority / Risk", description: "Priority, risk and blocker context." },
+  { key: "cardDelivery", label: "Timeline & Delivery", description: "Created date, delivery due date and remaining time." },
+  { key: "cardNotes", label: "Notes", description: "Main notes and custom note sections." },
+  { key: "cardClientFiles", label: "Client Files", description: "Client files card inside project detail." },
+  { key: "cardTodo", label: "To Do", description: "Project task list and task controls." },
+  { key: "cardWorkTime", label: "Work Time", description: "Work session timer and time log." },
+  { key: "cardFinancial", label: "Financial Info", description: "Financial card inside project detail." },
+  { key: "cardStatus", label: "Production Status", description: "Production stages and status toggles." },
+  { key: "cardShipping", label: "Shipping & Tracking", description: "Dispatch, courier and tracking fields." },
+  { key: "cardSchedule", label: "Schedule & Alerts", description: "Order reminders, calendar and alerts card." },
+  { key: "cardHistoryLog", label: "History / Log", description: "Project audit trail and change history." }
+] as const;
+
+export const WORKSPACE_SCOPE_ACCESS_OPTIONS = [
   { key: "assignedProjectsOnly", label: "Assigned Projects Only", description: "Limit this role to projects assigned to the current member." }
+] as const;
+
+export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
+  ...WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
+  ...WORKSPACE_CARD_ACCESS_OPTIONS,
+  ...WORKSPACE_SCOPE_ACCESS_OPTIONS
 ] as const;
 
 export type WorkspaceMemberAccessKey = (typeof WORKSPACE_MEMBER_ACCESS_OPTIONS)[number]["key"];
@@ -517,6 +544,7 @@ function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess
     access.dashboard = false;
     access.financialInfo = false;
     access.teamAccess = false;
+    access.cardFinancial = false;
   }
   return access;
 }
@@ -567,6 +595,7 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
     merged.dashboard = false;
     merged.financialInfo = false;
     merged.teamAccess = false;
+    merged.cardFinancial = false;
   }
   return merged;
 }
