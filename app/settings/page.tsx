@@ -6,13 +6,12 @@ import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
+import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import { MemberAccessEditor } from "@/components/MemberAccessEditor";
-import { AddTeamMemberForm, MemberProfileEditor } from "@/components/TeamMemberAccessForm";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth } from "@/lib/firebase/client";
-import { ACCOUNT_AVATAR_ACCEPT, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
-import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent } from "@/lib/studioflow/plans";
+import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
+import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
 import {
   loadDashboardCounts,
   loadQuickReplySettings,
@@ -42,7 +41,7 @@ import {
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
-import { addTeamMember, approveJoinRequest, declineJoinRequest, removeTeamMember, syncAcceptedJoinRequests, updateTeamMemberAccess, updateTeamMemberProfile, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
+import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 
 type SettingsSectionId =
@@ -111,6 +110,73 @@ function formatTeamDate(date: Date | null) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
+function planOrderLimitText(plan: { orderLimit: number | null }) {
+  return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} orders`;
+}
+
+function planCustomerLimitText(plan: { customerLimit: number | null }) {
+  return plan.customerLimit == null ? "Unlimited customers" : `${plan.customerLimit} customers`;
+}
+
+function planTeamLimitText(plan: { teamMemberLimit: number }) {
+  return plan.teamMemberLimit <= 1 ? "1 user" : `Up to ${plan.teamMemberLimit} users`;
+}
+
+function planIconMark(plan: string) {
+  switch (plan) {
+    case "lifetime_lite":
+      return "✓";
+    case "pro_monthly":
+      return "⚡";
+    case "team_monthly":
+      return "3";
+    default:
+      return "✦";
+  }
+}
+
+function planSummaryText(plan: string) {
+  switch (plan) {
+    case "lifetime_lite":
+      return "One-time access for solo local order management and personal scheduling.";
+    case "pro_monthly":
+      return "Cloud files, Share Sheet, advanced schedule tools and professional dashboard access.";
+    case "team_monthly":
+      return "Shared workspace access with roles, team scheduling and live card profile sync.";
+    default:
+      return "Try the core order workflow with safe limits before upgrading.";
+  }
+}
+
+function planBestForText(plan: string) {
+  switch (plan) {
+    case "lifetime_lite":
+      return "Best for solo makers who want local order tracking without team tools.";
+    case "pro_monthly":
+      return "Best for active studios that need cloud files and advanced workflows.";
+    case "team_monthly":
+      return "Best for studios working with multiple people in one shared workspace.";
+    default:
+      return "Best for testing the app with a small sample workspace.";
+  }
+}
+
+function planComparisonRows(plan: PlanEntitlements) {
+  const isProOrTeam = plan.plan === "pro_monthly" || plan.plan === "team_monthly";
+  const isLiteOrAbove = plan.plan !== "demo";
+  return [
+    { title: planOrderLimitText(plan), enabled: true },
+    { title: planCustomerLimitText(plan), enabled: true },
+    { title: `Storage: ${storageLimitLabel(plan)}`, enabled: plan.features.client_files },
+    { title: "Client Files", enabled: plan.features.client_files },
+    { title: "Share Sheet", enabled: isProOrTeam },
+    { title: "Team Access", enabled: plan.features.team_access },
+    { title: "Advanced Dashboard", enabled: isProOrTeam },
+    { title: "Card Customization", enabled: isLiteOrAbove },
+    { title: "Card Profile Sync", enabled: plan.plan === "team_monthly" }
+  ];
+}
+
 function memberLabel(member: TeamMemberDetail) {
   return member.displayName || member.email || member.id;
 }
@@ -121,6 +187,13 @@ function requestLabel(request: JoinRequestDetail) {
 
 function roleOptionLabel(role: string) {
   return WEB_TEAM_ROLES.find(option => option.value === role)?.label ?? "Member";
+}
+
+function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[] = []) {
+  return [
+    ...WEB_TEAM_ROLES,
+    ...customRoles.map(role => ({ value: role.id, label: role.name }))
+  ];
 }
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
@@ -283,15 +356,6 @@ export default function SettingsPage() {
         </aside>
 
         <section className="settings-content-pane">
-          <div className="settings-content-header">
-            <SettingsSectionIcon icon={selectedSection.icon} />
-            <div>
-              <p className="orders-kicker">{t(selectedSection.appKey)}</p>
-              <h2>{t(selectedSection.title)}</h2>
-              <p>{t(selectedSection.description)}</p>
-            </div>
-          </div>
-
           {error ? (
             <div className="card app-card">
               <CardTitle icon="lock" eyebrow={t("Settings error")} title={t("Could not load workspace settings")} />
@@ -361,7 +425,7 @@ function renderSettingsSection({
     case "quick-reply":
       return <QuickReplySettingsSection workspace={workspace} settings={quickReplySettings} onSaved={onQuickReplySettingsChange} />;
     case "financial":
-      return <FinancialSettingsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
+      return <FinancialSettingsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "woocommerce":
       return <WooCommerceIntegrationSection workspace={workspace} />;
     case "safety-uploads":
@@ -1407,158 +1471,187 @@ function QuickReplySettingsSection({
         </section>
       ) : null}
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="reply" eyebrow="Reply Engine" title="Reply Engine" />
-        <div className={canEdit ? "segmented-control" : "segmented-control is-disabled"}>
-          {[
-            ["Apple", "Apple On-Device"],
-            ["AI", "OpenAI Online"],
-            ["Offline", "Offline Template"]
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              className={replyMode === value ? "active" : ""}
-              type="button"
-              disabled={!canEdit}
-              onClick={() => setReplyMode(value)}
-            >
-              {label}
-            </button>
-          ))}
+      <section className="card app-card quick-reply-settings-card quick-reply-settings-shell">
+        <div className="quick-reply-settings-main-title">
+          <span className="quick-reply-settings-main-icon" aria-hidden="true">✦</span>
+          <h2>Quick Reply Settings</h2>
         </div>
-        <p className="muted-copy">{quickReplyEngineDescription(replyMode)}</p>
-      </section>
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="tasks" eyebrow="Default Reply Style" title="Default Reply Style" />
-        <div className="quick-reply-style-grid">
-          <div>
+        <div className="quick-reply-engine-block">
+          <h3>Reply Engine</h3>
+          <div className={canEdit ? "quick-reply-engine-segment" : "quick-reply-engine-segment is-disabled"}>
+            {[
+              ["Apple", "", "Apple On-Device"],
+              ["AI", "◎", "OpenAI Online"],
+              ["Offline", "▤", "Offline Template"]
+            ].map(([value, icon, label]) => (
+              <button
+                key={value}
+                className={replyMode === value ? "active" : ""}
+                type="button"
+                disabled={!canEdit}
+                onClick={() => setReplyMode(value)}
+              >
+                <span aria-hidden="true">{icon}</span>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="muted-copy">{quickReplyEngineDescription(replyMode)}</p>
+        </div>
+
+        <div className="quick-reply-style-panel">
+          <h3>Default Reply Style</h3>
+          <div className="quick-reply-setting-group">
             <span>Politeness</span>
-            <div className={canEdit ? "segmented-control" : "segmented-control is-disabled"}>
-              {["Direct", "Warm", "Very Polite"].map(option => (
-                <button key={option} className={politeness === option ? "active" : ""} type="button" disabled={!canEdit} onClick={() => setPoliteness(option)}>{option}</button>
+            <div className={canEdit ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
+              {[
+                ["Direct", "⌁"],
+                ["Warm", "♡"],
+                ["Very Polite", "☆"]
+              ].map(([option, icon]) => (
+                <button
+                  key={option}
+                  className={politeness === option ? "active" : ""}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setPoliteness(option)}
+                >
+                  <span aria-hidden="true">{icon}</span>
+                  {option}
+                </button>
               ))}
             </div>
           </div>
-          <div>
+          <div className="quick-reply-setting-group">
             <span>Length</span>
-            <div className={canEdit ? "segmented-control" : "segmented-control is-disabled"}>
-              {["Short", "Balanced", "Detailed"].map(option => (
-                <button key={option} className={replyLength === option ? "active" : ""} type="button" disabled={!canEdit} onClick={() => setReplyLength(option)}>{option}</button>
+            <div className={canEdit ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
+              {[
+                ["Short", "☷"],
+                ["Balanced", "⚖"],
+                ["Detailed", "☰"]
+              ].map(([option, icon]) => (
+                <button
+                  key={option}
+                  className={replyLength === option ? "active" : ""}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setReplyLength(option)}
+                >
+                  <span aria-hidden="true">{icon}</span>
+                  {option}
+                </button>
               ))}
             </div>
           </div>
+          <p className="muted-copy">These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.</p>
         </div>
-        <p className="muted-copy">These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.</p>
-      </section>
 
-      {replyMode === "Apple" ? (
-        <section className="card app-card quick-reply-settings-card">
-          <CardTitle icon="dashboard" eyebrow="Apple On-Device AI" title="Apple On-Device AI" />
-          <div className="quick-reply-settings-info">
-            <strong>Apple On-Device AI</strong>
-            <p>This mode uses Apple Intelligence on the device. Users do not need to download DeepSeek/Ollama models. If Apple Intelligence is not available, Quick Reply will show a clear warning and users can switch to OpenAI Online or Offline Template.</p>
-          </div>
-          <KnowledgeBaseEditor
-            title="Company Knowledge Base (For Apple On-Device AI)"
-            value={knowledgeBase}
-            disabled={!canEdit}
-            onChange={setKnowledgeBase}
-          />
-        </section>
-      ) : null}
-
-      {replyMode === "AI" ? (
-        <section className="card app-card quick-reply-settings-card">
-          <CardTitle icon="storage" eyebrow="OpenAI Online" title="OpenAI Online" />
-          <label className="quick-reply-settings-label">
-            OpenAI API Key
-            <input
-              className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
-              type={showMaskedOpenAIKey ? "text" : "password"}
-              value={showMaskedOpenAIKey ? "••••••••••••••••••••••••" : apiKeyInput}
-              readOnly={showMaskedOpenAIKey}
-              disabled={!canEdit || clearOpenAIKey}
-              onFocus={() => {
-                if (showMaskedOpenAIKey && canEdit) setIsReplacingOpenAIKey(true);
-              }}
-              onChange={event => {
-                if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value);
-              }}
-              placeholder={settings.hasOpenAIKey ? "Paste a new key to replace" : "sk-proj-..."}
+        {replyMode === "Apple" ? (
+          <div className="quick-reply-settings-panel">
+            <CardTitle icon="dashboard" eyebrow="Apple On-Device AI" title="Apple On-Device AI" />
+            <div className="quick-reply-settings-info">
+              <strong>Apple On-Device AI</strong>
+              <p>This mode uses Apple Intelligence on the device. Users do not need to download DeepSeek/Ollama models. If Apple Intelligence is not available, Quick Reply will show a clear warning and users can switch to OpenAI Online or Offline Template.</p>
+            </div>
+            <KnowledgeBaseEditor
+              title="Company Knowledge Base (For Apple On-Device AI)"
+              value={knowledgeBase}
+              disabled={!canEdit}
+              onChange={setKnowledgeBase}
             />
-          </label>
-          <div className="quick-reply-key-row">
-            <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
-              {clearOpenAIKey ? "Key will be cleared" : settings.hasOpenAIKey ? "API key configured" : "No API key"}
-            </span>
-            {showMaskedOpenAIKey ? (
-              <button className="button secondary" type="button" disabled={!canEdit} onClick={() => setIsReplacingOpenAIKey(true)}>
-                Replace Key
-              </button>
-            ) : null}
-            {isReplacingOpenAIKey ? (
-              <button className="button secondary" type="button" disabled={!canEdit} onClick={() => {
-                setIsReplacingOpenAIKey(false);
-                setApiKeyInput("");
-              }}>
-                Cancel Replace
-              </button>
-            ) : null}
-            {settings.hasOpenAIKey ? (
-              <button className="button secondary" type="button" disabled={!canEdit} onClick={() => {
-                setClearOpenAIKey(current => !current);
-                setIsReplacingOpenAIKey(false);
-                setApiKeyInput("");
-              }}>
-                {clearOpenAIKey ? "Keep Key" : "Clear Key"}
-              </button>
-            ) : null}
           </div>
-          <KnowledgeBaseEditor
-            title="Company Knowledge Base (For OpenAI)"
-            value={knowledgeBase}
-            disabled={!canEdit}
-            onChange={setKnowledgeBase}
-          />
-        </section>
-      ) : null}
+        ) : null}
 
-      {replyMode === "Offline" ? (
-        <section className="card app-card quick-reply-settings-card">
-          <CardTitle icon="notes" eyebrow="Offline Template" title="Offline Template" />
-          <QuickReplyTemplateEditor
-            title="Products / Services"
-            addLabel="Add Product"
-            titlePlaceholder="Product Name"
-            descPlaceholder="Product Detail / Price"
-            items={products}
-            disabled={!canEdit}
-            onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])}
-            onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))}
-            onChange={updateProduct}
-          />
-          <div className="settings-divider" />
-          <QuickReplyTemplateEditor
-            title="Custom Rules / FAQs"
-            addLabel="Add Rule"
-            titlePlaceholder="Rule Title"
-            descPlaceholder="Rule Description"
-            items={rules}
-            disabled={!canEdit}
-            onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])}
-            onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))}
-            onChange={updateRule}
-          />
-        </section>
-      ) : null}
+        {replyMode === "AI" ? (
+          <>
+            <div className="quick-reply-api-card">
+              <span className="quick-reply-api-icon" aria-hidden="true">⌕</span>
+              <div className="quick-reply-api-title">OpenAI API Key</div>
+              <div className="quick-reply-api-fields">
+                <input
+                  className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
+                  type={showMaskedOpenAIKey ? "text" : "password"}
+                  value={showMaskedOpenAIKey ? "sk-proj-••••" : apiKeyInput}
+                  readOnly={showMaskedOpenAIKey}
+                  disabled={!canEdit || clearOpenAIKey}
+                  onFocus={() => {
+                    if (showMaskedOpenAIKey && canEdit) setIsReplacingOpenAIKey(true);
+                  }}
+                  onChange={event => {
+                    if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value);
+                  }}
+                  placeholder={settings.hasOpenAIKey ? "Paste a new key to replace" : "sk-proj-..."}
+                />
+                <span>Your API key is encrypted and stored securely.</span>
+              </div>
+            </div>
+            <div className="quick-reply-key-row">
+              <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
+                {clearOpenAIKey ? "Key will be cleared" : settings.hasOpenAIKey ? "API key configured" : "No API key"}
+              </span>
+              {showMaskedOpenAIKey ? (
+                <button className="button secondary" type="button" disabled={!canEdit} onClick={() => setIsReplacingOpenAIKey(true)}>
+                  Replace Key
+                </button>
+              ) : null}
+              {isReplacingOpenAIKey ? (
+                <button className="button secondary" type="button" disabled={!canEdit} onClick={() => {
+                  setIsReplacingOpenAIKey(false);
+                  setApiKeyInput("");
+                }}>
+                  Cancel Replace
+                </button>
+              ) : null}
+              {settings.hasOpenAIKey ? (
+                <button className="button secondary" type="button" disabled={!canEdit} onClick={() => {
+                  setClearOpenAIKey(current => !current);
+                  setIsReplacingOpenAIKey(false);
+                  setApiKeyInput("");
+                }}>
+                  {clearOpenAIKey ? "Keep Key" : "Clear Key"}
+                </button>
+              ) : null}
+            </div>
+            <KnowledgeBaseEditor
+              title="Company Knowledge Base (For OpenAI)"
+              value={knowledgeBase}
+              disabled={!canEdit}
+              onChange={setKnowledgeBase}
+            />
+          </>
+        ) : null}
 
-      <section className="card app-card quick-reply-settings-actions">
-        <div>
-          <strong>Quick Reply page</strong>
-          <p className="muted-copy">Use the saved engine and template settings to draft customer replies.</p>
-        </div>
-        <div className="settings-action-row">
+        {replyMode === "Offline" ? (
+          <div className="quick-reply-settings-panel">
+            <CardTitle icon="notes" eyebrow="Offline Template" title="Offline Template" />
+            <QuickReplyTemplateEditor
+              title="Products / Services"
+              addLabel="Add Product"
+              titlePlaceholder="Product Name"
+              descPlaceholder="Product Detail / Price"
+              items={products}
+              disabled={!canEdit}
+              onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])}
+              onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))}
+              onChange={updateProduct}
+            />
+            <div className="settings-divider" />
+            <QuickReplyTemplateEditor
+              title="Custom Rules / FAQs"
+              addLabel="Add Rule"
+              titlePlaceholder="Rule Title"
+              descPlaceholder="Rule Description"
+              items={rules}
+              disabled={!canEdit}
+              onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])}
+              onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))}
+              onChange={updateRule}
+            />
+          </div>
+        ) : null}
+
+        <div className="quick-reply-settings-actions quick-reply-settings-footer">
           <Link className="button secondary" href="/quick-reply">Open Quick Reply</Link>
           <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
             {saving ? "Saving..." : "Save Settings"}
@@ -1583,14 +1676,14 @@ function KnowledgeBaseEditor({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="quick-reply-settings-label">
-      {title}
+    <label className="quick-reply-settings-label quick-reply-knowledge-panel">
+      <span>{title}</span>
       <textarea
         className="quick-reply-settings-textarea"
         value={value}
         disabled={disabled}
         onChange={event => onChange(event.target.value)}
-        placeholder="Add product details, prices, timelines, policies and reply rules here."
+        placeholder="Add your pricing, process, policies, FAQs and common customer answers here..."
       />
       <span>This Knowledge Base is synced across Mac, iPad and iPhone for the same company.</span>
     </label>
@@ -1715,6 +1808,9 @@ function SafetyUploadsSection({
     <div className="settings-card-stack">
       <section className="card app-card">
         <CardTitle icon="lock" eyebrow="Safety & Uploads" title="Upload safety policy" />
+        <p className="muted-copy">
+          Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in this workspace.
+        </p>
         <div className="settings-toggle-stack">
           <label className="settings-toggle-row">
             <span>
@@ -1765,6 +1861,10 @@ function SafetyUploadsSection({
           <InfoTile label="Accepted in browser" value={browserAccepted ? "Accepted" : "Not accepted"} />
           <InfoTile label="Max file size" value={`${Math.round(maxFileSizeMB)} MB`} />
         </div>
+        <div className="quick-reply-settings-info">
+          <strong>{browserAccepted ? "Upload policy is accepted on this browser." : "The first upload will ask this browser to accept the upload policy."}</strong>
+          <p>Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.</p>
+        </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
             {saving ? "Saving..." : "Save Upload Safety"}
@@ -1778,11 +1878,28 @@ function SafetyUploadsSection({
       <section className="card app-card">
         <CardTitle icon="check" eyebrow="What users must understand" title="Upload rules" />
         <div className="settings-rule-list">
-          <InfoTile label="1" value="Only upload legal, safe and work-related files that belong in this workspace." />
-          <InfoTile label="2" value="No illegal, abusive, explicit, stolen, harmful or unrelated files." />
-          <InfoTile label="3" value="If a file belongs to a client or third party, the user should have permission to use it for the order." />
-          <InfoTile label="4" value="Each upload records workspace, user, type, size, date, source and related order when available." />
+          <IntegrationInfoRow number="1" title="Only upload suitable files" detail="Users must only upload legal, safe and work-related files that belong in this workspace." />
+          <IntegrationInfoRow number="2" title="No illegal or harmful content" detail="Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded." />
+          <IntegrationInfoRow number="3" title="Client approval and rights" detail="If a file belongs to a client or third party, the user should have permission to use it for the order." />
+          <IntegrationInfoRow number="4" title="Owner can remove files" detail="Workspace owners should remove unsuitable files and can remove users from the workspace if needed." />
         </div>
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="lock" eyebrow="What the app does" title="Workspace upload protection" />
+        <div className="settings-rule-list">
+          <IntegrationInfoRow number="1" title="Company workspace only" detail="Uploads are saved under the active Company ID so they stay connected to this workspace." />
+          <IntegrationInfoRow number="2" title="Allowed file types only" detail="Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB, while previews, logos and avatars stay image-only." />
+          <IntegrationInfoRow number="3" title="File size limit" detail="Files larger than the selected limit are blocked before upload." />
+          <IntegrationInfoRow number="4" title="Upload audit log" detail="Each upload records the company, user, file type, file size, upload date, source and related order when available." />
+        </div>
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="lock" eyebrow="Important limitation" title="Human review still matters" />
+        <p className="muted-copy">
+          This does not automatically judge the content of a file. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything unsuitable.
+        </p>
       </section>
     </div>
   );
@@ -1810,6 +1927,9 @@ function AccountSection({
   const [displayName, setDisplayName] = useState(workspace.currentMemberDisplayName);
   const [companyName, setCompanyName] = useState(workspace.name);
   const [accountPhotoUrl, setAccountPhotoUrl] = useState(workspace.currentMemberPhotoURL);
+  const [accountEmail, setAccountEmail] = useState(userEmail);
+  const [emailDraft, setEmailDraft] = useState(userEmail);
+  const [savingEmail, setSavingEmail] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
@@ -1826,9 +1946,11 @@ function AccountSection({
   const requirePolicy = settings?.uploadSafetyRequirePolicyAcceptance ?? true;
   const maxSizeMB = settings?.uploadSafetyMaxFileSizeMB ?? 10;
   const logoUrl = settings?.appLogoUrl?.trim() ?? "";
+  const accountLanguage = settings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, accountLanguage);
   const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
   const googlePhotoUrl = user?.providerData.find(provider => provider.providerId === "google.com")?.photoURL?.trim() ?? "";
-  const accountInitials = (displayName || userEmail || "StudioFlow")
+  const accountInitials = (displayName || accountEmail || userEmail || "StudioFlow")
     .split(/[\s@._-]+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -1845,8 +1967,45 @@ function AccountSection({
   }, [workspace.name]);
 
   useEffect(() => {
+    setAccountEmail(userEmail);
+    setEmailDraft(userEmail);
+  }, [userEmail]);
+
+  useEffect(() => {
     setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
   }, [workspace.id]);
+
+  async function handleChangeEmail() {
+    const cleanEmail = emailDraft.trim().toLowerCase();
+    const currentEmail = accountEmail.trim().toLowerCase();
+    setProfileStatus("");
+    setProfileError("");
+    if (!cleanEmail) {
+      setProfileError("Enter a valid email address.");
+      return;
+    }
+    if (cleanEmail === currentEmail) {
+      setProfileStatus("This is already your sign-in email.");
+      return;
+    }
+    const confirmed = window.confirm("Change your sign-in email to " + cleanEmail + "? You can change it again after 10 days.");
+    if (!confirmed) return;
+
+    setSavingEmail(true);
+    try {
+      const result = await changeAccountEmail(workspace, { email: cleanEmail });
+      const nextEmail = result.profile?.email ?? cleanEmail;
+      setAccountEmail(nextEmail);
+      setEmailDraft(nextEmail);
+      await auth.currentUser?.reload();
+      await auth.currentUser?.getIdToken(true);
+      setProfileStatus(result.message || "Email updated. You can change it again after 10 days.");
+    } catch (emailError) {
+      setProfileError(emailError instanceof Error ? emailError.message : "Email could not be changed.");
+    } finally {
+      setSavingEmail(false);
+    }
+  }
 
   async function handleSaveProfile() {
     setSavingProfile(true);
@@ -1920,7 +2079,7 @@ function AccountSection({
     setProfileStatus("");
     setProfileError("");
     try {
-      await sendAccountPasswordReset(userEmail);
+      await sendAccountPasswordReset(accountEmail || userEmail);
       setProfileStatus("Password reset email sent.");
     } catch (resetError) {
       setProfileError(resetError instanceof Error ? resetError.message : "Password reset email could not be sent.");
@@ -2069,7 +2228,28 @@ function AccountSection({
         <div className="account-profile-fields">
           <label className="quick-reply-settings-label">
             Email
-            <input className="input" value={userEmail} disabled readOnly />
+            <div className="settings-inline-row">
+              <input
+                className="input"
+                value={emailDraft}
+                disabled={savingEmail}
+                placeholder="name@example.com"
+                type="email"
+                onChange={event => setEmailDraft(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === "Enter") void handleChangeEmail();
+                }}
+              />
+              <button
+                className="button secondary"
+                type="button"
+                disabled={savingEmail || emailDraft.trim().toLowerCase() === accountEmail.trim().toLowerCase()}
+                onClick={() => void handleChangeEmail()}
+              >
+                {savingEmail ? "Changing..." : "Change Email"}
+              </button>
+            </div>
+            <span className="muted-copy">After changing your sign-in email, you can change it again after 10 days.</span>
           </label>
           <label className="quick-reply-settings-label">
             Your Name
@@ -2134,7 +2314,12 @@ function AccountSection({
           {logoUrl ? (
             <img src={logoUrl} alt={`${workspace.name} logo`} />
           ) : (
-            <div className="workspace-logo-placeholder">Logo</div>
+            <div className="workspace-logo-placeholder">
+              <span className="workspace-studio-fallback workspace-studio-fallback-preview" aria-label={t("Studio")}>
+                <span className="workspace-studio-mark" aria-hidden="true" />
+                <span className="workspace-studio-text">{t("Studio")}</span>
+              </span>
+            </div>
           )}
           <div className="workspace-logo-copy">
             <strong>{logoUrl ? "Workspace logo is set" : "No logo uploaded yet"}</strong>
@@ -2213,10 +2398,12 @@ function secondsFromDateInput(value: string) {
 function FinancialSettingsSection({
   workspace,
   settings,
+  language,
   onSaved
 }: {
   workspace: WorkspaceContext;
   settings: WorkspaceSettingsOverview | null;
+  language: string;
   onSaved: (settings: WorkspaceSettingsOverview) => void;
 }) {
   const [draft, setDraft] = useState<WorkspaceSettingsOverview | null>(settings);
@@ -2225,6 +2412,7 @@ function FinancialSettingsSection({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
     setDraft(settings);
@@ -2233,7 +2421,7 @@ function FinancialSettingsSection({
   }, [settings]);
 
   if (!draft) {
-    return <PlaceholderSection title="Financial Settings" detail="Financial settings could not be loaded yet." />;
+    return <PlaceholderSection title={t("Financial Settings")} detail={t("Financial settings could not be loaded yet.")} />;
   }
 
   function updateString(
@@ -2277,9 +2465,9 @@ function FinancialSettingsSection({
       const savedSettings = { ...draft, ...(result.settings ?? {}) };
       setDraft(savedSettings);
       onSaved(savedSettings);
-      setStatus(result.message || "Financial settings saved.");
+      setStatus(result.message || t("Financial settings saved."));
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Financial settings could not be saved.");
+      setError(saveError instanceof Error ? saveError.message : t("Financial settings could not be saved."));
     } finally {
       setSaving(false);
     }
@@ -2287,7 +2475,7 @@ function FinancialSettingsSection({
 
   async function handleRecalculate() {
     if (!draft) return;
-    const confirmed = window.confirm("Recalculate taxes and platform fees for existing orders using these Financial Settings?");
+    const confirmed = window.confirm(t("Recalculate VAT and platform fees for existing projects using these Financial Settings?"));
     if (!confirmed) return;
     setRecalculating(true);
     setStatus("");
@@ -2308,9 +2496,9 @@ function FinancialSettingsSection({
       setDraft(savedSettings);
       onSaved(savedSettings);
       const result = await recalculateFinancialSettingsForOrders(workspace);
-      setStatus(result.message || "Existing orders recalculated.");
+      setStatus(result.message || t("Existing projects recalculated."));
     } catch (recalculateError) {
-      setError(recalculateError instanceof Error ? recalculateError.message : "Existing orders could not be recalculated.");
+      setError(recalculateError instanceof Error ? recalculateError.message : t("Existing projects could not be recalculated."));
     } finally {
       setRecalculating(false);
     }
@@ -2320,24 +2508,27 @@ function FinancialSettingsSection({
     <div className="settings-card-stack">
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Locked" title="Financial settings are read-only" />
-          <p className="muted-copy">Your current workspace role cannot edit Financial Settings.</p>
+          <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Financial settings are read-only")} />
+          <p className="muted-copy">{t("Your current workspace role cannot edit Financial Settings.")}</p>
         </section>
       ) : null}
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="finance" eyebrow="Financial Settings" title="Currency and tax rules" />
-        <div className="settings-mini-grid">
-          <InfoTile label="Basic finance" value={workspace.entitlements.features.financial_basic ? "Available" : "Locked"} />
-          <InfoTile label="Advanced finance" value={workspace.entitlements.features.financial_advanced ? "Available" : "Locked"} />
-          <InfoTile label="Current plan" value={workspace.billingPlanName} />
-        </div>
+      <section className="card app-card financial-settings-card">
+        <header className="financial-settings-main-title">
+          <span className="financial-settings-main-icon">%</span>
+          <h2>{t("Financial Settings")}</h2>
+        </header>
 
-        <div className="financial-settings-grid">
-          <label className="quick-reply-settings-label">
-            <span>Currency Symbol</span>
+        <div className="financial-settings-section">
+          <div className="financial-settings-section-title">
+            <strong>{t("General")}</strong>
+            <span />
+          </div>
+
+          <label className="financial-settings-row">
+            <span>{t("Currency Symbol")}</span>
             <select
-              className="input"
+              className="input financial-control"
               value={draft.selectedCurrency}
               disabled={!canEdit || saving}
               onChange={event => updateString("selectedCurrency", event.target.value)}
@@ -2348,76 +2539,93 @@ function FinancialSettingsSection({
             </select>
           </label>
 
-          <label className="quick-reply-settings-label">
-            <span>Decimal Separator</span>
-            <select
-              className="input"
-              value={draft.selectedDecimalSeparator}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("selectedDecimalSeparator", event.target.value)}
-            >
-              <option value=".">Dot (.)</option>
-              <option value=",">Comma (,)</option>
-            </select>
+          <label className="financial-settings-row">
+            <span>{t("Decimal Separator")}</span>
+            <div className={canEdit ? "financial-segmented" : "financial-segmented is-disabled"}>
+              <button
+                type="button"
+                className={draft.selectedDecimalSeparator === "." ? "active" : ""}
+                disabled={!canEdit || saving}
+                onClick={() => updateString("selectedDecimalSeparator", ".")}
+              >
+                {t("Dot (.)")}
+              </button>
+              <button
+                type="button"
+                className={draft.selectedDecimalSeparator === "," ? "active" : ""}
+                disabled={!canEdit || saving}
+                onClick={() => updateString("selectedDecimalSeparator", ",")}
+              >
+                {t("Comma (,)")}
+              </button>
+            </div>
           </label>
 
-          <label className="quick-reply-settings-label">
-            <span>Avg. Platform Fee (%)</span>
-            <input
-              className="input"
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={draft.feePercentage}
-              disabled={!canEdit || saving}
-              onChange={event => updateNumber("feePercentage", Number(event.target.value))}
-            />
+          <label className="financial-settings-row">
+            <span>{t("Avg. Platform Fee (%)")}</span>
+            <span className="financial-percent-control">
+              <input
+                className="input financial-control"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={draft.feePercentage}
+                disabled={!canEdit || saving}
+                onChange={event => updateNumber("feePercentage", Number(event.target.value))}
+              />
+              <em>%</em>
+            </span>
           </label>
         </div>
-      </section>
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="dashboard" eyebrow="Tax / VAT Settings" title="Rules and defaults" />
-        <div className="financial-settings-grid">
-          <label className="quick-reply-settings-label">
-            <span>Rule 1 (Revenue)</span>
+        <div className="financial-settings-section">
+          <div className="financial-settings-section-title">
+            <strong>{t("Tax / VAT Settings")}</strong>
+            <span />
+          </div>
+
+          <label className="financial-settings-row wide-control">
+            <span>{t("Rule 1 (Revenue)")}</span>
             <input
-              className="input"
+              className="input financial-control"
               value={draft.taxRuleNameRevenue}
               disabled={!canEdit || saving}
               onChange={event => updateString("taxRuleNameRevenue", event.target.value)}
             />
           </label>
 
-          <label className="quick-reply-settings-label">
-            <span>Rule 2 (Profit)</span>
+          <label className="financial-settings-row wide-control">
+            <span>{t("Rule 2 (Profit)")}</span>
             <input
-              className="input"
+              className="input financial-control"
               value={draft.taxRuleNameProfit}
               disabled={!canEdit || saving}
               onChange={event => updateString("taxRuleNameProfit", event.target.value)}
             />
           </label>
 
-          <label className="quick-reply-settings-label">
-            <span>Default Tax Rate (%)</span>
-            <input
-              className="input"
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={draft.defaultTaxRate}
-              disabled={!canEdit || saving}
-              onChange={event => updateNumber("defaultTaxRate", Number(event.target.value))}
-            />
+          <label className="financial-settings-row wide-control">
+            <span>{t("Default Tax Rate (%)")}</span>
+            <span className="financial-percent-control is-vat-rate">
+              <input
+                className="input financial-control"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={draft.defaultTaxRate}
+                disabled={!canEdit || saving}
+                onChange={event => updateNumber("defaultTaxRate", Number(event.target.value))}
+              />
+              <em>%</em>
+            </span>
           </label>
 
-          <label className="quick-reply-settings-label">
-            <span>Calculate Tax On</span>
+          <label className="financial-settings-row wide-control">
+            <span>{t("Calculate Tax On")}</span>
             <select
-              className="input"
+              className="input financial-control"
               value={draft.taxCalculationType}
               disabled={!canEdit || saving}
               onChange={event => updateString("taxCalculationType", event.target.value)}
@@ -2426,45 +2634,46 @@ function FinancialSettingsSection({
               <option value="Profit">{draft.taxRuleNameProfit || "Profit"}</option>
             </select>
           </label>
+
+          <label className="financial-settings-row">
+            <span>{t("Use Tax Transition Date")}</span>
+            <span className="financial-checkbox-line">
+              <input
+                type="checkbox"
+                checked={draft.taxMilestoneEnabled}
+                disabled={!canEdit || saving}
+                onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
+              />
+              <strong>{t("Use Tax Transition Date")}</strong>
+            </span>
+          </label>
+
+          {draft.taxMilestoneEnabled ? (
+            <label className="financial-settings-row wide-control">
+              <span>{t("VAT Registration Date")}</span>
+              <input
+                className="input financial-control"
+                type="date"
+                value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
+                disabled={!canEdit || saving}
+                onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
+              />
+            </label>
+          ) : null}
         </div>
 
-        <label className="settings-toggle-row">
-          <span>
-            Use Tax Transition Date
-            <small>Newer orders can use the revenue rule while older orders keep the profit rule, matching the app setting.</small>
-          </span>
-          <input
-            type="checkbox"
-            checked={draft.taxMilestoneEnabled}
-            disabled={!canEdit || saving}
-            onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
-          />
-        </label>
-
-        {draft.taxMilestoneEnabled ? (
-          <label className="quick-reply-settings-label">
-            <span>VAT Registration Date</span>
-            <input
-              className="input"
-              type="date"
-              value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
-              disabled={!canEdit || saving}
-              onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
-            />
-          </label>
-        ) : null}
-
-        <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
-            {saving ? "Saving..." : "Save Financial Settings"}
+        <div className="financial-settings-footer">
+          <button className="button secondary financial-save-button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
+            {saving ? t("Saving...") : t("Save Financial Settings")}
           </button>
-          <button className="button secondary" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
-            {recalculating ? "Recalculating..." : "Recalculate Taxes for Past Orders"}
+          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
+            <span aria-hidden="true">↻</span>
+            {recalculating ? t("Recalculating...") : t("Recalculate Taxes for Past Orders")}
           </button>
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy">Changing “Calculate Tax On” sets the default rule. Use recalculation when you want existing orders to adopt the current tax rule, default tax rate and platform fee.</p>
+        <p className="muted-copy financial-settings-note">{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
       </section>
     </div>
   );
@@ -2759,10 +2968,41 @@ function DataManagementSection({
 }
 
 function PlanAccessSection({ workspace, counts, storagePercent }: { workspace: WorkspaceContext; counts: DashboardCounts | null; storagePercent: number }) {
+  const currentPlan = workspace.entitlements;
+  const featurePills = [
+    { title: planOrderLimitText(currentPlan), enabled: true },
+    { title: planCustomerLimitText(currentPlan), enabled: true },
+    { title: `Storage: ${storageLimitLabel(currentPlan)}`, enabled: currentPlan.features.client_files },
+    { title: planTeamLimitText(currentPlan), enabled: currentPlan.features.team_access },
+    { title: "Client Files", enabled: currentPlan.features.client_files },
+    { title: "Export Data", enabled: currentPlan.features.export_data },
+    { title: "Card Customise", enabled: currentPlan.features.card_customization },
+    { title: "Financial Cards", enabled: currentPlan.features.financial_basic },
+    { title: "Advanced Finance", enabled: currentPlan.features.financial_advanced },
+    { title: "Workspace Logo", enabled: currentPlan.features.workspace_logo_upload },
+    { title: "Team Access", enabled: currentPlan.features.team_access },
+    { title: "Storage Add-ons", enabled: currentPlan.features.storage_addons }
+  ];
+
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
         <CardTitle icon="plan" eyebrow="Plan & Access" title={workspace.billingPlanName} />
+        <div className="plan-access-hero">
+          <div className="plan-access-hero-icon" aria-hidden="true">◆</div>
+          <div>
+            <div className="plan-access-hero-title">
+              <strong>{currentPlan.title}</strong>
+              <span>{currentPlan.purchaseModel}</span>
+            </div>
+            <p>{planSummaryText(currentPlan.plan)}</p>
+            <div className="plan-access-compact-metrics">
+              <span>{planOrderLimitText(currentPlan)}</span>
+              <span>{`Storage: ${storageLimitLabel(currentPlan)}`}</span>
+              <span>{planTeamLimitText(currentPlan)}</span>
+            </div>
+          </div>
+        </div>
         <div className="settings-mini-grid">
           <InfoTile label="Orders" value={`${counts?.orderCount ?? 0}`} />
           <InfoTile label="Customers" value={`${counts?.customerCount ?? 0}`} />
@@ -2777,13 +3017,41 @@ function PlanAccessSection({ workspace, counts, storagePercent }: { workspace: W
       </section>
 
       <section className="card app-card">
+        <CardTitle icon="check" eyebrow="Available now" title="Current plan access" />
+        <div className="plan-feature-pill-grid">
+          {featurePills.map(feature => (
+            <span className={feature.enabled ? "plan-feature-pill enabled" : "plan-feature-pill"} key={feature.title}>
+              <b>{feature.enabled ? "✓" : "–"}</b>
+              {feature.title}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="card app-card">
         <CardTitle icon="check" eyebrow="Plan Matrix" title="Shared app and web plan keys" />
         <div className="settings-plan-list">
           {Object.values(PLAN_ENTITLEMENTS).map(plan => (
             <article key={plan.plan} className={plan.plan === workspace.billingPlan ? "mini-panel active-plan" : "mini-panel"}>
-              <strong>{plan.title}</strong>
-              <span>{plan.purchaseModel}</span>
-              <small>{storageLimitLabel(plan)}</small>
+              <div className="settings-plan-card-head">
+                <div className="settings-plan-card-title">
+                  <span className={`settings-plan-icon plan-${plan.plan}`} aria-hidden="true">{planIconMark(plan.plan)}</span>
+                  <div>
+                    <strong>{plan.title}</strong>
+                    <span>{plan.purchaseModel}</span>
+                  </div>
+                </div>
+                {plan.plan === workspace.billingPlan ? <small>Current plan</small> : null}
+              </div>
+              <p>{planBestForText(plan.plan)}</p>
+              <div className="settings-plan-feature-list">
+                {planComparisonRows(plan).map(row => (
+                  <span className={row.enabled ? "enabled" : ""} key={`${plan.plan}-${row.title}`}>
+                    <b>{row.enabled ? "✓" : "–"}</b>
+                    {row.title}
+                  </span>
+                ))}
+              </div>
             </article>
           ))}
         </div>
@@ -2803,6 +3071,7 @@ function TeamAccessSection({
 }) {
   const members = teamData?.members ?? [];
   const joinRequests = teamData?.joinRequests ?? [];
+  const customRoles = teamData?.customRoles ?? [];
   const [requestRoles, setRequestRoles] = useState<Record<string, string>>({});
   const [actioning, setActioning] = useState("");
   const [status, setStatus] = useState("");
@@ -2822,6 +3091,7 @@ function TeamAccessSection({
   const isOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const hasTeamPlan = Boolean(workspace.entitlements.features.team_access);
   const canManageTeam = Boolean(isOwner && hasTeamPlan);
+  const roleOptions = useMemo(() => standardAndCustomRoleOptions(customRoles), [customRoles]);
   const teamLimit = workspace.billingTeamMemberLimit > 9999 ? "Unlimited" : `${members.length} / ${workspace.billingTeamMemberLimit}`;
   const roleCounts = useMemo(() => {
     return members.reduce<Record<string, number>>((acc, member) => {
@@ -2886,31 +3156,43 @@ function TeamAccessSection({
         <div className="settings-mini-grid">
           <InfoTile label="Member" value="Full order work" />
           <InfoTile label="View Only" value="Read-only" />
-          <InfoTile label="Workflow Only" value="Status work" />
+          <InfoTile label="Workflow Only" value="Non-finance order work" />
         </div>
-        <p className="muted-copy">Recommendation: use Member for trusted production users, Workflow Only for painters/fulfilment staff who should update statuses and tasks without seeing finance, and View Only for accountants, clients or reviewers who should not change order data.</p>
+        <p className="muted-copy">Recommendation: use Member for trusted production users who can see finance, Workflow Only for painters/fulfilment staff who should edit orders, status, schedule, tasks and files without seeing money, and View Only for reviewers who should not change order data.</p>
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="customer" eyebrow="Role Profiles" title="Custom access roles" />
+        <p className="muted-copy">
+          Create extra role choices here, then assign one to any workspace member. The permissions belong to the role profile, not to one individual row.
+        </p>
+        {canManageTeam ? (
+          <CustomRoleManager
+            roles={customRoles}
+            disabled={Boolean(actioning)}
+            savingKey={actioning}
+            onSave={role => runTeamAction(
+              role.id ? `custom-role-${role.id}` : "custom-role-new",
+              () => saveWorkspaceCustomRole(workspace, role),
+              "Role profile saved."
+            )}
+            onDelete={role => runTeamAction(
+              `delete-custom-role-${role.id}`,
+              () => deleteWorkspaceCustomRole(workspace, role),
+              "Role profile deleted."
+            )}
+          />
+        ) : (
+          <p className="muted-copy">Only the workspace owner on StudioFlow Team can create custom role profiles.</p>
+        )}
       </section>
 
       <section className="card app-card">
         <CardTitle icon="customer" eyebrow="Members" title="Workspace members" />
-        {canManageTeam ? (
-          <AddTeamMemberForm
-            disabled={Boolean(actioning)}
-            saving={actioning === "add-member"}
-            onAdd={input => runTeamAction(
-              "add-member",
-              () => addTeamMember(workspace, input),
-              "Team member added."
-            )}
-          />
-        ) : (
-          <p className="muted-copy">Only the workspace owner on StudioFlow Team can add members and customize their access.</p>
-        )}
+        <p className="muted-copy">Use this list to assign Member, View Only, Workflow Only or one of your custom role profiles to existing workspace members.</p>
         <div className="settings-team-list">
           {members.map(member => {
             const changingKey = `role-${member.id}`;
-            const accessKey = `access-${member.id}`;
-            const profileKey = `profile-${member.id}`;
             const removeKey = `remove-${member.id}`;
             const canChangeRole = canManageTeam && !member.isOwner;
             return (
@@ -2930,7 +3212,7 @@ function TeamAccessSection({
                     <>
                       <select
                         className="input"
-                        value={WEB_TEAM_ROLES.some(option => option.value === member.role) ? member.role : "member"}
+                        value={roleOptions.some(option => option.value === member.role) ? member.role : "member"}
                         disabled={Boolean(actioning)}
                         onChange={event => {
                           const nextRole = event.target.value;
@@ -2938,11 +3220,11 @@ function TeamAccessSection({
                           void runTeamAction(
                             changingKey,
                             () => updateTeamMemberRole(workspace, member, nextRole),
-                            `Role updated to ${roleOptionLabel(nextRole)}.`
+                            `Role updated to ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
                           );
                         }}
                       >
-                        {WEB_TEAM_ROLES.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                       <button
                         className="button secondary"
@@ -2959,31 +3241,6 @@ function TeamAccessSection({
                   ) : null}
                   {actioning === changingKey ? <span className="studio-pill">Updating...</span> : null}
                 </div>
-                {canChangeRole ? (
-                  <MemberProfileEditor
-                    member={member}
-                    disabled={Boolean(actioning)}
-                    saving={actioning === profileKey}
-                    onSave={profile => runTeamAction(
-                      profileKey,
-                      () => updateTeamMemberProfile(workspace, member, profile),
-                      "Member profile updated."
-                    )}
-                  />
-                ) : null}
-                <MemberAccessEditor
-                  access={member.access}
-                  disabled={!canChangeRole || Boolean(actioning)}
-                  saving={actioning === accessKey}
-                  ownerLocked={member.isOwner}
-                  onChange={nextAccess => {
-                    void runTeamAction(
-                      accessKey,
-                      () => updateTeamMemberAccess(workspace, member, nextAccess),
-                      "Member access updated."
-                    );
-                  }}
-                />
               </article>
             );
           })}
@@ -3018,7 +3275,7 @@ function TeamAccessSection({
                       disabled={!canManageTeam || Boolean(actioning)}
                       onChange={event => setRequestRoles(previous => ({ ...previous, [request.id]: event.target.value }))}
                     >
-                      {WEB_TEAM_ROLES.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                     <button
                       className="button"
@@ -3062,22 +3319,38 @@ function TeamAccessSection({
 
 function AboutSection({ workspace }: { workspace: WorkspaceContext }) {
   return (
-    <section className="card app-card">
-      <CardTitle icon="notes" eyebrow="About" title="StudioFlow by EGGcraft" />
-      <div className="settings-mini-grid">
-        <InfoTile label="Workspace" value={workspace.name} />
-        <InfoTile label="Company ID" value={workspace.id} />
-        <InfoTile label="Web portal" value="Next.js + Firebase" />
-      </div>
-      <p className="muted-copy">StudioFlow keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.</p>
-    </section>
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="notes" eyebrow="About" title="StudioFlow by EGGcraft" />
+        <div className="about-app-panel">
+          <span className="about-app-mark" aria-hidden="true">⬢</span>
+          <div>
+            <strong>Studio Manager</strong>
+            <p>Version 1.0.0</p>
+          </div>
+        </div>
+        <div className="settings-divider" />
+        <p className="muted-copy"><strong>© 2026 All rights reserved.</strong></p>
+        <p className="muted-copy">This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.</p>
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="storage" eyebrow="Workspace" title="Current workspace" />
+        <div className="settings-mini-grid">
+          <InfoTile label="Workspace" value={workspace.name} />
+          <InfoTile label="Company ID" value={workspace.id} />
+          <InfoTile label="Web portal" value="Next.js + Firebase" />
+        </div>
+        <p className="muted-copy">StudioFlow keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.</p>
+      </section>
+    </div>
   );
 }
 
 function PlaceholderSection({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) {
   return (
     <section className="card app-card">
-      <CardTitle icon="notes" eyebrow="Web placeholder" title={title} />
+      <CardTitle icon="notes" eyebrow="Status" title={title} />
       <p className="muted-copy">{detail}</p>
       {action}
     </section>

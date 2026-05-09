@@ -34,6 +34,8 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
   details?: {
     customerName?: string;
     designName?: string;
+    assignedToUid?: string;
+    assignedToEmail?: string;
     watchRef?: string;
     designLink?: string;
     emailAddress?: string;
@@ -42,6 +44,7 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     tiktokUsername?: string;
     address?: string;
     communication?: string[];
+    customerNotes?: string;
     paymentDate?: string;
     deliveryTime?: number;
     deliveryDueDate?: string;
@@ -132,6 +135,11 @@ export function canCreateOrdersForRole(role: string) {
 
 export function canEditOrderFullyForRole(role: string) {
   return canCreateOrdersForRole(role);
+}
+
+export function canDeleteOrdersForRole(role: string) {
+  const normalized = normalizeWorkspaceRole(role);
+  return normalized === "owner" || normalized === "admin" || normalized === "member";
 }
 
 export function canEditOrderStatusForRole(role: string) {
@@ -242,7 +250,7 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
 }
 
 export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
-  if (!canEditOrderFullyForRole(workspace.role)) {
+  if (!canDeleteOrdersForRole(workspace.role)) {
     throw new Error("Your workspace role cannot delete orders.");
   }
 

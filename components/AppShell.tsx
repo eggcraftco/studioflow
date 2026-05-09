@@ -46,11 +46,6 @@ function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
   return formatStudioMoney(value, settings);
 }
 
-function isWorkflowOnly(role: string) {
-  const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "workflow" || normalized === "workflowonly";
-}
-
 function memberCanAccess(workspace: WorkspaceContext | null, key: WorkspaceMemberAccessKey) {
   return workspace ? workspaceAccessAllows(workspace.memberAccess, key) : true;
 }
@@ -64,12 +59,6 @@ function orderInCurrentMonth(order: DashboardFinanceOrder) {
 function orderInCurrentYear(order: DashboardFinanceOrder) {
   if (!order.paymentDate) return false;
   return order.paymentDate.getFullYear() === new Date().getFullYear();
-}
-
-function initials(value: string | null | undefined) {
-  const source = value || "EGGcraft";
-  const parts = source.split(/[\s@._-]+/).filter(Boolean);
-  return parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "E";
 }
 
 function syncTitle(state: WebSyncState, language?: string | null) {
@@ -146,6 +135,26 @@ function NavIcon({ name }: { name: NavIconName }) {
   );
 }
 
+function ToolbarAvatarPlaceholder() {
+  return (
+    <span className="toolbar-avatar-placeholder" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+        <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+      </svg>
+    </span>
+  );
+}
+
+function WorkspaceLogoFallback({ language }: { language: string | null | undefined }) {
+  return (
+    <span className="workspace-studio-fallback" aria-label={studioT("Studio", language)}>
+      <span className="workspace-studio-mark" aria-hidden="true" />
+      <span className="workspace-studio-text">{studioT("Studio", language)}</span>
+    </span>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { hideNumbers, toggleHideNumbers } = usePricePrivacy();
@@ -168,6 +177,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [orderCreateError, setOrderCreateError] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [avatarImageFailed, setAvatarImageFailed] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -185,8 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
 
-        const canLoadFinance = !isWorkflowOnly(loadedWorkspace.role) &&
-          memberCanAccess(loadedWorkspace, "dashboard") &&
+        const canLoadFinance = memberCanAccess(loadedWorkspace, "dashboard") &&
           memberCanAccess(loadedWorkspace, "financialInfo");
         const [loadedOrders, loadedSettings] = await Promise.all([
           canLoadFinance ? loadDashboardFinanceOrders(loadedWorkspace.id) : Promise.resolve([]),
@@ -289,16 +298,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const theme = settings?.appTheme || "System";
+    const storedThemeKey = "studioflow-app-theme";
+    const theme = settings?.appTheme;
+
+    if (!theme) {
+      if (!document.body.dataset.studioTheme) {
+        try {
+          const storedTheme = window.localStorage.getItem(storedThemeKey);
+          if (storedTheme === "light" || storedTheme === "dark") {
+            document.body.dataset.studioTheme = storedTheme;
+          }
+        } catch {
+          // Theme cache is only used to avoid a brief light/dark flash while settings load.
+        }
+      }
+      return;
+    }
+
+    const activeTheme = theme;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
 
     function applyTheme() {
-      const resolvedTheme = theme === "System" ? (media.matches ? "dark" : "light") : theme.toLowerCase();
+      const resolvedTheme = activeTheme === "System" ? (media.matches ? "dark" : "light") : activeTheme.toLowerCase();
+      if (resolvedTheme !== "light" && resolvedTheme !== "dark") return;
       document.body.dataset.studioTheme = resolvedTheme;
+      try {
+        window.localStorage.setItem(storedThemeKey, resolvedTheme);
+      } catch {
+        // Theme cache is non-critical.
+      }
     }
 
     applyTheme();
-    if (theme === "System") {
+    if (activeTheme === "System") {
       media.addEventListener("change", applyTheme);
       return () => media.removeEventListener("change", applyTheme);
     }
@@ -320,6 +352,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    setAvatarImageFailed(false);
+  }, [workspace?.currentMemberPhotoURL]);
+
+  useEffect(() => {
     if (!mobileNavOpen) return;
 
     function handleEscape(event: KeyboardEvent) {
@@ -332,7 +368,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const canSeeToolbarFinance = Boolean(
     workspace &&
-    !isWorkflowOnly(workspace.role) &&
     memberCanAccess(workspace, "dashboard") &&
     memberCanAccess(workspace, "financialInfo")
   );
@@ -345,7 +380,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     [financeOrders]
   );
   const toolbarAvatarUrl = workspace?.currentMemberPhotoURL ?? "";
-  const avatarText = initials(workspace?.currentMemberDisplayName || user?.displayName || user?.email);
+  const showToolbarAvatarImage = Boolean(toolbarAvatarUrl && !avatarImageFailed);
   const canCreateToolbarOrder = Boolean(
     workspace &&
     memberCanAccess(workspace, "orders") &&
@@ -369,7 +404,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     if (!canCreateOrdersForRole(workspace.role)) {
-      setOrderCreateError(t("View Only and Workflow Only roles cannot create full orders."));
+      setOrderCreateError(t("Your workspace role cannot create orders."));
       return;
     }
 
@@ -400,10 +435,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <img src={settings.appLogoUrl} alt="Workspace logo" />
                 </span>
               ) : (
-                <>
-                  <span className="native-logo-mark">EGG</span>
-                  <span>EGGcraft</span>
-                </>
+                <WorkspaceLogoFallback language={language} />
               )}
             </Link>
             {canSeeToolbarFinance ? (
@@ -478,10 +510,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className="button native-add-order"
                 type="button"
                 disabled={creatingOrder}
-                title={t("Add Order")}
+                title={t("Add Project")}
                 onClick={handleAddOrder}
               >
-                <span>{creatingOrder ? t("Creating...") : `+ ${t("Add Order")}`}</span>
+                <span>{creatingOrder ? t("Creating...") : `+ ${t("Add Project")}`}</span>
               </button>
             ) : null}
             <button
@@ -491,7 +523,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-label={t("Account")}
               onClick={() => router.push("/settings?section=account")}
             >
-              {toolbarAvatarUrl ? <img src={toolbarAvatarUrl} alt="" /> : avatarText}
+              {showToolbarAvatarImage ? (
+                <img src={toolbarAvatarUrl} alt="" onError={() => setAvatarImageFailed(true)} />
+              ) : (
+                <ToolbarAvatarPlaceholder />
+              )}
             </button>
             <button
               className={mobileNavOpen ? "toolbar-menu-button is-open" : "toolbar-menu-button"}

@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
-import type { JoinRequestDetail, TeamMemberDetail, WorkspaceContext, WorkspaceMemberAccess } from "@/lib/studioflow/firestore";
+import type { JoinRequestDetail, TeamMemberDetail, WorkspaceContext, WorkspaceCustomRole, WorkspaceMemberAccess } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 
 export const WEB_TEAM_ROLES = [
@@ -25,8 +25,9 @@ type CallableResult = {
   [key: string]: unknown;
 };
 
-function normalizeRole(role: string): WebTeamRole {
+function normalizeRole(role: string): string {
   const clean = role.trim().toLowerCase();
+  if (/^custom_[a-z0-9_-]{6,64}$/i.test(role.trim())) return role.trim();
   if (clean === "viewer") return "viewer";
   if (clean === "workflow") return "workflow";
   return "member";
@@ -84,6 +85,23 @@ export async function updateTeamMemberProfile(workspace: WorkspaceContext, membe
     memberUid: member.id,
     displayName: profile.displayName,
     email: profile.email
+  });
+}
+
+export async function saveWorkspaceCustomRole(workspace: WorkspaceContext, role: Partial<WorkspaceCustomRole> & { name: string; access: WorkspaceMemberAccess }) {
+  return callTeamFunction("saveWorkspaceCustomRole", {
+    companyId: workspace.id,
+    roleId: role.id || "",
+    name: role.name,
+    baseRole: role.baseRole || "member",
+    access: role.access
+  });
+}
+
+export async function deleteWorkspaceCustomRole(workspace: WorkspaceContext, role: WorkspaceCustomRole) {
+  return callTeamFunction("deleteWorkspaceCustomRole", {
+    companyId: workspace.id,
+    roleId: role.id
   });
 }
 

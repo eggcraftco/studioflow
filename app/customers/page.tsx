@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -27,6 +27,7 @@ import {
   updateCustomerFromWeb,
   type CustomerFormInput
 } from "@/lib/studioflow/customers";
+import { studioT } from "@/lib/studioflow/language";
 
 type SortMode = "recent" | "orders";
 type FormMode = "create" | "edit" | null;
@@ -38,6 +39,10 @@ const EMPTY_CUSTOMER_FORM: CustomerFormInput = {
   phone: "",
   instagram: "",
   address: "",
+  streetAddress: "",
+  city: "",
+  postalCode: "",
+  country: "",
   notes: ""
 };
 
@@ -52,12 +57,30 @@ function formatDate(date: Date | null) {
 }
 
 function initials(value: string) {
-  return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "C";
+  return customerDisplayName(value).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "C";
 }
 
-function isWorkflowOnly(role: string) {
-  const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "workflow" || normalized === "workflowonly";
+function customerDisplayName(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned || ["new order", "new project", "yeni sipariş", "yeni proje"].includes(cleaned.toLowerCase())) {
+    return "New Project";
+  }
+  return cleaned;
+}
+
+function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
+  return {
+    name: customerDisplayName(input.name),
+    email: input.email.trim(),
+    phone: input.phone.trim(),
+    instagram: input.instagram.trim(),
+    address: input.address.trim(),
+    streetAddress: input.streetAddress.trim(),
+    city: input.city.trim(),
+    postalCode: input.postalCode.trim(),
+    country: input.country.trim(),
+    notes: input.notes.trim()
+  };
 }
 
 function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
@@ -67,6 +90,10 @@ function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
     phone: customer.phone,
     instagram: customer.instagram,
     address: customer.address,
+    streetAddress: customer.streetAddress || customer.address,
+    city: customer.city,
+    postalCode: customer.postalCode,
+    country: customer.country,
     notes: customer.notes
   };
 }
@@ -94,6 +121,7 @@ export default function CustomersPage() {
   const [actionError, setActionError] = useState("");
   const [requestedCustomerId, setRequestedCustomerId] = useState("");
   const [requestedCustomerName, setRequestedCustomerName] = useState("");
+  const [customerContextMenu, setCustomerContextMenu] = useState<{ customerId: string; x: number; y: number } | null>(null);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-customers-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
 
   useEffect(() => {
@@ -157,7 +185,11 @@ export default function CustomersPage() {
           customer.email,
           customer.phone,
           customer.instagram,
-          customer.address
+          customer.address,
+          customer.streetAddress,
+          customer.city,
+          customer.postalCode,
+          customer.country
         ].some(value => value.toLowerCase().includes(term)))
       : customers;
 
@@ -179,9 +211,38 @@ export default function CustomersPage() {
       ?? null,
     [customers, filteredCustomers, selectedCustomerId]
   );
+  const contextCustomer = useMemo(
+    () => customerContextMenu
+      ? customers.find(customer => customer.id === customerContextMenu.customerId) ?? null
+      : null,
+    [customerContextMenu, customers]
+  );
 
-  const canSeeFinance = Boolean(workspace && !isWorkflowOnly(workspace.role));
+  const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canManageCustomers = Boolean(workspace && canManageCustomersForRole(workspace.role));
+  const language = moneySettings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, language);
+
+  useEffect(() => {
+    if (!customerContextMenu) return;
+
+    function closeMenu() {
+      setCustomerContextMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeMenu();
+    }
+
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customerContextMenu]);
 
   async function refreshCustomers(selectCustomerId?: string) {
     if (!workspace) return;
@@ -208,30 +269,32 @@ export default function CustomersPage() {
     setFormMode("edit");
   }
 
+  function openCustomerContextMenu(event: MouseEvent<HTMLButtonElement>, customer: CustomerDirectoryItem) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedCustomerId(customer.id);
+    setCustomerContextMenu({
+      customerId: customer.id,
+      x: Math.min(event.clientX, window.innerWidth - 230),
+      y: Math.min(event.clientY, window.innerHeight - 70)
+    });
+  }
+
   async function handleSaveCustomer(event: React.FormEvent) {
     event.preventDefault();
     if (!workspace || !formMode) return;
-    if (!form.name.trim()) {
-      setActionError("Customer name is required.");
-      return;
-    }
 
     setSavingCustomer(true);
     setActionStatus(formMode === "create" ? "Creating customer..." : "Saving customer...");
     setActionError("");
     try {
+      const cleanForm = cleanCustomerForm(form);
       if (formMode === "create") {
-        const result = await createCustomerFromWeb(workspace, {
-          ...form,
-          name: form.name.trim()
-        });
+        const result = await createCustomerFromWeb(workspace, cleanForm);
         await refreshCustomers(result.customerId || undefined);
         setActionStatus("Customer created.");
       } else if (selectedCustomer) {
-        await updateCustomerFromWeb(workspace, selectedCustomer.id, {
-          ...form,
-          name: form.name.trim()
-        });
+        await updateCustomerFromWeb(workspace, selectedCustomer.id, cleanForm);
         await refreshCustomers(selectedCustomer.id);
         setActionStatus("Customer updated.");
       }
@@ -251,17 +314,20 @@ export default function CustomersPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete "${customer.name}" from Customers? Related orders will stay in Orders.`);
+    const confirmed = window.confirm(`Delete "${customerDisplayName(customer.name)}" from Customers? Related orders will stay in Orders, but their customer name will reset to "New Project".`);
     if (!confirmed) return;
 
     setSavingCustomer(true);
     setActionStatus("Deleting customer...");
     setActionError("");
     try {
-      await deleteCustomerFromWeb(workspace, customer.id);
+      const result = await deleteCustomerFromWeb(workspace, customer.id);
       const nextCustomerId = customers.find(item => item.id !== customer.id)?.id || "";
       await refreshCustomers(nextCustomerId);
-      setActionStatus("Customer deleted. Related orders were not removed.");
+      const clearedOrderCount = typeof result.clearedOrderCount === "number" ? result.clearedOrderCount : 0;
+      setActionStatus(clearedOrderCount > 0
+        ? `Customer deleted. ${clearedOrderCount} related orders were reset to New Project.`
+        : "Customer deleted.");
     } catch (deleteError) {
       setActionStatus("");
       setActionError(deleteError instanceof Error ? deleteError.message : "Could not delete customer.");
@@ -281,21 +347,20 @@ export default function CustomersPage() {
       ...formFromCustomer(customer),
       ...patch
     };
-    nextForm.name = nextForm.name.trim();
-    if (!nextForm.name) {
-      setActionError("Customer name is required.");
-      return;
+    if ("streetAddress" in patch || "city" in patch || "postalCode" in patch || "country" in patch) {
+      nextForm.address = "";
     }
+    const cleanForm = cleanCustomerForm(nextForm);
 
     setSavingInlineField(fieldLabel);
     setActionStatus(`Saving ${fieldLabel}...`);
     setActionError("");
     try {
-      await updateCustomerFromWeb(workspace, customer.id, nextForm);
+      await updateCustomerFromWeb(workspace, customer.id, cleanForm);
       setCustomers(currentCustomers => currentCustomers.map(item => item.id === customer.id ? {
         ...item,
         ...patch,
-        name: nextForm.name
+        ...cleanForm
       } : item));
       await refreshCustomers(customer.id);
       setActionStatus(`${fieldLabel} updated.`);
@@ -320,17 +385,17 @@ export default function CustomersPage() {
         <aside className="customers-sidebar">
           <div className="orders-sidebar-toolbar">
             <div>
-              <p className="orders-kicker">Customers</p>
-              <h1>{customers.length} customers</h1>
-              <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : "Loading workspace..."}</p>
+              <p className="orders-kicker">{t("Customers")}</p>
+              <h1>{customers.length} {t("customers")}</h1>
+              <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
             </div>
             <div className="customers-toolbar-actions">
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
               <button
                 className="sidebar-toggle-button"
                 type="button"
-                title={sidebar.collapsed ? "Expand customer list" : "Collapse customer list"}
-                aria-label={sidebar.collapsed ? "Expand customer list" : "Collapse customer list"}
+                title={sidebar.collapsed ? t("Expand customer list") : t("Collapse customer list")}
+                aria-label={sidebar.collapsed ? t("Expand customer list") : t("Collapse customer list")}
                 onClick={() => sidebar.setCollapsed(value => !value)}
               >
                 {sidebar.collapsed ? ">" : "<"}
@@ -339,34 +404,34 @@ export default function CustomersPage() {
                 className="button customer-action-button"
                 type="button"
                 disabled={!canManageCustomers}
-                title={canManageCustomers ? "Add customer" : "Your role cannot create customers"}
+                title={canManageCustomers ? t("Add customer") : t("Your role cannot create customers")}
                 onClick={openCreateForm}
               >
-                + Customer
+                + {t("Customer")}
               </button>
             </div>
           </div>
 
           <div className="customers-filter-bar">
             <label className="customers-search">
-              <span>Search</span>
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, phone..." />
+              <span>{t("Search")}</span>
+              <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Name, email, phone...")} />
             </label>
             <div className="segmented-control customers-segmented">
-              <button type="button" className={sortMode === "recent" ? "active" : ""} onClick={() => setSortMode("recent")}>Recent</button>
-              <button type="button" className={sortMode === "orders" ? "active" : ""} onClick={() => setSortMode("orders")}>Most Orders</button>
+              <button type="button" className={sortMode === "recent" ? "active" : ""} onClick={() => setSortMode("recent")}>{t("Recent")}</button>
+              <button type="button" className={sortMode === "orders" ? "active" : ""} onClick={() => setSortMode("orders")}>{t("Most Orders")}</button>
             </div>
           </div>
 
           {error ? (
             <div className="mini-panel compact-mini-panel">
-              <CardTitle icon="lock" eyebrow="Customer error" title="Could not load customers" />
+              <CardTitle icon="lock" eyebrow={t("Customer error")} title={t("Could not load customers")} />
               <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
             </div>
           ) : null}
 
           {filteredCustomers.length === 0 && !loadingCustomers ? (
-            <p className="muted-copy" style={{ padding: "0 14px 14px" }}>No customers match this search yet.</p>
+            <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No customers match this search yet.")}</p>
           ) : null}
 
           <div className="customers-list">
@@ -377,7 +442,9 @@ export default function CustomersPage() {
                 selected={customer.id === selectedCustomer?.id}
                 canSeeFinance={canSeeFinance}
                 moneySettings={moneySettings}
+                language={language}
                 onSelect={() => setSelectedCustomerId(customer.id)}
+                onContextMenu={event => openCustomerContextMenu(event, customer)}
               />
             ))}
           </div>
@@ -386,8 +453,8 @@ export default function CustomersPage() {
         <button
           className="workspace-sidebar-resizer"
           type="button"
-          aria-label="Resize customer list"
-          title="Resize customer list"
+          aria-label={t("Resize customer list")}
+          title={t("Resize customer list")}
           onPointerDown={sidebar.startResize}
         />
 
@@ -402,14 +469,13 @@ export default function CustomersPage() {
               canManageCustomers={canManageCustomers}
               moneySettings={moneySettings}
               savingInlineField={savingInlineField}
-              onEdit={() => openEditForm(selectedCustomer)}
-              onDelete={() => handleDeleteCustomer(selectedCustomer)}
-              onInlineUpdate={(patch, fieldLabel) => handleInlineCustomerUpdate(selectedCustomer, patch, fieldLabel)}
+              language={language}
+              onSaveDetails={(patch, fieldLabel) => handleInlineCustomerUpdate(selectedCustomer, patch, fieldLabel)}
             />
           ) : (
             <section className="orders-empty-detail">
-              <CardTitle icon="customer" eyebrow="Select customer" title="Choose a customer from the list" />
-              <p className="muted-copy">Customer details and related orders will appear here.</p>
+              <CardTitle icon="customer" eyebrow={t("Select customer")} title={t("Choose a customer from the list")} />
+              <p className="muted-copy">{t("Customer details and related orders will appear here.")}</p>
             </section>
           )}
         </main>
@@ -428,6 +494,29 @@ export default function CustomersPage() {
           onSubmit={handleSaveCustomer}
         />
       ) : null}
+
+      {customerContextMenu && contextCustomer ? (
+        <div
+          className="order-list-context-menu customer-list-context-menu"
+          style={{ left: customerContextMenu.x, top: customerContextMenu.y }}
+          role="menu"
+          onClick={event => event.stopPropagation()}
+        >
+          <button
+            className="order-list-context-row danger"
+            type="button"
+            role="menuitem"
+            disabled={!canManageCustomers}
+            onClick={() => {
+              setCustomerContextMenu(null);
+              void handleDeleteCustomer(contextCustomer);
+            }}
+          >
+            <span aria-hidden="true">⌫</span>
+            {t("Delete Customer")}
+          </button>
+        </div>
+      ) : null}
     </AppShell>
   );
 }
@@ -437,23 +526,43 @@ function CustomerListCard({
   selected,
   canSeeFinance,
   moneySettings,
-  onSelect
+  language,
+  onSelect,
+  onContextMenu
 }: {
   customer: CustomerDirectoryItem;
   selected: boolean;
   canSeeFinance: boolean;
   moneySettings: StudioMoneySettings;
+  language: string;
   onSelect: () => void;
+  onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const { hideNumbers } = usePricePrivacy();
+  const t = (text: string) => studioT(text, language);
+  const displayName = customerDisplayName(customer.name);
+  const designNames = customer.orders
+    .map(order => order.designName.trim() || "Untitled design")
+    .filter(Boolean)
+    .slice(0, 3);
+  const extraDesignCount = Math.max(customer.orders.length - designNames.length, 0);
+
   return (
-    <button type="button" className={selected ? "customer-list-card selected" : "customer-list-card"} onClick={onSelect}>
+    <button type="button" className={selected ? "customer-list-card selected" : "customer-list-card"} onClick={onSelect} onContextMenu={onContextMenu}>
       <CustomerAvatar customer={customer} size="small" />
       <span className="customer-list-body">
-        <strong>{customer.name}</strong>
-        <small>{customer.email || customer.phone || customer.instagram || "No contact details"}</small>
+        <strong title={displayName}>{displayName}</strong>
+        <small>{customer.email || customer.phone || customer.instagram || t("No contact details")}</small>
+        {designNames.length > 0 ? (
+          <span className="customer-list-designs" aria-label="Customer designs">
+            {designNames.map((designName, index) => (
+              <span key={`${designName}-${index}`} title={designName}>{designName}</span>
+            ))}
+            {extraDesignCount > 0 ? <span>+{extraDesignCount} {t("more")}</span> : null}
+          </span>
+        ) : null}
         <span className="customer-list-meta">
-          <span className="studio-pill">{customer.orderCount} orders</span>
+          <span className="studio-pill">{customer.orderCount} {t("orders")}</span>
           <span className="studio-pill">{formatDate(customer.lastContactDate)}</span>
           {canSeeFinance ? <span className="studio-pill">{money(customer.totalValue, hideNumbers, moneySettings)}</span> : null}
         </span>
@@ -468,116 +577,69 @@ function CustomerDetail({
   canManageCustomers,
   moneySettings,
   savingInlineField,
-  onEdit,
-  onDelete,
-  onInlineUpdate
+  language,
+  onSaveDetails
 }: {
   customer: CustomerDirectoryItem;
   canSeeFinance: boolean;
   canManageCustomers: boolean;
   moneySettings: StudioMoneySettings;
   savingInlineField: string;
-  onEdit: () => void;
-  onDelete: () => void;
-  onInlineUpdate: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
+  language: string;
+  onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
 }) {
   const { hideNumbers } = usePricePrivacy();
+  const t = (text: string) => studioT(text, language);
   return (
     <div className="customer-detail-scroll">
       <section className="customer-profile-header">
         <CustomerAvatar customer={customer} size="large" />
         <div>
-          <p className="orders-kicker">Customer Profile</p>
+          <p className="orders-kicker">{t("Customer Profile")}</p>
           <CustomerInlineTitle
-            value={customer.name}
+            value={customerDisplayName(customer.name)}
             disabled={!canManageCustomers}
             saving={savingInlineField === "Customer name"}
-            onSave={value => onInlineUpdate({ name: value }, "Customer name")}
+            onSave={value => onSaveDetails({ name: value }, "Customer name")}
           />
           <p>
-            {canSeeFinance ? `${money(customer.totalValue, hideNumbers, moneySettings)} total value - ` : ""}
-            {customer.orderCount} orders
+            {canSeeFinance ? `${money(customer.totalValue, hideNumbers, moneySettings)} ${t("total value")} - ` : ""}
+            {customer.orderCount} {t("orders")}
           </p>
-        </div>
-        <div className="customer-profile-actions">
-          <button
-            className="button secondary customer-edit-button"
-            type="button"
-            disabled={!canManageCustomers}
-            title={canManageCustomers ? "Edit customer" : "Your role cannot edit customers"}
-            onClick={onEdit}
-          >
-            Edit
-          </button>
-          <button
-            className="button secondary customer-danger-button"
-            type="button"
-            disabled={!canManageCustomers}
-            title={canManageCustomers ? "Delete customer" : "Your role cannot delete customers"}
-            onClick={onDelete}
-          >
-            Delete
-          </button>
         </div>
       </section>
 
       <div className="customer-detail-grid">
         <div className="customer-card-stack">
           <section className="card app-card customer-detail-card">
-            <CardTitle icon="customer" eyebrow="Contact Info" title="Customer details" />
+            <CardTitle icon="customer" eyebrow={t("Contact Info")} title={t("Customer details")} />
             <div className="app-card-panel">
-              <CustomerInlineValueRow
-                label="Email"
-                field="email"
-                value={customer.email}
+              <CustomerDetailsForm
+                customer={customer}
                 disabled={!canManageCustomers}
-                saving={savingInlineField === "Email"}
-                onSave={onInlineUpdate}
-              />
-              <CustomerInlineValueRow
-                label="WhatsApp"
-                field="phone"
-                value={customer.phone}
-                disabled={!canManageCustomers}
-                saving={savingInlineField === "WhatsApp"}
-                onSave={onInlineUpdate}
-              />
-              <CustomerInlineValueRow
-                label="Instagram"
-                field="instagram"
-                value={customer.instagram}
-                disabled={!canManageCustomers}
-                saving={savingInlineField === "Instagram"}
-                onSave={onInlineUpdate}
-              />
-              <CustomerInlineValueRow
-                label="Address"
-                field="address"
-                value={customer.address}
-                disabled={!canManageCustomers}
-                saving={savingInlineField === "Address"}
-                onSave={onInlineUpdate}
+                saving={savingInlineField === "Customer details"}
+                onSave={patch => onSaveDetails(patch, "Customer details")}
               />
               <InfoRow label="Last Contact" value={formatDate(customer.lastContactDate)} />
             </div>
           </section>
 
           <section className="card app-card customer-detail-card">
-            <CardTitle icon="notes" eyebrow="Customer Notes" title="Notes" />
+            <CardTitle icon="notes" eyebrow={t("Customer Notes")} title={t("Notes")} />
             <CustomerInlineNotes
               value={customer.notes}
               disabled={!canManageCustomers}
               saving={savingInlineField === "Notes"}
-              onSave={value => onInlineUpdate({ notes: value }, "Notes")}
+              onSave={value => onSaveDetails({ notes: value }, "Notes")}
             />
           </section>
         </div>
 
         <section className="card app-card customer-detail-card">
-          <CardTitle icon="orders" eyebrow="Order History" title={`${customer.orderCount} orders`} />
+          <CardTitle icon="orders" eyebrow={t("Order History")} title={`${customer.orderCount} ${t("orders")}`} />
           <div className="customer-order-list">
             {customer.orders.length === 0 ? (
-              <p className="muted-copy">No orders found for this customer.</p>
+              <p className="muted-copy">{t("No orders found for this customer.")}</p>
             ) : customer.orders.map(order => (
               <CustomerOrderRow key={order.id} order={order} canSeeFinance={canSeeFinance} moneySettings={moneySettings} />
             ))}
@@ -593,6 +655,81 @@ function CustomerAvatar({ customer, size }: { customer: CustomerDirectoryItem; s
     <span className={size === "large" ? "customer-avatar large" : "customer-avatar"} aria-hidden="true">
       {customer.profileImageUrl ? <img src={customer.profileImageUrl} alt="" /> : initials(customer.name)}
     </span>
+  );
+}
+
+function CustomerDetailsForm({
+  customer,
+  disabled,
+  saving,
+  onSave
+}: {
+  customer: CustomerDirectoryItem;
+  disabled: boolean;
+  saving: boolean;
+  onSave: (patch: CustomerUpdatePatch) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<CustomerFormInput>(() => formFromCustomer(customer));
+
+  useEffect(() => {
+    setDraft(formFromCustomer(customer));
+  }, [customer]);
+
+  const saved = formFromCustomer(customer);
+  const normalizedValue = (value: string) => value.trim();
+  const isDirty = (Object.keys(saved) as Array<keyof CustomerFormInput>).some(key => normalizedValue(draft[key] || "") !== normalizedValue(saved[key] || ""));
+
+  function updateField(field: keyof CustomerFormInput, value: string) {
+    setDraft(current => ({
+      ...current,
+      [field]: value,
+      ...(field === "streetAddress" || field === "city" || field === "postalCode" || field === "country" ? { address: "" } : {})
+    }));
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (disabled || saving || !isDirty) return;
+    await onSave({ ...cleanCustomerForm(draft), address: "" });
+  }
+
+  const fields: Array<{ label: string; field: keyof CustomerFormInput; type?: string }> = [
+    { label: "Email", field: "email", type: "email" },
+    { label: "WhatsApp", field: "phone" },
+    { label: "Instagram", field: "instagram" },
+    { label: "Street", field: "streetAddress" },
+    { label: "City", field: "city" },
+    { label: "Postal Code", field: "postalCode" },
+    { label: "Country", field: "country" }
+  ];
+
+  return (
+    <form className="customer-detail-form" onSubmit={submit}>
+      {fields.map(item => (
+        <label className="customer-detail-input-row" key={item.field}>
+          <span>{item.label}</span>
+          <input
+            type={item.type || "text"}
+            value={draft[item.field] || ""}
+            disabled={disabled || saving}
+            onChange={event => updateField(item.field, event.target.value)}
+            placeholder="-"
+          />
+        </label>
+      ))}
+      {disabled ? null : (
+        <div className="customer-detail-save-row">
+          <button className="button" type="submit" disabled={saving || !isDirty}>
+            {saving ? "Saving..." : "Save Customer Details"}
+          </button>
+          {isDirty ? (
+            <button className="button secondary" type="button" disabled={saving} onClick={() => setDraft(saved)}>
+              Reset
+            </button>
+          ) : null}
+        </div>
+      )}
+    </form>
   );
 }
 
@@ -615,8 +752,8 @@ function CustomerInlineTitle({
   }, [editing, value]);
 
   async function submit() {
-    const nextValue = draft.trim();
-    if (!nextValue || nextValue === value) {
+    const nextValue = customerDisplayName(draft);
+    if (nextValue === value) {
       setEditing(false);
       setDraft(value);
       return;
@@ -643,7 +780,7 @@ function CustomerInlineTitle({
             }
           }}
         />
-        <button className="button" type="submit" disabled={saving || !draft.trim()}>
+        <button className="button" type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save"}
         </button>
       </form>
@@ -813,6 +950,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function CustomerOrderRow({ order, canSeeFinance, moneySettings }: { order: CustomerOrderSummary; canSeeFinance: boolean; moneySettings: StudioMoneySettings }) {
   const { hideNumbers } = usePricePrivacy();
+  const designName = order.designName.trim() || "Untitled design";
+  const statusLabel = order.status.trim() || "Not Yet";
   return (
     <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`} className="customer-order-row">
       <span className="customer-order-thumb">
@@ -821,11 +960,11 @@ function CustomerOrderRow({ order, canSeeFinance, moneySettings }: { order: Cust
       <span className="customer-order-content">
         <span className="customer-order-main-line">
           <span>
-            <strong>{order.designName}</strong>
+            <strong title={designName}>{designName}</strong>
             <small>{formatDate(order.paymentDate)} - due {formatDate(order.dueDate)}</small>
           </span>
           <span className="customer-order-meta">
-            <span className="status-pill">{order.status}</span>
+            <span className="status-pill">{statusLabel}</span>
             {canSeeFinance ? <span className="studio-pill">{money(order.paidAmount + order.remainingAmount, hideNumbers, moneySettings)}</span> : null}
           </span>
         </span>
@@ -852,7 +991,11 @@ function CustomerFormModal({
   onCancel: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
-  const updateField = (field: keyof CustomerFormInput, value: string) => onChange({ ...form, [field]: value });
+  const updateField = (field: keyof CustomerFormInput, value: string) => onChange({
+    ...form,
+    [field]: value,
+    ...(field === "streetAddress" || field === "city" || field === "postalCode" || field === "country" ? { address: "" } : {})
+  });
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={mode === "create" ? "Add customer" : "Edit customer"}>
@@ -860,7 +1003,7 @@ function CustomerFormModal({
         <div className="add-order-header">
           <div>
             <p className="orders-kicker">{mode === "create" ? "New Customer" : "Edit Customer"}</p>
-            <h2>{mode === "create" ? "Add customer" : form.name || "Customer details"}</h2>
+            <h2>{mode === "create" ? "Add customer" : customerDisplayName(form.name)}</h2>
             <p>These fields match the StudioFlow app customer profile.</p>
           </div>
           <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>Close</button>
@@ -869,7 +1012,7 @@ function CustomerFormModal({
         <form className="add-order-form" onSubmit={onSubmit}>
           <label>
             Customer name
-            <input className="input" value={form.name} onChange={event => updateField("name", event.target.value)} disabled={saving} required />
+            <input className="input" value={form.name} onChange={event => updateField("name", event.target.value)} disabled={saving} />
           </label>
 
           <div className="add-order-two-col">
@@ -890,7 +1033,28 @@ function CustomerFormModal({
 
           <label>
             Address
-            <input className="input" value={form.address} onChange={event => updateField("address", event.target.value)} disabled={saving} />
+            <input
+              className="input"
+              value={form.streetAddress || form.address}
+              onChange={event => onChange({ ...form, streetAddress: event.target.value, address: "" })}
+              disabled={saving}
+            />
+          </label>
+
+          <div className="add-order-two-col">
+            <label>
+              City
+              <input className="input" value={form.city} onChange={event => updateField("city", event.target.value)} disabled={saving} />
+            </label>
+            <label>
+              Postal Code
+              <input className="input" value={form.postalCode} onChange={event => updateField("postalCode", event.target.value)} disabled={saving} />
+            </label>
+          </div>
+
+          <label>
+            Country
+            <input className="input" value={form.country} onChange={event => updateField("country", event.target.value)} disabled={saving} />
           </label>
 
           <label>

@@ -3,6 +3,7 @@ import { functions } from "@/lib/firebase/client";
 import {
   type DashboardWidgetVisibility,
   normalizeWorkspaceRole,
+  workspaceAccessAllows,
   type CompanyNumberSetting,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
@@ -82,6 +83,16 @@ export type DashboardWidgetVisibilityResult = {
   ok?: boolean;
   message?: string;
   visibility?: DashboardWidgetVisibility;
+};
+
+export type OrderCardDisplaySettingsInput = {
+  showStatusBadges: boolean;
+};
+
+export type OrderCardDisplaySettingsResult = {
+  ok?: boolean;
+  message?: string;
+  settings?: OrderCardDisplaySettingsInput;
 };
 
 export type RecalculateFinancialSettingsResult = {
@@ -245,6 +256,30 @@ export async function saveDashboardWidgetVisibility(workspace: WorkspaceContext,
       });
       return result.data;
     }, "Saving dashboard customization to cloud.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
+export async function saveOrderCardDisplaySettings(workspace: WorkspaceContext, settings: OrderCardDisplaySettingsInput) {
+  const normalizedRole = normalizeWorkspaceRole(workspace.role);
+  const isCustomRole = /^custom_[A-Za-z0-9_-]{6,64}$/.test(workspace.role);
+  const canEditOrderCards = workspaceAccessAllows(workspace.memberAccess, "orders") &&
+    normalizedRole !== "viewer" &&
+    (normalizedRole !== "" || isCustomRole);
+  if (!canEditOrderCards) {
+    throw new Error("Your workspace role cannot edit order card settings.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, OrderCardDisplaySettingsResult>(functions, "saveOrderCardDisplaySettings");
+      const result = await callable({
+        companyId: workspace.id,
+        settings
+      });
+      return result.data;
+    }, "Saving order card settings to cloud.");
   } catch (error) {
     throw new Error(friendlySettingsError(error));
   }

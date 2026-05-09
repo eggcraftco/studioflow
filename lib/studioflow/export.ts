@@ -15,6 +15,8 @@ const APP_BACKUP_STRING_KEYS = [
   "financialExpenseItemsJSON",
   "financialRemainingItemsJSON",
   "financialBaseCostLabel",
+  "specialNoteSectionsJSON",
+  "specialNoteSectionsJSONV1",
   "summaryStep1",
   "summaryStep2",
   "orderListStep1",
@@ -69,6 +71,10 @@ const APP_BACKUP_BOOL_KEYS = [
   "showCardMaterials",
   "showCardPriority",
   "showCardSchedule",
+  "showCardHistoryLog",
+  "showCardClientFiles",
+  "showCardToDo",
+  "showCardWorkTime",
   "pdfShowCustomer",
   "pdfShowContact",
   "pdfShowPreview",
@@ -118,6 +124,10 @@ const CUSTOMER_COLUMNS = [
   "email",
   "phone",
   "address",
+  "streetAddress",
+  "city",
+  "postalCode",
+  "country",
   "company",
   "notes"
 ];
@@ -180,6 +190,38 @@ function booleanMapValue(value: unknown) {
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function recordArrayValue(value: unknown) {
+  return Array.isArray(value) ? value.filter(isPlainObject) : [];
+}
+
+function uuidStringValue(value: unknown, index: number) {
+  const raw = typeof value === "string"
+    ? value
+    : isPlainObject(value) && typeof value.uuidString === "string"
+      ? value.uuidString
+      : "";
+  const cleaned = raw.trim();
+  if (UUID_PATTERN.test(cleaned)) return cleaned;
+  return `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0").slice(-12)}`;
+}
+
+function swiftOptionalIsoDate(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  let date: Date | null = null;
+  if (value instanceof Date) {
+    date = value;
+  } else if (isPlainObject(value) && typeof value.seconds === "number") {
+    date = new Date(value.seconds * 1000);
+  } else if (typeof value === "string" || typeof value === "number") {
+    date = new Date(value);
+  }
+
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 function swiftIsoDate(value: unknown, fallback: string) {
   let date: Date | null = null;
   if (value instanceof Date) {
@@ -193,6 +235,71 @@ function swiftIsoDate(value: unknown, fallback: string) {
   if (!date || Number.isNaN(date.getTime())) date = new Date(fallback);
   if (Number.isNaN(date.getTime())) date = new Date();
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+function appBackupTodoItems(value: unknown, generatedAt: string) {
+  return recordArrayValue(value).map((item, index) => ({
+    id: uuidStringValue(item.id, index),
+    title: stringValue(item.title, "Untitled task") || "Untitled task",
+    note: stringValue(item.note),
+    assignedToUid: stringValue(item.assignedToUid),
+    assignedToEmail: stringValue(item.assignedToEmail),
+    dueAt: swiftOptionalIsoDate(item.dueAt),
+    priority: stringValue(item.priority, "Normal") || "Normal",
+    isDone: booleanValue(item.isDone),
+    createdAt: swiftIsoDate(item.createdAt, generatedAt),
+    createdByUid: stringValue(item.createdByUid),
+    createdByEmail: stringValue(item.createdByEmail),
+    completedAt: swiftOptionalIsoDate(item.completedAt),
+    completedByUid: stringValue(item.completedByUid),
+    completedByEmail: stringValue(item.completedByEmail)
+  }));
+}
+
+function appBackupWorkSessions(value: unknown, generatedAt: string) {
+  return recordArrayValue(value).map((item, index) => ({
+    id: uuidStringValue(item.id, index),
+    title: stringValue(item.title, "Work session") || "Work session",
+    startedAt: swiftIsoDate(item.startedAt, generatedAt),
+    endedAt: swiftOptionalIsoDate(item.endedAt),
+    durationSeconds: Math.max(0, integerValue(item.durationSeconds)),
+    createdAt: swiftIsoDate(item.createdAt, generatedAt),
+    createdByUid: stringValue(item.createdByUid),
+    createdByEmail: stringValue(item.createdByEmail),
+    source: stringValue(item.source, "web") || "web"
+  }));
+}
+
+function appBackupHistoryLog(value: unknown, generatedAt: string) {
+  return recordArrayValue(value).slice(0, 120).map((item, index) => ({
+    id: uuidStringValue(item.id, index),
+    createdAt: swiftIsoDate(item.createdAt, generatedAt),
+    title: stringValue(item.title, "Order updated") || "Order updated",
+    oldValue: stringValue(item.oldValue, "-") || "-",
+    newValue: stringValue(item.newValue, "-") || "-"
+  }));
+}
+
+function appBackupClientFiles(value: unknown, generatedAt: string) {
+  return recordArrayValue(value).map((item, index) => {
+    const fileName = stringValue(item.fileName ?? item.originalFileName ?? item.name, "Client file") || "Client file";
+    return {
+      id: uuidStringValue(item.id, index),
+      fileName,
+      downloadURL: stringValue(item.downloadURL ?? item.downloadUrl ?? item.url),
+      storagePath: stringValue(item.storagePath ?? item.path),
+      contentType: stringValue(item.contentType ?? item.type, "application/octet-stream") || "application/octet-stream",
+      fileSize: Math.max(0, integerValue(item.fileSize ?? item.size)),
+      uploadedByUid: stringValue(item.uploadedByUid ?? item.createdByUid),
+      uploadedByEmail: stringValue(item.uploadedByEmail ?? item.uploadedBy ?? item.createdByEmail),
+      uploadedAt: swiftIsoDate(item.uploadedAt ?? item.createdAt, generatedAt),
+      source: stringValue(item.source, "client_file") || "client_file",
+      note: stringValue(item.note),
+      isPendingUpload: false,
+      localFilePath: "",
+      pendingQueueId: ""
+    };
+  });
 }
 
 function appBackupSettings(settings: Record<string, unknown>) {
@@ -219,7 +326,7 @@ function appBackupSettings(settings: Record<string, unknown>) {
 function appBackupOrder(document: SerializableFirestoreDocument, generatedAt: string) {
   const data = document.data;
   return {
-    customerName: stringValue(data.customerName, "New Order") || "New Order",
+    customerName: stringValue(data.customerName, "New Project") || "New Project",
     paymentDate: swiftIsoDate(data.paymentDate, generatedAt),
     paidAmount: numberValue(data.paidAmount),
     remainingAmount: numberValue(data.remainingAmount),
@@ -255,17 +362,30 @@ function appBackupOrder(document: SerializableFirestoreDocument, generatedAt: st
     risk: stringValue(data.risk, "None") || "None",
     riskReason: stringValue(data.riskReason, "-") || "-",
     customFields: stringMapValue(data.customFields),
-    customToggles: booleanMapValue(data.customToggles)
+    customToggles: booleanMapValue(data.customToggles),
+    historyLog: appBackupHistoryLog(data.historyLog, generatedAt),
+    clientFiles: appBackupClientFiles(data.clientFiles, generatedAt),
+    todoItems: appBackupTodoItems(data.todoItems, generatedAt),
+    workSessions: appBackupWorkSessions(data.workSessions, generatedAt)
   };
 }
 
 function appBackupCustomer(document: SerializableFirestoreDocument) {
   const data = document.data;
+  const streetAddress = stringValue(data.streetAddress || data.addressLine1 || data.street);
+  const city = stringValue(data.city || data.town);
+  const postalCode = stringValue(data.postalCode || data.postcode || data.zipCode || data.zip);
+  const country = stringValue(data.country);
+  const detailedAddress = [streetAddress, city, postalCode, country].filter(Boolean).join(", ");
   return {
     name: stringValue(data.name || data.customerName),
     phone: stringValue(data.phone || data.whatsappNumber),
     email: stringValue(data.email || data.emailAddress),
-    address: stringValue(data.address),
+    address: stringValue(data.address) || detailedAddress,
+    streetAddress,
+    city,
+    postalCode,
+    country,
     notes: stringValue(data.notes)
   };
 }

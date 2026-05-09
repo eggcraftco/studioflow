@@ -3,25 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import { MemberAccessEditor } from "@/components/MemberAccessEditor";
-import { AddTeamMemberForm, MemberProfileEditor } from "@/components/TeamMemberAccessForm";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   loadTeamAccessData,
   loadWorkspaceContext,
   type JoinRequestDetail,
   type TeamMemberDetail,
+  type WorkspaceCustomRole,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
 import {
-  addTeamMember,
   approveJoinRequest,
+  deleteWorkspaceCustomRole,
   declineJoinRequest,
   removeTeamMember,
+  saveWorkspaceCustomRole,
   syncAcceptedJoinRequests,
-  updateTeamMemberAccess,
-  updateTeamMemberProfile,
   updateTeamMemberRole,
   WEB_TEAM_ROLES
 } from "@/lib/studioflow/teamActions";
@@ -43,12 +42,20 @@ function roleOptionLabel(role: string) {
   return WEB_TEAM_ROLES.find(option => option.value === role)?.label ?? "Member";
 }
 
+function roleOptionsWithCustom(customRoles: WorkspaceCustomRole[]) {
+  return [
+    ...WEB_TEAM_ROLES,
+    ...customRoles.map(role => ({ value: role.id, label: role.name }))
+  ];
+}
+
 export default function TeamPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [members, setMembers] = useState<TeamMemberDetail[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequestDetail[]>([]);
+  const [customRoles, setCustomRoles] = useState<WorkspaceCustomRole[]>([]);
   const [requestRoles, setRequestRoles] = useState<Record<string, string>>({});
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [actioning, setActioning] = useState("");
@@ -77,6 +84,7 @@ export default function TeamPage() {
       setWorkspace(workspaceContext);
       setMembers(teamData.members);
       setJoinRequests(teamData.joinRequests);
+      setCustomRoles(teamData.customRoles);
       setRequestRoles(previous => {
         const next = { ...previous };
         teamData.joinRequests.forEach(request => {
@@ -111,6 +119,7 @@ export default function TeamPage() {
           setWorkspace(workspaceContext);
           setMembers(teamData.members);
           setJoinRequests(teamData.joinRequests);
+          setCustomRoles(teamData.customRoles);
           setRequestRoles(() => Object.fromEntries(teamData.joinRequests.map(request => [request.id, "member"])));
         }
       } catch (loadError) {
@@ -132,6 +141,7 @@ export default function TeamPage() {
   const teamLimit = workspace?.billingTeamMemberLimit ?? workspace?.entitlements.teamMemberLimit ?? 1;
   const currentMemberCount = members.length;
   const limitText = teamLimit > 9999 ? "Unlimited" : `${currentMemberCount} / ${teamLimit}`;
+  const roleOptions = useMemo(() => roleOptionsWithCustom(customRoles), [customRoles]);
 
   const roleCounts = useMemo(() => {
     return members.reduce<Record<string, number>>((acc, member) => {
@@ -228,30 +238,45 @@ export default function TeamPage() {
         <StatCard label="Roles" value={`${Object.keys(roleCounts).length}`} note={Object.entries(roleCounts).map(([role, count]) => `${role}: ${count}`).join(" · ") || "No members"} />
       </div>
 
+      <section className="card" style={{ padding: 22, marginBottom: 18 }}>
+        <div className="pill">Role Profiles</div>
+        <h2 style={{ margin: "12px 0 8px" }}>Custom access roles</h2>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Create role choices beside Member, View Only and Workflow Only. Each role profile carries its own visible areas and permissions.
+        </p>
+        {canManageTeam ? (
+          <CustomRoleManager
+            roles={customRoles}
+            disabled={Boolean(actioning)}
+            savingKey={actioning}
+            onSave={role => runTeamAction(
+              role.id ? `custom-role-${role.id}` : "custom-role-new",
+              () => saveWorkspaceCustomRole(workspace!, role),
+              "Role profile saved."
+            )}
+            onDelete={role => runTeamAction(
+              `delete-custom-role-${role.id}`,
+              () => deleteWorkspaceCustomRole(workspace!, role),
+              "Role profile deleted."
+            )}
+          />
+        ) : (
+          <p style={{ color: "var(--muted)", margin: 0 }}>
+            Only the workspace owner on StudioFlow Team can create custom role profiles.
+          </p>
+        )}
+      </section>
+
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", alignItems: "start" }}>
         <section className="card" style={{ padding: 22 }}>
           <div className="pill">Members</div>
           <h2 style={{ margin: "12px 0 14px" }}>Workspace members</h2>
-          {canManageTeam ? (
-            <AddTeamMemberForm
-              disabled={Boolean(actioning)}
-              saving={actioning === "add-member"}
-              onAdd={input => runTeamAction(
-                "add-member",
-                () => addTeamMember(workspace!, input),
-                "Team member added."
-              )}
-            />
-          ) : (
-            <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              Only the workspace owner on StudioFlow Team can add members and customize their access.
-            </p>
-          )}
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Assign existing members to standard or custom role profiles.
+          </p>
           <div className="grid" style={{ gap: 10 }}>
             {members.map(member => {
               const changingKey = `role-${member.id}`;
-              const accessKey = `access-${member.id}`;
-              const profileKey = `profile-${member.id}`;
               const removeKey = `remove-${member.id}`;
               const canChangeRole = canManageTeam && !member.isOwner;
               return (
@@ -273,20 +298,20 @@ export default function TeamPage() {
                       <>
                         <select
                           className="input"
-                          value={WEB_TEAM_ROLES.some(option => option.value === member.role) ? member.role : "member"}
+                          value={roleOptions.some(option => option.value === member.role) ? member.role : "member"}
                           onChange={event => {
                             const nextRole = event.target.value;
                             if (nextRole === member.role) return;
                             runTeamAction(
                               changingKey,
                               () => updateTeamMemberRole(workspace!, member, nextRole),
-                              `Role updated to ${roleOptionLabel(nextRole)}.`
+                              `Role updated to ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
                             );
                           }}
                           disabled={Boolean(actioning)}
                           style={{ maxWidth: 170 }}
                         >
-                          {WEB_TEAM_ROLES.map(option => (
+                          {roleOptions.map(option => (
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
@@ -309,31 +334,6 @@ export default function TeamPage() {
                       </>
                     ) : null}
                   </div>
-                  {canChangeRole ? (
-                    <MemberProfileEditor
-                      member={member}
-                      disabled={Boolean(actioning)}
-                      saving={actioning === profileKey}
-                      onSave={profile => runTeamAction(
-                        profileKey,
-                        () => updateTeamMemberProfile(workspace!, member, profile),
-                        "Member profile updated."
-                      )}
-                    />
-                  ) : null}
-                  <MemberAccessEditor
-                    access={member.access}
-                    disabled={!canChangeRole || Boolean(actioning)}
-                    saving={actioning === accessKey}
-                    ownerLocked={member.isOwner}
-                    onChange={nextAccess => {
-                      runTeamAction(
-                        accessKey,
-                        () => updateTeamMemberAccess(workspace!, member, nextAccess),
-                        "Member access updated."
-                      );
-                    }}
-                  />
                 </article>
               );
             })}
@@ -373,7 +373,7 @@ export default function TeamPage() {
                         disabled={!canManageTeam || Boolean(actioning)}
                         style={{ maxWidth: 180 }}
                       >
-                        {WEB_TEAM_ROLES.map(option => (
+                        {roleOptions.map(option => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>

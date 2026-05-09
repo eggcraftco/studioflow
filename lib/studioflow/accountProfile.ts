@@ -28,6 +28,22 @@ export type AccountProfileResult = {
   };
 };
 
+export type AccountEmailInput = {
+  email: string;
+};
+
+export type AccountEmailResult = {
+  ok?: boolean;
+  message?: string;
+  profile?: {
+    email: string;
+    displayName?: string;
+    companyName?: string;
+    photoURL?: string;
+    emailNextChangeAt?: number | null;
+  };
+};
+
 function friendlyAccountError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot edit this account profile.";
@@ -79,6 +95,32 @@ export async function saveAccountProfile(workspace: WorkspaceContext, input: Acc
       }
       return result.data;
     }, "Saving account profile to cloud.");
+  } catch (error) {
+    throw new Error(friendlyAccountError(error));
+  }
+}
+
+
+export async function changeAccountEmail(workspace: WorkspaceContext, input: AccountEmailInput) {
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, AccountEmailResult>(functions, "changeAccountEmail");
+      const result = await callable({
+        companyId: workspace.id,
+        email: input.email
+      });
+      if (typeof window !== "undefined" && result.data.profile) {
+        window.dispatchEvent(new CustomEvent("studioflow-workspace-updated", {
+          detail: {
+            workspace: {
+              currentMemberDisplayName: result.data.profile.displayName ?? workspace.currentMemberDisplayName,
+              currentMemberPhotoURL: result.data.profile.photoURL ?? workspace.currentMemberPhotoURL
+            }
+          }
+        }));
+      }
+      return result.data;
+    }, "Changing sign-in email.");
   } catch (error) {
     throw new Error(friendlyAccountError(error));
   }

@@ -26,6 +26,7 @@ import {
   customPendingTotal,
   dashboardCostTotal
 } from "@/lib/studioflow/finance";
+import { studioT } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
 
@@ -89,11 +90,6 @@ const DASHBOARD_WIDGET_META = DASHBOARD_WIDGET_ROWS.reduce(
 function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
   if (hidden) return hiddenMoneyLabel(moneySymbol(settings));
   return formatStudioMoney(value, settings);
-}
-
-function isWorkflowOnly(role: string) {
-  const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "workflow" || normalized === "workflowonly";
 }
 
 function boolSetting(value: unknown, fallback: boolean) {
@@ -306,7 +302,6 @@ export default function DashboardPage() {
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
         if (
-          isWorkflowOnly(loadedWorkspace.role) ||
           !workspaceAccessAllows(loadedWorkspace.memberAccess, "dashboard") ||
           !workspaceAccessAllows(loadedWorkspace.memberAccess, "financialInfo")
         ) {
@@ -348,7 +343,7 @@ export default function DashboardPage() {
     });
   }, [workspace?.id]);
 
-  const canSeeFinance = Boolean(workspace && !isWorkflowOnly(workspace.role));
+  const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
   const currentWindow = useMemo(
     () => rangeWindow(range, financeOrders, customStart, customEnd),
@@ -380,6 +375,8 @@ export default function DashboardPage() {
   );
   const yearly = useMemo(() => yearTotals(financeOrders, settings), [financeOrders, settings]);
   const revenueCardTitle = settings?.taxRuleNameRevenue || "Standard VAT (New)";
+  const language = settings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, language);
 
   async function updateDashboardVisibility(key: keyof DashboardWidgetVisibility, value: boolean) {
     if (!workspace) return;
@@ -410,7 +407,7 @@ export default function DashboardPage() {
       {loadingWorkspace ? <LoadingScreen /> : null}
       {error ? (
         <section className="card app-card dashboard-error-card">
-          <CardTitle icon="lock" eyebrow="Workspace error" title="Could not load your workspace" />
+          <CardTitle icon="lock" eyebrow={t("Workspace error")} title={t("Could not load your workspace")} />
           <p className="layout-error">{error}</p>
         </section>
       ) : null}
@@ -419,19 +416,19 @@ export default function DashboardPage() {
         <div className="dashboard-workspace">
           <section className="dashboard-header-card">
             <div>
-              <p className="orders-kicker">Dashboard</p>
+              <p className="orders-kicker">{t("Dashboard")}</p>
               <h1>{workspace.name}</h1>
-              <p>{workspace.billingPlanName} · {workspace.roleLabel} · {counts.activeOrderCount} active orders</p>
+              <p>{workspace.billingPlanName} · {workspace.roleLabel} · {counts.activeOrderCount} {t("active orders")}</p>
             </div>
             <div className="compact-pill-row">
-              <span className="studio-pill">Orders {counts.orderCount}</span>
-              <span className="studio-pill">Customers {counts.customerCount}</span>
-              <span className="studio-pill">Due soon {counts.dueSoonCount}</span>
+              <span className="studio-pill">{t("Orders")} {counts.orderCount}</span>
+              <span className="studio-pill">{t("Customers")} {counts.customerCount}</span>
+              <span className="studio-pill">{t("Due soon")} {counts.dueSoonCount}</span>
             </div>
           </section>
 
           <section className="dashboard-filter-card">
-            <div className="segmented-control" aria-label="Dashboard time range">
+            <div className="segmented-control" aria-label={t("Dashboard time range")}>
               {RANGE_OPTIONS.map(option => (
                 <button
                   key={option.key}
@@ -439,7 +436,7 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => setRange(option.key)}
                 >
-                  {option.label}
+                  {t(option.label)}
                 </button>
               ))}
             </div>
@@ -447,11 +444,11 @@ export default function DashboardPage() {
             {range === "custom" ? (
               <div className="dashboard-date-controls">
                 <label>
-                  Start
+                  {t("Start")}
                   <input className="input" type="date" value={customStart} onChange={event => setCustomStart(event.target.value)} />
                 </label>
                 <label>
-                  End
+                  {t("End")}
                   <input className="input" type="date" value={customEnd} onChange={event => setCustomEnd(event.target.value)} />
                 </label>
               </div>
@@ -463,7 +460,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setCompareOneYear(value => !value)}
               >
-                1 Yr Compare
+                {t("1 Yr Compare")}
               </button>
               <button
                 className={compareThreeYears ? "compare-pill active" : "compare-pill"}
@@ -475,33 +472,33 @@ export default function DashboardPage() {
                   });
                 }}
               >
-                3 Yrs Compare
+                {t("3 Yrs Compare")}
               </button>
               <button className={showCustomize ? "compare-pill active" : "compare-pill"} type="button" onClick={() => setShowCustomize(value => !value)}>
-                Customize
+                {t("Customize")}
               </button>
             </div>
           </section>
 
           {!canSeeFinance ? (
             <section className="card app-card locked-panel">
-              <CardTitle icon="lock" eyebrow="Role locked" title="Finance dashboard is hidden for Workflow Only." />
-              <p className="muted-copy">Orders, workflow and Client Files remain available according to your workspace permissions.</p>
+              <CardTitle icon="lock" eyebrow={t("Role locked")} title={t("Finance dashboard is hidden for Workflow Only.")} />
+              <p className="muted-copy">{t("Orders, workflow and Client Files remain available according to your workspace permissions.")}</p>
             </section>
           ) : (
             <>
               <section className="dashboard-summary-grid">
-                {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={revenueCardTitle} value={canSeeAdvancedFinance ? money(totals.revenue, hideNumbers, settings) : "Locked"} tone="blue" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title="Pending" value={canSeeAdvancedFinance ? money(totals.pending, hideNumbers, settings) : "Locked"} tone="orange" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title="Cost" value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
-                {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title="Platform Fee" value={canSeeAdvancedFinance ? money(totals.fee, hideNumbers, settings) : "Locked"} tone="red" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title="Shipping" value={canSeeAdvancedFinance ? money(totals.shipping, hideNumbers, settings) : "Locked"} tone="red" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title="Tax Amount" value={canSeeAdvancedFinance ? money(totals.tax, hideNumbers, settings) : "Locked"} tone="red" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title="Net Profit" value={canSeeAdvancedFinance ? money(totals.netProfit, hideNumbers, settings) : "Locked"} tone="green" locked={!canSeeAdvancedFinance} /> : null}
+                {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t(revenueCardTitle)} value={canSeeAdvancedFinance ? money(totals.revenue, hideNumbers, settings) : t("Locked")} tone="blue" locked={!canSeeAdvancedFinance} /> : null}
+                {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Pending")} value={canSeeAdvancedFinance ? money(totals.pending, hideNumbers, settings) : t("Locked")} tone="orange" locked={!canSeeAdvancedFinance} /> : null}
+                {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
+                {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={canSeeAdvancedFinance ? money(totals.fee, hideNumbers, settings) : t("Locked")} tone="red" locked={!canSeeAdvancedFinance} /> : null}
+                {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={canSeeAdvancedFinance ? money(totals.shipping, hideNumbers, settings) : t("Locked")} tone="red" locked={!canSeeAdvancedFinance} /> : null}
+                {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("Tax Amount")} value={canSeeAdvancedFinance ? money(totals.tax, hideNumbers, settings) : t("Locked")} tone="red" locked={!canSeeAdvancedFinance} /> : null}
+                {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t("Net Profit")} value={canSeeAdvancedFinance ? money(totals.netProfit, hideNumbers, settings) : t("Locked")} tone="green" locked={!canSeeAdvancedFinance} /> : null}
               </section>
 
               <section className="card app-card dashboard-chart-card">
-                <CardTitle icon="finance" title="Net Profit Analysis" />
+                <CardTitle icon="finance" title={t("Net Profit Analysis")} />
                 {canSeeAdvancedFinance ? (
                   <ProfitChart
                     current={currentSeries}
@@ -511,17 +508,17 @@ export default function DashboardPage() {
                   />
                 ) : (
                   <div className="dashboard-chart-locked">
-                    <CardTitle icon="lock" eyebrow="Advanced finance locked" title="Net profit analysis is available from StudioFlow Lite." />
+                    <CardTitle icon="lock" eyebrow={t("Advanced finance locked")} title={t("Net profit analysis is available from StudioFlow Lite.")} />
                   </div>
                 )}
               </section>
 
               <section className="card app-card yearly-summary-card">
-                <CardTitle icon="calendar" title="Year-over-Year Summary" />
+                <CardTitle icon="calendar" title={t("Year-over-Year Summary")} />
                 <div className="yearly-summary-grid">
-                  <YearSummary title="This Year" value={canSeeAdvancedFinance ? money(yearly.current, hideNumbers, settings) : "Locked" } />
-                  <YearSummary title="Last Year" value={canSeeAdvancedFinance ? money(yearly.previous, hideNumbers, settings) : "Locked" } />
-                  <YearSummary title="Growth" value={canSeeAdvancedFinance ? `${Math.abs(yearly.growth).toFixed(1)}%` : "Locked"} trend={yearly.growth >= 0 ? "up" : "down"} />
+                  <YearSummary title={t("This Year")} value={canSeeAdvancedFinance ? money(yearly.current, hideNumbers, settings) : t("Locked") } />
+                  <YearSummary title={t("Last Year")} value={canSeeAdvancedFinance ? money(yearly.previous, hideNumbers, settings) : t("Locked") } />
+                  <YearSummary title={t("Growth")} value={canSeeAdvancedFinance ? `${Math.abs(yearly.growth).toFixed(1)}%` : t("Locked")} trend={yearly.growth >= 0 ? "up" : "down"} />
                 </div>
               </section>
             </>
@@ -531,9 +528,9 @@ export default function DashboardPage() {
             <div className="modal-backdrop dashboard-customize-backdrop" onClick={() => setShowCustomize(false)}>
               <section className="add-order-modal dashboard-customize-modal" onClick={event => event.stopPropagation()}>
                 <div className="add-order-header">
-                  <CardTitle icon="dashboard" eyebrow="Customize" title="Dashboard" />
+                  <CardTitle icon="dashboard" eyebrow={t("Customize")} title={t("Dashboard")} />
                   <button className="ghost-button" type="button" onClick={() => setShowCustomize(false)}>
-                    Close
+                    {t("Close")}
                   </button>
                 </div>
                 <div className="dashboard-widget-list">
@@ -542,7 +539,7 @@ export default function DashboardPage() {
                       <span className="dashboard-widget-icon" aria-hidden="true">
                         <CardIconGlyph icon={row.icon} />
                       </span>
-                      <span>{row.key === "revenue" ? revenueCardTitle : row.title}</span>
+                      <span>{row.key === "revenue" ? t(revenueCardTitle) : t(row.title)}</span>
                       <input
                         checked={dashboardVisibility[row.key]}
                         type="checkbox"

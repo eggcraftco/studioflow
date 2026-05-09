@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
@@ -17,6 +17,8 @@ import {
   loadScheduleOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  orderIsAssignedToCurrentUser,
+  workspaceAssignedProjectsOnly,
   workspaceAccessAllows,
   type ScheduleOrderItem,
   type WorkspaceContext,
@@ -29,6 +31,7 @@ import {
   type OrderQuickFilterId,
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
+import { studioT } from "@/lib/studioflow/language";
 import { canCreateOrdersForRole, canEditOrderStatusForRole, createOrderFromWeb, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 
@@ -37,6 +40,9 @@ type ScheduleFilter = OrderQuickFilterId;
 type ScheduleTone = "green" | "yellow" | "red" | "blue" | "gray";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SCHEDULE_ZOOM_STORAGE_KEY = "studioflow-schedule-timeline-zoom";
+const MIN_SCHEDULE_ZOOM = 0.45;
+const MAX_SCHEDULE_ZOOM = 2.2;
 
 const SPANS: Array<{ id: ScheduleSpan; label: string }> = [
   { id: "weekly", label: "Weekly" },
@@ -130,11 +136,6 @@ function dayName(date: Date) {
 function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
   if (hidden) return hiddenMoneyLabel(moneySymbol(settings));
   return formatStudioMoney(value, settings, { maximumFractionDigits: 0 });
-}
-
-function isWorkflowOnly(role: string) {
-  const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "workflow" || normalized === "workflowonly";
 }
 
 function orderStartDate(order: ScheduleOrderItem) {
@@ -274,7 +275,11 @@ function scheduleRangeText(order: ScheduleOrderItem) {
 }
 
 function titleForOrder(order: ScheduleOrderItem) {
-  return order.customerName.trim() || "Unnamed";
+  const cleaned = order.customerName.trim();
+  if (!cleaned || ["new order", "new project", "yeni sipariş", "yeni proje"].includes(cleaned.toLowerCase())) {
+    return "New Project";
+  }
+  return cleaned;
 }
 
 function designForOrder(order: ScheduleOrderItem) {
@@ -364,6 +369,8 @@ export default function SchedulePage() {
   const [span, setSpan] = useState<ScheduleSpan>("weekly");
   const [filter, setFilter] = useState<ScheduleFilter>("all");
   const [sortMode, setSortMode] = useState<OrderSortMode>("smart");
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const [timelineZoomHydrated, setTimelineZoomHydrated] = useState(false);
   const [search, setSearch] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -390,6 +397,20 @@ export default function SchedulePage() {
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SCHEDULE_ZOOM_STORAGE_KEY);
+    const parsed = stored ? Number(stored) : NaN;
+    if (Number.isFinite(parsed)) {
+      setTimelineZoom(Math.min(MAX_SCHEDULE_ZOOM, Math.max(MIN_SCHEDULE_ZOOM, parsed)));
+    }
+    setTimelineZoomHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!timelineZoomHydrated) return;
+    window.localStorage.setItem(SCHEDULE_ZOOM_STORAGE_KEY, String(timelineZoom));
+  }, [timelineZoom, timelineZoomHydrated]);
 
   useEffect(() => {
     if (!user) return;
@@ -539,17 +560,27 @@ export default function SchedulePage() {
     }
   }, [span, visibleStart]);
 
-  const dayWidth = span === "weekly" ? 168 : span === "monthly" ? 118 : span === "threeMonths" ? 58 : span === "sixMonths" ? 38 : 28;
+  const clampedTimelineZoom = Math.min(MAX_SCHEDULE_ZOOM, Math.max(MIN_SCHEDULE_ZOOM, timelineZoom));
+  const baseDayWidth = span === "weekly" ? 168 : span === "monthly" ? 118 : span === "threeMonths" ? 58 : span === "sixMonths" ? 38 : 28;
+  const dayWidth = Math.max(18, Math.round(baseDayWidth * clampedTimelineZoom));
   const visibleDayCount = Math.max(1, daysBetween(visibleStart, visibleEnd));
   const visibleDays = useMemo(() => dateRange(visibleStart, visibleDayCount), [visibleDayCount, visibleStart]);
+  const minimumTimelineWidth = span === "weekly" ? 980 : span === "monthly" ? 1300 : span === "threeMonths" ? 2100 : span === "sixMonths" ? 2600 : 3600;
   const timelineWidth = Math.max(
     visibleDayCount * dayWidth,
-    span === "weekly" ? 980 : span === "monthly" ? 1300 : span === "threeMonths" ? 2100 : span === "sixMonths" ? 2600 : 3600
+    Math.round(minimumTimelineWidth * clampedTimelineZoom)
+  );
+
+  const visibleSourceOrders = useMemo(
+    () => workspace && workspaceAssignedProjectsOnly(workspace.memberAccess)
+      ? orders.filter(order => orderIsAssignedToCurrentUser(order, user))
+      : orders,
+    [orders, user, workspace]
   );
 
   const filteredOrders = useMemo(() => {
-    return filterAndSortOrders(orders, search, filter, sortMode);
-  }, [filter, orders, search, sortMode]);
+    return filterAndSortOrders(visibleSourceOrders, search, filter, sortMode);
+  }, [filter, visibleSourceOrders, search, sortMode]);
 
   const visibleOrders = useMemo(() => filteredOrders.filter(order => {
     const start = orderStartDate(order);
@@ -560,15 +591,17 @@ export default function SchedulePage() {
   const notice = planNotice(workspace);
   const lateCount = filteredOrders.filter(orderIsLate).length;
   const readyCount = filteredOrders.filter(orderIsReadyToShip).length;
-  const canSeeFinance = Boolean(workspace && !isWorkflowOnly(workspace.role));
+  const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
   const canEditSchedule = Boolean(workspace && canEditOrderStatusForRole(workspace.role));
   const canCreateScheduleOrder = Boolean(workspace && workspace.entitlements.features.orders_create && canCreateOrdersForRole(workspace.role));
   const canUseCalendarExport = Boolean(workspace && workspace.billingPlan !== "demo");
   const selectedOrder = useMemo(
-    () => orders.find(order => order.id === selectedOrderId) ?? filteredOrders[0] ?? null,
-    [filteredOrders, orders, selectedOrderId]
+    () => visibleSourceOrders.find(order => order.id === selectedOrderId) ?? filteredOrders[0] ?? null,
+    [filteredOrders, selectedOrderId, visibleSourceOrders]
   );
+  const language = moneySettings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, language);
 
   function selectScheduleOrder(order: ScheduleOrderItem) {
     setSelectedOrderId(order.id);
@@ -590,6 +623,20 @@ export default function SchedulePage() {
           return addYears(current, direction);
       }
     });
+  }
+
+  function setScheduleZoom(nextZoom: number) {
+    setTimelineZoom(Math.min(MAX_SCHEDULE_ZOOM, Math.max(MIN_SCHEDULE_ZOOM, nextZoom)));
+  }
+
+  function adjustScheduleZoom(delta: number) {
+    setScheduleZoom(clampedTimelineZoom + delta);
+  }
+
+  function handleScheduleTimelineWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    adjustScheduleZoom(event.deltaY < 0 ? 0.10 : -0.10);
   }
 
   async function saveScheduleOrderRange(order: ScheduleOrderItem, nextPaymentDate: Date, nextDeliveryTime: number) {
@@ -742,17 +789,17 @@ export default function SchedulePage() {
         <aside className="orders-sidebar schedule-order-sidebar">
           <div className="orders-sidebar-toolbar">
             <div>
-              <p className="orders-kicker">Schedule Orders</p>
-              <h1>{filteredOrders.length} orders</h1>
-              <p>{selectedOrder ? `Selected: ${selectedOrder.customerName}` : workspace ? `${workspace.name} - ${workspace.roleLabel}` : "Loading workspace..."}</p>
+              <p className="orders-kicker">{t("Schedule Orders")}</p>
+              <h1>{filteredOrders.length} {t("orders")}</h1>
+              <p>{selectedOrder ? `${t("Selected:")} ${selectedOrder.customerName}` : workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
             </div>
             <div className="sidebar-toolbar-actions">
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
               <button
                 className="sidebar-toggle-button"
                 type="button"
-                title={sidebar.collapsed ? "Expand order list" : "Collapse order list"}
-                aria-label={sidebar.collapsed ? "Expand order list" : "Collapse order list"}
+                title={sidebar.collapsed ? t("Expand order list") : t("Collapse order list")}
+                aria-label={sidebar.collapsed ? t("Expand order list") : t("Collapse order list")}
                 onClick={() => sidebar.setCollapsed(value => !value)}
               >
                 {sidebar.collapsed ? ">" : "<"}
@@ -766,15 +813,16 @@ export default function SchedulePage() {
               <input
                 value={search}
                 onChange={event => setSearch(event.target.value)}
-                placeholder="Search..."
+                placeholder={t("Search...")}
               />
             </label>
-            <OrderQuickFilterBar
-              orders={orders}
+              <OrderQuickFilterBar
+              orders={visibleSourceOrders}
               filter={filter}
               sortMode={sortMode}
               onFilterChange={setFilter}
               onSortModeChange={setSortMode}
+              language={language}
             />
           </div>
 
@@ -788,6 +836,7 @@ export default function SchedulePage() {
                   canSeeAdvancedFinance={canSeeAdvancedFinance}
                   blockHeadingSettings={blockHeadingSettings}
                   moneySettings={moneySettings}
+                  showStatusBadges={moneySettings?.orderCardShowStatusBadges ?? true}
                   onSelect={() => selectScheduleOrder(order)}
                 />
               </div>
@@ -798,22 +847,22 @@ export default function SchedulePage() {
         <button
           className="workspace-sidebar-resizer"
           type="button"
-          aria-label="Resize schedule order list"
-          title="Resize schedule order list"
+          aria-label={t("Resize schedule order list")}
+          title={t("Resize schedule order list")}
           onPointerDown={sidebar.startResize}
         />
 
         <main className="schedule-main-pane">
           <div className="schedule-header-card">
             <div className="schedule-title-block">
-              <h1>Schedule</h1>
-              <p>See who is doing what and when.</p>
+              <h1>{t("Schedule")}</h1>
+              <p>{t("See who is doing what and when.")}</p>
             </div>
             <div className="schedule-header-actions">
               {workspace ? <span className="studio-pill">{workspace.name} - {workspace.roleLabel}</span> : null}
               {selectedOrder ? (
                 <button className="button secondary schedule-header-button" type="button" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(selectedOrder.id)}`)}>
-                  Open Order
+                  {t("Open Order")}
                 </button>
               ) : null}
               <button
@@ -821,18 +870,18 @@ export default function SchedulePage() {
                 type="button"
                 disabled={!selectedOrder || !canUseCalendarExport}
                 onClick={downloadSelectedCalendarFile}
-                title={canUseCalendarExport ? "Download an all-day calendar file" : "Available from StudioFlow Lite"}
+                title={canUseCalendarExport ? t("Download an all-day calendar file") : t("Available from StudioFlow Lite")}
               >
-                Calendar File
+                {t("Calendar File")}
               </button>
               <button
                 className="button schedule-header-button"
                 type="button"
                 disabled={!canCreateScheduleOrder || creatingScheduleOrder}
                 onClick={addScheduleOrder}
-                title={canCreateScheduleOrder ? "Create a new scheduled order" : "Your plan or role cannot create orders"}
+                title={canCreateScheduleOrder ? t("Create a new scheduled order") : t("Your plan or role cannot create orders")}
               >
-                {creatingScheduleOrder ? "Adding..." : "+ New Order"}
+                {creatingScheduleOrder ? t("Adding...") : `+ ${t("New Project")}`}
               </button>
             </div>
           </div>
@@ -846,49 +895,57 @@ export default function SchedulePage() {
                 onFilterChange={setFilter}
                 onSortModeChange={setSortMode}
                 filters={filterOptions}
+                language={language}
               />
             </div>
 
             <label className="schedule-control">
-              <span>Filter by Status</span>
+              <span>{t("Filter by Status")}</span>
               <select value={filter} onChange={event => setFilter(event.target.value as ScheduleFilter)}>
-                {filterOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                {filterOptions.map(option => <option key={option.id} value={option.id}>{t(option.label)}</option>)}
               </select>
             </label>
 
             <label className="schedule-control schedule-mobile-sort-control">
-              <span>Sort</span>
+              <span>{t("Sort")}</span>
               <select value={sortMode} onChange={event => setSortMode(event.target.value as OrderSortMode)}>
-                <option value="smart">Smart</option>
-                <option value="recent">Recent</option>
+                <option value="smart">{t("Smart")}</option>
+                <option value="recent">{t("Recent")}</option>
               </select>
             </label>
 
             <label className="schedule-control schedule-search-control schedule-search-desktop">
-              <span>Search Tasks</span>
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Customer, design, status..." />
+              <span>{t("Search Tasks")}</span>
+              <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Customer, design, status...")} />
             </label>
 
             <div className="schedule-range-control">
-              <button type="button" onClick={() => moveRange(-1)} aria-label="Previous range">{"<"}</button>
+              <button type="button" onClick={() => moveRange(-1)} aria-label={t("Previous range")}>{"<"}</button>
               <strong>{rangeText}</strong>
-              <button type="button" onClick={() => moveRange(1)} aria-label="Next range">{">"}</button>
+              <button type="button" onClick={() => moveRange(1)} aria-label={t("Next range")}>{">"}</button>
+            </div>
+
+            <div className="schedule-zoom-control" role="group" aria-label={t("Timeline zoom")} title={t("Timeline zoom")}>
+              <button type="button" onClick={() => adjustScheduleZoom(-0.15)} disabled={clampedTimelineZoom <= MIN_SCHEDULE_ZOOM + 0.001} aria-label={t("Zoom out")} title={t("Zoom out")}>−</button>
+              <span>{Math.round(clampedTimelineZoom * 100)}%</span>
+              <button type="button" onClick={() => adjustScheduleZoom(0.15)} disabled={clampedTimelineZoom >= MAX_SCHEDULE_ZOOM - 0.001} aria-label={t("Zoom in")} title={t("Zoom in")}>+</button>
+              <button type="button" onClick={() => setScheduleZoom(1)} aria-label={t("Reset zoom")} title={t("Reset zoom")}>↺</button>
             </div>
 
             <div className="schedule-mobile-span-row">
               <label className="schedule-control schedule-span-control">
-                <span>Range</span>
+                <span>{t("Range")}</span>
                 <select value={span} onChange={event => setSpan(event.target.value as ScheduleSpan)}>
-                  {spanOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  {spanOptions.map(option => <option key={option.id} value={option.id}>{t(option.label)}</option>)}
                 </select>
               </label>
               <button
                 className={search.trim() || mobileSearchOpen ? "schedule-mobile-search-toggle active" : "schedule-mobile-search-toggle"}
                 type="button"
                 onClick={() => setMobileSearchOpen(current => !current)}
-                aria-label="Search schedule"
+                aria-label={t("Search schedule")}
                 aria-expanded={mobileSearchOpen}
-                title="Search Tasks"
+                title={t("Search Tasks")}
               >
                 ⌕
               </button>
@@ -896,8 +953,8 @@ export default function SchedulePage() {
 
             {mobileSearchOpen ? (
               <label className="schedule-control schedule-search-control schedule-search-mobile">
-                <span>Search Tasks</span>
-                <input ref={mobileSearchInputRef} value={search} onChange={event => setSearch(event.target.value)} placeholder="Customer, design, status..." />
+                <span>{t("Search Tasks")}</span>
+                <input ref={mobileSearchInputRef} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Customer, design, status...")} />
               </label>
             ) : null}
           </div>
@@ -905,7 +962,7 @@ export default function SchedulePage() {
           {notice ? (
             <div className="schedule-plan-notice">
               <span aria-hidden="true">{workspace?.billingPlan === "team_monthly" ? "Team" : "Lite"}</span>
-              <p>{notice}</p>
+              <p>{t(notice)}</p>
             </div>
           ) : null}
 
@@ -914,13 +971,13 @@ export default function SchedulePage() {
 
           {error ? (
             <section className="card app-card schedule-empty-card">
-              <CardTitle icon="lock" eyebrow="Schedule error" title="Could not load schedule" />
+              <CardTitle icon="lock" eyebrow={t("Schedule error")} title={t("Could not load schedule")} />
               <p className="layout-error">{error}</p>
             </section>
           ) : visibleOrders.length === 0 && !loadingSchedule ? (
             <section className="card app-card schedule-empty-card">
-              <CardTitle icon="calendar" eyebrow="Schedule" title="No orders in this schedule range." />
-              <p className="muted-copy">Use the arrows, filters or search to find scheduled work.</p>
+              <CardTitle icon="calendar" eyebrow={t("Schedule")} title={t("No orders in this schedule range.")} />
+              <p className="muted-copy">{t("Use the arrows, filters or search to find scheduled work.")}</p>
             </section>
           ) : (
             <div
@@ -930,11 +987,12 @@ export default function SchedulePage() {
               onPointerUp={endScheduleTimelinePan}
               onPointerCancel={endScheduleTimelinePan}
               onLostPointerCapture={endScheduleTimelinePan}
+              onWheel={handleScheduleTimelineWheel}
             >
               <div className="schedule-timeline-canvas" style={{ width: timelineWidth }}>
                 <div className="schedule-timeline-title-row">
                   <strong>{rangeText}</strong>
-                  <span>{visibleOrders.length} orders</span>
+                  <span>{visibleOrders.length} {t("orders")}</span>
                 </div>
                 <div className="schedule-day-header">
                   {visibleDays.map(day => (
@@ -971,10 +1029,10 @@ export default function SchedulePage() {
           )}
 
           <footer className="schedule-summary-footer">
-            <span>{filteredOrders.length} orders</span>
-            <span>{lateCount} Late</span>
-            <span>{readyCount} Ready to Ship</span>
-            <span>{canEditSchedule ? "Drag bars to move or resize. Double-click opens the order." : "Double-click a bar to open the order."}</span>
+            <span>{filteredOrders.length} {t("orders")}</span>
+            <span>{lateCount} {t("Late")}</span>
+            <span>{readyCount} {t("Ready to Ship")}</span>
+            <span>{canEditSchedule ? t("Drag bars to move or resize. Double-click opens the order.") : t("Double-click a bar to open the order.")}</span>
           </footer>
         </main>
       </section>

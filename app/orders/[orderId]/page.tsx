@@ -10,7 +10,9 @@ import {
   loadOrderDetail,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  orderIsAssignedToCurrentUser,
   subscribeOrderDetail,
+  workspaceAssignedProjectsOnly,
   type OrderDetail,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
@@ -55,6 +57,12 @@ export default function OrderDetailPage() {
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
         if (cancelled) return;
+        if (workspaceAssignedProjectsOnly(loadedWorkspace.memberAccess) && !orderIsAssignedToCurrentUser(loadedOrder, user)) {
+          setOrder(null);
+          setMoneySettings(loadedMoneySettings);
+          setError("This project is not assigned to your account.");
+          return;
+        }
         setOrder(loadedOrder);
         setMoneySettings(loadedMoneySettings);
       } catch (loadError) {
@@ -82,6 +90,12 @@ export default function OrderDetailPage() {
       orderId,
       workspace.entitlements.features.client_files,
       loadedOrder => {
+        if (workspaceAssignedProjectsOnly(workspace.memberAccess) && !orderIsAssignedToCurrentUser(loadedOrder, user)) {
+          setOrder(null);
+          setError("This project is not assigned to your account.");
+          setLoadingOrder(false);
+          return;
+        }
         setOrder(loadedOrder);
         setError(null);
         setLoadingOrder(false);
@@ -92,7 +106,7 @@ export default function OrderDetailPage() {
         setLoadingOrder(false);
       }
     );
-  }, [orderId, workspace]);
+  }, [orderId, user, workspace]);
 
   async function refreshOrder() {
     if (!workspace || !orderId) return;
@@ -101,6 +115,11 @@ export default function OrderDetailPage() {
       orderId,
       workspace.entitlements.features.client_files
     );
+    if (workspaceAssignedProjectsOnly(workspace.memberAccess) && !orderIsAssignedToCurrentUser(loadedOrder, user)) {
+      setOrder(null);
+      setError("This project is not assigned to your account.");
+      return;
+    }
     setOrder(loadedOrder);
   }
 

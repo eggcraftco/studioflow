@@ -8,6 +8,7 @@ import {
   type OrderQuickFilterId,
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
+import { studioT } from "@/lib/studioflow/language";
 
 export function OrderQuickFilterBar({
   orders,
@@ -15,7 +16,8 @@ export function OrderQuickFilterBar({
   sortMode,
   onFilterChange,
   onSortModeChange,
-  filters = ORDER_QUICK_FILTERS
+  filters = ORDER_QUICK_FILTERS,
+  language = "English"
 }: {
   orders: FilterableOrder[];
   filter: OrderQuickFilterId;
@@ -23,10 +25,12 @@ export function OrderQuickFilterBar({
   onFilterChange: (filter: OrderQuickFilterId) => void;
   onSortModeChange: (sortMode: OrderSortMode) => void;
   filters?: typeof ORDER_QUICK_FILTERS;
+  language?: string | null;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const selectedFilter = filters.find(item => item.id === filter) ?? filters[0] ?? ORDER_QUICK_FILTERS[0];
   const selectedCount = quickFilterCount(orders, filter);
+  const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -49,30 +53,30 @@ export function OrderQuickFilterBar({
   }
 
   return (
-    <div className="order-filter-card" aria-label="Order Filters">
+    <div className="order-filter-card" aria-label={t("Order Filters")}>
       <div className="order-filter-topline">
         <span className="order-filter-icon" aria-hidden="true">☰</span>
         <div>
-          <small>Order Filters</small>
-          <strong>{selectedFilter.label} · {sortMode === "smart" ? "Smart" : "Recent"}</strong>
+          <small>{t("Order Filters")}</small>
+          <strong>{t(selectedFilter.label)} · {sortMode === "smart" ? t("Smart") : t("Recent")}</strong>
         </div>
         <span className="order-filter-count">{selectedCount}</span>
       </div>
 
-      <div className="order-filter-sort" role="group" aria-label="Order sort">
+      <div className="order-filter-sort" role="group" aria-label={t("Order sort")}>
         <button
           type="button"
           className={sortMode === "smart" ? "is-active" : ""}
           onClick={() => onSortModeChange("smart")}
         >
-          Smart
+          {t("Smart")}
         </button>
         <button
           type="button"
           className={sortMode === "recent" ? "is-active" : ""}
           onClick={() => onSortModeChange("recent")}
         >
-          Recent
+          {t("Recent")}
         </button>
       </div>
 
@@ -80,11 +84,11 @@ export function OrderQuickFilterBar({
         className="order-filter-select"
         value={filter}
         onChange={event => onFilterChange(event.target.value as OrderQuickFilterId)}
-        aria-label="Order quick filter"
+        aria-label={t("Order quick filter")}
       >
         {filters.map(item => (
           <option key={item.id} value={item.id}>
-            {item.label} ({quickFilterCount(orders, item.id)})
+            {t(item.label)} ({quickFilterCount(orders, item.id)})
           </option>
         ))}
       </select>
@@ -92,7 +96,7 @@ export function OrderQuickFilterBar({
       <button
         className="order-filter-mobile-hit"
         type="button"
-        aria-label="Open order filters"
+        aria-label={t("Open order filters")}
         aria-expanded={mobileMenuOpen}
         onClick={() => setMobileMenuOpen(open => !open)}
       />
@@ -102,17 +106,17 @@ export function OrderQuickFilterBar({
           <button
             className="order-filter-mobile-scrim"
             type="button"
-            aria-label="Close order filters"
+            aria-label={t("Close order filters")}
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="order-filter-mobile-menu" role="menu" aria-label="Order filters">
+          <div className="order-filter-mobile-menu" role="menu" aria-label={t("Order filters")}>
             <button className="order-filter-menu-row" type="button" role="menuitemradio" aria-checked={sortMode === "smart"} onClick={() => chooseSort("smart")}>
               <span className="order-filter-menu-icon">{sortMode === "smart" ? "✓" : "✦"}</span>
-              <span>Smart</span>
+              <span>{t("Smart")}</span>
             </button>
             <button className="order-filter-menu-row" type="button" role="menuitemradio" aria-checked={sortMode === "recent"} onClick={() => chooseSort("recent")}>
               <span className="order-filter-menu-icon">{sortMode === "recent" ? "✓" : "↺"}</span>
-              <span>Recent</span>
+              <span>{t("Recent")}</span>
             </button>
 
             <div className="order-filter-menu-divider" />
@@ -127,7 +131,7 @@ export function OrderQuickFilterBar({
                 onClick={() => chooseFilter(item.id)}
               >
                 <span className="order-filter-menu-icon">{filter === item.id ? "✓" : filterIcon(item.id)}</span>
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
                 <span className="order-filter-menu-count">({quickFilterCount(orders, item.id)})</span>
               </button>
             ))}

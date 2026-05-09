@@ -15,37 +15,40 @@ import {
 import {
   loadOrderDetail,
   loadRecentOrders,
+  loadTeamAccessData,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  orderIsAssignedToCurrentUser,
   subscribeOrderDetail,
+  workspaceAssignedProjectsOnly,
   workspaceAccessAllows,
   type OrderDetail,
   type OrderListItem,
+  type TeamMemberDetail,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import {
-  canEditOrderFullyForRole,
+  canDeleteOrdersForRole,
   canEditOrderStatusForRole,
   deleteOrderFromWeb,
   updateOrderFromWeb
 } from "@/lib/studioflow/orders";
+import { saveOrderCardDisplaySettings } from "@/lib/studioflow/settingsActions";
 import {
   filterAndSortOrders,
   type OrderQuickFilterId,
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
+import { studioT } from "@/lib/studioflow/language";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderDetailContent } from "./OrderDetailContent";
-
-function isWorkflowOnly(role: string) {
-  const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "workflow" || normalized === "workflowonly";
-}
 
 function applyOrderListPatch(order: OrderListItem, patch: Partial<OrderDetail>): OrderListItem {
   return {
     ...order,
+    ...(patch.assignedToUid !== undefined ? { assignedToUid: patch.assignedToUid } : {}),
+    ...(patch.assignedToEmail !== undefined ? { assignedToEmail: patch.assignedToEmail } : {}),
     ...(patch.customerName !== undefined ? { customerName: patch.customerName } : {}),
     ...(patch.designName !== undefined ? { designName: patch.designName } : {}),
     ...(patch.watchRef !== undefined ? { watchRef: patch.watchRef } : {}),
@@ -70,11 +73,22 @@ function applyOrderListPatch(order: OrderListItem, patch: Partial<OrderDetail>):
   };
 }
 
+function initialsForMember(member: TeamMemberDetail) {
+  const source = (member.displayName || member.email || "").replace(/@.*/, "").replace(/[._-]+/g, " ").trim();
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part.charAt(0).toUpperCase())
+    .join("") || "•";
+}
+
 export default function OrdersPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +105,7 @@ export default function OrdersPage() {
   const [orderContextMenu, setOrderContextMenu] = useState<{ orderId: string; x: number; y: number } | null>(null);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
+  const [showOrderStatusBadges, setShowOrderStatusBadges] = useState(true);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-orders-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
 
   useEffect(() => {
@@ -124,10 +139,13 @@ export default function OrdersPage() {
           loadWorkspaceBlockHeadings(loadedWorkspace).catch(() => null),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
+        const loadedTeamMembers = await loadTeamAccessData(loadedWorkspace).then(data => data.members).catch(() => []);
         if (cancelled) return;
         setOrders(loadedOrders);
+        setTeamMembers(loadedTeamMembers);
         setBlockHeadingSettings(loadedBlockHeadings);
         setMoneySettings(loadedMoneySettings);
+        setShowOrderStatusBadges(loadedMoneySettings?.orderCardShowStatusBadges ?? true);
         setSelectedOrderId(current => {
           if (requestedOrderId && loadedOrders.some(order => order.id === requestedOrderId)) return requestedOrderId;
           return current || loadedOrders[0]?.id || "";
@@ -181,11 +199,17 @@ export default function OrdersPage() {
     });
   }, [selectedOrderId]);
 
-  const canSeeFinance = useMemo(() => workspace ? !isWorkflowOnly(workspace.role) : false, [workspace]);
+  const canSeeFinance = useMemo(() => workspace ? workspaceAccessAllows(workspace.memberAccess, "financialInfo") : false, [workspace]);
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
+  const visibleOrders = useMemo(
+    () => workspace && workspaceAssignedProjectsOnly(workspace.memberAccess)
+      ? orders.filter(order => orderIsAssignedToCurrentUser(order, user))
+      : orders,
+    [orders, user, workspace]
+  );
   const filteredOrders = useMemo(
-    () => filterAndSortOrders(orders, orderSearch, orderFilter, orderSortMode),
-    [orderFilter, orderSearch, orderSortMode, orders]
+    () => filterAndSortOrders(visibleOrders, orderSearch, orderFilter, orderSortMode),
+    [orderFilter, orderSearch, orderSortMode, visibleOrders]
   );
   useEffect(() => {
     if (loadingOrders) return;
@@ -241,7 +265,7 @@ export default function OrdersPage() {
 
   function contextMenuPosition(x: number, y: number) {
     const width = 230;
-    const height = 190;
+    const height = 370;
     return {
       x: Math.min(x, window.innerWidth - width - 12),
       y: Math.min(y, window.innerHeight - height - 12)
@@ -302,11 +326,11 @@ export default function OrdersPage() {
 
   async function deleteOrderFromMenu(order: OrderListItem) {
     if (!workspace) return;
-    if (!canEditOrderFullyForRole(workspace.role)) {
+    if (!canDeleteOrdersForRole(workspace.role)) {
       setOrderActionError("Your workspace role cannot delete orders.");
       return;
     }
-    const confirmed = window.confirm(`Delete "${order.customerName || "this order"}"? This cannot be undone.`);
+    const confirmed = window.confirm(`Delete "${order.customerName.trim() || "New Project"}"? This cannot be undone.`);
     if (!confirmed) return;
 
     setOrderContextMenu(null);
@@ -329,9 +353,76 @@ export default function OrdersPage() {
     }
   }
 
+  function assigneeForOrder(order: { assignedToUid?: string; assignedToEmail?: string }) {
+    const assignedUid = order.assignedToUid?.trim() ?? "";
+    const assignedEmail = order.assignedToEmail?.trim().toLowerCase() ?? "";
+    return teamMembers.find(member => assignedUid && member.id === assignedUid)
+      ?? teamMembers.find(member => assignedEmail && member.email.trim().toLowerCase() === assignedEmail)
+      ?? null;
+  }
+
+  function assigneeNameForOrder(order: OrderListItem) {
+    const member = assigneeForOrder(order);
+    return member?.displayName || member?.email || order.assignedToEmail || "";
+  }
+
+  function assigneePhotoForOrder(order: OrderListItem) {
+    return assigneeForOrder(order)?.photoURL || "";
+  }
+
+  async function assignOrderFromMenu(order: OrderListItem, member: TeamMemberDetail | null) {
+    if (!workspace) return;
+    if (!canDeleteOrdersForRole(workspace.role)) {
+      setOrderActionError("Your workspace role cannot assign projects.");
+      return;
+    }
+
+    const assignedToUid = member?.id ?? "";
+    const assignedToEmail = member?.email ?? "";
+    setOrderContextMenu(null);
+    setOrderActionError(null);
+    setOrderActionStatus(member ? `Assigning project to ${member.displayName || member.email}...` : "Clearing project assignment...");
+
+    setOrders(current => current.map(item => item.id === order.id ? { ...item, assignedToUid, assignedToEmail } : item));
+    setSelectedOrder(current => current?.id === order.id ? { ...current, assignedToUid, assignedToEmail } : current);
+
+    try {
+      await updateOrderFromWeb(workspace, {
+        orderId: order.id,
+        details: { assignedToUid, assignedToEmail }
+      });
+      setOrderActionStatus(member ? "Project assigned." : "Project assignment cleared.");
+    } catch (assignError) {
+      setOrderActionStatus(null);
+      setOrderActionError(assignError instanceof Error ? assignError.message : "Could not update project assignment.");
+      loadRecentOrders(workspace.id).then(setOrders).catch(() => undefined);
+      if (selectedOrderId === order.id) refreshSelectedOrder().catch(() => undefined);
+    }
+  }
+
+  async function toggleOrderStatusBadgesFromMenu() {
+    if (!workspace) return;
+    const nextValue = !showOrderStatusBadges;
+    setShowOrderStatusBadges(nextValue);
+    setOrderContextMenu(null);
+    setOrderActionError(null);
+    setOrderActionStatus(nextValue ? "Production status badges shown." : "Production status badges hidden.");
+    try {
+      await saveOrderCardDisplaySettings(workspace, { showStatusBadges: nextValue });
+      setMoneySettings(current => current ? { ...current, orderCardShowStatusBadges: nextValue } : current);
+    } catch (saveError) {
+      setOrderActionStatus(null);
+      setMoneySettings(current => current ? { ...current, orderCardShowStatusBadges: nextValue } : current);
+      setOrderActionError(saveError instanceof Error ? `${saveError.message} The change is visible locally, but could not sync yet.` : "The change is visible locally, but could not sync yet.");
+    }
+  }
+
   const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
   const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
-  const canDeleteOrders = workspace ? canEditOrderFullyForRole(workspace.role) : false;
+  const canDeleteOrders = workspace ? canDeleteOrdersForRole(workspace.role) : false;
+  const canAssignOrders = workspace ? canDeleteOrdersForRole(workspace.role) : false;
+  const language = moneySettings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, language);
 
   if (loading || !user) return <LoadingScreen />;
 
@@ -346,17 +437,17 @@ export default function OrdersPage() {
         <aside className="orders-sidebar">
           <div className="orders-sidebar-toolbar">
             <div>
-              <p className="orders-kicker">Orders</p>
-              <h1>{filteredOrders.length} orders</h1>
-              <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : "Loading workspace..."}</p>
+              <p className="orders-kicker">{t("Orders")}</p>
+              <h1>{filteredOrders.length} {t("orders")}</h1>
+              <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
             </div>
             <div className="sidebar-toolbar-actions">
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
               <button
                 className="sidebar-toggle-button"
                 type="button"
-                title={sidebar.collapsed ? "Expand order list" : "Collapse order list"}
-                aria-label={sidebar.collapsed ? "Expand order list" : "Collapse order list"}
+                title={sidebar.collapsed ? t("Expand order list") : t("Collapse order list")}
+                aria-label={sidebar.collapsed ? t("Expand order list") : t("Collapse order list")}
                 onClick={() => sidebar.setCollapsed(value => !value)}
               >
                 {sidebar.collapsed ? ">" : "<"}
@@ -370,21 +461,22 @@ export default function OrdersPage() {
               <input
                 value={orderSearch}
                 onChange={event => setOrderSearch(event.target.value)}
-                placeholder="Search..."
+                placeholder={t("Search...")}
               />
             </label>
             <OrderQuickFilterBar
-              orders={orders}
+              orders={visibleOrders}
               filter={orderFilter}
               sortMode={orderSortMode}
               onFilterChange={setOrderFilter}
               onSortModeChange={setOrderSortMode}
+              language={language}
             />
           </div>
 
           {error ? (
             <div className="mini-panel compact-mini-panel">
-              <CardTitle icon="lock" eyebrow="Order error" title="Could not load orders" />
+              <CardTitle icon="lock" eyebrow={t("Order error")} title={t("Could not load orders")} />
               <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
             </div>
           ) : null}
@@ -393,7 +485,7 @@ export default function OrdersPage() {
           {orderActionError ? <p className="orders-sidebar-error">{orderActionError}</p> : null}
 
           {filteredOrders.length === 0 && !loadingOrders ? (
-            <p className="muted-copy" style={{ padding: "0 14px 14px" }}>No orders found for this workspace yet.</p>
+            <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
           ) : null}
 
           <div className="orders-list">
@@ -410,6 +502,9 @@ export default function OrdersPage() {
                   canSeeAdvancedFinance={canSeeAdvancedFinance}
                   blockHeadingSettings={blockHeadingSettings}
                   moneySettings={moneySettings}
+                  showStatusBadges={showOrderStatusBadges}
+                  assigneeName={assigneeNameForOrder(order)}
+                  assigneePhotoURL={assigneePhotoForOrder(order)}
                   onSelect={() => setSelectedOrderId(order.id)}
                 />
               </div>
@@ -430,9 +525,46 @@ export default function OrdersPage() {
                   className="order-list-context-row"
                 >
                   <span aria-hidden="true">◉</span>
-                  Open Customer
+                  {t("Open Customer")}
                 </a>
               ) : null}
+              <button
+                role="menuitem"
+                type="button"
+                className="order-list-context-row"
+                onClick={() => void toggleOrderStatusBadgesFromMenu()}
+              >
+                <span aria-hidden="true">{showOrderStatusBadges ? "✓" : "○"}</span>
+                {t("Production Status")}
+              </button>
+              <div className="order-list-context-divider" />
+              <div className="order-list-context-subtitle">{t("Assign Project")}</div>
+              <button
+                role="menuitem"
+                type="button"
+                className="order-list-context-row"
+                disabled={!canAssignOrders || !contextOrder.assignedToUid}
+                onClick={() => void assignOrderFromMenu(contextOrder, null)}
+              >
+                <span aria-hidden="true">○</span>
+                {t("Unassigned")}
+              </button>
+              {teamMembers
+                .filter(member => !member.isOwner)
+                .map(member => (
+                  <button
+                    key={member.id}
+                    role="menuitem"
+                    type="button"
+                    className="order-list-context-row"
+                    disabled={!canAssignOrders}
+                    onClick={() => void assignOrderFromMenu(contextOrder, member)}
+                  >
+                    <span aria-hidden="true">{contextOrder.assignedToUid === member.id ? "✓" : initialsForMember(member)}</span>
+                    {member.displayName || member.email}
+                  </button>
+                ))}
+              <div className="order-list-context-divider" />
               <button
                 role="menuitem"
                 type="button"
@@ -441,7 +573,7 @@ export default function OrdersPage() {
                 onClick={() => void saveOrderStatusFromMenu(contextOrder, "Done")}
               >
                 <span aria-hidden="true">✓</span>
-                Mark as Done
+                {t("Mark as Done")}
               </button>
               <button
                 role="menuitem"
@@ -451,7 +583,7 @@ export default function OrdersPage() {
                 onClick={() => void saveOrderStatusFromMenu(contextOrder, "Cancelled")}
               >
                 <span aria-hidden="true">×</span>
-                Cancel Order
+                {t("Cancel Order")}
               </button>
               <div className="order-list-context-divider" />
               <button
@@ -462,7 +594,7 @@ export default function OrdersPage() {
                 onClick={() => void deleteOrderFromMenu(contextOrder)}
               >
                 <span aria-hidden="true">⌫</span>
-                Delete
+                {t("Delete")}
               </button>
             </div>
           ) : null}
@@ -471,8 +603,8 @@ export default function OrdersPage() {
         <button
           className="workspace-sidebar-resizer"
           type="button"
-          aria-label="Resize order list"
-          title="Resize order list"
+          aria-label={t("Resize order list")}
+          title={t("Resize order list")}
           onPointerDown={sidebar.startResize}
         />
 
@@ -481,15 +613,15 @@ export default function OrdersPage() {
 
           {detailError ? (
             <section className="card order-error-card">
-              <CardTitle icon="lock" eyebrow="Order error" title="Could not load order" />
+              <CardTitle icon="lock" eyebrow={t("Order error")} title={t("Could not load order")} />
               <p style={{ color: "var(--danger)", margin: 0 }}>{detailError}</p>
             </section>
           ) : null}
 
           {!selectedOrderId && !detailError ? (
             <section className="orders-empty-detail">
-              <CardTitle icon="orders" eyebrow="Select order" title="Choose an order from the list" />
-              <p className="muted-copy">Order details will appear here on wider screens.</p>
+              <CardTitle icon="orders" eyebrow={t("Select order")} title={t("Choose an order from the list")} />
+              <p className="muted-copy">{t("Order details will appear here on wider screens.")}</p>
             </section>
           ) : null}
 
@@ -508,8 +640,8 @@ export default function OrdersPage() {
         <section className="orders-mobile-list">
           <div className="orders-mobile-header">
             <div className="orders-mobile-title">
-              <h2>Orders</h2>
-              <p>{filteredOrders.length} orders</p>
+              <h2>{t("Orders")}</h2>
+              <p>{filteredOrders.length} {t("orders")}</p>
             </div>
             <OrderQuickFilterBar
               orders={orders}
@@ -517,11 +649,12 @@ export default function OrdersPage() {
               sortMode={orderSortMode}
               onFilterChange={setOrderFilter}
               onSortModeChange={setOrderSortMode}
+              language={language}
             />
             <button
               className={mobileSearchOpen ? "orders-mobile-search-toggle is-active" : "orders-mobile-search-toggle"}
               type="button"
-              aria-label={mobileSearchOpen ? "Hide search" : "Show search"}
+              aria-label={mobileSearchOpen ? t("Hide search") : t("Show search")}
               onClick={() => setMobileSearchOpen(open => !open)}
             >
               {mobileSearchOpen ? "×" : "⌕"}
@@ -531,9 +664,9 @@ export default function OrdersPage() {
           {mobileSearchOpen ? (
             <label className="orders-search orders-mobile-search">
               <span aria-hidden="true">⌕</span>
-              <input value={orderSearch} onChange={event => setOrderSearch(event.target.value)} placeholder="Search..." />
+              <input value={orderSearch} onChange={event => setOrderSearch(event.target.value)} placeholder={t("Search...")} />
               {orderSearch ? (
-                <button type="button" aria-label="Clear search" onClick={() => setOrderSearch("")}>
+                <button type="button" aria-label={t("Clear search")} onClick={() => setOrderSearch("")}>
                   ×
                 </button>
               ) : null}
@@ -550,6 +683,9 @@ export default function OrdersPage() {
                 canSeeAdvancedFinance={canSeeAdvancedFinance}
                 blockHeadingSettings={blockHeadingSettings}
                 moneySettings={moneySettings}
+                showStatusBadges={showOrderStatusBadges}
+                assigneeName={assigneeNameForOrder(order)}
+                assigneePhotoURL={assigneePhotoForOrder(order)}
                 onSelect={() => setSelectedOrderId(order.id)}
                 mobileHref={`/orders/${order.id}`}
               />

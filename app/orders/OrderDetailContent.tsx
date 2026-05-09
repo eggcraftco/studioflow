@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { db } from "@/lib/firebase/client";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -59,9 +61,19 @@ import {
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 
+const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
+
 function formatDate(date: Date | null) {
   if (!date) return "-";
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function normalizeOrderCustomerName(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned || ["new order", "new project", "yeni sipariş", "yeni proje"].includes(cleaned.toLowerCase())) {
+    return "New Project";
+  }
+  return cleaned;
 }
 
 function formatShortDate(date: Date | null) {
@@ -274,6 +286,21 @@ function todoItemsSignature(items: ToDoDetail[]) {
       item.dueAt?.getTime() ?? "",
       item.priority,
       item.isDone ? "1" : "0"
+    ].join("|"))
+    .join("||");
+}
+
+function scheduleItemsSignature(items: WebScheduleReminder[]) {
+  return items
+    .map(item => [
+      item.id,
+      item.title,
+      item.note,
+      item.dueAt?.getTime() ?? "",
+      item.priority,
+      item.status,
+      item.notify ? "1" : "0",
+      item.completedAt?.getTime() ?? ""
     ].join("|"))
     .join("||");
 }
@@ -873,14 +900,9 @@ function dynamicStatusTone(value: string) {
   return "orange";
 }
 
-function isWorkflowOnly(role: string) {
-  const normalized = role.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "workflow" || normalized === "workflowonly";
-}
-
 function orderEditForm(order: OrderDetail): CreateOrderInput {
   return {
-    customerName: order.customerName,
+    customerName: normalizeOrderCustomerName(order.customerName),
     designName: order.designName,
     watchRef: order.watchRef,
     orderValue: order.paidAmount + order.remainingAmount,
@@ -936,7 +958,7 @@ const PRIORITY_OPTIONS = ["Low", "Normal", "High", "Urgent"];
 const RISK_OPTIONS = ["None", "Waiting", "Blocked", "Overdue"];
 const RISK_REASON_OPTIONS = ["-", "Waiting for customer", "Waiting for payment", "Waiting for material", "Other"];
 const COURIER_OPTIONS = ["Auto Detect", "Royal Mail", "DHL", "FedEx", "UPS"];
-const COMMUNICATION_CHANNELS = ["Instagram", "WhatsApp", "TikTok"];
+const DEFAULT_COMMUNICATION_CHANNELS = ["Instagram", "WhatsApp", "TikTok"];
 const APP_DEFAULT_MATERIAL_LABELS = ["Dial Sourced", "Dial Received", "Watch Received", "Materials Ready"];
 
 function communicationChannelKey(channel: string) {
@@ -946,6 +968,44 @@ function communicationChannelKey(channel: string) {
 function hasCommunicationChannel(channels: string[], channel: string) {
   const targetKey = communicationChannelKey(channel);
   return channels.some(item => communicationChannelKey(item) === targetKey);
+}
+
+function communicationChannelLabels(settings: BlockHeadingSettings | null) {
+  const labels = settings?.communicationChannelLabels ?? DEFAULT_COMMUNICATION_CHANNELS;
+  const seen = new Set<string>();
+  const cleaned = labels
+    .map(label => label.trim())
+    .filter(label => {
+      const key = communicationChannelKey(label);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  return cleaned.length > 0 ? cleaned : DEFAULT_COMMUNICATION_CHANNELS;
+}
+
+function communicationChannelCustomFieldKey(channel: string) {
+  return `communicationChannel::${channel.trim()}`;
+}
+
+function communicationChannelValue(order: OrderDetail, channel: string) {
+  const key = communicationChannelKey(channel);
+  if (key === "instagram" || key === "instagramusername") return order.instagramUsername || "";
+  if (key === "whatsapp" || key === "telephone" || key === "phone") return order.whatsappNumber || "";
+  if (key === "email" || key === "emailaddress") return order.emailAddress || "";
+  if (key === "address" || key === "adres" || key === "shippingaddress") {
+    return order.customFields.communicationAddress || order.customFields.Address || "";
+  }
+  return order.customFields[communicationChannelCustomFieldKey(channel)] || "";
+}
+
+function communicationChannelPatch(channel: string, value: string): DetailsPatch {
+  const key = communicationChannelKey(channel);
+  if (key === "instagram" || key === "instagramusername") return { instagramUsername: value };
+  if (key === "whatsapp" || key === "telephone" || key === "phone") return { whatsappNumber: value };
+  if (key === "email" || key === "emailaddress") return { emailAddress: value };
+  if (key === "address" || key === "adres" || key === "shippingaddress") return { address: value };
+  return { customFields: { [communicationChannelCustomFieldKey(channel)]: value } };
 }
 
 const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
@@ -970,6 +1030,7 @@ type FinancePatch = NonNullable<UpdateOrderInput["finance"]>;
 type DetailsPatch = NonNullable<UpdateOrderInput["details"]>;
 type TodoPatch = NonNullable<UpdateOrderInput["todo"]>;
 type SchedulePatch = NonNullable<UpdateOrderInput["schedule"]>;
+type TodoMenuPanel = "main" | "move" | "assign" | "due" | "priority";
 
 type WebScheduleReminder = {
   id: string;
@@ -1362,6 +1423,7 @@ export function OrderDetailContent({
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
+  const [cardsLocked, setCardsLocked] = useState(false);
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
@@ -1400,6 +1462,14 @@ export function OrderDetailContent({
   const [inlineError, setInlineError] = useState<string | null>(null);
 
   useEffect(() => {
+    try {
+      setCardsLocked(window.localStorage.getItem(WORKSPACE_CARDS_LOCKED_STORAGE_KEY) === "true");
+    } catch {
+      setCardsLocked(false);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!orderActionsOpen) return;
     const closeMenu = () => setOrderActionsOpen(false);
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1428,6 +1498,7 @@ export function OrderDetailContent({
   const [todoError, setTodoError] = useState<string | null>(null);
   const [savingTodoAction, setSavingTodoAction] = useState<string | null>(null);
   const [openTodoMenuId, setOpenTodoMenuId] = useState<string | null>(null);
+  const [todoMenuPanel, setTodoMenuPanel] = useState<TodoMenuPanel>("main");
   const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
   const [dragOverTodoId, setDragOverTodoId] = useState<string | null>(null);
   const [editingTodoTitleId, setEditingTodoTitleId] = useState<string | null>(null);
@@ -1443,6 +1514,10 @@ export function OrderDetailContent({
   const [scheduleStatus, setScheduleStatus] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [savingScheduleAction, setSavingScheduleAction] = useState<string | null>(null);
+  const [openScheduleMenuId, setOpenScheduleMenuId] = useState<string | null>(null);
+  const [optimisticScheduleItems, setOptimisticScheduleItems] = useState<WebScheduleReminder[]>(() => scheduleRemindersFromFields(order.customFields));
+  const scheduleServerSignatureRef = useRef(scheduleItemsSignature(scheduleRemindersFromFields(order.customFields)));
+  const scheduleOrderIdRef = useRef(order.id);
   const [calendarStatus, setCalendarStatus] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [newWorkSessionTitle, setNewWorkSessionTitle] = useState("");
@@ -1460,12 +1535,12 @@ export function OrderDetailContent({
   );
   const isOrderCardLayoutIndependent = Boolean(independentCardLayout);
 
-  const canSeeFinance = useMemo(() => !isWorkflowOnly(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "financialInfo"), [workspace.memberAccess, workspace.role]);
+  const canSeeFinance = useMemo(() => workspaceAccessAllows(workspace.memberAccess, "financialInfo"), [workspace.memberAccess]);
   const canSeeAdvancedFinance = Boolean(workspace.entitlements.features.financial_advanced && canSeeFinance);
   const canAccessOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
   const canUseClientFiles = Boolean(workspace.entitlements.features.client_files);
   const canManageClientFiles = Boolean(canUseClientFiles && workspaceAccessAllows(workspace.memberAccess, "clientFiles") && canManageClientFilesForRole(workspace.role));
-  const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access);
+  const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
   const canUseLiteWorkspaceCards = workspace.billingPlan !== "demo";
@@ -1479,8 +1554,43 @@ export function OrderDetailContent({
   const canEditScheduleItems = Boolean(canEditWorkflowFields && workspaceAccessAllows(workspace.memberAccess, "schedule"));
   const canEditWorkTime = canEditWorkflowFields;
   const canEditCardLayout = Boolean(canCustomizeCards && canEditWorkflowFields);
+  const canMoveResizeCards = Boolean(canCustomizeCards && layoutReady && !cardsLocked);
   const canNotifyScheduleItems = workspace.billingPlan !== "demo";
   const canUseCalendarExport = workspace.billingPlan !== "demo";
+  const showCommunicationTelephone = blockHeadingSettings?.communicationShowTelephone ?? true;
+  const showCommunicationEmail = blockHeadingSettings?.communicationShowEmail ?? true;
+  const showCommunicationAddress = blockHeadingSettings?.communicationShowAddress ?? true;
+  const showCommunicationChannel = blockHeadingSettings?.communicationShowChannel ?? true;
+  const showCommunicationCustomerNotes = blockHeadingSettings?.communicationShowCustomerNotes ?? true;
+  const visibleCommunicationChannels = useMemo(
+    () => communicationChannelLabels(blockHeadingSettings),
+    [blockHeadingSettings]
+  );
+  const showCommunicationSection = showCommunicationTelephone
+    || showCommunicationEmail
+    || showCommunicationAddress
+    || showCommunicationChannel
+    || showCommunicationCustomerNotes;
+
+  function toggleCardsLocked() {
+    setCardsLocked(current => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(WORKSPACE_CARDS_LOCKED_STORAGE_KEY, next ? "true" : "false");
+      } catch {
+        // Local browser storage can be unavailable in private modes; keep the session state.
+      }
+      if (next) {
+        setDraggingCardId(null);
+        setDragOverCardId(null);
+        setDragOverCardCue(null);
+        setDragOverColumnIndex(null);
+        setResizingCardId(null);
+        resizingCardIdRef.current = null;
+      }
+      return next;
+    });
+  }
 
   function setCardFrameRef(cardId: OrderDetailCardId, node: HTMLDivElement | null, mode: "desktop" | "mobile") {
     const refs = mode === "mobile" ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
@@ -1631,6 +1741,23 @@ export function OrderDetailContent({
   }, [order.id, order.todoItems]);
 
   useEffect(() => {
+    const serverScheduleItems = scheduleRemindersFromFields(order.customFields);
+    const serverSignature = scheduleItemsSignature(serverScheduleItems);
+    if (scheduleOrderIdRef.current !== order.id) {
+      scheduleOrderIdRef.current = order.id;
+      scheduleServerSignatureRef.current = serverSignature;
+      setOptimisticScheduleItems(serverScheduleItems);
+      setOpenScheduleMenuId(null);
+      return;
+    }
+
+    if (serverSignature !== scheduleServerSignatureRef.current) {
+      scheduleServerSignatureRef.current = serverSignature;
+      setOptimisticScheduleItems(serverScheduleItems);
+    }
+  }, [order.customFields, order.id]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(measureVisibleCardMinimums);
     return () => window.cancelAnimationFrame(frame);
   });
@@ -1650,6 +1777,7 @@ export function OrderDetailContent({
 
   useEffect(() => {
     setOpenTodoMenuId(null);
+    setTodoMenuPanel("main");
     cancelTodoTitleEdit();
     setCalendarStatus(null);
     setCalendarError(null);
@@ -1707,7 +1835,7 @@ export function OrderDetailContent({
     [newTodoAssignedToUid, todoAssigneeOptions]
   );
 
-  const scheduleItems = useMemo(() => scheduleRemindersFromFields(order.customFields), [order.customFields]);
+  const scheduleItems = optimisticScheduleItems;
   const activeScheduleItems = useMemo(() => scheduleItems.filter(item => item.status !== "Done"), [scheduleItems]);
   const completedScheduleItems = useMemo(() => scheduleItems.filter(item => item.status === "Done"), [scheduleItems]);
   const clientFileItems = useMemo(() => {
@@ -1828,14 +1956,14 @@ export function OrderDetailContent({
       financial: "finance",
       status: "paintbrush",
       shipping: "airplane",
-      schedule: "calendarClock",
+      schedule: "bellBadge",
       historyLog: "historyClock"
     };
     return icons[cardId];
   }
 
   function renderCardTitle(cardId: OrderDetailCardId) {
-    return <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} />;
+    return <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} iconSymbol={cardId === "financial" ? moneySymbol(moneySettings) : undefined} />;
   }
 
   function productionStepTitles() {
@@ -1974,7 +2102,7 @@ export function OrderDetailContent({
     }
 
     let cancelled = false;
-    async function run() {
+    async function refreshBlockHeadings() {
       try {
         const loaded = await loadWorkspaceBlockHeadings(workspace);
         if (!cancelled) {
@@ -1989,9 +2117,23 @@ export function OrderDetailContent({
       }
     }
 
-    run();
+    void refreshBlockHeadings();
+    const unsubscribe = onSnapshot(
+      doc(db, "companySettings", workspace.id),
+      () => {
+        void refreshBlockHeadings();
+      },
+      () => {
+        if (!cancelled) {
+          setBlockHeadingSettings(null);
+          onBlockHeadingSettingsChange?.(null);
+        }
+      }
+    );
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [onBlockHeadingSettingsChange, workspace]);
 
@@ -2792,7 +2934,7 @@ export function OrderDetailContent({
   function applyOptimisticDetailsPatch(patch: DetailsPatch) {
     const nextPatch: Partial<OrderDetail> = {};
 
-    if (typeof patch.customerName === "string") nextPatch.customerName = patch.customerName;
+    if (typeof patch.customerName === "string") nextPatch.customerName = normalizeOrderCustomerName(patch.customerName);
     if (typeof patch.designName === "string") nextPatch.designName = patch.designName;
     if (typeof patch.watchRef === "string") nextPatch.watchRef = patch.watchRef;
     if (typeof patch.designLink === "string") nextPatch.designLink = patch.designLink;
@@ -2800,6 +2942,13 @@ export function OrderDetailContent({
     if (typeof patch.whatsappNumber === "string") nextPatch.whatsappNumber = patch.whatsappNumber;
     if (typeof patch.instagramUsername === "string") nextPatch.instagramUsername = patch.instagramUsername;
     if (typeof patch.notes === "string") nextPatch.notes = patch.notes;
+    if (typeof patch.customerNotes === "string") {
+      nextPatch.customFields = {
+        ...order.customFields,
+        ...(nextPatch.customFields ?? {}),
+        communicationCustomerNotes: patch.customerNotes
+      };
+    }
     if (patch.customFields && typeof patch.customFields === "object") {
       const nextCustomFields = { ...order.customFields };
       Object.entries(patch.customFields).forEach(([key, value]) => {
@@ -3151,6 +3300,7 @@ export function OrderDetailContent({
         setNewTodoPriority("Normal");
       }
       setOpenTodoMenuId(null);
+      setTodoMenuPanel("main");
       setDraggingTodoId(null);
       setDragOverTodoId(null);
       setEditingTodoTitleId(null);
@@ -3219,6 +3369,7 @@ export function OrderDetailContent({
   function startEditingTodoTitle(task: ToDoDetail) {
     if (!canEditToDoItems || savingTodoAction) return;
     setOpenTodoMenuId(null);
+    setTodoMenuPanel("main");
     setEditingTodoTitleId(task.id);
     setEditingTodoTitle(task.title);
     setTodoError(null);
@@ -3295,6 +3446,7 @@ export function OrderDetailContent({
 
   function downloadTodoReminder(task: ToDoDetail) {
     setOpenTodoMenuId(null);
+    setTodoMenuPanel("main");
     setTodoStatus(null);
     setTodoError(null);
 
@@ -3311,21 +3463,79 @@ export function OrderDetailContent({
     }
   }
 
+  function optimisticSchedulePatch(items: WebScheduleReminder[], patch: SchedulePatch): WebScheduleReminder[] {
+    const now = new Date();
+    if (patch.action === "add") {
+      const dueAt = patch.dueAt ? new Date(patch.dueAt) : null;
+      const title = (patch.title || "").trim();
+      if (!title || !dueAt || Number.isNaN(dueAt.getTime())) return items;
+      return [
+        {
+          id: patch.reminderId || localWorkSessionId(),
+          title,
+          note: patch.note || "",
+          dueAt,
+          priority: patch.priority || "Normal",
+          status: "Pending",
+          notify: patch.notify !== false,
+          completedAt: null
+        },
+        ...items
+      ];
+    }
+
+    const reminderId = patch.reminderId || "";
+    const index = items.findIndex(item => item.id === reminderId);
+    if (index < 0) return items;
+
+    if (patch.action === "delete") {
+      return items.filter(item => item.id !== reminderId);
+    }
+
+    if (patch.action === "complete") {
+      return items.map(item => item.id === reminderId ? { ...item, status: "Done", completedAt: now } : item);
+    }
+
+    if (patch.action === "snooze") {
+      const dueAt = new Date(now.getTime() + Math.max(1, Number(patch.hours || 1)) * 60 * 60 * 1000);
+      return items.map(item => item.id === reminderId ? { ...item, status: "Pending", dueAt, completedAt: null } : item);
+    }
+
+    if (patch.action === "update") {
+      return items.map(item => {
+        if (item.id !== reminderId) return item;
+        const dueAt = patch.dueAt ? new Date(patch.dueAt) : item.dueAt;
+        return {
+          ...item,
+          title: patch.title ?? item.title,
+          note: patch.note ?? item.note,
+          dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : item.dueAt,
+          priority: patch.priority ?? item.priority,
+          notify: patch.notify ?? item.notify
+        };
+      });
+    }
+
+    return items;
+  }
+
   async function saveSchedulePatch(patch: SchedulePatch, fieldLabel: string) {
     if (!canEditScheduleItems) {
       setScheduleError("Your workspace role cannot edit Schedule & Alerts.");
       return;
     }
 
+    const previousScheduleItems = optimisticScheduleItems;
     setScheduleError(null);
     setScheduleStatus(null);
     setSavingScheduleAction(fieldLabel);
+    setOpenScheduleMenuId(null);
+    setOptimisticScheduleItems(current => optimisticSchedulePatch(current, patch));
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
         schedule: patch
       });
-      await onReloadOrder();
       if (patch.action === "add") {
         setNewScheduleTitle("Follow up customer");
         setNewScheduleNote("");
@@ -3335,6 +3545,8 @@ export function OrderDetailContent({
       }
       setScheduleStatus(patch.action === "add" ? "Reminder saved." : "Schedule updated.");
     } catch (saveFailure) {
+      setOptimisticScheduleItems(previousScheduleItems);
+      await onReloadOrder();
       setScheduleStatus(null);
       setScheduleError(saveFailure instanceof Error ? saveFailure.message : "Could not update Schedule & Alerts.");
     } finally {
@@ -3364,8 +3576,10 @@ export function OrderDetailContent({
       setScheduleStatus(null);
       return;
     }
+    const reminderId = localWorkSessionId();
     void saveSchedulePatch({
       action: "add",
+      reminderId,
       title,
       note: newScheduleNote,
       dueAt: new Date(newScheduleDueAt).toISOString(),
@@ -3952,9 +4166,10 @@ export function OrderDetailContent({
               <InlineValueRow
                 label="Customer Name"
                 value={order.customerName}
+                displayValue={normalizeOrderCustomerName(order.customerName)}
                 disabled={!canInlineEditFullDetails}
                 saving={savingInlineField === "Customer Name"}
-                onSave={value => saveDetailsPatch({ customerName: String(value) }, "Customer Name")}
+                onSave={value => saveDetailsPatch({ customerName: normalizeOrderCustomerName(String(value)) }, "Customer Name")}
               />
               <InlineValueRow
                 label="Design Name"
@@ -3976,75 +4191,83 @@ export function OrderDetailContent({
                     onSave={value => saveDetailsPatch({ customFields: { [field.title]: String(value) } }, field.title)}
                   />
                 ))}
-              <div className="app-card-divider" />
-              <div className="app-subsection-title"><span>▱</span><strong>Communication</strong></div>
-              <InlineValueRow
-                label="Telephone"
-                value={order.whatsappNumber || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Telephone"}
-                onSave={value => saveDetailsPatch({ whatsappNumber: String(value) }, "Telephone")}
-              />
-              <InlineValueRow
-                label="Email"
-                value={order.emailAddress || ""}
-                inputType="email"
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Email"}
-                onSave={value => saveDetailsPatch({ emailAddress: String(value) }, "Email")}
-              />
-              <InlineValueRow
-                label="Address"
-                value={order.customFields.communicationAddress || order.customFields.Address || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Address"}
-                onSave={value => saveDetailsPatch({ address: String(value) }, "Address")}
-              />
-              <div className="app-value-row">
-                <span>Channel</span>
-                <div className="app-channel-pills">
-                  {COMMUNICATION_CHANNELS.map(item => (
-                    <button
-                      key={item}
-                      className={hasCommunicationChannel(order.communication, item) ? "is-selected" : ""}
-                      type="button"
-                      disabled={!canInlineEditFullDetails || savingInlineField === "Communication channels"}
-                      onClick={() => toggleCommunicationChannel(item)}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {hasCommunicationChannel(order.communication, "Instagram") ? (
-                <InlineValueRow
-                  label="Instagram"
-                  value={order.instagramUsername || ""}
-                  disabled={!canInlineEditFullDetails}
-                  saving={savingInlineField === "Instagram"}
-                  onSave={value => saveDetailsPatch({ instagramUsername: String(value) }, "Instagram")}
-                />
+              {showCommunicationSection ? (
+                <>
+                  <div className="app-card-divider" />
+                  <div className="app-subsection-title"><span>▱</span><strong>Communication</strong></div>
+                </>
               ) : null}
-              {hasCommunicationChannel(order.communication, "WhatsApp") ? (
+              {showCommunicationTelephone ? (
                 <InlineValueRow
-                  label="WhatsApp"
+                  label="Telephone"
                   value={order.whatsappNumber || ""}
                   disabled={!canInlineEditFullDetails}
-                  saving={savingInlineField === "WhatsApp"}
-                  onSave={value => saveDetailsPatch({ whatsappNumber: String(value) }, "WhatsApp")}
+                  saving={savingInlineField === "Telephone"}
+                  onSave={value => saveDetailsPatch({ whatsappNumber: String(value) }, "Telephone")}
                 />
               ) : null}
-              {hasCommunicationChannel(order.communication, "TikTok") ? (
+              {showCommunicationEmail ? (
                 <InlineValueRow
-                  label="TikTok"
-                  value={order.customFields["communicationChannel::TikTok"] || ""}
+                  label="Email"
+                  value={order.emailAddress || ""}
+                  inputType="email"
                   disabled={!canInlineEditFullDetails}
-                  saving={savingInlineField === "TikTok"}
-                  onSave={value => saveDetailsPatch({ tiktokUsername: String(value) }, "TikTok")}
+                  saving={savingInlineField === "Email"}
+                  onSave={value => saveDetailsPatch({ emailAddress: String(value) }, "Email")}
                 />
               ) : null}
-              <div className="app-card-divider" />
-              <AppValueRow label="Customer Notes" value={order.customFields.communicationCustomerNotes || ""} />
+              {showCommunicationAddress ? (
+                <InlineValueRow
+                  label="Address"
+                  value={order.customFields.communicationAddress || order.customFields.Address || ""}
+                  disabled={!canInlineEditFullDetails}
+                  saving={savingInlineField === "Address"}
+                  onSave={value => saveDetailsPatch({ address: String(value) }, "Address")}
+                />
+              ) : null}
+              {showCommunicationChannel ? (
+                <>
+                  <div className="app-value-row">
+                    <span>Channel</span>
+                    <div className="app-channel-pills">
+                      {visibleCommunicationChannels.map(item => (
+                        <button
+                          key={item}
+                          className={hasCommunicationChannel(order.communication, item) ? "is-selected" : ""}
+                          type="button"
+                          title={item}
+                          disabled={!canInlineEditFullDetails || savingInlineField === "Communication channels"}
+                          onClick={() => toggleCommunicationChannel(item)}
+                        >
+                          <span className="app-channel-pill-text">{item}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {visibleCommunicationChannels.filter(channel => hasCommunicationChannel(order.communication, channel)).map(channel => (
+                    <InlineValueRow
+                      key={channel}
+                      label={channel}
+                      value={communicationChannelValue(order, channel)}
+                      disabled={!canInlineEditFullDetails}
+                      saving={savingInlineField === channel}
+                      onSave={value => saveDetailsPatch(communicationChannelPatch(channel, String(value)), channel)}
+                    />
+                  ))}
+                </>
+              ) : null}
+              {showCommunicationCustomerNotes ? (
+                <>
+                  <div className="app-card-divider" />
+                  <InlineNotesField
+                    title="Customer Notes"
+                    value={order.customFields.communicationCustomerNotes || ""}
+                    disabled={!canInlineEditFullDetails}
+                    saving={savingInlineField === "Customer Notes"}
+                    onSave={value => saveDetailsPatch({ customerNotes: value }, "Customer Notes")}
+                  />
+                </>
+              ) : null}
             </div>
           </section>
         );
@@ -4331,7 +4554,7 @@ export function OrderDetailContent({
                   onChange={event => setNewScheduleTitle(event.target.value)}
                 />
                 <div className="app-schedule-inline-controls">
-                  <label>
+                  <label className="app-schedule-date-control">
                     <span>Date & Time</span>
                     <input
                       className="input"
@@ -4341,7 +4564,7 @@ export function OrderDetailContent({
                       onChange={event => setNewScheduleDueAt(event.target.value)}
                     />
                   </label>
-                  <label>
+                  <label className="app-schedule-priority-control">
                     <span>Priority</span>
                     <select
                       className="input"
@@ -4407,10 +4630,33 @@ export function OrderDetailContent({
                             <p>{formatDateTime(item.dueAt)} · {scheduleRelativeLabel(item)}</p>
                             {item.note ? <small>{item.note}</small> : null}
                           </div>
-                          <div className="app-schedule-item-actions">
-                            <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "complete", reminderId: item.id }, "Reminder")}>Done</button>
-                            <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "snooze", reminderId: item.id, hours: 24 }, "Reminder")}>+1d</button>
-                            <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder")}>Delete</button>
+                          <div className="app-schedule-menu">
+                            <button
+                              className="app-schedule-menu-button"
+                              type="button"
+                              disabled={!canEditScheduleItems || Boolean(savingScheduleAction)}
+                              aria-expanded={openScheduleMenuId === item.id}
+                              aria-label={`Actions for ${item.title}`}
+                              onClick={() => setOpenScheduleMenuId(current => current === item.id ? null : item.id)}
+                            >
+                              •••
+                            </button>
+                            {openScheduleMenuId === item.id ? (
+                            <div className="app-schedule-menu-panel">
+                              <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "complete", reminderId: item.id }, "Reminder")}>
+                                <span>✓</span> Mark Done
+                              </button>
+                              <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "snooze", reminderId: item.id, hours: 1 }, "Reminder")}>
+                                <span>◷</span> Snooze 1 hour
+                              </button>
+                              <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "snooze", reminderId: item.id, hours: 24 }, "Reminder")}>
+                                <span>◷</span> Snooze 1 day
+                              </button>
+                              <button type="button" className="danger" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder")}>
+                                <span>⌫</span> Delete
+                              </button>
+                            </div>
+                            ) : null}
                           </div>
                         </article>
                       );
@@ -4434,8 +4680,24 @@ export function OrderDetailContent({
                           </div>
                           <p>{formatDateTime(item.completedAt || item.dueAt)}</p>
                         </div>
-                        <div className="app-schedule-item-actions">
-                          <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder")}>Delete</button>
+                        <div className="app-schedule-menu">
+                          <button
+                            className="app-schedule-menu-button"
+                            type="button"
+                            disabled={!canEditScheduleItems || Boolean(savingScheduleAction)}
+                            aria-expanded={openScheduleMenuId === item.id}
+                            aria-label={`Actions for ${item.title}`}
+                            onClick={() => setOpenScheduleMenuId(current => current === item.id ? null : item.id)}
+                          >
+                            •••
+                          </button>
+                          {openScheduleMenuId === item.id ? (
+                          <div className="app-schedule-menu-panel">
+                            <button type="button" className="danger" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder")}>
+                              <span>⌫</span> Delete
+                            </button>
+                          </div>
+                          ) : null}
                         </div>
                       </article>
                     ))}
@@ -4475,7 +4737,7 @@ export function OrderDetailContent({
                     value={newWorkSessionTitle}
                     onChange={event => setNewWorkSessionTitle(event.target.value)}
                     onKeyDown={event => {
-                      if (event.key === "Enter" && !runningSession && !savingWorkTimeAction) startWorkTimer();
+                      if ((event.key === "Enter" || event.code === "NumpadEnter") && !runningSession && !savingWorkTimeAction) startWorkTimer();
                     }}
                     placeholder="Work title..."
                     disabled={Boolean(runningSession || savingWorkTimeAction)}
@@ -4656,7 +4918,7 @@ export function OrderDetailContent({
                     disabled={!canEditToDoItems || Boolean(savingTodoAction)}
                     onChange={event => setNewTodoTitle(event.target.value)}
                     onKeyDown={event => {
-                      if (event.key === "Enter") addTodoItem();
+                      if (event.key === "Enter" || event.code === "NumpadEnter") addTodoItem();
                     }}
                   />
                   <button
@@ -4791,7 +5053,7 @@ export function OrderDetailContent({
                               onDragStart={event => event.preventDefault()}
                               onChange={event => setEditingTodoTitle(event.target.value)}
                               onKeyDown={event => {
-                                if (event.key === "Enter") saveTodoTitleEdit(task);
+                                if (event.key === "Enter" || event.code === "NumpadEnter") saveTodoTitleEdit(task);
                                 if (event.key === "Escape") cancelTodoTitleEdit();
                               }}
                             />
@@ -4815,75 +5077,118 @@ export function OrderDetailContent({
                                 disabled={Boolean(savingTodoAction)}
                                 aria-expanded={menuOpen}
                                 aria-label={`${task.title} task menu`}
-                                onClick={() => setOpenTodoMenuId(current => current === task.id ? null : task.id)}
+                                onPointerDown={event => event.stopPropagation()}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  setTodoMenuPanel("main");
+                                  setOpenTodoMenuId(current => current === task.id ? null : task.id);
+                                }}
                               >
-                                ...
-                              </button>
-                              <button
-                                className="app-todo-task-menu-chevron"
-                                type="button"
-                                disabled={Boolean(savingTodoAction)}
-                                aria-label={menuOpen ? "Close task menu" : "Open task menu"}
-                                onClick={() => setOpenTodoMenuId(current => current === task.id ? null : task.id)}
-                              >
-                               ⌄
+                                •••
                               </button>
                               {menuOpen ? (
-                                <div className="app-todo-task-menu">
-                                  <button type="button" onClick={() => saveTodoPatch({ action: "toggle", taskId: task.id, isDone: !task.isDone }, task.isDone ? "Task reopened" : "Task completed")}>
-                                    <span>◎</span>{task.isDone ? "Reopen" : "Mark Done"}
-                                  </button>
-                                  <button type="button" onClick={() => downloadTodoReminder(task)}>
-                                    <span>♢</span>Add Reminder
-                                  </button>
-                                  <details>
-                                    <summary>Move</summary>
-                                    <div>
+                                <div
+                                  className="app-todo-task-menu"
+                                  draggable={false}
+                                  onPointerDown={event => event.stopPropagation()}
+                                  onClick={event => event.stopPropagation()}
+                                >
+                                  {todoMenuPanel === "main" ? (
+                                    <>
+                                      <button type="button" onClick={() => saveTodoPatch({ action: "toggle", taskId: task.id, isDone: !task.isDone }, task.isDone ? "Task reopened" : "Task completed")}>
+                                        <span>◎</span>{task.isDone ? "Reopen" : "Mark Done"}
+                                      </button>
+                                      <button type="button" onClick={() => downloadTodoReminder(task)}>
+                                        <span>♢</span>Add Reminder
+                                      </button>
+                                      <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("move")}>
+                                        <span>↕</span>Move
+                                      </button>
+                                      {canSeeTeamAssignment ? (
+                                        <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("assign")}>
+                                          <span>◎</span>Assign
+                                        </button>
+                                      ) : null}
+                                      <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("due")}>
+                                        <span>▦</span>Due date
+                                      </button>
+                                      <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("priority")}>
+                                        <span>⚑</span>Priority
+                                      </button>
+                                      <button className="is-danger" type="button" onClick={() => saveTodoPatch({ action: "delete", taskId: task.id }, "Task deleted")}>
+                                        <span>⌫</span>Delete
+                                      </button>
+                                    </>
+                                  ) : null}
+
+                                  {todoMenuPanel === "move" ? (
+                                    <>
+                                      <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
+                                        <span>‹</span>Move
+                                      </button>
                                       <button type="button" disabled={taskIndex <= 0} onClick={() => moveTodoTask(task, "up")}>Move Up</button>
                                       <button type="button" disabled={taskIndex < 0 || taskIndex >= todoItems.length - 1} onClick={() => moveTodoTask(task, "down")}>Move Down</button>
                                       <button type="button" disabled={taskIndex <= 0} onClick={() => moveTodoTask(task, "top")}>Move to Top</button>
                                       <button type="button" disabled={taskIndex < 0 || taskIndex >= todoItems.length - 1} onClick={() => moveTodoTask(task, "bottom")}>Move to Bottom</button>
-                                    </div>
-                                  </details>
-                                  {canSeeTeamAssignment ? (
-                                    <details>
-                                      <summary>Assign</summary>
-                                      <div>
-                                        {todoAssigneeOptions.map(option => (
+                                    </>
+                                  ) : null}
+
+                                  {todoMenuPanel === "assign" ? (
+                                    <>
+                                      <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
+                                        <span>‹</span>Assign
+                                      </button>
+                                      {todoAssigneeOptions.map(option => {
+                                        const isCurrentAssignee = option.uid
+                                          ? task.assignedToUid === option.uid
+                                          : !task.assignedToUid.trim();
+                                        return (
                                           <button key={option.uid || "unassigned"} type="button" onClick={() => assignTodoTask(task, option.uid, option.email)}>
+                                            <span>{isCurrentAssignee ? "✓" : ""}</span>
                                             {option.label}
                                           </button>
-                                        ))}
-                                      </div>
-                                    </details>
+                                        );
+                                      })}
+                                    </>
                                   ) : null}
-                                  <details>
-                                    <summary>Due date</summary>
-                                    <div>
-                                      <button type="button" onClick={() => setTodoDueDate(task, "")}>No due date</button>
-                                      <button type="button" onClick={() => setTodoDueDate(task, isoDateFromToday(0))}>Today</button>
-                                      <button type="button" onClick={() => setTodoDueDate(task, isoDateFromToday(1))}>Tomorrow</button>
-                                      <button type="button" onClick={() => setTodoDueDate(task, isoDateFromToday(3))}>In 3 days</button>
-                                      <button type="button" onClick={() => setTodoDueDate(task, isoDateFromToday(7))}>In 7 days</button>
-                                    </div>
-                                  </details>
-                                  <details>
-                                    <summary>Priority</summary>
-                                    <div>
+
+                                  {todoMenuPanel === "due" ? (
+                                    <>
+                                      <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
+                                        <span>‹</span>Due date
+                                      </button>
+                                      {[
+                                        { label: "No due date", value: "" },
+                                        { label: "Today", value: isoDateFromToday(0) },
+                                        { label: "Tomorrow", value: isoDateFromToday(1) },
+                                        { label: "In 3 days", value: isoDateFromToday(3) },
+                                        { label: "In 7 days", value: isoDateFromToday(7) }
+                                      ].map(option => (
+                                        <button key={option.label} type="button" onClick={() => setTodoDueDate(task, option.value)}>
+                                          <span>{dateInputValue(task.dueAt) === option.value ? "✓" : ""}</span>
+                                          {option.label}
+                                        </button>
+                                      ))}
+                                    </>
+                                  ) : null}
+
+                                  {todoMenuPanel === "priority" ? (
+                                    <>
+                                      <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
+                                        <span>‹</span>Priority
+                                      </button>
                                       {PRIORITY_OPTIONS.map(priority => (
                                         <button
                                           key={priority}
                                           type="button"
                                           onClick={() => saveTodoPatch({ action: "update", taskId: task.id, priority }, "Task priority")}
                                         >
+                                          <span>{task.priority.trim().toLowerCase() === priority.toLowerCase() ? "✓" : ""}</span>
                                           {priority}
                                         </button>
                                       ))}
-                                    </div>
-                                  </details>
-                                  <button className="is-danger" type="button" onClick={() => saveTodoPatch({ action: "delete", taskId: task.id }, "Task deleted")}>
-                                    <span>⌫</span>Delete
-                                  </button>
+                                    </>
+                                  ) : null}
                                 </div>
                               ) : null}
                             </div>
@@ -5035,11 +5340,13 @@ export function OrderDetailContent({
       height: `${renderedHeight}px`,
       minHeight: `${renderedHeight}px`
     };
+    const frameCanMoveResize = canMoveResizeCards && !savingLayout;
     const frameClassName = [
       "order-detail-card-frame",
       "has-drag-handle",
-      canCustomizeCards && layoutReady ? "can-drag" : "",
-      canCustomizeCards && layoutReady ? "can-resize" : "",
+      frameCanMoveResize ? "can-drag" : "",
+      frameCanMoveResize ? "can-resize" : "",
+      cardsLocked ? "is-layout-locked" : "",
       draggingCardId === cardId ? "is-dragging" : "",
       dragOverCardId === cardId ? "is-drop-target" : "",
       resizingCardId === cardId ? "is-resizing" : ""
@@ -5056,20 +5363,25 @@ export function OrderDetailContent({
         onDrop={event => handleCardDrop(event, cardId)}
         style={frameStyle}
       >
-        <button
-          aria-label={`Drag ${cardLabel(cardId)}`}
-          className="order-card-drag-handle"
-          disabled={!canCustomizeCards || !layoutReady || savingLayout}
-          draggable={canCustomizeCards && layoutReady && !savingLayout}
-          onDragStart={event => handleCardDragStart(event, cardId)}
-          onDragEnd={handleCardDragEnd}
-          title={canCustomizeCards ? "Drag to reorder card" : "Card customization is available from StudioFlow Lite."}
-          type="button"
-        >
-          <span />
-          <span />
-          <span />
-        </button>
+        {frameCanMoveResize ? (
+          <button
+            aria-label={`Drag ${cardLabel(cardId)}`}
+            className="order-card-drag-handle"
+            draggable
+            onDragStart={event => handleCardDragStart(event, cardId)}
+            onDragEnd={handleCardDragEnd}
+            title="Drag to reorder card"
+            type="button"
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        ) : (
+          <span className="order-card-layout-lock-handle" title={cardsLocked ? "Layout locked" : "Card customization is available from StudioFlow Lite."} aria-label={cardsLocked ? "Layout locked" : "Card customization locked"}>
+            <CardIconGlyph icon="lock" />
+          </span>
+        )}
         {renderCardMenu(cardId)}
         {renderCard(cardId)}
         {draggingCardId && draggingCardId !== cardId ? (
@@ -5081,7 +5393,7 @@ export function OrderDetailContent({
             aria-hidden="true"
           />
         ) : null}
-        {canCustomizeCards && layoutReady ? (
+        {frameCanMoveResize ? (
           <>
             <button
               aria-label={`Resize ${cardLabel(cardId)} height`}
@@ -5135,7 +5447,8 @@ export function OrderDetailContent({
     const frameClassName = [
       "order-detail-card-frame",
       "order-detail-mobile-card-frame",
-      canCustomizeCards && layoutReady ? "can-resize" : "",
+      canMoveResizeCards ? "can-resize" : "",
+      cardsLocked ? "is-layout-locked" : "",
       resizingCardId === cardId ? "is-resizing" : ""
     ].filter(Boolean).join(" ");
 
@@ -5149,7 +5462,7 @@ export function OrderDetailContent({
       >
         {renderCardMenu(cardId)}
         {renderCard(cardId)}
-        {canCustomizeCards && layoutReady ? (
+        {canMoveResizeCards ? (
           <button
             aria-label={`Resize ${cardLabel(cardId)} height`}
             className="order-card-height-resize-handle"
@@ -5169,10 +5482,20 @@ export function OrderDetailContent({
       <section className="order-detail-toolbar">
         <div>
           {showBackLink ? <Link className="studio-pill" href="/orders">Back to orders</Link> : null}
-          <h1>{order.customerName}</h1>
+          <h1>{normalizeOrderCustomerName(order.customerName)}</h1>
           <p>{order.designName}</p>
         </div>
         <div className="order-toolbar-pills">
+          <button
+            className={["card-layout-lock-button", cardsLocked ? "is-locked" : "is-unlocked"].join(" ")}
+            type="button"
+            onClick={toggleCardsLocked}
+            title={cardsLocked ? "Unlock cards" : "Lock cards"}
+            aria-pressed={cardsLocked}
+          >
+            <CardIconGlyph icon="lock" />
+            <span>{cardsLocked ? "Cards Locked" : "Cards Unlocked"}</span>
+          </button>
           <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
             <button
               className="button secondary order-actions-button"
@@ -5508,10 +5831,6 @@ function OrderEditModal({
     const orderValue = Number(form.orderValue);
     const paidAmount = Number(form.paidAmount);
     if (canEditFullOrder) {
-      if (!form.customerName.trim()) {
-        setError("Customer name is required.");
-        return;
-      }
       if (!form.designName.trim()) {
         setError("Design name is required.");
         return;
@@ -5536,7 +5855,7 @@ function OrderEditModal({
       const payload = canEditFullOrder
         ? {
           ...form,
-          customerName: form.customerName.trim(),
+          customerName: normalizeOrderCustomerName(form.customerName),
           designName: form.designName.trim(),
           watchRef: form.watchRef.trim(),
           notes: form.notes.trim(),
@@ -5569,7 +5888,7 @@ function OrderEditModal({
           <div>
             <p className="orders-kicker">Order Management</p>
             <h2 id="edit-order-title">Edit Order</h2>
-            <p>{order.customerName} - {order.designName}</p>
+            <p>{normalizeOrderCustomerName(order.customerName)} - {order.designName}</p>
           </div>
           <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label="Close Edit Order">
             x
@@ -6128,6 +6447,7 @@ function InlineValueRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const cancellingRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(value);
@@ -6142,6 +6462,20 @@ function InlineValueRow({
     }
     setEditing(false);
     await onSave(nextValue);
+  }
+
+  function cancelEdit() {
+    cancellingRef.current = true;
+    setDraft(value);
+    setEditing(false);
+    window.setTimeout(() => {
+      cancellingRef.current = false;
+    }, 0);
+  }
+
+  function saveOnBlur() {
+    if (cancellingRef.current) return;
+    void submit();
   }
 
   return (
@@ -6163,10 +6497,14 @@ function InlineValueRow({
             autoFocus
             value={draft}
             disabled={saving}
-            onBlur={() => setEditing(false)}
+            onBlur={saveOnBlur}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => {
-              if (event.key === "Escape") setEditing(false);
+              if (event.key === "Escape") cancelEdit();
+              if (event.key === "Enter" || event.code === "NumpadEnter") {
+                event.preventDefault();
+                void submit();
+              }
             }}
           />
         </form>
@@ -6474,13 +6812,17 @@ function FinanceInlineRow({
               step="0.01"
               autoFocus
               value={draft}
-              disabled={saving}
-              onBlur={saveOnBlur}
-              onChange={event => setDraft(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === "Escape") cancelEdit();
-              }}
-            />
+            disabled={saving}
+            onBlur={saveOnBlur}
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Escape") cancelEdit();
+              if (event.key === "Enter" || event.code === "NumpadEnter") {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
           </form>
         )
       ) : (

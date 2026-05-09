@@ -46,14 +46,22 @@ export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
   { key: "teamAccess", label: "Team Access", description: "Team members and access controls." },
   { key: "clientFiles", label: "Client Files", description: "Client file upload, rename and delete." },
   { key: "financialInfo", label: "Financial Info", description: "Prices, profit, dashboard finance and finance cards." },
-  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." }
+  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." },
+  { key: "assignedProjectsOnly", label: "Assigned Projects Only", description: "Limit this role to projects assigned to the current member." }
 ] as const;
 
 export type WorkspaceMemberAccessKey = (typeof WORKSPACE_MEMBER_ACCESS_OPTIONS)[number]["key"];
 export type WorkspaceMemberAccess = Record<WorkspaceMemberAccessKey, boolean>;
 
+export type WorkspaceCustomRole = {
+  id: string;
+  name: string;
+  baseRole: string;
+  access: WorkspaceMemberAccess;
+};
+
 export const WORKSPACE_MEMBER_ACCESS_DEFAULTS: WorkspaceMemberAccess = WORKSPACE_MEMBER_ACCESS_OPTIONS.reduce((acc, option) => {
-  acc[option.key] = true;
+  acc[option.key] = option.key === "assignedProjectsOnly" ? false : true;
   return acc;
 }, {} as WorkspaceMemberAccess);
 
@@ -111,6 +119,7 @@ export type WorkspaceSettingsOverview = {
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
+  orderCardShowStatusBadges: boolean;
 };
 
 export type DashboardWidgetVisibility = {
@@ -147,6 +156,8 @@ export type QuickReplySettings = {
 
 export type OrderListItem = {
   id: string;
+  assignedToUid: string;
+  assignedToEmail: string;
   customerName: string;
   designName: string;
   watchRef: string;
@@ -173,6 +184,8 @@ export type OrderListItem = {
 
 export type ScheduleOrderItem = {
   id: string;
+  assignedToUid: string;
+  assignedToEmail: string;
   customerName: string;
   designName: string;
   watchRef: string;
@@ -223,6 +236,10 @@ export type CustomerDirectoryItem = {
   phone: string;
   instagram: string;
   address: string;
+  streetAddress: string;
+  city: string;
+  postalCode: string;
+  country: string;
   notes: string;
   profileImageUrl: string;
   lastContactDate: Date | null;
@@ -304,6 +321,8 @@ export type HistoryLogDetail = {
 export type OrderDetail = {
   id: string;
   companyId: string;
+  assignedToUid: string;
+  assignedToEmail: string;
   customerName: string;
   designName: string;
   designLink: string;
@@ -419,23 +438,65 @@ export function normalizeWorkspaceRole(value: unknown, fallback = ""): string {
 
 function normalizeWorkspaceMemberRole(entry: unknown, fallback = ""): string {
   if (entry && typeof entry === "object" && !Array.isArray(entry)) {
-    return normalizeWorkspaceRole((entry as Record<string, unknown>).role, fallback);
+    const raw = entry as Record<string, unknown>;
+    const customRoleId = stringValue(raw.customRoleId, "");
+    if (/^custom_[A-Za-z0-9_-]{6,64}$/.test(customRoleId)) return customRoleId;
+    return stringValue(raw.role, fallback);
   }
-  return normalizeWorkspaceRole(entry, fallback);
+  return stringValue(entry, fallback);
 }
 
-function workspaceMemberRole(companyData: Record<string, unknown>, uid: string, memberFallback = "member"): string {
+function memberCustomRolesMap(companyData: Record<string, unknown>) {
+  return companyData.memberCustomRoles && typeof companyData.memberCustomRoles === "object" && !Array.isArray(companyData.memberCustomRoles)
+    ? companyData.memberCustomRoles as Record<string, unknown>
+    : {};
+}
+
+function customRolesMap(companyData: Record<string, unknown>) {
+  const raw = companyData.customRoles && typeof companyData.customRoles === "object" && !Array.isArray(companyData.customRoles)
+    ? companyData.customRoles as Record<string, unknown>
+    : {};
+  const roles: Record<string, WorkspaceCustomRole> = {};
+  Object.entries(raw).forEach(([id, value]) => {
+    const data = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const roleId = stringValue(data.id, id);
+    if (!/^custom_[A-Za-z0-9_-]{6,64}$/.test(roleId)) return;
+    roles[roleId] = {
+      id: roleId,
+      name: stringValue(data.name, "Custom Role"),
+      baseRole: normalizeWorkspaceRole(data.baseRole, "member") || "member",
+      access: normalizeWorkspaceMemberAccess(data.access)
+    };
+  });
+  return roles;
+}
+
+function effectiveWorkspaceRole(companyData: Record<string, unknown>, roleValue: string, fallback = "member") {
+  const custom = customRolesMap(companyData)[roleValue];
+  if (custom) return normalizeWorkspaceRole(custom.baseRole, fallback) || fallback;
+  return normalizeWorkspaceRole(roleValue, fallback);
+}
+
+function workspaceMemberRoleValue(companyData: Record<string, unknown>, uid: string, memberFallback = "member"): string {
   const members = companyData.members && typeof companyData.members === "object"
     ? companyData.members as Record<string, unknown>
     : {};
   const roles = companyData.memberRoles && typeof companyData.memberRoles === "object"
     ? companyData.memberRoles as Record<string, unknown>
     : {};
+  const customRoles = customRolesMap(companyData);
+  const assignedCustomRole = stringValue(memberCustomRolesMap(companyData)[uid], "");
+  if (customRoles[assignedCustomRole]) return assignedCustomRole;
   const memberExists = Object.prototype.hasOwnProperty.call(members, uid);
   const memberRole = memberExists ? normalizeWorkspaceMemberRole(members[uid], "") : "";
   if (memberRole) return memberRole;
-  if (Object.prototype.hasOwnProperty.call(roles, uid)) return normalizeWorkspaceRole(roles[uid], "");
-  return memberExists ? normalizeWorkspaceRole(memberFallback, "") : "";
+  if (Object.prototype.hasOwnProperty.call(roles, uid)) return stringValue(roles[uid], "");
+  return memberExists ? memberFallback : "";
+}
+
+function workspaceMemberRole(companyData: Record<string, unknown>, uid: string, memberFallback = "member"): string {
+  const roleValue = workspaceMemberRoleValue(companyData, uid, memberFallback);
+  return roleValue ? effectiveWorkspaceRole(companyData, roleValue, memberFallback) : "";
 }
 
 export function normalizeWorkspaceMemberAccess(value: unknown, forceFullAccess = false): WorkspaceMemberAccess {
@@ -450,8 +511,34 @@ export function normalizeWorkspaceMemberAccess(value: unknown, forceFullAccess =
   return output;
 }
 
+function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess {
+  const access: WorkspaceMemberAccess = { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
+  if (normalizeWorkspaceRole(roleValue, "member") === "workflow") {
+    access.dashboard = false;
+    access.financialInfo = false;
+    access.teamAccess = false;
+  }
+  return access;
+}
+
 export function workspaceAccessAllows(access: WorkspaceMemberAccess | undefined, key: WorkspaceMemberAccessKey) {
+  if (key === "assignedProjectsOnly") return access?.assignedProjectsOnly === true;
   return access?.[key] !== false;
+}
+
+export function workspaceAssignedProjectsOnly(access: WorkspaceMemberAccess | undefined) {
+  return access?.assignedProjectsOnly === true;
+}
+
+export function orderIsAssignedToCurrentUser(
+  order: { assignedToUid?: string; assignedToEmail?: string },
+  user: { uid?: string; email?: string | null } | null | undefined
+) {
+  const uid = user?.uid?.trim() ?? "";
+  const email = user?.email?.trim().toLowerCase() ?? "";
+  const assignedUid = order.assignedToUid?.trim() ?? "";
+  const assignedEmail = order.assignedToEmail?.trim().toLowerCase() ?? "";
+  return Boolean((uid && assignedUid === uid) || (email && assignedEmail === email));
 }
 
 function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string, isOwner = false): WorkspaceMemberAccess {
@@ -462,6 +549,9 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
   const memberData = members[uid] && typeof members[uid] === "object" && !Array.isArray(members[uid])
     ? members[uid] as Record<string, unknown>
     : {};
+  const roleValue = workspaceMemberRoleValue(companyData, uid, "member");
+  const customRole = customRolesMap(companyData)[roleValue];
+  if (customRole) return normalizeWorkspaceMemberAccess(customRole.access);
   const memberAccess = companyData.memberAccess && typeof companyData.memberAccess === "object" && !Array.isArray(companyData.memberAccess)
     ? companyData.memberAccess as Record<string, unknown>
     : {};
@@ -471,7 +561,14 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
   const inlineAccess = memberData.access && typeof memberData.access === "object" && !Array.isArray(memberData.access)
     ? memberData.access as Record<string, unknown>
     : {};
-  return normalizeWorkspaceMemberAccess({ ...inlineAccess, ...rootAccess });
+  const defaults = defaultWorkspaceAccessForRole(roleValue);
+  const merged = normalizeWorkspaceMemberAccess({ ...defaults, ...inlineAccess, ...rootAccess });
+  if (normalizeWorkspaceRole(roleValue, "member") === "workflow") {
+    merged.dashboard = false;
+    merged.financialInfo = false;
+    merged.teamAccess = false;
+  }
+  return merged;
 }
 
 function resolveRole(companyData: Record<string, unknown>, uid: string, companyId: string) {
@@ -520,6 +617,8 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
   const storageAddonMB = numberValue(companyData.billingStorageAddonMB, numberValue(companyData.storageAddonMB, 0));
   const storedStorageLimitMB = numberValue(companyData.billingStorageLimitMB, entitlements.storageLimitMB);
   const ownerUid = stringValue(companyData.ownerUid, companyId);
+  const rawRoleValue = uid === ownerUid || uid === companyId ? "owner" : workspaceMemberRoleValue(companyData, uid, "member");
+  const customRoles = customRolesMap(companyData);
   const role = resolveRole(companyData, uid, companyId);
   const members = companyData.members && typeof companyData.members === "object" && !Array.isArray(companyData.members)
     ? companyData.members as Record<string, unknown>
@@ -533,7 +632,7 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     name: stringValue(companyData.name, stringValue(companyData.companyName, "My Studio")),
     ownerUid,
     role,
-    roleLabel: roleLabel(role),
+    roleLabel: customRoles[rawRoleValue]?.name ?? roleLabel(role),
     memberAccess: workspaceMemberAccess(companyData, uid, normalizeWorkspaceRole(role) === "owner"),
     billingPlan: entitlements.plan,
     billingPlanSource: stringValue(companyData.billingPlanSource, hasBillingPlan ? "workspace" : "legacy_default"),
@@ -669,7 +768,8 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
       data.uploadSafetyMaxFileSizeMBV1,
       numberValue(data.uploadSafetyMaxFileSizeMB, 10)
     ),
-    dashboardWidgetVisibility: dashboardVisibility
+    dashboardWidgetVisibility: dashboardVisibility,
+    orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true)
   };
 }
 
@@ -751,7 +851,9 @@ export async function loadRecentOrders(companyId: string): Promise<OrderListItem
 
     return {
       id: orderDocument.id,
-      customerName: stringValue(data.customerName, "Unnamed customer"),
+      assignedToUid: stringValue(data.assignedToUid, ""),
+      assignedToEmail: stringValue(data.assignedToEmail, ""),
+      customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       watchRef: stringValue(data.watchRef, ""),
       status: stringValue(data.status, "Not Yet"),
@@ -805,7 +907,9 @@ export async function loadScheduleOrders(companyId: string): Promise<ScheduleOrd
 
     return {
       id: orderDocument.id,
-      customerName: stringValue(data.customerName, "Unnamed customer"),
+      assignedToUid: stringValue(data.assignedToUid, ""),
+      assignedToEmail: stringValue(data.assignedToEmail, ""),
+      customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       watchRef: stringValue(data.watchRef, ""),
       status: stringValue(data.status, "Not Yet"),
@@ -851,7 +955,7 @@ export async function loadWorkspaceOrderOptions(companyId: string): Promise<Orde
     const data = orderDocument.data();
     return {
       id: orderDocument.id,
-      customerName: stringValue(data.customerName, "Unnamed customer"),
+      customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       status: stringValue(data.status, "Not Yet"),
       paymentDate: dateValue(data.paymentDate)
@@ -881,7 +985,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
 
     return {
       id: orderDocument.id,
-      customerName: stringValue(data.customerName, "Unnamed customer"),
+      customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       status: stringValue(data.status, "Not Yet"),
       notes: stringValue(data.notes, ""),
@@ -925,6 +1029,10 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       phone: stringValue(data.phone, ""),
       instagram: stringValue(data.instagram, ""),
       address: stringValue(data.address, ""),
+      streetAddress: firstStringValue(data.streetAddress, data.addressLine1, data.street),
+      city: firstStringValue(data.city, data.town),
+      postalCode: firstStringValue(data.postalCode, data.postcode, data.zipCode, data.zip),
+      country: stringValue(data.country, ""),
       notes: stringValue(data.notes, ""),
       profileImageUrl: stringValue(data.profileImageUrl, ""),
       lastContactDate: dateValue(data.lastContactDate),
@@ -1025,9 +1133,23 @@ function idFromUnknown(value: unknown, fallback: string) {
   return fallback;
 }
 
+function collectionItemsValue(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    try {
+      return collectionItemsValue(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>);
+  }
+  return [];
+}
+
 function mapClientFiles(value: unknown): ClientFileDetail[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item, index) => {
+  return collectionItemsValue(value).map((item, index) => {
     const file = item && typeof item === "object" ? item as Record<string, unknown> : {};
     return {
       id: idFromUnknown(file.id, `file-${index}`),
@@ -1051,7 +1173,7 @@ export async function loadWorkspaceClientFiles(companyId: string, includeCloudAc
   const files = snapshot.docs.flatMap(orderDocument => {
     const data = orderDocument.data();
     const orderId = orderDocument.id;
-    const customerName = stringValue(data.customerName, "Unnamed customer");
+    const customerName = stringValue(data.customerName, "New Project");
     const designName = stringValue(data.designName, "Untitled design");
     const orderStatus = stringValue(data.status, "Not Yet");
 
@@ -1116,8 +1238,7 @@ function mapWorkSessions(value: unknown): WorkSessionDetail[] {
 }
 
 function mapHistoryLog(value: unknown): HistoryLogDetail[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item, index) => {
+  return collectionItemsValue(value).map((item, index) => {
     const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
     return {
       id: idFromUnknown(entry.id, `history-${index}`),
@@ -1160,7 +1281,9 @@ function mapOrderDetailSnapshot(
   return {
     id: snapshot.id,
     companyId: orderCompanyId,
-    customerName: stringValue(data.customerName, "Unnamed customer"),
+    assignedToUid: stringValue(data.assignedToUid, ""),
+    assignedToEmail: stringValue(data.assignedToEmail, ""),
+    customerName: stringValue(data.customerName, "New Project"),
     designName: stringValue(data.designName, "Untitled design"),
     designLink: stringValue(data.designLink, ""),
     watchRef: stringValue(data.watchRef, ""),
@@ -1245,6 +1368,7 @@ export type TeamMemberDetail = {
   displayName: string;
   photoURL: string;
   role: string;
+  effectiveRole: string;
   roleLabel: string;
   access: WorkspaceMemberAccess;
   addedAt: Date | null;
@@ -1264,27 +1388,31 @@ export type JoinRequestDetail = {
 export type TeamAccessData = {
   members: TeamMemberDetail[];
   joinRequests: JoinRequestDetail[];
+  customRoles: WorkspaceCustomRole[];
 };
 
 function mapCompanyMembers(companyData: Record<string, unknown>, companyId: string): TeamMemberDetail[] {
   const ownerUid = stringValue(companyData.ownerUid, companyId);
+  const customRoles = customRolesMap(companyData);
   const members = companyData.members && typeof companyData.members === "object"
     ? companyData.members as Record<string, unknown>
     : {};
 
   const output: TeamMemberDetail[] = Object.entries(members).map(([uid, raw]) => {
     const memberData = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-    const role = workspaceMemberRole(companyData, uid, uid === ownerUid ? "owner" : "member");
+    const role = workspaceMemberRoleValue(companyData, uid, uid === ownerUid ? "owner" : "member");
+    const effectiveRole = effectiveWorkspaceRole(companyData, role, uid === ownerUid ? "owner" : "member");
     return {
       id: uid,
       email: stringValue(memberData.email, uid === ownerUid ? stringValue(companyData.ownerEmail, "") : ""),
       displayName: stringValue(memberData.displayName, uid === ownerUid ? stringValue(companyData.ownerDisplayName, "") : ""),
       photoURL: stringValue(memberData.photoURL, uid === ownerUid ? stringValue(companyData.ownerPhotoURL, "") : ""),
       role,
-      roleLabel: roleLabel(role),
-      access: workspaceMemberAccess(companyData, uid, uid === ownerUid || normalizeWorkspaceRole(role) === "owner"),
+      effectiveRole,
+      roleLabel: customRoles[role]?.name ?? roleLabel(effectiveRole),
+      access: workspaceMemberAccess(companyData, uid, uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"),
       addedAt: dateValue(memberData.addedAt) ?? dateValue(memberData.updatedAt),
-      isOwner: uid === ownerUid || normalizeWorkspaceRole(role) === "owner"
+      isOwner: uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"
     };
   });
 
@@ -1295,6 +1423,7 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       displayName: stringValue(companyData.ownerDisplayName, "Owner"),
       photoURL: stringValue(companyData.ownerPhotoURL, ""),
       role: "owner",
+      effectiveRole: "owner",
       roleLabel: "Owner",
       access: normalizeWorkspaceMemberAccess(null, true),
       addedAt: dateValue(companyData.createdAt),
@@ -1306,8 +1435,8 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
     if (lhs.isOwner && !rhs.isOwner) return -1;
     if (!lhs.isOwner && rhs.isOwner) return 1;
     const roleRank: Record<string, number> = { owner: 0, admin: 1, member: 2, viewer: 3, workflow: 4 };
-    const lhsRank = roleRank[normalizeWorkspaceRole(lhs.role)] ?? 9;
-    const rhsRank = roleRank[normalizeWorkspaceRole(rhs.role)] ?? 9;
+    const lhsRank = roleRank[normalizeWorkspaceRole(lhs.effectiveRole)] ?? 9;
+    const rhsRank = roleRank[normalizeWorkspaceRole(rhs.effectiveRole)] ?? 9;
     if (lhsRank !== rhsRank) return lhsRank - rhsRank;
     return (lhs.displayName || lhs.email || lhs.id).localeCompare(rhs.displayName || rhs.email || rhs.id);
   });
@@ -1331,6 +1460,8 @@ export async function loadTeamAccessData(workspace: WorkspaceContext): Promise<T
   const companySnapshot = await getDoc(doc(db, "companies", workspace.id));
   const companyData = companySnapshot.exists() ? companySnapshot.data() : {};
   const members = mapCompanyMembers(companyData, workspace.id);
+  const customRoles = Object.values(customRolesMap(companyData))
+    .sort((lhs, rhs) => lhs.name.localeCompare(rhs.name));
 
   let joinRequests: JoinRequestDetail[] = [];
   if (normalizeWorkspaceRole(workspace.role) === "owner") {
@@ -1342,5 +1473,5 @@ export async function loadTeamAccessData(workspace: WorkspaceContext): Promise<T
       .sort((lhs, rhs) => (rhs.createdAt?.getTime() ?? 0) - (lhs.createdAt?.getTime() ?? 0));
   }
 
-  return { members, joinRequests };
+  return { members, joinRequests, customRoles };
 }

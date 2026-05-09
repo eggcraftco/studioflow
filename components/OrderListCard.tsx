@@ -8,6 +8,8 @@ import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/
 
 export type OrderListCardItem = {
   id: string;
+  assignedToUid?: string;
+  assignedToEmail?: string;
   customerName: string;
   designName: string;
   designStatus?: string;
@@ -20,8 +22,12 @@ export type OrderListCardItem = {
   isDelivered?: boolean;
   clientFileCount: number;
   previewImageUrl: string;
+  customFields?: Record<string, string>;
   extraStatuses?: Record<string, string>;
 };
+
+const SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1";
+const SWIFT_REFERENCE_SECONDS = 978307200;
 
 function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
   if (hidden) return hiddenMoneyLabel(moneySymbol(settings));
@@ -82,6 +88,63 @@ function dueTone(order: OrderListCardItem) {
   return "success";
 }
 
+function scheduleDateValue(value: unknown): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const unixSeconds = value > 2000000000 ? value / 1000 : value + SWIFT_REFERENCE_SECONDS;
+    const date = new Date(unixSeconds * 1000);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? scheduleDateValue(numeric) : null;
+  }
+  return null;
+}
+
+function nextScheduleItem(order: OrderListCardItem) {
+  const raw = order.customFields?.[SCHEDULE_ITEMS_CUSTOM_KEY];
+  if (!raw) return null;
+  try {
+    const decoded = JSON.parse(raw) as unknown;
+    if (!Array.isArray(decoded)) return null;
+    const active = decoded
+      .filter(item => item && typeof item === "object")
+      .map(item => {
+        const source = item as Record<string, unknown>;
+        return {
+          title: String(source.title || "Reminder"),
+          dueAt: scheduleDateValue(source.dueAt),
+          status: String(source.status || "Pending")
+        };
+      })
+      .filter(item => item.status !== "Done" && item.dueAt);
+    if (active.length === 0) return null;
+    const now = Date.now();
+    active.sort((first, second) => {
+      const firstTime = first.dueAt?.getTime() ?? 0;
+      const secondTime = second.dueAt?.getTime() ?? 0;
+      const firstOverdue = firstTime < now;
+      const secondOverdue = secondTime < now;
+      if (firstOverdue !== secondOverdue) return firstOverdue ? -1 : 1;
+      return firstTime - secondTime;
+    });
+    return active[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function scheduleTone(dueAt: Date | null | undefined) {
+  if (!dueAt) return "neutral";
+  const hours = (dueAt.getTime() - Date.now()) / (60 * 60 * 1000);
+  if (hours < 0) return "danger";
+  if (hours <= 24) return "warning";
+  return "info";
+}
+
 function statusTone(value: string) {
   const normalized = value.trim().toLowerCase();
   if (["none", "done", "completed", "delivered", "approved", "deposit paid", "shipped", "ready to ship"].includes(normalized)) return "success";
@@ -94,6 +157,25 @@ function shortStepTitle(stepName: string) {
   const cleaned = stepName.replaceAll("/", " ").replaceAll("&", " ").trim();
   const firstWord = cleaned.split(/\s+/)[0] || "ST";
   return firstWord.slice(0, 4).toUpperCase();
+}
+
+function displayOrderCustomerName(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned || ["new order", "new project", "yeni sipariş", "yeni proje"].includes(cleaned.toLowerCase())) {
+    return "New Project";
+  }
+  return cleaned;
+}
+
+function initialsForName(value: string) {
+  const cleaned = value.replace(/@.*/, "").replace(/[._-]+/g, " ").trim();
+  const initials = cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part.charAt(0).toUpperCase())
+    .join("");
+  return initials || "•";
 }
 
 function availableBadgeSteps(settings?: BlockHeadingSettings | null) {
@@ -131,7 +213,10 @@ export function OrderListCard({
   onSelect,
   mobileHref,
   blockHeadingSettings,
-  moneySettings
+  moneySettings,
+  showStatusBadges = true,
+  assigneeName = "",
+  assigneePhotoURL = ""
 }: {
   order: OrderListCardItem;
   selected: boolean;
@@ -141,14 +226,20 @@ export function OrderListCard({
   mobileHref?: string;
   blockHeadingSettings?: BlockHeadingSettings | null;
   moneySettings?: StudioMoneySettings;
+  showStatusBadges?: boolean;
+  assigneeName?: string;
+  assigneePhotoURL?: string;
 }) {
   const { hideNumbers } = usePricePrivacy();
   const firstBadgeStep = resolveBadgeStep(blockHeadingSettings, 1);
   const secondBadgeStep = resolveBadgeStep(blockHeadingSettings, 2);
+  const customerName = displayOrderCustomerName(order.customerName);
   const customerHref = order.customerName.trim()
     ? `/customers?customerName=${encodeURIComponent(order.customerName.trim())}`
     : "";
   const deliveryCountdown = shouldShowDeliveryCountdown(order) ? dueLabel(order) : "";
+  const scheduleItem = nextScheduleItem(order);
+  const assignmentLabel = assigneeName.trim() || order.assignedToEmail?.trim() || "";
   const content = (
     <div className="order-list-card-content">
       <div className="order-list-thumbnail" aria-hidden="true">
@@ -163,13 +254,13 @@ export function OrderListCard({
                 className="order-customer-name-link"
                 href={customerHref}
                 onClick={event => event.stopPropagation()}
-                title={order.customerName}
-                aria-label={`Open ${order.customerName} in Customers`}
+                title={customerName}
+                aria-label={`Open ${customerName} in Customers`}
               >
-                <strong>{order.customerName}</strong>
+                <strong>{customerName}</strong>
               </Link>
             ) : (
-              <strong title={order.customerName}>{order.customerName}</strong>
+              <strong title={customerName}>{customerName}</strong>
             )}
             {deliveryCountdown ? (
               <span className={`order-delivery-badge ${dueTone(order)}`}>
@@ -179,21 +270,39 @@ export function OrderListCard({
             ) : null}
           </div>
 
+          {assignmentLabel ? (
+            <div className="order-list-assignee" title={`Assigned to ${assignmentLabel}`}>
+              <span className="order-list-assignee-line" aria-hidden="true" />
+              <span className="order-list-assignee-avatar">
+                {assigneePhotoURL ? <img src={assigneePhotoURL} alt="" /> : initialsForName(assignmentLabel)}
+              </span>
+              <span>{`Assigned to ${assignmentLabel}`}</span>
+            </div>
+          ) : null}
+
           <div className="order-list-detail-line">
             <span aria-hidden="true">✽</span>
-            <span>{order.designName || "-"}</span>
+            <span title={order.designName || "Untitled design"}>{order.designName || "Untitled design"}</span>
           </div>
           <div className="order-list-detail-line">
             <span aria-hidden="true">▣</span>
             <span>{shortDate(order.paymentDate ?? null)}</span>
           </div>
+          {scheduleItem ? (
+            <div className={`order-list-detail-line order-list-schedule-line ${scheduleTone(scheduleItem.dueAt)}`}>
+              <span aria-hidden="true">◔</span>
+              <span title={scheduleItem.title}>{scheduleItem.title}</span>
+            </div>
+          ) : null}
         </div>
 
         <div className="order-list-side">
-          <div className="order-list-badges">
-            {firstBadgeStep ? <OrderStatusBadge stepName={firstBadgeStep} value={stepValue(order, blockHeadingSettings, firstBadgeStep)} /> : null}
-            {secondBadgeStep ? <OrderStatusBadge stepName={secondBadgeStep} value={stepValue(order, blockHeadingSettings, secondBadgeStep)} /> : null}
-          </div>
+          {showStatusBadges ? (
+            <div className="order-list-badges">
+              {firstBadgeStep ? <OrderStatusBadge stepName={firstBadgeStep} value={stepValue(order, blockHeadingSettings, firstBadgeStep)} /> : null}
+              {secondBadgeStep ? <OrderStatusBadge stepName={secondBadgeStep} value={stepValue(order, blockHeadingSettings, secondBadgeStep)} /> : null}
+            </div>
+          ) : null}
           {canSeeFinance ? (
             <strong className={order.status.trim().toLowerCase().includes("cancel") ? "order-list-amount muted" : "order-list-amount"}>
               {money(order.paidAmount, hideNumbers, moneySettings)}
@@ -231,11 +340,12 @@ export function OrderListCard({
 }
 
 function OrderStatusBadge({ stepName, value }: { stepName: string; value: string }) {
-  const tone = statusTone(value);
+  const displayValue = value.trim() || "Not Yet";
+  const tone = statusTone(displayValue);
   return (
     <span className="order-status-badge-row">
       <span className="order-status-abbrev">{shortStepTitle(stepName)}</span>
-      <span className={`order-status-value ${tone}`}>{value}</span>
+      <span className={`order-status-value ${tone}`}>{displayValue}</span>
     </span>
   );
 }
