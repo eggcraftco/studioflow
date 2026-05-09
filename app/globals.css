@@ -12,6 +12,7 @@
   --success: #34c759;
   --success-soft: rgba(52, 199, 89, 0.14);
   --warning: #ff9500;
+  --warning-rgb: 255, 149, 0;
   --warning-soft: rgba(255, 149, 0, 0.14);
   --danger: #9f2d2d;
   --danger-soft: rgba(255, 59, 48, 0.12);
@@ -57,6 +58,7 @@ body[data-studio-theme="dark"] {
   --success: #34c759;
   --success-soft: rgba(52, 199, 89, 0.16);
   --warning: #ff9500;
+  --warning-rgb: 255, 149, 0;
   --warning-soft: rgba(255, 149, 0, 0.16);
   --danger: #ff8a8a;
   --danger-soft: rgba(255, 138, 138, 0.16);
@@ -1512,8 +1514,8 @@ th {
   min-width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: rgba(245, 158, 11, 0.12);
-  color: #b7791f;
+  background: rgba(var(--warning-rgb), 0.12);
+  color: var(--warning);
   font-size: 16px;
   font-weight: 950;
   line-height: 1;
@@ -1867,9 +1869,9 @@ button.toolbar-icon-button,
 }
 
 .price-privacy-active {
-  color: #d97706;
-  background: rgba(245, 158, 11, 0.16);
-  border-color: rgba(217, 119, 6, 0.28);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb), 0.16);
+  border-color: rgba(var(--warning-rgb), 0.28);
 }
 
 .toolbar-sync-wrap {
@@ -1887,9 +1889,9 @@ button.toolbar-icon-button,
 .cloud-state-saving,
 .cloud-state-syncing,
 .cloud-state-offline {
-  color: #d97706;
-  background: rgba(245, 158, 11, 0.14);
-  border-color: rgba(217, 119, 6, 0.24);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb), 0.14);
+  border-color: rgba(var(--warning-rgb), 0.24);
 }
 
 .cloud-state-error {
@@ -2765,7 +2767,7 @@ button.toolbar-icon-button,
 .order-delivery-badge.warning {
   color: var(--warning);
   background: var(--warning-soft);
-  border: 1px solid rgba(255, 149, 0, 0.28);
+  border: 1px solid rgba(var(--warning-rgb), 0.28);
 }
 
 .order-delivery-badge.danger {
@@ -2839,7 +2841,7 @@ button.toolbar-icon-button,
 .order-status-value.warning {
   color: var(--warning);
   background: var(--warning-soft);
-  border-color: rgba(255, 149, 0, 0.22);
+  border-color: rgba(var(--warning-rgb), 0.22);
 }
 
 .order-status-value.neutral {
@@ -6452,8 +6454,8 @@ button.toolbar-icon-button,
 }
 
 .app-summary-status-badge.orange {
-  color: #ff9f0a;
-  background: rgba(255, 159, 10, 0.16);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb), 0.16);
 }
 
 .app-summary-date-block strong {
@@ -6480,7 +6482,7 @@ button.toolbar-icon-button,
 
 .app-summary-delivery.yellow,
 .app-summary-delivery.yellow svg {
-  color: #ff9500;
+  color: var(--warning);
 }
 
 .app-summary-delivery.red,
@@ -6744,8 +6746,8 @@ button.toolbar-icon-button,
 }
 
 .app-time-remaining.is-yellow {
-  background: rgba(255, 149, 0, 0.13);
-  color: #ff9500;
+  background: rgba(var(--warning-rgb), 0.13);
+  color: var(--warning);
 }
 
 .app-time-remaining.is-green {
@@ -6829,8 +6831,8 @@ button.toolbar-icon-button,
 }
 
 .app-calendar-button.is-yellow {
-  background: rgba(255, 149, 0, 0.13);
-  color: #ff9500;
+  background: rgba(var(--warning-rgb), 0.13);
+  color: var(--warning);
 }
 
 .app-calendar-button.is-gray {
@@ -7194,7 +7196,7 @@ button.toolbar-icon-button,
 }
 
 .tone-yellow {
-  color: #ff9500 !important;
+  color: var(--warning) !important;
 }
 
 .tone-gray {
@@ -7214,7 +7216,7 @@ button.toolbar-icon-button,
 }
 
 .app-soft-metric-card.tone-yellow {
-  color: #ff9500 !important;
+  color: var(--warning) !important;
 }
 
 .app-soft-metric-card.tone-gray {
@@ -7816,8 +7818,8 @@ button.toolbar-icon-button,
 }
 
 .app-todo-meta-pill.priority-high {
-  background: rgba(255, 149, 0, 0.14);
-  color: #d97706;
+  background: rgba(var(--warning-rgb), 0.14);
+  color: var(--warning);
 }
 
 .app-todo-meta-pill.priority-urgent {
@@ -7826,7 +7828,7 @@ button.toolbar-icon-button,
 }
 
 .app-todo-meta-item.due-active {
-  color: #d97706;
+  color: var(--warning);
 }
 
 .app-todo-meta-item.due-overdue {
@@ -8062,8 +8064,8 @@ button.toolbar-icon-button,
 }
 
 .app-schedule-item.tone-yellow {
-  border-color: rgba(255, 149, 0, 0.18);
-  background: rgba(255, 149, 0, 0.08);
+  border-color: rgba(var(--warning-rgb), 0.18);
+  background: rgba(var(--warning-rgb), 0.08);
 }
 
 .app-schedule-item.tone-red {
@@ -8085,7 +8087,7 @@ button.toolbar-icon-button,
 }
 
 .app-schedule-item.tone-green .app-schedule-dot { background: #34c759; }
-.app-schedule-item.tone-yellow .app-schedule-dot { background: #ff9500; }
+.app-schedule-item.tone-yellow .app-schedule-dot { background: var(--warning); }
 .app-schedule-item.tone-red .app-schedule-dot { background: #ff3b30; }
 .app-schedule-item.tone-gray .app-schedule-dot { background: #8b8f96; }
 
@@ -8137,8 +8139,8 @@ button.toolbar-icon-button,
 }
 
 .app-schedule-priority.tone-yellow {
-  background: rgba(255, 149, 0, 0.13);
-  color: #d97706;
+  background: rgba(var(--warning-rgb), 0.13);
+  color: var(--warning);
 }
 
 .app-schedule-priority.tone-red {
@@ -10125,8 +10127,8 @@ body[data-studio-theme="dark"] .app-schedule-item.tone-green {
 }
 
 body[data-studio-theme="dark"] .app-schedule-item.tone-yellow {
-  background: rgba(255, 149, 0, 0.13);
-  border-color: rgba(255, 149, 0, 0.22);
+  background: rgba(var(--warning-rgb), 0.13);
+  border-color: rgba(var(--warning-rgb), 0.22);
 }
 
 body[data-studio-theme="dark"] .app-schedule-item.tone-red {
@@ -10298,8 +10300,8 @@ body[data-studio-theme="dark"] .financial-control {
 }
 
 body[data-studio-theme="dark"] .financial-percent-control.is-vat-rate .financial-control {
-  background: rgba(255, 149, 0, 0.08);
-  border-color: rgba(255, 149, 0, 0.42);
+  background: rgba(var(--warning-rgb), 0.08);
+  border-color: rgba(var(--warning-rgb), 0.42);
 }
 
 body[data-studio-theme="dark"] .financial-segmented {
@@ -10533,8 +10535,8 @@ body[data-studio-theme="dark"] .dashboard-summary-card[data-tone="green"] .summa
 }
 
 body[data-studio-theme="dark"] .dashboard-summary-card[data-tone="orange"] .summary-icon {
-  background: rgba(255, 149, 0, 0.14);
-  color: #ffb340;
+  background: rgba(var(--warning-rgb), 0.14);
+  color: var(--warning);
 }
 
 body[data-studio-theme="dark"] .dashboard-summary-card[data-tone="red"] .summary-icon {
@@ -10813,8 +10815,8 @@ body[data-studio-theme="dark"] .schedule-order-block.green {
 }
 
 body[data-studio-theme="dark"] .schedule-order-block.yellow {
-  background: rgba(255, 149, 0, 0.16);
-  border-color: rgba(255, 149, 0, 0.44);
+  background: rgba(var(--warning-rgb), 0.16);
+  border-color: rgba(var(--warning-rgb), 0.44);
 }
 
 body[data-studio-theme="dark"] .schedule-order-block.red {
@@ -10843,8 +10845,8 @@ body[data-studio-theme="dark"] .schedule-status-badge.green {
 }
 
 body[data-studio-theme="dark"] .schedule-status-badge.yellow {
-  color: #ffb340;
-  background: rgba(255, 149, 0, 0.18);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb), 0.18);
 }
 
 body[data-studio-theme="dark"] .schedule-status-badge.red {

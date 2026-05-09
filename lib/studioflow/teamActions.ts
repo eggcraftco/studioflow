@@ -1,6 +1,13 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
-import type { JoinRequestDetail, TeamMemberDetail, WorkspaceContext, WorkspaceCustomRole, WorkspaceMemberAccess } from "@/lib/studioflow/firestore";
+import {
+  WORKSPACE_MEMBER_ACCESS_DEFAULTS,
+  type JoinRequestDetail,
+  type TeamMemberDetail,
+  type WorkspaceContext,
+  type WorkspaceCustomRole,
+  type WorkspaceMemberAccess
+} from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 
 export const WEB_TEAM_ROLES = [
@@ -36,6 +43,13 @@ function normalizeRole(role: string): string {
 function callableError(error: unknown) {
   if (error instanceof Error) return error.message;
   return "Team action failed. Please try again.";
+}
+
+function normalizeAccess(access: WorkspaceMemberAccess): WorkspaceMemberAccess {
+  return {
+    ...WORKSPACE_MEMBER_ACCESS_DEFAULTS,
+    ...access
+  };
 }
 
 async function callTeamFunction(name: string, payload: Record<string, unknown>) {
@@ -75,7 +89,7 @@ export async function addTeamMember(workspace: WorkspaceContext, input: TeamMemb
     email: input.email || "",
     displayName: input.displayName || "",
     role: normalizeRole(input.role || "member"),
-    access: input.access
+    access: input.access ? normalizeAccess(input.access) : undefined
   });
 }
 
@@ -94,7 +108,7 @@ export async function saveWorkspaceCustomRole(workspace: WorkspaceContext, role:
     roleId: role.id || "",
     name: role.name,
     baseRole: role.baseRole || "member",
-    access: role.access
+    access: normalizeAccess(role.access)
   });
 }
 
@@ -117,7 +131,7 @@ export async function updateTeamMemberAccess(workspace: WorkspaceContext, member
   return callTeamFunction("updateWorkspaceMemberAccess", {
     companyId: workspace.id,
     memberUid: member.id,
-    access
+    access: normalizeAccess(access)
   });
 }
 

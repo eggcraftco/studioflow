@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  WORKSPACE_MEMBER_ACCESS_DEFAULTS,
   WORKSPACE_MEMBER_ACCESS_OPTIONS,
   type WorkspaceMemberAccess,
   type WorkspaceMemberAccessKey
@@ -25,11 +26,18 @@ export function MemberAccessEditor({
   note,
   onChange
 }: MemberAccessEditorProps) {
+  const normalizedAccess: WorkspaceMemberAccess = {
+    ...WORKSPACE_MEMBER_ACCESS_DEFAULTS,
+    ...access
+  };
+
   function toggleAccess(key: WorkspaceMemberAccessKey) {
     if (disabled || ownerLocked) return;
+    const isAssignedScope = key === "assignedProjectsOnly";
+    const currentValue = isAssignedScope ? normalizedAccess[key] === true : normalizedAccess[key] !== false;
     onChange({
-      ...access,
-      [key]: access[key] === false
+      ...normalizedAccess,
+      [key]: !currentValue
     });
   }
 
@@ -42,7 +50,7 @@ export function MemberAccessEditor({
       <div className="member-access-grid">
         {WORKSPACE_MEMBER_ACCESS_OPTIONS.map(option => {
           const isAssignedScope = option.key === "assignedProjectsOnly";
-          const enabled = isAssignedScope ? access[option.key] === true : access[option.key] !== false;
+          const enabled = isAssignedScope ? normalizedAccess[option.key] === true : normalizedAccess[option.key] !== false;
           return (
             <button
               key={option.key}

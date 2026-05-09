@@ -28,6 +28,13 @@ function defaultAccess(): WorkspaceMemberAccess {
   return { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
 }
 
+function normalizeAccess(access?: Partial<WorkspaceMemberAccess>): WorkspaceMemberAccess {
+  return {
+    ...WORKSPACE_MEMBER_ACCESS_DEFAULTS,
+    ...(access ?? {})
+  };
+}
+
 function defaultRole(): EditableRole {
   return {
     name: "",
@@ -37,14 +44,18 @@ function defaultRole(): EditableRole {
 }
 
 function roleDescription(role: WorkspaceCustomRole) {
-  const hidden = Object.entries(role.access).filter(([, enabled]) => enabled === false).length;
+  const access = normalizeAccess(role.access);
+  const hidden = Object.entries(access).filter(([key, enabled]) => key !== "assignedProjectsOnly" && enabled === false).length;
+  const assignedScope = access.assignedProjectsOnly === true ? " · assigned projects only" : "";
   const base = WEB_TEAM_ROLES.find(option => option.value === role.baseRole)?.label ?? "Member";
-  const baseDetail = role.baseRole === "viewOnly"
+  const baseDetail = role.baseRole === "viewer"
     ? "read-only behavior"
-    : role.baseRole === "workflowOnly"
+    : role.baseRole === "workflow"
       ? "non-finance workflow behavior"
       : "member edit behavior";
-  return hidden === 0 ? `${base} with ${baseDetail}` : `${base} with ${hidden} hidden area${hidden === 1 ? "" : "s"}`;
+  return hidden === 0
+    ? `${base} with ${baseDetail}${assignedScope}`
+    : `${base} with ${hidden} hidden area${hidden === 1 ? "" : "s"}${assignedScope}`;
 }
 
 export function CustomRoleManager({ roles, disabled = false, savingKey = "", onSave, onDelete }: CustomRoleManagerProps) {
@@ -70,7 +81,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
         id: role.id,
         name: role.name,
         baseRole: role.baseRole,
-        access: { ...role.access }
+        access: normalizeAccess(role.access)
       }
     ])));
   }, [roles]);
@@ -100,10 +111,18 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
   function updateDraft(id: string, update: Partial<EditableRole>) {
     setDrafts(previous => ({
       ...previous,
-      [id]: {
-        ...(previous[id] ?? roles.find(role => role.id === id) ?? defaultRole()),
-        ...update
-      }
+      [id]: (() => {
+        const existing = previous[id] ?? roles.find(role => role.id === id) ?? defaultRole();
+        const base = {
+          ...existing,
+          access: normalizeAccess(existing.access)
+        };
+        return {
+          ...base,
+          ...update,
+          access: update.access ? normalizeAccess(update.access) : base.access
+        };
+      })()
     }));
   }
 
@@ -167,13 +186,17 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
 
       <div className="custom-role-list">
         {roles.map(role => {
-          const draft = drafts[role.id] ?? role;
+          const draft = {
+            ...(drafts[role.id] ?? role),
+            access: normalizeAccess((drafts[role.id] ?? role).access)
+          };
+          const roleAccess = normalizeAccess(role.access);
           const saveKey = `custom-role-${role.id}`;
           const deleteKey = `delete-custom-role-${role.id}`;
           const cleanDraftName = draft.name.trim();
           const hasNameConflict = roleNameExists(cleanDraftName, role.id);
           const dirty = draft.name.trim() !== role.name || draft.baseRole !== role.baseRole ||
-            Object.keys(draft.access).some(key => draft.access[key as keyof WorkspaceMemberAccess] !== role.access[key as keyof WorkspaceMemberAccess]);
+            Object.keys(WORKSPACE_MEMBER_ACCESS_DEFAULTS).some(key => draft.access[key as keyof WorkspaceMemberAccess] !== roleAccess[key as keyof WorkspaceMemberAccess]);
           const expanded = expandedRoleId === role.id;
           return (
             <article key={role.id} className={expanded ? "custom-role-card is-expanded" : "custom-role-card"}>
@@ -229,7 +252,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
                       className="button"
                       type="button"
                       disabled={!dirty || !cleanDraftName || hasNameConflict || disabled || Boolean(savingKey)}
-                      onClick={() => onSave({ ...draft, id: role.id, name: cleanDraftName })}
+                      onClick={() => onSave({ ...draft, id: role.id, name: cleanDraftName, access: normalizeAccess(draft.access) })}
                     >
                       {savingKey === saveKey ? "Saving..." : "Save role"}
                     </button>
