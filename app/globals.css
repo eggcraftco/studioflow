@@ -5454,6 +5454,36 @@ button.toolbar-icon-button,
   font-size: 12px;
 }
 
+.card-layout-lock-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(23, 25, 35, 0.08);
+  border-radius: 8px;
+  background: rgba(23, 25, 35, 0.055);
+  color: var(--muted);
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.card-layout-lock-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.card-layout-lock-button:hover {
+  border-color: rgba(37, 99, 235, 0.18);
+  color: var(--text);
+}
+
+.card-layout-lock-button.is-locked {
+  border-color: rgba(23, 25, 35, 0.14);
+}
+
 .order-actions-menu-panel {
   position: absolute;
   top: calc(100% + 8px);
@@ -5943,6 +5973,30 @@ button.toolbar-icon-button,
   height: 2px;
   border-radius: 999px;
   background: currentColor;
+}
+
+.order-card-layout-lock-handle {
+  position: absolute;
+  top: 16px;
+  left: 15px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(23, 25, 35, 0.055);
+  color: var(--muted);
+  opacity: 0.88;
+}
+
+.order-card-layout-lock-handle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.order-detail-card-frame.is-layout-locked {
+  cursor: default;
 }
 
 .order-detail-card-frame.has-drag-handle .order-detail-card > .card-title {
