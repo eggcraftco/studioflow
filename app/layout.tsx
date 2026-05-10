@@ -5,6 +5,9 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 
 const isStagingPreview = process.env.NEXT_PUBLIC_STAGING_NO_INDEX === "true";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "StudioFlow by EGGcraft",
   description: "Premium studio management for artists, custom studios and order-based creative businesses.",
