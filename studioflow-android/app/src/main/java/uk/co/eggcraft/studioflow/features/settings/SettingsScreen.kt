@@ -1,0 +1,3455 @@
+package uk.co.eggcraft.studioflow.features.settings
+
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import uk.co.eggcraft.studioflow.data.model.QuickReplyTemplateItem
+import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
+import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
+import uk.co.eggcraft.studioflow.data.model.StudioCompanyNumber
+import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
+import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
+import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
+import uk.co.eggcraft.studioflow.data.model.StudioOrder
+import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
+import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
+import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
+import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
+import uk.co.eggcraft.studioflow.features.shell.SectionHeader
+import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
+import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+
+private val StudioOrange = Color(0xFFFF9500)
+private val StudioPurple = Color(0xFFCC2FE1)
+private val DangerRed = Color(0xFFFF5A5F)
+
+@Composable
+fun SettingsScreen(
+    state: StudioFlowUiState,
+    requireDeviceUnlock: Boolean,
+    onSetRequireDeviceUnlock: (Boolean) -> Unit,
+    onSignOut: () -> Unit,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
+    onUpdateAccountProfile: (String, String) -> Unit,
+    onUploadAccountAvatar: (ByteArray, String) -> Unit,
+    onRemoveAccountAvatar: () -> Unit,
+    onUploadWorkspaceLogo: (ByteArray, String, Boolean) -> Unit,
+    onRemoveWorkspaceLogo: () -> Unit,
+    onChangeAccountEmail: (String) -> Unit,
+    onSendPasswordResetEmail: () -> Unit,
+    onRequestWorkspaceAccess: (String) -> Unit,
+    onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
+    onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
+    onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
+    onUpdateTeamMemberAccess: (StudioTeamMember, WorkspaceMemberAccess) -> Unit,
+    onRemoveTeamMember: (StudioTeamMember) -> Unit,
+    onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
+    onDeleteCustomRole: (StudioCustomRole) -> Unit,
+    onImportBackup: (String) -> Unit,
+    onDeleteWorkspaceData: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val sections = rememberSettingsSections()
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        val isWide = maxWidth >= 900.dp
+        val containerWidth = maxWidth
+        val selected = sections.firstOrNull { it.key == selectedKey } ?: if (isWide) sections.firstOrNull() else null
+
+        if (isWide) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .width(if (containerWidth >= 1200.dp) 390.dp else 340.dp)
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    SectionHeader(title = "Settings", subtitle = "Choose a section to edit.")
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+                        items(sections, key = { it.key }) { section ->
+                            SettingsRow(
+                                section = section,
+                                selected = section.key == selected?.key,
+                                onClick = { selectedKey = section.key }
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                }
+                selected?.let { section ->
+                    SettingsDetailScreen(
+                        section = section,
+                        state = state,
+                        requireDeviceUnlock = requireDeviceUnlock,
+                        onSetRequireDeviceUnlock = onSetRequireDeviceUnlock,
+                        showBack = false,
+                        onBack = { selectedKey = null },
+                        onSignOut = onSignOut,
+                        onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                        onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                        onRecalculateFinancialSettings = onRecalculateFinancialSettings,
+                        onUpdateAccountProfile = onUpdateAccountProfile,
+                        onUploadAccountAvatar = onUploadAccountAvatar,
+                        onRemoveAccountAvatar = onRemoveAccountAvatar,
+                        onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                        onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                        onChangeAccountEmail = onChangeAccountEmail,
+                        onSendPasswordResetEmail = onSendPasswordResetEmail,
+                        onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                        onApproveJoinRequest = onApproveJoinRequest,
+                        onDeclineJoinRequest = onDeclineJoinRequest,
+                        onUpdateTeamMemberRole = onUpdateTeamMemberRole,
+                        onUpdateTeamMemberAccess = onUpdateTeamMemberAccess,
+                        onRemoveTeamMember = onRemoveTeamMember,
+                        onSaveCustomRole = onSaveCustomRole,
+                        onDeleteCustomRole = onDeleteCustomRole,
+                        onImportBackup = onImportBackup,
+                        onDeleteWorkspaceData = onDeleteWorkspaceData,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            return@BoxWithConstraints
+        }
+
+        if (selected != null) {
+            SettingsDetailScreen(
+                section = selected,
+                state = state,
+                requireDeviceUnlock = requireDeviceUnlock,
+                onSetRequireDeviceUnlock = onSetRequireDeviceUnlock,
+                onBack = { selectedKey = null },
+                onSignOut = onSignOut,
+                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                onRecalculateFinancialSettings = onRecalculateFinancialSettings,
+                onUpdateAccountProfile = onUpdateAccountProfile,
+                onUploadAccountAvatar = onUploadAccountAvatar,
+                onRemoveAccountAvatar = onRemoveAccountAvatar,
+                onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                onChangeAccountEmail = onChangeAccountEmail,
+                onSendPasswordResetEmail = onSendPasswordResetEmail,
+                onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                onApproveJoinRequest = onApproveJoinRequest,
+                onDeclineJoinRequest = onDeclineJoinRequest,
+                onUpdateTeamMemberRole = onUpdateTeamMemberRole,
+                onUpdateTeamMemberAccess = onUpdateTeamMemberAccess,
+                onRemoveTeamMember = onRemoveTeamMember,
+                onSaveCustomRole = onSaveCustomRole,
+                onDeleteCustomRole = onDeleteCustomRole,
+                onImportBackup = onImportBackup,
+                onDeleteWorkspaceData = onDeleteWorkspaceData
+            )
+            return@BoxWithConstraints
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            SectionHeader(title = "Settings", subtitle = "Choose a section to edit.")
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+                items(sections, key = { it.key }) { section ->
+                    SettingsRow(section = section, onClick = { selectedKey = section.key })
+                }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberSettingsSections(): List<SettingsSection> = remember {
+    listOf(
+        SettingsSection("theme", "Theme & Branding", "Logo, theme and branding.", Icons.Filled.Palette),
+        SettingsSection("language", "Language & Labels", "Language, currency and label text.", Icons.Filled.Language),
+        SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline),
+        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description),
+        SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome),
+        SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent),
+        SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart),
+        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
+        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
+        SettingsSection("account", "Account", "Profile, company and sign-in security.", Icons.Filled.AccountCircle),
+        SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
+        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
+        SettingsSection("about", "About", "Version and ownership information.", Icons.Filled.Info)
+    )
+}
+
+@Composable
+private fun SettingsRow(section: SettingsSection, onClick: () -> Unit, selected: Boolean = false) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) StudioBlue.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            IconBubble(icon = section.icon, tint = StudioBlue, container = StudioBlue.copy(alpha = 0.12f))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(section.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text(section.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            }
+            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SettingsDetailScreen(
+    section: SettingsSection,
+    state: StudioFlowUiState,
+    requireDeviceUnlock: Boolean,
+    onSetRequireDeviceUnlock: (Boolean) -> Unit,
+    showBack: Boolean = true,
+    onBack: () -> Unit,
+    onSignOut: () -> Unit,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
+    onUpdateAccountProfile: (String, String) -> Unit,
+    onUploadAccountAvatar: (ByteArray, String) -> Unit,
+    onRemoveAccountAvatar: () -> Unit,
+    onUploadWorkspaceLogo: (ByteArray, String, Boolean) -> Unit,
+    onRemoveWorkspaceLogo: () -> Unit,
+    onChangeAccountEmail: (String) -> Unit,
+    onSendPasswordResetEmail: () -> Unit,
+    onRequestWorkspaceAccess: (String) -> Unit,
+    onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
+    onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
+    onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
+    onUpdateTeamMemberAccess: (StudioTeamMember, WorkspaceMemberAccess) -> Unit,
+    onRemoveTeamMember: (StudioTeamMember) -> Unit,
+    onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
+    onDeleteCustomRole: (StudioCustomRole) -> Unit,
+    onImportBackup: (String) -> Unit,
+    onDeleteWorkspaceData: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item { DetailTopBar(section = section, onBack = onBack, showBack = showBack) }
+        item {
+            when (section.key) {
+                "theme" -> ThemeBrandingDetail(state, onUpdateWorkspaceSettings)
+                "language" -> LanguageLabelsDetail(state, onUpdateWorkspaceSettings)
+                "workflow" -> WorkflowStepsDetail(state, onUpdateWorkspaceSettings)
+                "pdf" -> PdfExportDetail(state, onUpdateWorkspaceSettings)
+                "quickReply" -> QuickReplySettingsDetail(state, onUpdateWorkspaceSettings)
+                "financial" -> FinancialSettingsDetail(state, onUpdateWorkspaceSettings, onRecalculateFinancialSettings)
+                "woo" -> WooCommerceDetail(state)
+                "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
+                "data" -> DataManagementDetail(state, onImportBackup, onDeleteWorkspaceData)
+                "account" -> AccountDetail(
+                    state = state,
+                    requireDeviceUnlock = requireDeviceUnlock,
+                    onSetRequireDeviceUnlock = onSetRequireDeviceUnlock,
+                    onUpdateAccountProfile = onUpdateAccountProfile,
+                    onUploadAccountAvatar = onUploadAccountAvatar,
+                    onRemoveAccountAvatar = onRemoveAccountAvatar,
+                    onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                    onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                    onChangeAccountEmail = onChangeAccountEmail,
+                    onSendPasswordResetEmail = onSendPasswordResetEmail,
+                    onSignOut = onSignOut
+                )
+                "plan" -> PlanAccessDetail(state, onUpdateWorkspaceBillingPlan)
+                "team" -> TeamAccessDetail(
+                    state = state,
+                    onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                    onApproveJoinRequest = onApproveJoinRequest,
+                    onDeclineJoinRequest = onDeclineJoinRequest,
+                    onUpdateTeamMemberRole = onUpdateTeamMemberRole,
+                    onUpdateTeamMemberAccess = onUpdateTeamMemberAccess,
+                    onRemoveTeamMember = onRemoveTeamMember,
+                    onSaveCustomRole = onSaveCustomRole,
+                    onDeleteCustomRole = onDeleteCustomRole
+                )
+                "about" -> AboutDetail()
+            }
+        }
+        item {
+            StatusFooter(state)
+            Spacer(modifier = Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack: Boolean) {
+    Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (showBack) {
+                TextButton(onClick = onBack) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Settings", fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(section.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+@Composable
+private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val settings = state.workspaceSettings
+    var subtitle by rememberSaveable(settings.appSubtitle) { mutableStateOf(settings.appSubtitle) }
+    DetailColumn {
+        DetailCard(title = "Theme", icon = Icons.Filled.Palette) {
+            MenuField(
+                label = "Theme",
+                value = settings.appTheme,
+                options = listOf("System", "Light", "Dark"),
+                onSelect = { onSave(mapOf("appTheme" to it), "Theme saved.") }
+            )
+        }
+        DetailCard(title = "Theme & Branding", icon = Icons.Filled.Palette) {
+            OutlinedTextField(
+                value = subtitle,
+                onValueChange = {
+                    subtitle = it
+                    onSave(mapOf("appSubtitle" to it), "Branding saved.")
+                },
+                label = { Text("Brand Subtitle") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Text("Workspace logo is managed from Account > Workspace Logo.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    DetailColumn {
+        DetailCard(title = "Language & Labels", icon = Icons.Filled.Language) {
+            MenuField(
+                label = "Select Language",
+                value = state.workspaceSettings.selectedLanguage,
+                options = listOf("English", "Turkce", "Deutsch", "Francais", "Italiano", "Espanol", "Portugues"),
+                onSelect = { onSave(mapOf("seciliDil" to it), "Language saved.") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val settings = state.workspaceSettings
+    var statusExpanded by rememberSaveable { mutableStateOf(false) }
+    var businessPrompt by rememberSaveable(settings.businessDescriptionPrompt) { mutableStateOf(settings.businessDescriptionPrompt) }
+    val statusPool = listOf("Not Yet", "In Progress", "Pending", "Ready", "Ready to Ship", "Done", "Cancelled", "Design", "Painting", "Shipped")
+    DetailColumn {
+        DetailCard(title = "Business Type", icon = Icons.Filled.Business) {
+            MenuField(
+                label = "Select Industry",
+                value = settings.businessType,
+                options = listOf(
+                    "Custom Art Studio",
+                    "Photography Studio",
+                    "Agency / Creative Studio",
+                    "Repair Service",
+                    "Tailor / Alteration Studio",
+                    "Jewellery Studio",
+                    "Food / Bakery",
+                    "Beauty / Wellness",
+                    "Handmade / General",
+                    "Other / Prompt Based"
+                ),
+                onSelect = { onSave(mapOf("businessType" to it), "Business type saved.") }
+            )
+            Surface(shape = RoundedCornerShape(12.dp), color = StudioPurple.copy(alpha = 0.08f)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = StudioPurple)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Smart Business Description", fontWeight = FontWeight.ExtraBold)
+                        Spacer(modifier = Modifier.weight(1f))
+                        TextButton(onClick = {
+                            businessPrompt = ""
+                            onSave(mapOf("businessDescriptionPrompt" to ""), "Business description cleared.")
+                        }) { Text("Clear") }
+                    }
+                    Text("Describe what the business does, what information it needs from customers, how the work moves from enquiry to delivery, and whether materials, shipping, appointments, approvals or deposits are important.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = businessPrompt,
+                        onValueChange = {
+                            businessPrompt = it
+                            onSave(mapOf("businessDescriptionPrompt" to it), "Business description saved.")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(170.dp)
+                    )
+                    Button(
+                        onClick = { onSave(smartWorkflowTemplateUpdates(businessPrompt, settings.businessType), "Smart template applied.") },
+                        colors = ButtonDefaults.buttonColors(containerColor = StudioPurple)
+                    ) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Smart Customize", fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+            Button(onClick = { onSave(standardWorkflowTemplate(settings.businessType), "Standard template applied.") }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.Settings, contentDescription = null)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Apply Standard Template", fontWeight = FontWeight.ExtraBold)
+            }
+        }
+        DetailCard(title = "Status Menu Options", icon = Icons.Filled.CheckCircle) {
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { statusExpanded = !statusExpanded }) {
+                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(if (statusExpanded) "Hide Status Options" else "Show Status Options", fontWeight = FontWeight.ExtraBold)
+                        Text("${settings.activeStatuses.size} active statuses selected", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(if (statusExpanded) "Collapse" else "Expand", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+            if (statusExpanded) {
+                statusPool.forEach { status ->
+                    SettingSwitch(
+                        label = status,
+                        checked = settings.activeStatuses.contains(status),
+                        onCheckedChange = { checked ->
+                            val next = settings.activeStatuses.toMutableSet()
+                            if (checked) next.add(status) else next.remove(status)
+                            onSave(mapOf("activeStatusesJSON" to stringArrayJson(next.toList())), "Status options saved.")
+                        }
+                    )
+                }
+            }
+        }
+        DetailCard(title = "Production Steps", icon = Icons.Filled.Timeline) {
+            EditableNameList(
+                title = "Custom Status Menus",
+                addLabel = "Add Step",
+                values = settings.customSteps,
+                onChange = { onSave(mapOf("customStepsJSON" to titleArrayJson(it)), "Production steps saved.") }
+            )
+            HorizontalDivider()
+            EditableNameList(
+                title = "Production Toggles (Yes/No)",
+                addLabel = "Add Toggle",
+                values = settings.customToggles,
+                onChange = { onSave(mapOf("customTogglesJSON" to titleArrayJson(it)), "Production toggles saved.") }
+            )
+            SettingSwitch("Show Status Notes / Supplier", settings.showStatusNotesSupplier) {
+                onSave(mapOf("showStatusNotesSupplier" to it), "Status notes saved.")
+            }
+            OutlinedTextField(
+                value = settings.statusNotesSupplierLabel,
+                onValueChange = {
+                    onSave(mapOf("statusNotesSupplierLabel" to it), "Status notes label saved.")
+                },
+                label = { Text("Status Notes / Supplier Label") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HorizontalDivider()
+            EditableNameList(
+                title = "Custom Fields",
+                addLabel = "Add Field",
+                values = settings.customFields,
+                onChange = { onSave(mapOf("customFieldsJSON" to titleArrayJson(it)), "Custom fields saved.") }
+            )
+            HorizontalDivider()
+            Text("Communication Fields", fontWeight = FontWeight.ExtraBold)
+            TwoColumnSwitches(
+                listOf(
+                    SwitchSpec("Telephone", settings.communicationShowTelephone, "communicationShowTelephone"),
+                    SwitchSpec("Email", settings.communicationShowEmail, "communicationShowEmail"),
+                    SwitchSpec("Address", settings.communicationShowAddress, "communicationShowAddress"),
+                    SwitchSpec("Channel Buttons", settings.communicationShowChannel, "communicationShowChannel"),
+                    SwitchSpec("Customer Notes", settings.communicationShowCustomerNotes, "communicationShowCustomerNotes")
+                ),
+                onSave = { key, value -> onSave(mapOf(key to value), "Communication fields saved.") }
+            )
+            EditableNameList(
+                title = "Channel Button Names",
+                addLabel = "Add Channel",
+                values = settings.communicationChannelLabels,
+                onChange = { onSave(mapOf("communicationChannelLabelsJSON" to stringArrayJson(it)), "Channel labels saved.") }
+            )
+            HorizontalDivider()
+            EditableHeadingItemList(
+                title = "Special Note Sections",
+                addLabel = "Add Note",
+                values = settings.specialNoteSections,
+                lockedIds = setOf(STUDIO_PRIMARY_SPECIAL_NOTE_ID),
+                onChange = { onSave(specialNoteSectionUpdates(it), "Special note sections saved.") }
+            )
+            HorizontalDivider()
+            EditableQuickReminderList(
+                title = "Quick Reminder Templates",
+                values = settings.scheduleQuickReminders,
+                onChange = { onSave(scheduleQuickReminderUpdates(it), "Quick reminders saved.") }
+            )
+            HorizontalDivider()
+            EditableNameList(
+                title = "Material Default Checks",
+                addLabel = "Add Check",
+                values = settings.materialsDefaultChecks,
+                onChange = { onSave(materialDefaultCheckUpdates(it), "Material checks saved.") }
+            )
+            HorizontalDivider()
+            EditableNameList(
+                title = "Materials Extra Yes/No Checks",
+                addLabel = "Add Check",
+                values = settings.materialsToggles,
+                onChange = { onSave(mapOf("materialsTogglesJSON" to titleArrayJson(it)), "Material toggles saved.") }
+            )
+            SettingSwitch("Show Notes / Supplier", settings.showMaterialsNotesSupplier) {
+                onSave(mapOf("showMaterialsNotesSupplier" to it), "Material notes saved.")
+            }
+            OutlinedTextField(
+                value = settings.materialsNotesSupplierLabel,
+                onValueChange = { onSave(mapOf("materialsNotesSupplierLabel" to it), "Material notes label saved.") },
+                label = { Text("Notes / Supplier Label") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HorizontalDivider()
+            Text("Dashboard Highlights", fontWeight = FontWeight.ExtraBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                MenuChip(value = settings.summaryStep1, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
+                    onSave(mapOf("summaryStep1" to it), "Dashboard highlights saved.")
+                }
+                MenuChip(value = settings.summaryStep2, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
+                    onSave(mapOf("summaryStep2" to it), "Dashboard highlights saved.")
+                }
+            }
+            Text("Order List Badges", fontWeight = FontWeight.ExtraBold)
+            Text("Choose which two production statuses appear on the small order cards.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                MenuChip(value = settings.orderListStep1, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
+                    onSave(mapOf("orderListStep1" to it), "Order list badges saved.")
+                }
+                MenuChip(value = settings.orderListStep2, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
+                    onSave(mapOf("orderListStep2" to it), "Order list badges saved.")
+                }
+            }
+        }
+        DetailCard(title = "Workspace Blocks", icon = Icons.Filled.Settings) {
+            TwoColumnSwitches(
+                listOf(
+                    SwitchSpec("Preview Image", settings.showCardPreview, "showCardPreview"),
+                    SwitchSpec("Order Summary", settings.showCardSummary, "showCardSummary"),
+                    SwitchSpec("Customer & Design", settings.showCardCustomer, "showCardCustomer"),
+                    SwitchSpec("Customer Notes", settings.showCardCustomerNotes, "showCardCustomerNotes"),
+                    SwitchSpec("Delivery Date", settings.showCardDelivery, "showCardDelivery"),
+                    SwitchSpec("Priority / Risk", settings.showCardPriority, "showCardPriority"),
+                    SwitchSpec("Materials & Inventory", settings.showCardMaterials, "showCardMaterials"),
+                    SwitchSpec("Communication", settings.showCardCommunication, "showCardCommunication"),
+                    SwitchSpec("Special Notes", settings.showCardNotes, "showCardNotes"),
+                    SwitchSpec("Client Files", settings.showCardClientFiles, "showCardClientFiles"),
+                    SwitchSpec("To Do", settings.showCardTodo, "showCardTodo"),
+                    SwitchSpec("Work Time", settings.showCardWorkTime, "showCardWorkTime"),
+                    SwitchSpec("Financial Info", settings.showCardFinancial, "showCardFinancial"),
+                    SwitchSpec("Production Status", settings.showCardStatus, "showCardStatus"),
+                    SwitchSpec("Shipping & Tracking", settings.showCardShipping, "showCardShipping"),
+                    SwitchSpec("Schedule & Alerts", settings.showCardSchedule, "showCardSchedule"),
+                    SwitchSpec("History / Log", settings.showCardHistoryLog, "showCardHistoryLog")
+                ),
+                onSave = { key, value -> onSave(mapOf(key to value), "Workspace blocks saved.") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val settings = state.workspaceSettings
+    DetailColumn {
+        DetailCard(title = "PDF Export Settings", icon = Icons.Filled.Description) {
+            TwoColumnSwitches(
+                listOf(
+                    SwitchSpec("Customer & Design", settings.pdfShowCustomer, "pdfShowCustomer"),
+                    SwitchSpec("Contact & Notes", settings.pdfShowContact, "pdfShowContact"),
+                    SwitchSpec("Preview Image", settings.pdfShowPreview, "pdfShowPreview"),
+                    SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "pdfShowMaterials"),
+                    SwitchSpec("Priority / Risk", settings.pdfShowPriority, "pdfShowPriority"),
+                    SwitchSpec("Financials: Paid & Remaining", settings.pdfShowFinCustomer, "pdfShowFinCustomer"),
+                    SwitchSpec("Payment Method", settings.pdfShowPaymentMethod, "pdfShowPaymentMethod"),
+                    SwitchSpec("Internal Financials", settings.pdfShowFinInternal, "pdfShowFinInternal"),
+                    SwitchSpec("Production Status", settings.pdfShowStatus, "pdfShowStatus"),
+                    SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping")
+                ),
+                onSave = { key, value -> onSave(mapOf(key to value), "PDF settings saved.") }
+            )
+            HorizontalDivider()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Company invoice numbers", fontWeight = FontWeight.ExtraBold)
+                    Text("VAT, EORI, company number or any reference you want to show on PDF invoices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = {
+                    onSave(mapOf("companyNumbersJSON" to companyNumbersJson(settings.companyNumbers + StudioCompanyNumber("New Number", ""))), "Invoice numbers saved.")
+                }) {
+                    Icon(Icons.Filled.AddCircle, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add")
+                }
+            }
+            settings.companyNumbers.forEachIndexed { index, item ->
+                CompanyNumberRow(
+                    item = item,
+                    onChange = { nextItem ->
+                        val next = settings.companyNumbers.toMutableList().also { it[index] = nextItem }
+                        onSave(mapOf("companyNumbersJSON" to companyNumbersJson(next)), "Invoice numbers saved.")
+                    },
+                    onDelete = {
+                        val next = settings.companyNumbers.toMutableList().also { it.removeAt(index) }
+                        onSave(mapOf("companyNumbersJSON" to companyNumbersJson(next)), "Invoice numbers saved.")
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val settings = state.workspaceSettings
+    var apiKey by rememberSaveable(settings.openAIKey) { mutableStateOf(settings.openAIKey) }
+    var knowledge by rememberSaveable(settings.aiKnowledgeBase) { mutableStateOf(settings.aiKnowledgeBase) }
+    var products by remember(settings.quickReplyProducts) { mutableStateOf(settings.quickReplyProducts.ifEmpty { defaultQuickReplyProducts() }) }
+    var rules by remember(settings.quickReplyRules) { mutableStateOf(settings.quickReplyRules.ifEmpty { defaultQuickReplyRules() }) }
+    val templatesDirty = products != settings.quickReplyProducts || rules != settings.quickReplyRules
+    fun saveTemplates(message: String = "Offline template settings saved.") {
+        onSave(
+            mapOf(
+                "customProductsJSON" to quickReplyTemplatesJson(products),
+                "customRulesJSON" to quickReplyTemplatesJson(rules)
+            ),
+            message
+        )
+    }
+    DetailColumn {
+        DetailCard(title = "Quick Reply Settings", icon = Icons.Outlined.AutoAwesome) {
+            Text("Reply Engine", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            SegmentedRow(listOf("Apple On-Device", "OpenAI Online", "Offline Template"), engineLabel(settings.replyMode)) {
+                val mode = when (it) {
+                    "Apple On-Device" -> "Apple"
+                    "Offline Template" -> "Offline"
+                    else -> "AI"
+                }
+                onSave(mapOf("replyMode" to mode), "Reply engine saved.")
+            }
+            Text(engineDescription(settings.replyMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Default Reply Style", fontWeight = FontWeight.ExtraBold)
+                    Text("Politeness", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    SegmentedRow(listOf("Direct", "Warm", "Very Polite"), settings.quickReplyPoliteness) {
+                        onSave(mapOf("quickReplyPoliteness" to it), "Reply style saved.")
+                    }
+                    Text("Length", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    SegmentedRow(listOf("Short", "Balanced", "Detailed"), settings.quickReplyLength) {
+                        onSave(mapOf("quickReplyLength" to it), "Reply style saved.")
+                    }
+                    Text("These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            OutlinedTextField(
+                value = apiKey,
+                onValueChange = {
+                    apiKey = it
+                    onSave(mapOf("openAIKey" to it), "OpenAI key saved.")
+                },
+                label = { Text("OpenAI API Key") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation()
+            )
+            Text("Your API key is encrypted by Firebase transport and stored in the shared workspace settings, matching the current Apple app behavior.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(
+                value = knowledge,
+                onValueChange = {
+                    knowledge = it
+                    onSave(mapOf("aiKnowledgeBase" to it), "Knowledge base saved.")
+                },
+                label = { Text("Company Knowledge Base (For OpenAI)") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            )
+            HorizontalDivider()
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Offline Template", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "Products, services and custom rules sync with Mac, iPhone and web, then feed the offline reply engine.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Button(
+                    onClick = { saveTemplates() },
+                    enabled = templatesDirty && !state.settingsSaving,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(if (state.settingsSaving) "Saving..." else "Save", fontWeight = FontWeight.ExtraBold)
+                }
+            }
+            BoxWithConstraints {
+                val wide = maxWidth >= 720.dp
+                if (wide) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                        QuickReplyTemplateEditor(
+                            title = "Products / Services",
+                            subtitle = "Reusable products, packages, services and price notes.",
+                            addLabel = "Add Product",
+                            items = products,
+                            onItemsChange = { products = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                        QuickReplyTemplateEditor(
+                            title = "Custom Rules / FAQs",
+                            subtitle = "Delivery, payment, revision, refund or support rules.",
+                            addLabel = "Add Rule",
+                            items = rules,
+                            onItemsChange = { rules = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        QuickReplyTemplateEditor(
+                            title = "Products / Services",
+                            subtitle = "Reusable products, packages, services and price notes.",
+                            addLabel = "Add Product",
+                            items = products,
+                            onItemsChange = { products = it }
+                        )
+                        QuickReplyTemplateEditor(
+                            title = "Custom Rules / FAQs",
+                            subtitle = "Delivery, payment, revision, refund or support rules.",
+                            addLabel = "Add Rule",
+                            items = rules,
+                            onItemsChange = { rules = it }
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
+                        products = defaultQuickReplyProducts()
+                        rules = defaultQuickReplyRules()
+                    },
+                    enabled = !state.settingsSaving,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Reset Defaults", fontWeight = FontWeight.ExtraBold)
+                }
+                Button(
+                    onClick = { saveTemplates() },
+                    enabled = templatesDirty && !state.settingsSaving,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(if (state.settingsSaving) "Saving..." else "Save Templates", fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickReplyTemplateEditor(
+    title: String,
+    subtitle: String,
+    addLabel: String,
+    items: List<QuickReplyTemplateItem>,
+    onItemsChange: (List<QuickReplyTemplateItem>) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.ExtraBold)
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp)
+                }
+                TextButton(onClick = { onItemsChange(items + newQuickReplyTemplateItem(addLabel)) }) {
+                    Icon(Icons.Filled.AddCircle, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(addLabel)
+                }
+            }
+            items.ifEmpty { listOf(newQuickReplyTemplateItem(addLabel)) }.forEachIndexed { index, item ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = item.title,
+                                onValueChange = { next ->
+                                    onItemsChange(items.toMutableList().also { list ->
+                                        if (index in list.indices) list[index] = item.copy(title = next)
+                                    })
+                                },
+                                label = { Text("Title") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            IconButton(
+                                onClick = {
+                                    onItemsChange(items.toMutableList().also { list ->
+                                        if (index in list.indices) list.removeAt(index)
+                                    }.ifEmpty { listOf(newQuickReplyTemplateItem(addLabel)) })
+                                },
+                                enabled = items.size > 1
+                            ) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = "Delete",
+                                    tint = if (items.size > 1) DangerRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = item.desc,
+                            onValueChange = { next ->
+                                onItemsChange(items.toMutableList().also { list ->
+                                    if (index in list.indices) list[index] = item.copy(desc = next)
+                                })
+                            },
+                            label = { Text("Description / answer") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(96.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinancialSettingsDetail(
+    state: StudioFlowUiState,
+    onSave: (Map<String, Any?>, String) -> Unit,
+    onRecalculate: (Map<String, Any?>) -> Unit
+) {
+    val settings = state.workspaceSettings
+    var selectedCurrency by rememberSaveable(settings.selectedCurrency) { mutableStateOf(settings.selectedCurrency) }
+    var selectedDecimalSeparator by rememberSaveable(settings.selectedDecimalSeparator) { mutableStateOf(settings.selectedDecimalSeparator) }
+    var feePercentage by rememberSaveable(settings.feePercentage) { mutableStateOf(settingsNumberText(settings.feePercentage)) }
+    var taxRuleNameRevenue by rememberSaveable(settings.taxRuleNameRevenue) { mutableStateOf(settings.taxRuleNameRevenue) }
+    var taxRuleNameProfit by rememberSaveable(settings.taxRuleNameProfit) { mutableStateOf(settings.taxRuleNameProfit) }
+    var defaultTaxRate by rememberSaveable(settings.defaultTaxRate) { mutableStateOf(settingsNumberText(settings.defaultTaxRate)) }
+    var taxCalculationType by rememberSaveable(settings.taxCalculationType) { mutableStateOf(settings.taxCalculationType) }
+    var taxMilestoneEnabled by rememberSaveable(settings.taxMilestoneEnabled) { mutableStateOf(settings.taxMilestoneEnabled) }
+    var taxMilestoneDate by rememberSaveable(settings.taxMilestoneDate) { mutableStateOf(settingsDateInput(settings.taxMilestoneDate)) }
+    var financialShowBaseCost by rememberSaveable(settings.financialShowBaseCost) { mutableStateOf(settings.financialShowBaseCost) }
+    var financialBaseCostLabel by rememberSaveable(settings.financialBaseCostLabel) { mutableStateOf(settings.financialBaseCostLabel) }
+    var financialRemainingItems by remember(settings.financialRemainingItems) { mutableStateOf(normalizeHeadingItems(settings.financialRemainingItems)) }
+    var financialExpenseItems by remember(settings.financialExpenseItems) { mutableStateOf(normalizeHeadingItems(settings.financialExpenseItems)) }
+
+    fun payload(): Map<String, Any?> {
+        return mapOf(
+            "seciliParaBirimi" to selectedCurrency.ifBlank { "£" },
+            "seciliOndalik" to if (selectedDecimalSeparator == ",") "," else ".",
+            "feePercentage" to parseSettingsNumber(feePercentage, settings.feePercentage).coerceIn(0.0, 100.0),
+            "taxRuleNameRevenue" to taxRuleNameRevenue.trim().ifBlank { "Standard Tax (Services/New)" },
+            "taxRuleNameProfit" to taxRuleNameProfit.trim().ifBlank { "Margin Scheme (2nd Hand)" },
+            "defaultTaxRate" to parseSettingsNumber(defaultTaxRate, settings.defaultTaxRate).coerceIn(0.0, 100.0),
+            "taxCalculationType" to if (taxCalculationType == "Profit") "Profit" else "Revenue",
+            "taxMilestoneEnabled" to taxMilestoneEnabled,
+            "taxMilestoneDate" to settingsDateSeconds(taxMilestoneDate, settings.taxMilestoneDate),
+            "financialShowBaseCost" to financialShowBaseCost,
+            "financialBaseCostLabel" to financialBaseCostLabel.trim().ifBlank { "Cost (Base)" },
+            "financialRemainingItemsJSON" to genericHeadingItemsJson(financialRemainingItems.filter { isUsableFinancialTitle(it.title, "Pending") }),
+            "financialExpenseItemsJSON" to genericHeadingItemsJson(financialExpenseItems.filter { isUsableFinancialTitle(it.title, "Cost") })
+        )
+    }
+
+    DetailColumn {
+        DetailCard(title = "Financial Settings", icon = Icons.Filled.Percent) {
+            SettingsSectionTitle("General")
+            MenuField(
+                label = "Currency Symbol",
+                value = selectedCurrency.ifBlank { "£" },
+                options = listOf("£", "$", "€", "₺", "AED", "CAD", "AUD", "CHF", "¥"),
+                onSelect = { selectedCurrency = it }
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Decimal Separator", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                SegmentedRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    options = listOf("Dot (.)", "Comma (,)"),
+                    selected = if (selectedDecimalSeparator == ",") "Comma (,)" else "Dot (.)",
+                    onSelect = { selectedDecimalSeparator = if (it.startsWith("Comma")) "," else "." }
+                )
+            }
+            PercentTextField(
+                label = "Avg. Platform Fee (%)",
+                value = feePercentage,
+                enabled = !state.settingsSaving,
+                onValueChange = { feePercentage = cleanSettingsNumberInput(it) }
+            )
+
+            HorizontalDivider()
+            SettingsSectionTitle("Tax / VAT Settings")
+            OutlinedTextField(
+                value = taxRuleNameRevenue,
+                onValueChange = { taxRuleNameRevenue = it },
+                label = { Text("Rule 1 (Revenue)") },
+                enabled = !state.settingsSaving,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = taxRuleNameProfit,
+                onValueChange = { taxRuleNameProfit = it },
+                label = { Text("Rule 2 (Profit)") },
+                enabled = !state.settingsSaving,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            PercentTextField(
+                label = "Default Tax Rate (%)",
+                value = defaultTaxRate,
+                enabled = !state.settingsSaving,
+                onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) }
+            )
+            MenuField(
+                label = "Calculate Tax On",
+                value = if (taxCalculationType == "Profit") taxRuleNameProfit.ifBlank { "Profit" } else taxRuleNameRevenue.ifBlank { "Revenue" },
+                options = listOf(taxRuleNameRevenue.ifBlank { "Revenue" }, taxRuleNameProfit.ifBlank { "Profit" }),
+                onSelect = { selected ->
+                    taxCalculationType = if (selected == taxRuleNameProfit.ifBlank { "Profit" }) "Profit" else "Revenue"
+                }
+            )
+            SettingSwitch("Use Tax Transition Date", taxMilestoneEnabled) { taxMilestoneEnabled = it }
+            if (taxMilestoneEnabled) {
+                OutlinedTextField(
+                    value = taxMilestoneDate,
+                    onValueChange = { taxMilestoneDate = it.take(10) },
+                    label = { Text("VAT Registration Date") },
+                    placeholder = { Text("YYYY-MM-DD") },
+                    enabled = !state.settingsSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+            HorizontalDivider()
+            SettingsSectionTitle("Order Detail Finance Card")
+            SettingSwitch("Show Base Cost", financialShowBaseCost) { financialShowBaseCost = it }
+            OutlinedTextField(
+                value = financialBaseCostLabel,
+                onValueChange = { financialBaseCostLabel = it },
+                label = { Text("Base Cost Label") },
+                enabled = !state.settingsSaving,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            EditableHeadingItemList(
+                title = "Extra Remaining / Pending Rows",
+                addLabel = "Add Pending",
+                values = financialRemainingItems,
+                normalizeValues = ::normalizeHeadingItems,
+                itemLabel = "Pending row",
+                onChange = { financialRemainingItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, "Pending") } }
+            )
+            EditableHeadingItemList(
+                title = "Extra Cost Rows",
+                addLabel = "Add Cost",
+                values = financialExpenseItems,
+                normalizeValues = ::normalizeHeadingItems,
+                itemLabel = "Cost row",
+                onChange = { financialExpenseItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, "Cost") } }
+            )
+            HorizontalDivider()
+            Text(
+                "Changing the default calculation model sets the tax rule for new projects. Use recalculation when existing projects should adopt the current VAT rule, default VAT rate and platform fee.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { onSave(payload(), "Financial settings saved.") },
+                    enabled = !state.settingsSaving,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(if (state.settingsSaving) "Saving..." else "Save Financial Settings", fontWeight = FontWeight.ExtraBold)
+                }
+                Button(
+                    onClick = { onRecalculate(payload()) },
+                    enabled = !state.settingsSaving,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = StudioOrange),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Recalculate Taxes", fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionTitle(title: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(title, fontWeight = FontWeight.ExtraBold)
+        HorizontalDivider(modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun PercentTextField(label: String, value: String, enabled: Boolean, onValueChange: (String) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            suffix = { Text("%") },
+            singleLine = true,
+            modifier = Modifier.width(150.dp)
+        )
+    }
+}
+
+private fun settingsNumberText(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        String.format(Locale.UK, "%.2f", value).trimEnd('0').trimEnd('.')
+    }
+}
+
+private fun cleanSettingsNumberInput(value: String): String {
+    val filtered = value.filter { it.isDigit() || it == '.' }
+    val firstDot = filtered.indexOf('.')
+    return if (firstDot < 0) {
+        filtered.take(5)
+    } else {
+        filtered.take(firstDot + 1) + filtered.drop(firstDot + 1).filter { it != '.' }.take(2)
+    }
+}
+
+private fun parseSettingsNumber(value: String, fallback: Double): Double {
+    return value.toDoubleOrNull() ?: fallback
+}
+
+private fun settingsDateInput(seconds: Double): String {
+    val timestamp = if (seconds > 0) seconds else System.currentTimeMillis() / 1000.0
+    return SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(Date((timestamp * 1000).toLong()))
+}
+
+private fun settingsDateSeconds(value: String, fallback: Double): Double {
+    return runCatching {
+        SimpleDateFormat("yyyy-MM-dd", Locale.UK).parse(value)?.time?.div(1000.0)
+    }.getOrNull() ?: fallback.takeIf { it > 0 } ?: (System.currentTimeMillis() / 1000.0)
+}
+
+@Composable
+private fun WooCommerceDetail(state: StudioFlowUiState) {
+    val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
+    val deliveryUrl = "https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook?companyId=$companyId"
+    DetailColumn {
+        DetailCard(title = "Connect WooCommerce", icon = Icons.Filled.ShoppingCart) {
+            Text("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("This setup only needs to be done once in WooCommerce.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DetailCard(title = "Copy Setup Details", icon = Icons.Filled.ContentCopy) {
+            CopyableValue("Your Company ID", companyId, "Copy Company ID")
+            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
+        }
+        DetailCard(title = "What you need to do", icon = Icons.Filled.CheckCircle) {
+            StepRow("1", "Open WooCommerce webhooks", "In WordPress, open WooCommerce > Settings > Advanced > Webhooks.")
+            StepRow("2", "Create a new webhook", "Create a new webhook for StudioFlow orders.")
+            StepRow("3", "Set it active", "Set Status to Active and Topic to Order created.")
+            StepRow("4", "Paste the Delivery URL", "Paste the copied Delivery URL, save the webhook, then place a test order.")
+        }
+        DetailCard(title = "What happens when it is active", icon = Icons.Filled.CheckCircle) {
+            Text("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val settings = state.workspaceSettings
+    var deviceAccepted by rememberSaveable { mutableStateOf(true) }
+    DetailColumn {
+        DetailCard(title = "Safety & Uploads", icon = Icons.Filled.Shield) {
+            Text("Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in your company workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SettingSwitch("Require upload policy acceptance before upload", settings.uploadSafetyRequirePolicyAcceptance) {
+                onSave(
+                    mapOf("uploadSafetyRequirePolicyAcceptanceV1" to it, "uploadSafetyRequirePolicyAcceptance" to it),
+                    "Upload safety saved."
+                )
+            }
+            SettingSwitch("This device has accepted the upload policy", deviceAccepted) { deviceAccepted = it }
+            StepperRow(
+                label = "Maximum upload size",
+                value = settings.uploadSafetyMaxFileSizeMB,
+                suffix = "MB",
+                onMinus = {
+                    val next = (settings.uploadSafetyMaxFileSizeMB - 1).coerceAtLeast(1)
+                    onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), "Upload limit saved.")
+                },
+                onPlus = {
+                    val next = (settings.uploadSafetyMaxFileSizeMB + 1).coerceAtMost(50)
+                    onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), "Upload limit saved.")
+                }
+            )
+            Text("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(shape = RoundedCornerShape(10.dp), color = StudioGreen.copy(alpha = 0.10f)) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Security, contentDescription = null, tint = StudioGreen)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (deviceAccepted) "Upload policy is accepted on this device." else "The first upload will ask the user to accept the upload policy.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        DetailCard(title = "What users must understand", icon = Icons.Filled.Person) {
+            StepRow("1", "Only upload suitable files", "Users must only upload legal, safe and work-related files that belong in this workspace.")
+            StepRow("2", "No illegal or harmful content", "Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded.")
+            StepRow("3", "Client approval and rights", "If a file belongs to a client or third party, the user should have permission to use it for the order.")
+            StepRow("4", "Owner can remove files", "Workspace owners should remove unsuitable files and can remove users from the workspace if needed.")
+        }
+    }
+}
+
+@Composable
+private fun DataManagementDetail(
+    state: StudioFlowUiState,
+    onImportBackup: (String) -> Unit,
+    onDeleteWorkspaceData: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            if (text.isNullOrBlank()) {
+                Toast.makeText(context, "Backup file could not be read.", Toast.LENGTH_SHORT).show()
+            } else {
+                onImportBackup(text)
+            }
+        }
+    }
+
+    DetailColumn {
+        DetailCard(title = "Data Management", icon = Icons.Filled.Storage) {
+            Text("Create a backup before importing or deleting data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ActionButton("Export Backup", Icons.Filled.Backup, StudioBlue) {
+                shareText(context, "StudioManager_Backup.json", backupJson(state.orders, state.workspaceSettings))
+            }
+            ActionButton("Export CSV", Icons.Filled.TableChart, StudioBlue) {
+                shareText(context, "Orders_Export.csv", ordersCsv(state.orders))
+            }
+            ActionButton("Import Backup", Icons.Filled.Upload, StudioGreen) {
+                importLauncher.launch("application/json")
+            }
+            Text("Import will add the backup into the current workspace. It will not clear existing orders automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider()
+            ActionButton("Delete Data", Icons.Filled.Delete, DangerRed) { confirmDelete = true }
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete all data?") },
+            text = { Text("All orders and customers in this workspace will be permanently deleted. Export a backup first if you are unsure.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmDelete = false
+                        onDeleteWorkspaceData()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
+                ) { Text("Yes, Delete All") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun AccountDetail(
+    state: StudioFlowUiState,
+    requireDeviceUnlock: Boolean,
+    onSetRequireDeviceUnlock: (Boolean) -> Unit,
+    onUpdateAccountProfile: (String, String) -> Unit,
+    onUploadAccountAvatar: (ByteArray, String) -> Unit,
+    onRemoveAccountAvatar: () -> Unit,
+    onUploadWorkspaceLogo: (ByteArray, String, Boolean) -> Unit,
+    onRemoveWorkspaceLogo: () -> Unit,
+    onChangeAccountEmail: (String) -> Unit,
+    onSendPasswordResetEmail: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val workspace = state.workspace
+    val user = state.user
+    val settings = state.workspaceSettings
+    var displayName by rememberSaveable(workspace?.accountDisplayName) { mutableStateOf(workspace?.accountDisplayName.orEmpty()) }
+    var companyName by rememberSaveable(workspace?.name) { mutableStateOf(workspace?.name ?: "EGGcraft") }
+    var emailDraft by rememberSaveable(user?.email) { mutableStateOf(user?.email.orEmpty()) }
+    var pendingLogo by remember { mutableStateOf<PickedUpload?>(null) }
+    var logoPolicyAccepted by rememberSaveable(workspace?.id) { mutableStateOf(!settings.uploadSafetyRequirePolicyAcceptance) }
+    val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val upload = readPickedUpload(context, uri)
+            if (upload == null) {
+                Toast.makeText(context, "Selected image could not be read.", Toast.LENGTH_SHORT).show()
+            } else {
+                onUploadAccountAvatar(upload.bytes, upload.contentType)
+            }
+        }
+    }
+    val logoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val upload = readPickedUpload(context, uri)
+            if (upload == null) {
+                Toast.makeText(context, "Selected logo could not be read.", Toast.LENGTH_SHORT).show()
+            } else if (settings.uploadSafetyRequirePolicyAcceptance && !logoPolicyAccepted) {
+                pendingLogo = upload
+            } else {
+                onUploadWorkspaceLogo(upload.bytes, upload.contentType, logoPolicyAccepted || !settings.uploadSafetyRequirePolicyAcceptance)
+            }
+        }
+    }
+    val accountPhotoSet = workspace?.accountPhotoUrl.orEmpty().isNotBlank()
+    val logoSet = settings.appLogoUrl.isNotBlank()
+    val canEditLogo = workspace?.role in setOf("owner", "admin")
+
+    DetailColumn {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 64)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text("Account", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Manage your StudioFlow profile, company details and sign-in security.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        DetailCard(title = "Profile & Company", icon = Icons.Filled.Business) {
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 86)
+                    Text("Profile Photo", fontWeight = FontWeight.ExtraBold)
+                    Text("Your profile photo is shown to team members in this workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(onClick = { avatarLauncher.launch("image/*") }, enabled = !state.settingsSaving) {
+                            Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (accountPhotoSet) "Change Avatar" else "Upload Avatar")
+                        }
+                        if (accountPhotoSet) {
+                            TextButton(onClick = onRemoveAccountAvatar, enabled = !state.settingsSaving) {
+                                Icon(Icons.Filled.Delete, contentDescription = null, tint = DangerRed)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Remove Avatar", color = DangerRed)
+                            }
+                        }
+                    }
+                    Text(if (accountPhotoSet) "Avatar is saved for this workspace account." else "Choose a JPG, PNG, HEIC, HEIF or WEBP image for your account avatar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = {}, enabled = false) {
+                        Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Use Google Photo")
+                    }
+                }
+            }
+            OutlinedTextField(value = emailDraft, onValueChange = { emailDraft = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            TextButton(onClick = { onChangeAccountEmail(emailDraft) }, enabled = emailDraft.trim().lowercase() != user?.email.orEmpty().trim().lowercase()) {
+                Icon(Icons.Filled.Email, contentDescription = null)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Change Email")
+            }
+            Text("After changing your sign-in email, you can change it again after 10 days.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Your Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text("Company / Studio Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+            CopyableValue("User ID", user?.uid.orEmpty(), "Copy")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = { onUpdateAccountProfile(displayName, companyName) }) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Save Profile")
+                }
+                TextButton(onClick = {
+                    displayName = workspace?.accountDisplayName.orEmpty()
+                    companyName = workspace?.name ?: "EGGcraft"
+                }) { Text("Reset") }
+            }
+        }
+        DetailCard(title = "Workspace Logo", icon = Icons.Filled.PhotoLibrary) {
+            Text("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Text("EGGcraft", modifier = Modifier.padding(22.dp), color = Color(0xFFB98224), fontFamily = FontFamily.Serif, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+            Text("Workspace Logo", fontWeight = FontWeight.ExtraBold)
+            Text(if (logoSet) "This logo is used in the app header on Mac, iPad, iPhone and Android." else "No logo uploaded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = { logoLauncher.launch("image/*") }, enabled = !state.settingsSaving && canEditLogo) {
+                    Icon(Icons.Filled.Upload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (logoSet) "Replace Logo" else "Upload Logo")
+                }
+                if (logoSet) {
+                    TextButton(onClick = onRemoveWorkspaceLogo, enabled = !state.settingsSaving && canEditLogo) {
+                        Icon(Icons.Filled.Delete, contentDescription = null, tint = DangerRed)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Remove Logo", color = DangerRed)
+                    }
+                }
+            }
+            if (!canEditLogo) {
+                Text("Your current workspace role cannot edit Workspace Logo.", color = DangerRed, fontWeight = FontWeight.Bold)
+            }
+            Text("Logo uploads use the same upload safety rules and plan checks as the web and Apple apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DetailCard(title = "Security", icon = Icons.Filled.Lock) {
+            SecurityStatusPanel(requireDeviceUnlock)
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingSwitch("Require Face ID / device passcode on app launch", requireDeviceUnlock, onSetRequireDeviceUnlock)
+                    Text("When enabled, StudioFlow asks for fingerprint, face unlock or your Android screen lock whenever the app opens with an existing session.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("This preference is saved locally on this Android device, matching the Apple app's per-device unlock setting.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Text("Password changes are handled securely by Firebase. We send a reset link to your account email instead of storing or editing your password inside the app.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (maxWidth >= 520.dp) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = onSendPasswordResetEmail, enabled = !state.settingsSaving, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.Email, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Send Password Reset Email", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        TextButton(onClick = onSignOut, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.Logout, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sign Out", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onSendPasswordResetEmail, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Filled.Email, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Send Password Reset Email")
+                        }
+                        TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Filled.Logout, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sign Out")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (pendingLogo != null) {
+        AlertDialog(
+            onDismissRequest = { pendingLogo = null },
+            title = { Text("Upload Policy") },
+            text = { Text("Only upload legal, safe and work-related images that belong in this workspace.") },
+            confirmButton = {
+                Button(onClick = {
+                    val upload = pendingLogo ?: return@Button
+                    pendingLogo = null
+                    logoPolicyAccepted = true
+                    onUploadWorkspaceLogo(upload.bytes, upload.contentType, true)
+                }) { Text("I Agree and Upload") }
+            },
+            dismissButton = { TextButton(onClick = { pendingLogo = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun PlanAccessDetail(
+    state: StudioFlowUiState,
+    onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit
+) {
+    val workspace = state.workspace
+    val plan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
+    DetailColumn {
+        DetailCard(title = "Plan & Access", icon = Icons.Filled.CreditCard) {
+            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconBubble(icon = Icons.Filled.People, tint = StudioPurple, container = StudioPurple.copy(alpha = 0.12f), size = 58.dp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(plan.title, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(if (plan == StudioBillingPlan.TeamMonthly) "Monthly Subscription" else "Workspace plan", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MiniPill(planOrderLimitText(plan), Icons.Filled.Backup)
+                            MiniPill(planStorageLimitText(plan), Icons.Filled.Storage)
+                            MiniPill("Up to ${plan.teamMemberLimit}", Icons.Filled.People)
+                        }
+                    }
+                }
+            }
+            StoreProductCard("StudioFlow Lite", "uk.co.eggcraft.studioflow.lite.lifetime", "Buy once")
+            StoreProductCard("StudioFlow Pro", "uk.co.eggcraft.studioflow.pro.monthly", "Subscribe")
+            StoreProductCard("StudioFlow Team", "uk.co.eggcraft.studioflow.team.monthly", "Subscribe")
+        }
+        DetailCard(title = "Available now", icon = Icons.Filled.CheckCircle) {
+            Text("Current plan access", fontWeight = FontWeight.ExtraBold)
+            PlanFeatureGrid(plan = plan)
+        }
+        DetailCard(title = "Plan Matrix", icon = Icons.Filled.TableChart) {
+            Text("Shared app and web plan keys", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val columns = if (maxWidth >= 760.dp) 2 else 1
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (columns == 1) 720.dp else 390.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    userScrollEnabled = false
+                ) {
+                    items(StudioBillingPlan.entries.toList()) { item ->
+                        PlanComparisonCard(plan = item, current = item == plan)
+                    }
+                }
+            }
+        }
+        DetailCard(title = "Owner testing controls", icon = Icons.Filled.Security) {
+            if (workspace?.isOwner == true) {
+                Text("Temporary manual plan switch", fontWeight = FontWeight.ExtraBold)
+                Text("Plan comparison is shown for testing now. StoreKit and Google Play purchases will replace manual switching later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val columns = if (maxWidth >= 700.dp) 2 else 1
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(if (columns == 1) 290.dp else 150.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        userScrollEnabled = false
+                    ) {
+                        items(StudioBillingPlan.entries.toList()) { item ->
+                            OwnerTestingPlanButton(
+                                plan = item,
+                                active = item == plan,
+                                saving = state.settingsSaving,
+                                onClick = { onUpdateWorkspaceBillingPlan(item) }
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("Only the workspace owner can manage the plan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeamAccessDetail(
+    state: StudioFlowUiState,
+    onRequestWorkspaceAccess: (String) -> Unit,
+    onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
+    onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
+    onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
+    onUpdateTeamMemberAccess: (StudioTeamMember, WorkspaceMemberAccess) -> Unit,
+    onRemoveTeamMember: (StudioTeamMember) -> Unit,
+    onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
+    onDeleteCustomRole: (StudioCustomRole) -> Unit
+) {
+    val workspace = state.workspace
+    var requestIdentifier by rememberSaveable { mutableStateOf("") }
+    var requestRoles by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var editingMemberId by rememberSaveable { mutableStateOf("") }
+    var customRoleId by rememberSaveable { mutableStateOf("") }
+    var customRoleName by rememberSaveable { mutableStateOf("") }
+    var customRoleBase by rememberSaveable { mutableStateOf("member") }
+    var customRoleAccess by remember { mutableStateOf(WorkspaceMemberAccess()) }
+    val ownerCanManage = workspace?.isOwner == true
+    val roleOptions = remember(state.customRoles) { teamRoleOptions(state.customRoles) }
+    DetailColumn {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconBubble(icon = Icons.Filled.People, tint = StudioBlue, container = StudioBlue.copy(alpha = 0.12f), size = 64.dp)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text("Team Access", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Manage workspace members, roles and join requests.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val useTwoColumns = maxWidth >= 720.dp
+            if (useTwoColumns) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        DetailCard(title = "Current Workspace", icon = Icons.Filled.People) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioOrange)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(workspace?.name ?: "EGGcraft", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Pill(workspace?.roleLabel ?: "Owner", StudioOrange)
+                                        Text(if (workspace?.isOwner == true) "You own this workspace" else "Shared with you", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                            CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+                        }
+                        DetailCard(title = "Request Access", icon = Icons.Filled.Send) {
+                            Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = requestIdentifier,
+                                    onValueChange = { requestIdentifier = it },
+                                    placeholder = { Text("Owner email or Company ID") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                TextButton(onClick = {
+                                    onRequestWorkspaceAccess(requestIdentifier)
+                                    requestIdentifier = ""
+                                }) {
+                                    Icon(Icons.Filled.Send, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Send")
+                                }
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        DetailCard(title = "Workspaces", icon = Icons.Filled.People) {
+                            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(workspace?.name ?: "EGGcraft", fontWeight = FontWeight.ExtraBold)
+                                        Text(workspace?.roleLabel ?: "Owner", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Pill("Current", StudioGreen)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Pill("Connected", MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Advanced: connect with Company ID", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                            }
+                        }
+                        DetailCard(title = "Invite People", icon = Icons.Filled.ContentCopy) {
+                            Text("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+                        }
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                    DetailCard(title = "Current Workspace", icon = Icons.Filled.People) {
+                        Text(workspace?.name ?: "EGGcraft", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Pill(workspace?.roleLabel ?: "Owner", StudioOrange)
+                            Text(if (workspace?.isOwner == true) "You own this workspace" else "Shared with you", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+                    }
+                    DetailCard(title = "Workspaces", icon = Icons.Filled.People) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(workspace?.name ?: "EGGcraft", fontWeight = FontWeight.ExtraBold)
+                                Text(workspace?.roleLabel ?: "Owner", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Pill("Current", StudioGreen)
+                        }
+                        Text("Advanced: connect with Company ID", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                    }
+                    DetailCard(title = "Request Access", icon = Icons.Filled.Send) {
+                        Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = requestIdentifier,
+                                onValueChange = { requestIdentifier = it },
+                                placeholder = { Text("Owner email or Company ID") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            TextButton(onClick = {
+                                onRequestWorkspaceAccess(requestIdentifier)
+                                requestIdentifier = ""
+                            }) {
+                                Icon(Icons.Filled.Send, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Send")
+                            }
+                        }
+                    }
+                    DetailCard(title = "Invite People", icon = Icons.Filled.ContentCopy) {
+                        Text("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+                    }
+                }
+            }
+        }
+        if (ownerCanManage) {
+            DetailCard(title = "Join Requests", icon = Icons.Filled.Person) {
+                if (state.joinRequests.isEmpty()) {
+                    Text("No pending join requests.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    state.joinRequests.forEach { request ->
+                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Avatar(initials(request.label), size = 42)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(request.label, fontWeight = FontWeight.ExtraBold)
+                                        Text(request.requesterEmail.ifBlank { request.requesterUid }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Pill("Pending", StudioOrange)
+                                }
+                                val selectedRole = requestRoles[request.id] ?: "member"
+                                RoleDropdown(
+                                    label = "Approve as",
+                                    selectedRole = selectedRole,
+                                    options = roleOptions.filter { it.value != "owner" },
+                                    onSelect = { role -> requestRoles = requestRoles + (request.id to role) }
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                    Button(
+                                        onClick = { onApproveJoinRequest(request, selectedRole) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Approve", fontWeight = FontWeight.ExtraBold)
+                                    }
+                                    TextButton(
+                                        onClick = { onDeclineJoinRequest(request) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Decline", color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            DetailCard(title = "Role Profiles", icon = Icons.Filled.Security) {
+                Text("Custom Access Roles", fontWeight = FontWeight.ExtraBold)
+                Text("Create role presets that use the same permission keys as Mac and web.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = customRoleName,
+                            onValueChange = { customRoleName = it },
+                            label = { Text("Role name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        RoleDropdown(
+                            label = "Base role",
+                            selectedRole = customRoleBase,
+                            options = listOf(RoleOption("member", "Member"), RoleOption("viewer", "View Only"), RoleOption("workflow", "Workflow Only")),
+                            onSelect = { customRoleBase = it }
+                        )
+                        AccessEditor(access = customRoleAccess, onChange = { customRoleAccess = it })
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = {
+                                    onSaveCustomRole(customRoleId, customRoleName, customRoleBase, customRoleAccess)
+                                    customRoleId = ""
+                                    customRoleName = ""
+                                    customRoleBase = "member"
+                                    customRoleAccess = WorkspaceMemberAccess()
+                                },
+                                enabled = customRoleName.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(if (customRoleId.isBlank()) "Save Role" else "Update Role", fontWeight = FontWeight.ExtraBold)
+                            }
+                            TextButton(
+                                onClick = {
+                                    customRoleId = ""
+                                    customRoleName = ""
+                                    customRoleBase = "member"
+                                    customRoleAccess = WorkspaceMemberAccess()
+                                },
+                                modifier = Modifier.weight(0.7f)
+                            ) {
+                                Text("Reset", fontWeight = FontWeight.ExtraBold)
+                            }
+                        }
+                    }
+                }
+                if (state.customRoles.isEmpty()) {
+                    Text("No custom roles yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    state.customRoles.forEach { role ->
+                        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(role.name, fontWeight = FontWeight.ExtraBold)
+                                    Text(roleLabelText(role.baseRole), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                TextButton(onClick = {
+                                    customRoleId = role.id
+                                    customRoleName = role.name
+                                    customRoleBase = role.baseRole
+                                    customRoleAccess = role.access
+                                }) {
+                                    Text("Edit", fontWeight = FontWeight.ExtraBold)
+                                }
+                                TextButton(onClick = { onDeleteCustomRole(role) }) {
+                                    Text("Delete", color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (state.teamMembers.isNotEmpty()) {
+            DetailCard(title = "Team Members", icon = Icons.Filled.People) {
+                state.teamMembers.forEach { member ->
+                    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Avatar(initials(member.label), size = 42)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(member.label, fontWeight = FontWeight.ExtraBold)
+                                    Text(member.email.ifBlank { member.id }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Pill(if (member.isOwner) "Owner" else member.roleLabel, if (member.isOwner) StudioOrange else StudioBlue)
+                            }
+                            if (ownerCanManage && !member.isOwner) {
+                                RoleDropdown(
+                                    label = "Role",
+                                    selectedRole = member.role,
+                                    options = roleOptions.filter { it.value != "owner" },
+                                    onSelect = { onUpdateTeamMemberRole(member, it) }
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                    TextButton(
+                                        onClick = { editingMemberId = if (editingMemberId == member.id) "" else member.id },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(if (editingMemberId == member.id) "Hide Permissions" else "Permissions", fontWeight = FontWeight.ExtraBold)
+                                    }
+                                    TextButton(
+                                        onClick = { onRemoveTeamMember(member) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Remove", color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                                    }
+                                }
+                                if (editingMemberId == member.id) {
+                                    MemberAccessPanel(member = member, onSave = { access -> onUpdateTeamMemberAccess(member, access) })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DetailCard(title = "Current role mix", icon = Icons.Filled.People) {
+            Text("Role counts", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            RoleMix(state)
+        }
+    }
+}
+
+private data class RoleOption(val value: String, val label: String)
+
+private data class AccessOption(val key: String, val label: String)
+
+private fun teamRoleOptions(customRoles: List<StudioCustomRole>): List<RoleOption> {
+    return listOf(
+        RoleOption("admin", "Admin"),
+        RoleOption("member", "Member"),
+        RoleOption("viewer", "View Only"),
+        RoleOption("workflow", "Workflow Only")
+    ) + customRoles.map { RoleOption(it.id, it.name) }
+}
+
+private fun roleLabelText(role: String): String {
+    return when (role.trim().lowercase()) {
+        "owner" -> "Owner"
+        "admin" -> "Admin"
+        "viewer" -> "View Only"
+        "workflow" -> "Workflow Only"
+        else -> if (role.startsWith("custom_")) "Custom role" else "Member"
+    }
+}
+
+@Composable
+private fun RoleDropdown(label: String, selectedRole: String, options: List<RoleOption>, onSelect: (String) -> Unit) {
+    val selectedLabel = options.firstOrNull { it.value == selectedRole }?.label ?: roleLabelText(selectedRole)
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+        MenuChip(
+            value = selectedLabel,
+            options = options.map { it.label },
+            onSelect = { selectedLabelValue ->
+                options.firstOrNull { it.label == selectedLabelValue }?.let { onSelect(it.value) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun MemberAccessPanel(member: StudioTeamMember, onSave: (WorkspaceMemberAccess) -> Unit) {
+    var draft by remember(member.id, member.access) { mutableStateOf(member.access) }
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Role Permissions", fontWeight = FontWeight.ExtraBold)
+            AccessEditor(access = draft, onChange = { draft = it })
+            Button(onClick = { onSave(draft) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                Text("Save Permissions", fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemberAccess) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AccessSectionBlock(
+            title = "Navigation & Menus",
+            note = "Controls main app areas shown in sidebar and settings.",
+            options = listOf(
+                AccessOption("dashboard", "Dashboard"),
+                AccessOption("orders", "Orders"),
+                AccessOption("schedule", "Schedule"),
+                AccessOption("customers", "Customers"),
+                AccessOption("quickReply", "Quick Reply"),
+                AccessOption("settings", "Settings"),
+                AccessOption("teamAccess", "Team Access"),
+                AccessOption("clientFiles", "Client Files"),
+                AccessOption("financialInfo", "Financial Info"),
+                AccessOption("exportData", "Export Data")
+            ),
+            access = access,
+            accent = StudioBlue,
+            onChange = onChange
+        )
+        HorizontalDivider()
+        AccessSectionBlock(
+            title = "Project Assignment",
+            note = "Controls assigned-project scope and reassignment power.",
+            options = listOf(
+                AccessOption("assignedProjectsOnly", "Assigned Projects Only"),
+                AccessOption("manageProjectAssignments", "Change Project Assignments")
+            ),
+            access = access,
+            accent = StudioPurple,
+            onChange = onChange
+        )
+        HorizontalDivider()
+        AccessSectionBlock(
+            title = "Order Detail Cards",
+            note = "Controls which cards are visible inside each project.",
+            options = listOf(
+                AccessOption("cardPreview", "Preview"),
+                AccessOption("cardSummary", "Order Summary"),
+                AccessOption("cardCustomer", "Customer & Communication"),
+                AccessOption("cardMaterials", "Materials & Inventory"),
+                AccessOption("cardPriority", "Priority / Risk"),
+                AccessOption("cardDelivery", "Timeline & Delivery"),
+                AccessOption("cardNotes", "Notes"),
+                AccessOption("cardClientFiles", "Client Files"),
+                AccessOption("cardTodo", "To Do"),
+                AccessOption("cardWorkTime", "Work Time"),
+                AccessOption("cardFinancial", "Financial Info"),
+                AccessOption("cardStatus", "Production Status"),
+                AccessOption("cardShipping", "Shipping & Tracking"),
+                AccessOption("cardSchedule", "Schedule & Alerts"),
+                AccessOption("cardHistoryLog", "History / Log")
+            ),
+            access = access,
+            accent = StudioOrange,
+            onChange = onChange
+        )
+    }
+}
+
+@Composable
+private fun AccessSectionBlock(
+    title: String,
+    note: String,
+    options: List<AccessOption>,
+    access: WorkspaceMemberAccess,
+    accent: Color,
+    onChange: (WorkspaceMemberAccess) -> Unit
+) {
+    val enabledCount = options.count { access.allows(it.key) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.ExtraBold)
+                Text(note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+            Text("$enabledCount / ${options.size}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val columns = when {
+                maxWidth >= 620.dp -> 3
+                maxWidth >= 420.dp -> 2
+                else -> 1
+            }
+            val rows = (options.size + columns - 1) / columns
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                modifier = Modifier.height((rows * 66 + (rows - 1) * 8).dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                userScrollEnabled = false
+            ) {
+                items(options, key = { it.key }) { option ->
+                    val enabled = access.allows(option.key)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (enabled) accent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                        tonalElevation = if (enabled) 1.dp else 0.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (enabled) accent.copy(alpha = 0.32f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
+                        onClick = { onChange(access.copyWithKey(option.key, !enabled)) }
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (enabled) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(option.label, color = if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(accessOptionDetail(option.key, enabled), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun accessOptionDetail(key: String, enabled: Boolean): String {
+    return when {
+        key == "assignedProjectsOnly" && enabled -> "Only assigned projects"
+        key == "assignedProjectsOnly" -> "All projects"
+        key == "manageProjectAssignments" && enabled -> "Can assign projects"
+        key == "manageProjectAssignments" -> "Assign hidden"
+        key.startsWith("card") && enabled -> "Visible"
+        key.startsWith("card") -> "Hidden"
+        enabled -> "Allowed"
+        else -> "Hidden / locked"
+    }
+}
+
+private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): WorkspaceMemberAccess {
+    return when (key) {
+        "orders" -> copy(orders = value)
+        "dashboard" -> copy(dashboard = value)
+        "schedule" -> copy(schedule = value)
+        "customers" -> copy(customers = value)
+        "quickReply" -> copy(quickReply = value)
+        "settings" -> copy(settings = value)
+        "teamAccess" -> copy(teamAccess = value)
+        "clientFiles" -> copy(clientFiles = value)
+        "financialInfo" -> copy(financialInfo = value)
+        "exportData" -> copy(exportData = value)
+        "assignedProjectsOnly" -> copy(assignedProjectsOnly = value)
+        "manageProjectAssignments" -> copy(manageProjectAssignments = value)
+        "cardPreview" -> copy(cardPreview = value)
+        "cardSummary" -> copy(cardSummary = value)
+        "cardCustomer" -> copy(cardCustomer = value)
+        "cardMaterials" -> copy(cardMaterials = value)
+        "cardPriority" -> copy(cardPriority = value)
+        "cardDelivery" -> copy(cardDelivery = value)
+        "cardNotes" -> copy(cardNotes = value)
+        "cardClientFiles" -> copy(cardClientFiles = value)
+        "cardTodo" -> copy(cardTodo = value)
+        "cardWorkTime" -> copy(cardWorkTime = value)
+        "cardFinancial" -> copy(cardFinancial = value)
+        "cardStatus" -> copy(cardStatus = value)
+        "cardShipping" -> copy(cardShipping = value)
+        "cardSchedule" -> copy(cardSchedule = value)
+        "cardHistoryLog" -> copy(cardHistoryLog = value)
+        else -> this
+    }
+}
+
+@Composable
+private fun AboutDetail() {
+    DetailColumn {
+        DetailCard(title = "About", icon = Icons.Filled.Info) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(StudioOrange, RoundedCornerShape(18.dp))
+            )
+            Text("Studio Manager", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Version 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider()
+            Text("(c) 2026 All rights reserved.", fontWeight = FontWeight.ExtraBold)
+            Text("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun DetailColumn(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun DetailCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SecurityStatusPanel(requireDeviceUnlock: Boolean) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = if (requireDeviceUnlock) Color(0xFFEAF7EF) else Color(0xFFFFF4E8)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            IconBubble(
+                icon = Icons.Filled.Shield,
+                tint = if (requireDeviceUnlock) StudioGreen else StudioOrange,
+                container = if (requireDeviceUnlock) Color(0xFFDDF5E5) else Color(0xFFFFE8C7),
+                size = 44.dp
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (requireDeviceUnlock) "Device unlock is active" else "Device unlock is off",
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    if (requireDeviceUnlock) {
+                        "StudioFlow will lock again after the app leaves the foreground and reopens with this session."
+                    } else {
+                        "This Android device will keep the current session open until you sign out."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IconBubble(icon: ImageVector, tint: Color, container: Color, size: androidx.compose.ui.unit.Dp = 50.dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(container, RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = tint)
+    }
+}
+
+@Composable
+private fun MenuField(label: String, value: String, options: List<String>, onSelect: (String) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+        MenuChip(value = value, options = options, onSelect = onSelect)
+    }
+}
+
+@Composable
+private fun MenuChip(value: String, options: List<String>, modifier: Modifier = Modifier, onSelect: (String) -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { open = true }) {
+            Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(value, color = StudioBlue, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option, fontWeight = if (option == value) FontWeight.ExtraBold else FontWeight.Normal) },
+                    onClick = {
+                        open = false
+                        onSelect(option)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun TwoColumnSwitches(specs: List<SwitchSpec>, onSave: (String, Boolean) -> Unit) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.height(((specs.size + 1) / 2 * 74).dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        userScrollEnabled = false
+    ) {
+        items(specs, key = { it.key }) { spec ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(spec.label, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, lineHeight = 18.sp)
+                Switch(checked = spec.checked, onCheckedChange = { onSave(spec.key, it) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableNameList(title: String, addLabel: String, values: List<String>, onChange: (List<String>) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
+        TextButton(onClick = { onChange(values + newEditableName(addLabel)) }) {
+            Icon(Icons.Filled.AddCircle, contentDescription = null)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(addLabel)
+        }
+    }
+    values.forEachIndexed { index, value ->
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { nextValue ->
+                    val next = values.toMutableList().also { it[index] = nextValue }
+                    onChange(next)
+                },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            IconButton(onClick = {
+                val next = values.toMutableList().also { it.removeAt(index) }
+                onChange(next)
+            }) {
+                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = DangerRed)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableHeadingItemList(
+    title: String,
+    addLabel: String,
+    values: List<StudioHeadingItem>,
+    lockedIds: Set<String> = emptySet(),
+    normalizeValues: (List<StudioHeadingItem>) -> List<StudioHeadingItem> = ::normalizeSpecialNoteSections,
+    itemLabel: String = "Note section",
+    onChange: (List<StudioHeadingItem>) -> Unit
+) {
+    val normalizedValues = normalizeValues(values)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
+        TextButton(onClick = { onChange(normalizedValues + newHeadingItem(addLabel)) }) {
+            Icon(Icons.Filled.AddCircle, contentDescription = null)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(addLabel)
+        }
+    }
+    normalizedValues.forEachIndexed { index, item ->
+        val locked = lockedIds.any { it.equals(item.id, ignoreCase = true) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = item.title,
+                onValueChange = { nextTitle ->
+                    val next = normalizedValues.toMutableList().also {
+                        it[index] = item.copy(title = nextTitle)
+                    }
+                    onChange(next)
+                },
+                modifier = Modifier.weight(1f),
+                label = { Text(if (locked) "Main note section" else itemLabel) },
+                singleLine = true
+            )
+            if (!locked) {
+                IconButton(onClick = {
+                    val next = normalizedValues.toMutableList().also { it.removeAt(index) }
+                    onChange(next)
+                }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = DangerRed)
+                }
+            } else {
+                Spacer(modifier = Modifier.size(48.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableQuickReminderList(
+    title: String,
+    values: List<StudioQuickReminderTemplate>,
+    onChange: (List<StudioQuickReminderTemplate>) -> Unit
+) {
+    val normalizedValues = normalizeQuickReminderTemplates(values)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
+        TextButton(onClick = { onChange(normalizedValues + newQuickReminderTemplate()) }) {
+            Icon(Icons.Filled.AddCircle, contentDescription = null)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Add Reminder")
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        normalizedValues.forEachIndexed { index, item ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = item.title,
+                            onValueChange = { titleValue ->
+                                onChange(normalizedValues.updated(index, item.copy(title = titleValue)))
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Button text") },
+                            singleLine = true
+                        )
+                        IconButton(onClick = { onChange(normalizedValues.toMutableList().also { it.removeAt(index) }) }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = DangerRed)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = item.days.toString(),
+                            onValueChange = { value ->
+                                val next = value.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0
+                                onChange(normalizedValues.updated(index, item.copy(days = next.coerceIn(0, 365))))
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Days") },
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = item.hours.toString(),
+                            onValueChange = { value ->
+                                val next = value.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
+                                onChange(normalizedValues.updated(index, item.copy(hours = next.coerceIn(0, 23))))
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Hours") },
+                            singleLine = true
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        MenuChip(
+                            value = item.priority,
+                            options = listOf("Low", "Normal", "High", "Urgent"),
+                            modifier = Modifier.weight(1f)
+                        ) { selected ->
+                            onChange(normalizedValues.updated(index, item.copy(priority = selected)))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text("Notify", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Switch(
+                                checked = item.notify,
+                                onCheckedChange = { checked ->
+                                    onChange(normalizedValues.updated(index, item.copy(notify = checked)))
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun newEditableName(addLabel: String): String {
+    return when {
+        addLabel.contains("Field", ignoreCase = true) -> "New Field"
+        addLabel.contains("Toggle", ignoreCase = true) -> "New Toggle"
+        addLabel.contains("Check", ignoreCase = true) -> "New Check"
+        addLabel.contains("Note", ignoreCase = true) -> "New Note"
+        addLabel.contains("Channel", ignoreCase = true) -> "New Channel"
+        else -> "New Step"
+    }
+}
+
+@Composable
+private fun SegmentedRow(options: List<String>, selected: String, modifier: Modifier = Modifier, onSelect: (String) -> Unit) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(modifier = Modifier.padding(3.dp)) {
+            options.forEach { option ->
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (option == selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    onClick = { onSelect(option) }
+                ) {
+                    Text(
+                        option,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompanyNumberRow(item: StudioCompanyNumber, onChange: (StudioCompanyNumber) -> Unit, onDelete: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = item.title,
+            onValueChange = { onChange(item.copy(title = it)) },
+            modifier = Modifier.weight(1f),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = item.value,
+            onValueChange = { onChange(item.copy(value = it)) },
+            placeholder = { Text("Num...") },
+            modifier = Modifier.weight(0.72f),
+            singleLine = true
+        )
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = null, tint = DangerRed)
+        }
+    }
+}
+
+@Composable
+private fun ActionButton(label: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+    Button(onClick = onClick, colors = ButtonDefaults.buttonColors(containerColor = color), shape = RoundedCornerShape(8.dp)) {
+        Icon(icon, contentDescription = null)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun CopyableValue(title: String, value: String, buttonTitle: String) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(value))
+                Toast.makeText(context, "$title copied.", Toast.LENGTH_SHORT).show()
+            }) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(buttonTitle)
+            }
+        }
+        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+            Text(value, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun StepRow(number: String, title: String, detail: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(modifier = Modifier.size(36.dp).background(StudioBlue, CircleShape), contentAlignment = Alignment.Center) {
+            Text(number, color = Color.White, fontWeight = FontWeight.ExtraBold)
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.ExtraBold)
+            Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun StepperRow(label: String, value: Int, suffix: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+        Text("$value $suffix", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold)
+        Spacer(modifier = Modifier.width(10.dp))
+        Surface(shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onMinus) { Text("-", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold) }
+                TextButton(onClick = onPlus) { Text("+", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+        Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun Avatar(initials: String, size: Int) {
+    Box(
+        modifier = Modifier
+            .size(size.dp)
+            .background(StudioBlue.copy(alpha = 0.16f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(initials, color = StudioBlue, fontSize = (size * 0.34).sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun Pill(label: String, color: Color) {
+    Surface(shape = RoundedCornerShape(999.dp), color = color.copy(alpha = 0.14f)) {
+        Text(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = color, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun MiniPill(label: String, icon: ImageVector) {
+    Surface(shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.surface) {
+        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun PlanFeatureGrid(plan: StudioBillingPlan) {
+    val features = listOf(
+        planOrderLimitText(plan) to true,
+        planCustomerLimitText(plan) to true,
+        planStorageLimitText(plan) to plan.hasClientFiles,
+        "Up to ${plan.teamMemberLimit} team" to plan.hasTeamAccess,
+        "Client Files" to plan.hasClientFiles,
+        "Export Data" to true,
+        "Card Customise" to plan.hasCardCustomization,
+        "Financial Cards" to true,
+        "Advanced Finance" to plan.hasAdvancedFinance,
+        "Workspace Logo" to plan.hasWorkspaceLogoUpload,
+        "Team Access" to plan.hasTeamAccess,
+        "Storage Add-ons" to plan.hasStorageAddOns
+    )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columns = when {
+            maxWidth >= 880.dp -> 3
+            maxWidth >= 560.dp -> 2
+            else -> 1
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp * (features.size / columns + if (features.size % columns == 0) 0 else 1).coerceAtLeast(1)),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            userScrollEnabled = false
+        ) {
+            items(features) { (title, enabled) ->
+                PlanFeaturePill(title = title, enabled = enabled)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlanFeaturePill(title: String, enabled: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = if (enabled) StudioGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (enabled) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (enabled) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = if (enabled) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun PlanComparisonCard(plan: StudioBillingPlan, current: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (current) StudioBlue.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant,
+        border = if (current) androidx.compose.foundation.BorderStroke(1.dp, StudioBlue.copy(alpha = 0.28f)) else null
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBubble(
+                    icon = plan.planIcon,
+                    tint = plan.planAccent,
+                    container = plan.planAccent.copy(alpha = 0.13f),
+                    size = 42.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(plan.title, fontWeight = FontWeight.ExtraBold)
+                    Text(plan.purchaseModel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                }
+                if (current) Pill("Current", StudioBlue)
+            }
+            Text(planBestForText(plan), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            PlanComparisonRow(planOrderLimitText(plan), true)
+            PlanComparisonRow(planCustomerLimitText(plan), true)
+            PlanComparisonRow(planStorageLimitText(plan), plan.hasClientFiles)
+            PlanComparisonRow("Client Files", plan.hasClientFiles)
+            PlanComparisonRow("Card Customise", plan.hasCardCustomization)
+            PlanComparisonRow("Team Access", plan.hasTeamAccess)
+        }
+    }
+}
+
+@Composable
+private fun PlanComparisonRow(title: String, enabled: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(if (enabled) "Yes" else "No", color = if (enabled) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun OwnerTestingPlanButton(
+    plan: StudioBillingPlan,
+    active: Boolean,
+    saving: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = if (active) StudioBlue.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (active) StudioBlue.copy(alpha = 0.30f) else MaterialTheme.colorScheme.outlineVariant),
+        onClick = onClick,
+        enabled = !active && !saving
+    ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(icon = plan.planIcon, tint = plan.planAccent, container = plan.planAccent.copy(alpha = 0.14f), size = 38.dp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(plan.title, fontWeight = FontWeight.ExtraBold)
+                Text(if (saving && !active) "Saving..." else if (active) "Current plan" else plan.purchaseModel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoreProductCard(title: String, productId: String, button: String) {
+    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, fontWeight = FontWeight.ExtraBold)
+            Text("Product not loaded", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text("Google Play product ID", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text(productId, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Create this product ID in Google Play Console.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text(button) }
+        }
+    }
+}
+
+private val StudioBillingPlan.purchaseModel: String
+    get() = when (this) {
+        StudioBillingPlan.Demo -> "Demo"
+        StudioBillingPlan.LifetimeLite -> "One-Time Purchase"
+        StudioBillingPlan.ProMonthly,
+        StudioBillingPlan.TeamMonthly -> "Monthly Subscription"
+    }
+
+private val StudioBillingPlan.hasClientFiles: Boolean
+    get() = this == StudioBillingPlan.ProMonthly || this == StudioBillingPlan.TeamMonthly
+
+private val StudioBillingPlan.hasTeamAccess: Boolean
+    get() = this == StudioBillingPlan.TeamMonthly
+
+private val StudioBillingPlan.hasCardCustomization: Boolean
+    get() = this != StudioBillingPlan.Demo
+
+private val StudioBillingPlan.hasAdvancedFinance: Boolean
+    get() = this != StudioBillingPlan.Demo
+
+private val StudioBillingPlan.hasWorkspaceLogoUpload: Boolean
+    get() = this == StudioBillingPlan.ProMonthly || this == StudioBillingPlan.TeamMonthly
+
+private val StudioBillingPlan.hasStorageAddOns: Boolean
+    get() = this == StudioBillingPlan.ProMonthly || this == StudioBillingPlan.TeamMonthly
+
+private val StudioBillingPlan.planIcon: ImageVector
+    get() = when (this) {
+        StudioBillingPlan.Demo -> Icons.Filled.Info
+        StudioBillingPlan.LifetimeLite -> Icons.Filled.CheckCircle
+        StudioBillingPlan.ProMonthly -> Icons.Filled.Security
+        StudioBillingPlan.TeamMonthly -> Icons.Filled.People
+    }
+
+private val StudioBillingPlan.planAccent: Color
+    get() = when (this) {
+        StudioBillingPlan.Demo -> MaterialThemeColorFallback.Gray
+        StudioBillingPlan.LifetimeLite -> StudioGreen
+        StudioBillingPlan.ProMonthly -> StudioBlue
+        StudioBillingPlan.TeamMonthly -> StudioPurple
+    }
+
+private object MaterialThemeColorFallback {
+    val Gray: Color = Color(0xFF8E8E93)
+}
+
+private fun planOrderLimitText(plan: StudioBillingPlan): String {
+    return if (plan == StudioBillingPlan.Demo) "5 orders" else "Unlimited orders"
+}
+
+private fun planCustomerLimitText(plan: StudioBillingPlan): String {
+    return if (plan == StudioBillingPlan.Demo) "3 customers" else "Unlimited customers"
+}
+
+private fun planStorageLimitText(plan: StudioBillingPlan): String {
+    return if (plan.storageLimitMb >= 1024) {
+        "Storage: ${plan.storageLimitMb / 1024} GB"
+    } else {
+        "Storage: ${plan.storageLimitMb} MB"
+    }
+}
+
+private fun planBestForText(plan: StudioBillingPlan): String {
+    return when (plan) {
+        StudioBillingPlan.Demo -> "Best for testing the app with a small sample workspace."
+        StudioBillingPlan.LifetimeLite -> "Best for a solo studio that wants unlimited orders without monthly billing."
+        StudioBillingPlan.ProMonthly -> "Best for a solo studio that needs uploads, advanced finance and workspace branding."
+        StudioBillingPlan.TeamMonthly -> "Best for shared workspaces with roles, team scheduling and live card profile sync."
+    }
+}
+
+@Composable
+private fun RoleMix(state: StudioFlowUiState) {
+    val counts = state.teamMembers.groupingBy { it.role.ifBlank { "member" } }.eachCount()
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        listOf("owner", "member", "viewer", "workflow").forEach { role ->
+            Surface(shape = RoundedCornerShape(10.dp), color = StudioBlue.copy(alpha = 0.08f), modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(role.replaceFirstChar { it.uppercase() }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    Text("${counts[role] ?: 0}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = StudioBlue)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusFooter(state: StudioFlowUiState) {
+    if (state.settingsMessage.isBlank() && state.errorMessage.isBlank() && !state.settingsSaving) return
+    Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (state.settingsSaving) {
+            Pill("Saving...", StudioBlue)
+        }
+        if (state.settingsMessage.isNotBlank()) {
+            Pill(state.settingsMessage, StudioGreen)
+        }
+        if (state.errorMessage.isNotBlank()) {
+            Pill(state.errorMessage, DangerRed)
+        }
+    }
+}
+
+private fun shareText(context: android.content.Context, title: String, text: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, title)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, title))
+}
+
+private fun backupJson(orders: List<StudioOrder>, settings: StudioWorkspaceSettings): String {
+    val root = JSONObject()
+    val array = JSONArray()
+    orders.forEach { order ->
+        array.put(JSONObject().apply {
+            put("customerName", order.customerName)
+            put("paymentDate", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(order.paymentDate))
+            put("paidAmount", order.paidAmount)
+            put("remainingAmount", order.remainingAmount)
+            put("watchPurchasePrice", order.watchPurchasePrice)
+            put("watchRef", order.watchRef)
+            put("deliveryTime", order.deliveryTime)
+            put("designName", order.designName)
+            put("designLink", order.designLink)
+            put("emailAddress", order.emailAddress)
+            put("instagramUsername", order.instagramUsername)
+            put("whatsappNumber", order.whatsappNumber)
+            put("notes", order.notes)
+            put("designStatus", order.designStatus)
+            put("status", order.status)
+            put("isDispatched", order.isDispatched)
+            put("trackingNumber", order.trackingNumber)
+            put("courier", order.courier)
+            put("isDelivered", order.isDelivered)
+            put("paymentFee", order.paymentFee)
+            put("deliveryCost", order.deliveryCost)
+            put("paymentMethod", order.paymentMethod)
+            put("taxRate", order.taxRate)
+            put("taxAmount", order.taxAmount)
+            put("taxType", order.taxType)
+            put("priority", order.priority)
+            put("risk", order.risk)
+            put("riskReason", order.riskReason)
+            put("invBool1", order.invBool1)
+            put("invBool2", order.invBool2)
+            put("invBool3", order.invBool3)
+            put("invBool4", order.invBool4)
+            put("invNotes", order.invNotes)
+            put("customFields", stringMapJson(order.customFields))
+            put("customToggles", boolMapJson(order.customToggles))
+        })
+    }
+    root.put("version", 2)
+    root.put("exportedAt", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(java.util.Date()))
+    root.put("siparisler", array)
+    root.put("settings", JSONObject().apply {
+        put("appTheme", settings.appTheme)
+        put("seciliDil", settings.selectedLanguage)
+        put("businessType", settings.businessType)
+        put("businessDescriptionPrompt", settings.businessDescriptionPrompt)
+        put("activeStatusesJSON", stringArrayJson(settings.activeStatuses))
+        put("customFieldsJSON", titleArrayJson(settings.customFields))
+        put("specialNoteSectionsJSON", headingItemsJson(settings.specialNoteSections))
+        put("specialNoteSectionsJSONV1", headingItemsJson(settings.specialNoteSections))
+        put("communicationShowTelephone", settings.communicationShowTelephone)
+        put("communicationShowEmail", settings.communicationShowEmail)
+        put("communicationShowAddress", settings.communicationShowAddress)
+        put("communicationShowChannel", settings.communicationShowChannel)
+        put("communicationShowCustomerNotes", settings.communicationShowCustomerNotes)
+        put("communicationChannelLabelsJSON", stringArrayJson(settings.communicationChannelLabels))
+        put("customStepsJSON", titleArrayJson(settings.customSteps))
+        put("customTogglesJSON", titleArrayJson(settings.customToggles))
+        put("materialsDefaultChecksJSON", titleArrayJson(settings.materialsDefaultChecks))
+        put("materialsTogglesJSON", titleArrayJson(settings.materialsToggles))
+        put("showStatusNotesSupplier", settings.showStatusNotesSupplier)
+        put("statusNotesSupplierLabel", settings.statusNotesSupplierLabel)
+        put("showMaterialsNotesSupplier", settings.showMaterialsNotesSupplier)
+        put("materialsNotesSupplierLabel", settings.materialsNotesSupplierLabel)
+        put("financialShowBaseCost", settings.financialShowBaseCost)
+        put("financialBaseCostLabel", settings.financialBaseCostLabel)
+        put("financialRemainingItemsJSON", genericHeadingItemsJson(settings.financialRemainingItems))
+        put("financialExpenseItemsJSON", genericHeadingItemsJson(settings.financialExpenseItems))
+        put("scheduleQuickRemindersJSON", quickReminderTemplatesJson(settings.scheduleQuickReminders))
+        settings.materialsDefaultChecks.take(4).forEachIndexed { index, label ->
+            put("invLabel${index + 1}", label)
+        }
+        put("summaryStep1", settings.summaryStep1)
+        put("summaryStep2", settings.summaryStep2)
+        put("orderListStep1", settings.orderListStep1)
+        put("orderListStep2", settings.orderListStep2)
+        put("appLogoUrl", settings.appLogoUrl)
+    })
+    return root.toString(2)
+}
+
+private fun stringMapJson(values: Map<String, String>): JSONObject {
+    return JSONObject().also { json ->
+        values.forEach { (key, value) -> json.put(key, value) }
+    }
+}
+
+private fun boolMapJson(values: Map<String, Boolean>): JSONObject {
+    return JSONObject().also { json ->
+        values.forEach { (key, value) -> json.put(key, value) }
+    }
+}
+
+private fun ordersCsv(orders: List<StudioOrder>): String {
+    return buildString {
+        append("Customer Name,Design Name,Paid Amount,Remaining,Status,Date\n")
+        orders.forEach { order ->
+            append(csv(order.customerName)).append(',')
+            append(csv(order.designName)).append(',')
+            append(order.paidAmount).append(',')
+            append(order.remainingAmount).append(',')
+            append(csv(order.status)).append(',')
+            append(csv(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(order.paymentDate))).append('\n')
+        }
+    }
+}
+
+private fun csv(value: String): String {
+    val escaped = value.replace("\"", "\"\"")
+    return if (escaped.contains(",") || escaped.contains("\n") || escaped.contains("\"")) "\"$escaped\"" else escaped
+}
+
+private fun stringArrayJson(values: List<String>): String {
+    return JSONArray().also { array -> values.forEach { array.put(it) } }.toString()
+}
+
+private fun titleArrayJson(values: List<String>): String {
+    return JSONArray().also { array ->
+        values.forEach { title ->
+            array.put(JSONObject().put("title", title))
+        }
+    }.toString()
+}
+
+private fun headingItemsJson(values: List<StudioHeadingItem>): String {
+    return JSONArray().also { array ->
+        normalizeSpecialNoteSections(values).forEach { item ->
+            array.put(JSONObject().put("id", item.id).put("title", item.title))
+        }
+    }.toString()
+}
+
+private fun genericHeadingItemsJson(values: List<StudioHeadingItem>): String {
+    return JSONArray().also { array ->
+        normalizeHeadingItems(values).forEach { item ->
+            array.put(JSONObject().put("id", item.id).put("title", item.title))
+        }
+    }.toString()
+}
+
+private fun specialNoteSectionUpdates(values: List<StudioHeadingItem>): Map<String, Any?> {
+    val json = headingItemsJson(values)
+    return mapOf(
+        "specialNoteSectionsJSON" to json,
+        "specialNoteSectionsJSONV1" to json
+    )
+}
+
+private fun scheduleQuickReminderUpdates(values: List<StudioQuickReminderTemplate>): Map<String, Any?> {
+    return mapOf("scheduleQuickRemindersJSON" to quickReminderTemplatesJson(values))
+}
+
+private fun normalizeSpecialNoteSections(values: List<StudioHeadingItem>): List<StudioHeadingItem> {
+    val cleaned = mutableListOf<StudioHeadingItem>()
+    values.forEach { item ->
+        val title = item.title.trim().take(120)
+        if (title.isBlank()) return@forEach
+        val id = item.id.trim().take(80).ifBlank { UUID.randomUUID().toString().uppercase(Locale.US) }
+        if (cleaned.none { existing -> existing.id.equals(id, ignoreCase = true) }) {
+            cleaned.add(StudioHeadingItem(id, title))
+        }
+    }
+    val primaryIndex = cleaned.indexOfFirst { it.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true) }
+    val primary = if (primaryIndex >= 0) {
+        cleaned.removeAt(primaryIndex).copy(id = STUDIO_PRIMARY_SPECIAL_NOTE_ID)
+    } else {
+        StudioHeadingItem(STUDIO_PRIMARY_SPECIAL_NOTE_ID, "Special Notes")
+    }
+    cleaned.add(0, primary.copy(title = primary.title.ifBlank { "Special Notes" }))
+    return cleaned.take(40)
+}
+
+private fun normalizeHeadingItems(values: List<StudioHeadingItem>): List<StudioHeadingItem> {
+    val cleaned = mutableListOf<StudioHeadingItem>()
+    values.forEach { item ->
+        val title = item.title.trim().take(120)
+        if (title.isBlank()) return@forEach
+        val id = item.id.trim().take(80).ifBlank { UUID.randomUUID().toString().uppercase(Locale.US) }
+        if (cleaned.none { existing -> existing.id.equals(id, ignoreCase = true) }) {
+            cleaned.add(StudioHeadingItem(id, title))
+        }
+    }
+    return cleaned.take(40)
+}
+
+private fun isUsableFinancialTitle(title: String, autoPrefix: String): Boolean {
+    val cleaned = title.trim()
+    if (cleaned.isBlank()) return false
+    val marker = "$autoPrefix "
+    if (!cleaned.startsWith(marker)) return true
+    return cleaned.removePrefix(marker).any { !it.isDigit() }
+}
+
+private fun newHeadingItem(addLabel: String): StudioHeadingItem {
+    return StudioHeadingItem(
+        id = UUID.randomUUID().toString().uppercase(Locale.US),
+        title = newEditableName(addLabel)
+    )
+}
+
+private fun quickReminderTemplatesJson(values: List<StudioQuickReminderTemplate>): String {
+    return JSONArray().also { array ->
+        normalizeQuickReminderTemplates(values).forEach { item ->
+            array.put(
+                JSONObject()
+                    .put("id", item.id)
+                    .put("title", item.title)
+                    .put("days", item.days)
+                    .put("hours", item.hours)
+                    .put("priority", item.priority)
+                    .put("notify", item.notify)
+            )
+        }
+    }.toString()
+}
+
+private fun normalizeQuickReminderTemplates(values: List<StudioQuickReminderTemplate>): List<StudioQuickReminderTemplate> {
+    return values
+        .map { item ->
+            item.copy(
+                id = item.id.trim().take(80).ifBlank { UUID.randomUUID().toString().uppercase(Locale.US) },
+                title = item.title.trim().take(120),
+                days = item.days.coerceIn(0, 365),
+                hours = item.hours.coerceIn(0, 23),
+                priority = reminderPriority(item.priority)
+            )
+        }
+        .filter { it.title.isNotBlank() }
+        .distinctBy { it.title.lowercase(Locale.UK) }
+        .take(20)
+        .ifEmpty {
+            listOf(
+                StudioQuickReminderTemplate("default-follow-up", "Follow up customer", 1, 0),
+                StudioQuickReminderTemplate("default-update", "Send design update", 1, 0),
+                StudioQuickReminderTemplate("default-payment", "Check payment", 2, 0),
+                StudioQuickReminderTemplate("default-delivery", "Check delivery status", 0, 12)
+            )
+        }
+}
+
+private fun reminderPriority(value: String): String {
+    return when (value.trim().lowercase(Locale.UK)) {
+        "low" -> "Low"
+        "high" -> "High"
+        "urgent" -> "Urgent"
+        else -> "Normal"
+    }
+}
+
+private fun newQuickReminderTemplate(): StudioQuickReminderTemplate {
+    return StudioQuickReminderTemplate(
+        id = UUID.randomUUID().toString().uppercase(Locale.US),
+        title = "Custom reminder",
+        days = 1,
+        hours = 0,
+        priority = "Normal",
+        notify = true
+    )
+}
+
+private fun List<StudioQuickReminderTemplate>.updated(index: Int, item: StudioQuickReminderTemplate): List<StudioQuickReminderTemplate> {
+    return toMutableList().also { it[index] = item }
+}
+
+private fun materialDefaultCheckUpdates(values: List<String>): Map<String, Any?> {
+    val cleaned = values.map { it.trim() }.filter { it.isNotBlank() }.ifEmpty {
+        listOf("Material Check 1")
+    }
+    val padded = cleaned + listOf("Item", "Item", "Item", "Materials Ready")
+    return mapOf(
+        "materialsDefaultChecksJSON" to titleArrayJson(cleaned),
+        "invLabel1" to padded[0],
+        "invLabel2" to padded[1],
+        "invLabel3" to padded[2],
+        "invLabel4" to padded[3]
+    )
+}
+
+private fun companyNumbersJson(values: List<StudioCompanyNumber>): String {
+    return JSONArray().also { array ->
+        values.forEach { item ->
+            array.put(JSONObject().put("title", item.title).put("value", item.value))
+        }
+    }.toString()
+}
+
+private fun quickReplyTemplatesJson(values: List<QuickReplyTemplateItem>): String {
+    return JSONArray().also { array ->
+        values.forEach { item ->
+            array.put(
+                JSONObject()
+                    .put("id", item.id)
+                    .put("title", item.title)
+                    .put("desc", item.desc)
+            )
+        }
+    }.toString()
+}
+
+private fun newQuickReplyTemplateItem(label: String): QuickReplyTemplateItem {
+    val cleanLabel = label.removePrefix("Add ").ifBlank { "Template" }
+    return QuickReplyTemplateItem(
+        id = "android-template-${System.nanoTime()}",
+        title = cleanLabel,
+        desc = ""
+    )
+}
+
+private fun defaultQuickReplyProducts(): List<QuickReplyTemplateItem> = listOf(
+    QuickReplyTemplateItem("default-product-1", "Service / Product 1", "Price starts at $100.")
+)
+
+private fun defaultQuickReplyRules(): List<QuickReplyTemplateItem> = listOf(
+    QuickReplyTemplateItem("default-rule-1", "Delivery Rule", "We usually deliver within 3-5 business days.")
+)
+
+private fun smartWorkflowTemplateUpdates(prompt: String, currentBusinessType: String): Map<String, Any?> {
+    val text = "$currentBusinessType $prompt".lowercase(Locale.UK)
+    val hasShipping = containsWorkflowTerm(text, "ship", "shipping", "delivery", "courier", "dispatch", "kargo", "teslimat")
+    val hasMaterials = containsWorkflowTerm(text, "material", "parts", "fabric", "metal", "stone", "paint", "inventory", "stock", "malzeme", "parca", "kumas")
+    val hasApproval = containsWorkflowTerm(text, "approval", "approve", "review", "mockup", "concept", "quote", "onay", "taslak", "teklif")
+    val hasDeposit = containsWorkflowTerm(text, "deposit", "payment", "paid", "invoice", "quote", "depozito", "odeme", "fatura")
+    val promptText = prompt.ifBlank {
+        "Describe this business, the information it needs from customers, the workflow steps, approvals, payments, materials and delivery rules."
+    }
+
+    return when {
+        containsWorkflowTerm(text, "watch", "dial", "paint", "art", "artwork", "miniature", "portrait", "eggcraft", "saat", "kadran", "boya") -> workflowTemplatePayload(
+            businessType = "Custom Art Studio",
+            businessPrompt = promptText,
+            customFields = listOf("Dial Size", "Design Theme"),
+            customSteps = listOf("Enquiry", "Concept", "Mockup", "Client Approval", "Painting", "Curing", "Final Review"),
+            customToggles = listOf("Deposit Paid?", "Dial Received?", "Mockup Approved?", "Painting Completed?", "Curing Finished?", "Final Photos Sent?"),
+            activeStatuses = listOf("New", "Quoted", "Waiting for Deposit", "Deposit Paid", "Waiting for Customer", "Waiting for Approval", "Approved", "In Progress", "Ready for Review", "Ready to Ship", "Shipped", "Done", "Cancelled"),
+            summaryStep1 = "Mockup",
+            summaryStep2 = "Painting",
+            showMaterials = true,
+            showShipping = true,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "repair", "fix", "diagnostic", "warranty", "device", "service", "tamir", "onarim", "ariza", "cihaz") -> workflowTemplatePayload(
+            businessType = "Repair Service",
+            businessPrompt = promptText,
+            customFields = listOf("Item / Device Model", "Serial Number", "Issue Reported", "Warranty Status"),
+            customSteps = listOf("Check-in", "Diagnostics", "Quote Approval", "Parts Order", "Repair", "Testing", "Ready for Pickup"),
+            customToggles = listOf("Item Received?", "Customer Approved Cost?", "Parts Arrived?", "Repair Completed?", "Quality Tested?", "Warranty Note Added?"),
+            activeStatuses = listOf("New", "Waiting for Customer", "Diagnostics", "Quoted", "Waiting for Approval", "Waiting for Material", "In Progress", "Testing", "Ready to Ship", "Done", "Cancelled"),
+            summaryStep1 = "Diagnostics",
+            summaryStep2 = "Repair",
+            showMaterials = true,
+            showShipping = hasShipping,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "tailor", "alteration", "sewing", "garment", "fabric", "dress", "fitting", "terzi", "tadilat", "dikis", "kumas") -> workflowTemplatePayload(
+            businessType = "Tailor / Alteration Studio",
+            businessPrompt = promptText,
+            customFields = listOf("Garment Type", "Measurements", "Fabric", "Fitting Date"),
+            customSteps = listOf("Consultation", "Measurements", "Pinning", "Cutting", "Sewing", "Fitting", "Final Press"),
+            customToggles = listOf("Measurements Taken?", "Fabric Received?", "Fitting Approved?", "Final Pressed?", "Ready for Collection?"),
+            activeStatuses = listOf("New", "Waiting for Customer", "Quoted", "Waiting for Deposit", "Approved", "In Progress", "Ready for Review", "Ready to Ship", "Done", "Cancelled"),
+            summaryStep1 = "Sewing",
+            summaryStep2 = "Fitting",
+            showMaterials = true,
+            showShipping = hasShipping,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "jewellery", "jewelry", "ring", "necklace", "stone", "diamond", "gold", "silver", "mucevher", "taki", "yuzuk") -> workflowTemplatePayload(
+            businessType = "Jewellery Studio",
+            businessPrompt = promptText,
+            customFields = listOf("Metal Type", "Size", "Stone / Setting", "Design Reference"),
+            customSteps = listOf("Consultation", "Design", "CAD / Mockup", "Casting", "Stone Setting", "Polishing", "Final Check"),
+            customToggles = listOf("Deposit Paid?", "Design Approved?", "Metal Sourced?", "Stones Arrived?", "Hallmarked?", "Box Ready?"),
+            activeStatuses = listOf("New", "Quoted", "Waiting for Deposit", "Deposit Paid", "Waiting for Approval", "Approved", "Waiting for Material", "In Progress", "Ready for Review", "Ready to Ship", "Done", "Cancelled"),
+            summaryStep1 = "Design",
+            summaryStep2 = "Stone Setting",
+            showMaterials = true,
+            showShipping = true,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "photo", "photography", "video", "shoot", "wedding", "retouch", "editing", "gallery", "fotograf", "cekim", "dugun") -> workflowTemplatePayload(
+            businessType = "Photography Studio",
+            businessPrompt = promptText,
+            customFields = listOf("Shoot Type", "Location", "Shoot Date", "Package"),
+            customSteps = listOf("Enquiry", "Booking", "Pre-shoot", "Shooting", "Selection", "Editing", "Delivery"),
+            customToggles = listOf("Contract Signed?", "Deposit Paid?", "Shot List Received?", "Gallery Sent?", "Final Files Delivered?"),
+            activeStatuses = listOf("New", "Quoted", "Waiting for Deposit", "Deposit Paid", "Waiting for Customer", "Approved", "In Progress", "Ready for Review", "Delivered", "Done", "Cancelled"),
+            summaryStep1 = "Shooting",
+            summaryStep2 = "Editing",
+            showMaterials = false,
+            showShipping = false,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "agency", "design", "branding", "website", "marketing", "content", "consulting", "ajans", "tasarim", "marka") -> workflowTemplatePayload(
+            businessType = "Agency / Creative Studio",
+            businessPrompt = promptText,
+            customFields = listOf("Project Type", "Brand / Company", "Deliverables", "Deadline"),
+            customSteps = listOf("Brief", "Research", "Concept", "Draft", "Revision", "Approval", "Delivery"),
+            customToggles = listOf("Brief Received?", "Deposit Paid?", "Assets Received?", "Draft Approved?", "Invoice Sent?"),
+            activeStatuses = listOf("New", "Quoted", "Waiting for Deposit", "Deposit Paid", "Waiting for Customer", "Waiting for Approval", "Approved", "In Progress", "Revision Needed", "Done", "Cancelled"),
+            summaryStep1 = "Concept",
+            summaryStep2 = "Revision",
+            showMaterials = false,
+            showShipping = false,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "food", "bakery", "cake", "catering", "restaurant", "allergy", "yemek", "firin", "pasta", "alerji") -> workflowTemplatePayload(
+            businessType = "Food / Bakery",
+            businessPrompt = promptText,
+            customFields = listOf("Event / Order Type", "Event Date", "Servings / Quantity", "Allergies"),
+            customSteps = listOf("Enquiry", "Menu Plan", "Quote", "Deposit", "Ingredients", "Preparation", "Delivery / Collection"),
+            customToggles = listOf("Deposit Paid?", "Allergies Confirmed?", "Ingredients Ready?", "Customer Confirmed Date?", "Packed?"),
+            activeStatuses = listOf("New", "Quoted", "Waiting for Deposit", "Deposit Paid", "Waiting for Customer", "Approved", "In Progress", "Ready to Ship", "Delivered", "Done", "Cancelled"),
+            summaryStep1 = "Menu Plan",
+            summaryStep2 = "Preparation",
+            showMaterials = true,
+            showShipping = true,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "beauty", "clinic", "wellness", "salon", "treatment", "therapy", "appointment", "guzellik", "klinik", "randevu") -> workflowTemplatePayload(
+            businessType = "Beauty / Wellness",
+            businessPrompt = promptText,
+            customFields = listOf("Service Type", "Appointment Date", "Practitioner", "Client Notes"),
+            customSteps = listOf("Enquiry", "Booking", "Consultation", "Treatment", "Follow-up"),
+            customToggles = listOf("Consent Form Signed?", "Deposit Paid?", "Patch Test Done?", "Aftercare Sent?"),
+            activeStatuses = listOf("New", "Waiting for Customer", "Booked", "Approved", "In Progress", "Follow-up", "Done", "Cancelled"),
+            summaryStep1 = "Booking",
+            summaryStep2 = "Treatment",
+            showMaterials = false,
+            showShipping = false,
+            showPriority = true
+        )
+        containsWorkflowTerm(text, "handmade", "product", "craft", "maker", "etsy", "shop", "ecommerce", "el yapimi", "urun", "zanaat") -> workflowTemplatePayload(
+            businessType = "Handmade / General",
+            businessPrompt = promptText,
+            customFields = listOf("Item Name", "Variant", "Quantity", "Personalisation"),
+            customSteps = listOf("Order Received", "Sourcing", "Making", "Quality Check", "Packing", "Shipped"),
+            customToggles = listOf("Payment Cleared?", "Materials Ready?", "Personalisation Checked?", "Packed?", "Tracking Sent?"),
+            activeStatuses = listOf("New", "Waiting for Deposit", "Deposit Paid", "Waiting for Material", "In Progress", "Ready to Ship", "Shipped", "Delivered", "Done", "Cancelled"),
+            summaryStep1 = "Making",
+            summaryStep2 = "Packing",
+            showMaterials = true,
+            showShipping = true,
+            showPriority = true
+        )
+        else -> {
+            val fields = buildList {
+                add("Customer Request")
+                add("Project / Item Type")
+                add("Reference / Notes")
+                if (hasShipping) add("Delivery Address")
+            }
+            val steps = buildList {
+                add("Enquiry")
+                add("Quote")
+                if (hasDeposit) add("Deposit")
+                if (hasMaterials) add("Sourcing")
+                add("Preparation")
+                add("In Progress")
+                if (hasApproval) add("Review / Approval")
+                add(if (hasShipping) "Delivery / Shipping" else "Completion")
+            }
+            workflowTemplatePayload(
+                businessType = currentBusinessType.ifBlank { "Other / Prompt Based" },
+                businessPrompt = promptText,
+                customFields = fields,
+                customSteps = steps,
+                customToggles = buildList {
+                    add("Customer Details Confirmed?")
+                    if (hasDeposit) add("Deposit Paid?")
+                    if (hasMaterials) add("Materials Ready?")
+                    if (hasApproval) add("Client Approved?")
+                    add("Quality Checked?")
+                    add("Invoice Sent?")
+                },
+                activeStatuses = listOf("New", "Waiting for Customer", "Quoted", "Waiting for Deposit", "Approved", "In Progress", "Ready for Review", "Ready to Ship", "Done", "Cancelled"),
+                summaryStep1 = steps.getOrElse(2) { steps.first() },
+                summaryStep2 = if (steps.contains("In Progress")) "In Progress" else steps.last(),
+                showMaterials = hasMaterials,
+                showShipping = hasShipping,
+                showPriority = true
+            )
+        }
+    }
+}
+
+private fun standardWorkflowTemplate(businessType: String): Map<String, Any?> {
+    return smartWorkflowTemplateUpdates("", businessType).minus("businessDescriptionPrompt")
+}
+
+private fun workflowTemplatePayload(
+    businessType: String,
+    businessPrompt: String,
+    customFields: List<String>,
+    customSteps: List<String>,
+    customToggles: List<String>,
+    activeStatuses: List<String>,
+    summaryStep1: String,
+    summaryStep2: String,
+    showMaterials: Boolean,
+    showShipping: Boolean,
+    showPriority: Boolean
+): Map<String, Any?> {
+    return mapOf(
+        "businessType" to businessType,
+        "businessDescriptionPrompt" to businessPrompt,
+        "customFieldsJSON" to titleArrayJson(customFields),
+        "customStepsJSON" to titleArrayJson(customSteps),
+        "customTogglesJSON" to titleArrayJson(customToggles),
+        "materialsTogglesJSON" to titleArrayJson(emptyList()),
+        "showMaterialsNotesSupplier" to true,
+        "materialsNotesSupplierLabel" to "Notes / Supplier",
+        "activeStatusesJSON" to stringArrayJson(activeStatuses),
+        "summaryStep1" to summaryStep1,
+        "summaryStep2" to summaryStep2,
+        "orderListStep1" to summaryStep1,
+        "orderListStep2" to summaryStep2,
+        "showCardMaterials" to showMaterials,
+        "showCardShipping" to showShipping,
+        "showCardPriority" to showPriority,
+        "showCardCustomerNotes" to true
+    ) + materialDefaultCheckUpdates(defaultInventoryLabelsForBusiness(businessType, showMaterials))
+}
+
+private fun containsWorkflowTerm(text: String, vararg terms: String): Boolean {
+    return terms.any { term -> text.contains(term.lowercase(Locale.UK)) }
+}
+
+private fun defaultInventoryLabelsForBusiness(businessType: String, showMaterials: Boolean): List<String> {
+    if (!showMaterials) return listOf("Information Received", "Assets Ready", "Checklist Ready", "Delivery Ready")
+    return when (businessType) {
+        "Custom Art Studio" -> listOf("Dial Sourced", "Paints Ready", "Brushes Prepared", "Packaging Ready")
+        "Repair Service" -> listOf("Item Received", "Parts Ordered", "Parts Arrived", "Ready for Pickup")
+        "Tailor / Alteration Studio" -> listOf("Fabric Sourced", "Threads Ready", "Accessories Ready", "Machine Setup")
+        "Jewellery Studio" -> listOf("Metal Sourced", "Moulds Ready", "Stones Arrived", "Box Ready")
+        "Photography Studio" -> listOf("Equipment Ready", "Memory Cards Ready", "Backup Drive Ready", "Delivery Folder Ready")
+        "Agency / Creative Studio" -> listOf("Assets Received", "Brand Files Ready", "Copy Ready", "Export Folder Ready")
+        "Food / Bakery" -> listOf("Ingredients Ordered", "Ingredients Ready", "Packaging Ready", "Delivery Slot Set")
+        "Beauty / Wellness" -> listOf("Room Ready", "Products Ready", "Consent Form Ready", "Aftercare Ready")
+        "Handmade / General" -> listOf("Main Material", "Components Ready", "Packaging Ready", "Label Ready")
+        else -> listOf("Main Material", "Supplier Confirmed", "Tools Ready", "Packaging Ready")
+    }
+}
+
+private fun engineLabel(value: String): String = when (value) {
+    "Apple", "Local" -> "Apple On-Device"
+    "Offline" -> "Offline Template"
+    else -> "OpenAI Online"
+}
+
+private fun engineDescription(value: String): String = when (value) {
+    "Apple", "Local" -> "Uses Apple Foundation Models on Apple devices. On Android, switch to OpenAI Online or Offline Template."
+    "Offline" -> "Uses saved products and rules without an AI model."
+    else -> "Uses OpenAI online with your API key."
+}
+
+private fun initials(value: String): String {
+    val parts = value.trim().split(Regex("[\\s@._-]+")).filter { it.isNotBlank() }
+    return parts.take(2).map { it.first().uppercaseChar() }.joinToString("").ifBlank { "?" }
+}
+
+private data class SettingsSection(val key: String, val title: String, val subtitle: String, val icon: ImageVector)
+
+private data class SwitchSpec(val label: String, val checked: Boolean, val key: String)
+
+private data class PickedUpload(val bytes: ByteArray, val contentType: String)
+
+private fun readPickedUpload(context: android.content.Context, uri: android.net.Uri): PickedUpload? {
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+    val contentType = context.contentResolver.getType(uri).orEmpty().ifBlank { "image/jpeg" }
+    return PickedUpload(bytes = bytes, contentType = contentType)
+}

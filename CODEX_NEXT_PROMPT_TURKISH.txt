@@ -1,0 +1,41 @@
+Codex için sıradaki görev:
+
+Lütfen önce `PROJECT_CONTEXT.md`, `CHANGELOG_STUDIOFLOW.md` ve `CODEX_CONTINUE_TURKISH.md` dosyalarını oku.
+
+Şu an web portalda kritik bir bug var:
+
+Web order detail kartlarında herhangi bir alanı editlerken şu hata alınıyor:
+
+"Your current role is Owner and cannot edit this order."
+
+Bu hata Owner kullanıcısında oluyor. Bu nedenle Customers veya yeni feature eklemeden önce bu permission bug’ını çöz.
+
+Görev:
+- `functions/index.js` içinde `updateWebOrder` ve tüm role/permission helperlarını incele.
+- Owner role’ü display label olarak "Owner" görünse bile permission logic canonical `"owner"` kullanmalı.
+- Full edit roller: `owner`, `admin`, `member`
+- Status-only: `workflowOnly`
+- No edit: `viewOnly`, `unknown`
+- Tüm permission check’leri canonical role values ile yapılmalı.
+- Duplicate role helper/check varsa temizle veya tutarlı hale getir.
+- Gerekirse `updateWebOrder` içine geçici güvenli debug log ekle:
+  - uid
+  - workspaceId
+  - rawRole
+  - normalizedRole
+  - requested field keys
+  - canFullEdit
+  - canWorkflowEdit
+  Sensitive order data loglama.
+- Eğer sorun role değil de web payload field classification ise, allowed field classification’ı düzelt.
+- `node --check index.js` çalıştır.
+- Web dosyası değişirse `npm run typecheck` ve `npm run build` çalıştır.
+- Değişiklikten sonra tam olarak şunları raporla:
+  1. Hatanın kesin nedeni
+  2. Değişen dosyalar
+  3. Canonical role değerleri
+  4. Hangi roller hangi alanları editler
+  5. Deploy adımları
+  6. Manuel testler
+
+Yeni özellik ekleme. Önce bu bug çözülsün.

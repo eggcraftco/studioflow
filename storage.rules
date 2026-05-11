@@ -1,0 +1,128 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function companyExists(companyId) {
+      return firestore.exists(/databases/(default)/documents/companies/$(companyId));
+    }
+
+    function companyData(companyId) {
+      return firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
+    }
+
+    function isOwner(companyId) {
+      let data = companyData(companyId);
+      return signedIn()
+        && (request.auth.uid == companyId || request.auth.uid == data.ownerUid);
+    }
+
+    function membersMap(companyId) {
+      let members = companyData(companyId).members;
+      return members is map ? members : {};
+    }
+
+    function memberRolesMap(companyId) {
+      let roles = companyData(companyId).memberRoles;
+      return roles is map ? roles : {};
+    }
+
+    function workspaceAccessExists(companyId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)/workspaceAccess/$(companyId));
+    }
+
+    function workspaceAccessData(companyId) {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)/workspaceAccess/$(companyId)).data;
+    }
+
+    function memberUidsList(companyId) {
+      let uids = companyData(companyId).memberUids;
+      return uids is list ? uids : [];
+    }
+
+    function memberEntry(companyId) {
+      return membersMap(companyId)[request.auth.uid];
+    }
+
+    function memberRole(companyId) {
+      let entry = memberEntry(companyId);
+      return entry is map ? entry.role : "";
+    }
+
+    function memberRoleFallback(companyId) {
+      return memberRolesMap(companyId)[request.auth.uid];
+    }
+
+    function workspaceAccessRole(companyId) {
+      return workspaceAccessExists(companyId) ? workspaceAccessData(companyId).role : "";
+    }
+
+    function hasMemberRecord(companyId) {
+      return request.auth.uid in membersMap(companyId)
+        || request.auth.uid in memberRolesMap(companyId)
+        || request.auth.uid in memberUidsList(companyId)
+        || workspaceAccessExists(companyId);
+    }
+
+    function roleIs(role, allowed) {
+      return role in allowed;
+    }
+
+    function canReadWorkspace(companyId) {
+      return signedIn()
+        && companyExists(companyId)
+        && (isOwner(companyId) || hasMemberRecord(companyId));
+    }
+
+    function canEditWorkspaceFiles(companyId) {
+      let editRoles = [
+        "owner", "Owner",
+        "admin", "Admin",
+        "member", "Member",
+        "workflow", "Workflow",
+        "workflowOnly", "WorkflowOnly", "workflowonly",
+        "workflow_only", "workflow-only",
+        "Workflow Only", "Workflow only", "workflow only"
+      ];
+      return canReadWorkspace(companyId)
+        && (
+          isOwner(companyId)
+          || roleIs(memberRole(companyId), editRoles)
+          || roleIs(memberRoleFallback(companyId), editRoles)
+          || roleIs(workspaceAccessRole(companyId), editRoles)
+        );
+    }
+
+    function clientFilesPlanAllowed(companyId) {
+      let rawPlan = companyData(companyId).billingPlan;
+      let plan = rawPlan is string ? rawPlan : "team_monthly";
+      return plan in ["pro_monthly", "team_monthly", "proMonthly", "teamMonthly"];
+    }
+
+    function safeUploadSize() {
+      return request.resource != null && request.resource.size <= 210 * 1024 * 1024;
+    }
+
+    match /companies/{companyId}/client_files/{orderId}/{fileName} {
+      allow read: if canEditWorkspaceFiles(companyId) && clientFilesPlanAllowed(companyId);
+      allow create, update: if canEditWorkspaceFiles(companyId)
+        && clientFilesPlanAllowed(companyId)
+        && safeUploadSize();
+      allow delete: if canEditWorkspaceFiles(companyId) && clientFilesPlanAllowed(companyId);
+    }
+
+    match /companies/{companyId}/design_images/{fileName} {
+      allow read: if canReadWorkspace(companyId);
+      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if canEditWorkspaceFiles(companyId);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

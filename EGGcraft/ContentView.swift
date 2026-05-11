@@ -1,80 +1,9555 @@
-//
-//  ContentView.swift
-//  EGGcraft
-//
-//  Created by Gunes Gocmen on 23/04/2026.
-//
-
 import SwiftUI
-import SwiftData
+import Foundation
+import UniformTypeIdentifiers
+import FirebaseFirestore
+#if canImport(EventKit)
+import EventKit
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
+#if os(macOS)
+import AppKit
+#endif
+
+let studioWarningOrange = Color(red: 1.0, green: 0.5843137255, blue: 0.0)
+
+enum SiralamaTuru { case akilli, sonEklenen }
+
+private func studioRoleForContentView(_ role: String, fallback: String = "member") -> String {
+    let compact = role
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: "[\\s_-]+", with: "", options: .regularExpression)
+
+    switch compact {
+    case "owner": return "owner"
+    case "admin": return "admin"
+    case "member": return "member"
+    case "viewer", "viewonly", "readonly": return "viewer"
+    case "workflow", "workflowonly": return "workflow"
+    case "unknown", "": return fallback
+    default: return fallback
+    }
+}
+
+enum SiparisHizliFiltre: String, CaseIterable, Identifiable {
+    case all
+    case active
+    case waitingCustomer
+    case inProduction
+    case thisWeek
+    case lateOrders
+    case unpaidBalance
+    case readyToShip
+    case completed
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .all: return "All"
+        case .active: return "Active"
+        case .waitingCustomer: return "Waiting Customer"
+        case .inProduction: return "In Production"
+        case .thisWeek: return "This Week"
+        case .lateOrders: return "Late Orders"
+        case .unpaidBalance: return "Unpaid Balance"
+        case .readyToShip: return "Ready to Ship"
+        case .completed: return "Completed"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .all: return "tray.full"
+        case .active: return "bolt.circle"
+        case .waitingCustomer: return "person.crop.circle.badge.clock"
+        case .inProduction: return "paintbrush.pointed"
+        case .thisWeek: return "calendar"
+        case .lateOrders: return "exclamationmark.triangle"
+        case .unpaidBalance: return "sterlingsign.circle"
+        case .readyToShip: return "shippingbox"
+        case .completed: return "checkmark.circle"
+        }
+    }
+}
+
+
+private func platformShiftPressed() -> Bool {
+    #if os(macOS)
+    return NSEvent.modifierFlags.contains(.shift)
+    #else
+    return false
+    #endif
+}
+
+private func platformCommandPressed() -> Bool {
+    #if os(macOS)
+    return NSEvent.modifierFlags.contains(.command)
+    #else
+    return false
+    #endif
+}
+
+private func platformCopyText(_ text: String) -> Bool {
+    let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !value.isEmpty else { return false }
+
+    #if os(macOS)
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
+    return true
+    #elseif canImport(UIKit)
+    UIPasteboard.general.string = value
+    return true
+    #else
+    return false
+    #endif
+}
+
+
+extension Siparis: Equatable {
+    static func == (lhs: Siparis, rhs: Siparis) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.companyId == rhs.companyId &&
+        lhs.paymentMethod == rhs.paymentMethod &&
+        lhs.customerName == rhs.customerName &&
+        lhs.paymentDate == rhs.paymentDate &&
+        lhs.paidAmount == rhs.paidAmount &&
+        lhs.remainingAmount == rhs.remainingAmount &&
+        lhs.watchPurchasePrice == rhs.watchPurchasePrice &&
+        lhs.watchRef == rhs.watchRef &&
+        lhs.deliveryTime == rhs.deliveryTime &&
+        lhs.designName == rhs.designName &&
+        lhs.designLink == rhs.designLink &&
+        lhs.communication == rhs.communication &&
+        lhs.emailAddress == rhs.emailAddress &&
+        lhs.instagramUsername == rhs.instagramUsername &&
+        lhs.whatsappNumber == rhs.whatsappNumber &&
+        lhs.notes == rhs.notes &&
+        lhs.designStatus == rhs.designStatus &&
+        lhs.status == rhs.status &&
+        lhs.isDispatched == rhs.isDispatched &&
+        lhs.trackingNumber == rhs.trackingNumber &&
+        lhs.courier == rhs.courier &&
+        lhs.isDelivered == rhs.isDelivered &&
+        lhs.paymentFee == rhs.paymentFee &&
+        lhs.deliveryCost == rhs.deliveryCost &&
+        lhs.taxType == rhs.taxType &&
+        lhs.extraStatuses == rhs.extraStatuses &&
+        lhs.taxRate == rhs.taxRate &&
+        lhs.invBool1 == rhs.invBool1 &&
+        lhs.invBool2 == rhs.invBool2 &&
+        lhs.invBool3 == rhs.invBool3 &&
+        lhs.invBool4 == rhs.invBool4 &&
+        lhs.invNotes == rhs.invNotes &&
+        lhs.taxAmount == rhs.taxAmount &&
+        lhs.priority == rhs.priority &&
+        lhs.risk == rhs.risk &&
+        lhs.riskReason == rhs.riskReason &&
+        lhs.customFields == rhs.customFields &&
+        lhs.customToggles == rhs.customToggles &&
+        lhs.historyLog == rhs.historyLog &&
+        lhs.clientFiles == rhs.clientFiles &&
+        lhs.todoItems == rhs.todoItems &&
+        lhs.workSessions == rhs.workSessions
+    }
+}
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Environment(\.colorScheme) var systemColorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
+    
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
+    
+    // 🌟 ONDALIK AYRACI BURAYA DA GELDİ 🌟
+    @AppStorage("seciliOndalik") private var seciliOndalik: String = "."
+    
+        @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
+@State private var seciliSiparis: Siparis?
+    @State private var seciliSiparisGorunumKey: String?
+    @State private var seciliMusteri: Musteri?
+    @State private var aramaMetni: String = ""
+    @State private var seciliSiralama: SiralamaTuru = .akilli
+    @State private var aktifSiparisFiltresi: SiparisHizliFiltre = .all
+    @State private var aktifSekme: String = "Orders"
+    @FocusState private var orderListFocused: Bool
+    @FocusState private var searchFocused: Bool
+    @State private var orderSelectionShouldScroll: Bool = false
+    @State private var pendingOrderSelectionWorkItem: DispatchWorkItem?
+    @State private var selectedOrderIds: Set<String> = []
+    @State private var lastSelectedOrderId: String?
+    @AppStorage("ordersSidebarWidth") private var ordersSidebarWidth: Double = 380
+    @AppStorage("ordersSidebarShowPreviewImages") private var showOrderPreviewImages: Bool = true
+    @AppStorage("orderCardShowDeliveryTime") private var orderCardShowDeliveryTime: Bool = true
+    @AppStorage("orderCardShowDesignName") private var orderCardShowDesignName: Bool = true
+    @AppStorage("orderCardShowOrderValue") private var orderCardShowOrderValue: Bool = true
+    @AppStorage("orderCardShowUpcomingSchedule") private var orderCardShowUpcomingSchedule: Bool = true
+    @AppStorage("orderCardShowStatusBadges") private var orderCardShowStatusBadges: Bool = true
+    @AppStorage("ordersSidebarVisible") private var isOrdersSidebarVisible: Bool = true
+    @AppStorage("dashShowRevenue") private var dashShowRevenue: Bool = true
+    @AppStorage("dashShowPending") private var dashShowPending: Bool = true
+    @AppStorage("dashShowCost") private var dashShowCost: Bool = true
+    @AppStorage("dashShowFee") private var dashShowFee: Bool = true
+    @AppStorage("dashShowShipping") private var dashShowShipping: Bool = true
+    @AppStorage("dashShowTax") private var dashShowTax: Bool = true
+    @AppStorage("dashShowProfit") private var dashShowProfit: Bool = true
+    @State private var temporaryOrdersSidebarWidth: Double?
+    @State private var orderSidebarResizerHovering: Bool = false
+    @State private var companySettingsListener: ListenerRegistration?
+    @State private var phoneShowsOrderDetail: Bool = false
+    @State private var phoneSearchVisible: Bool = false
+    @State private var cloudSyncState: String = "connecting"
+    @State private var cloudSyncMessage: String = "Connecting to cloud..."
+    @State private var lastCloudSyncDate: Date?
+    @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
+    @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
+    @State private var sharedClientFileOrderPickerVisible: Bool = false
+    @State private var sharedClientFileInbox: [SharedClientFileInbox.PendingFile] = []
+    @State private var sharedClientFileOrderSearchText: String = ""
+    @State private var sharedClientFileImportMessage: String = ""
+    @State private var sharedClientFileImportErrorMessage: String = ""
+    @State private var isImportingSharedClientFilesFromPicker: Bool = false
+    @State private var pendingSharedClientFileOrderKey: String? = nil
+    @State private var sharedClientFileAutoPromptScheduled: Bool = false
+    @State private var showSharedClientFileUploadPolicyPrompt: Bool = false
+    @State private var showSharedClientFileImportError: Bool = false
+    @State private var showPlanAccessAlert: Bool = false
+    @State private var planAccessAlertTitle: String = ""
+    @State private var planAccessAlertMessage: String = ""
+
+    private var minOrdersSidebarWidth: Double { showOrderPreviewImages ? 360 : 300 }
+    private let maxOrdersSidebarWidth: Double = 720
+    private var defaultOrdersSidebarWidth: Double { showOrderPreviewImages ? 380 : 320 }
+
+    @AppStorage("appTheme") private var appTheme: String = "System"
+    @AppStorage("appLogoUrl") private var appLogoUrl: String = ""
+    @AppStorage("appSubtitle") private var appSubtitle: String = "Bespoke Hand-Painted Dials"
+    
+    @AppStorage("summaryStep1") private var summaryStep1: String = "Design"
+    @AppStorage("summaryStep2") private var summaryStep2: String = "Painting"
+    @AppStorage("orderListStep1") private var orderListStep1: String = "Design"
+    @AppStorage("orderListStep2") private var orderListStep2: String = "Painting"
+    @AppStorage("customStepsJSON") private var customStepsJSON: String = ""
+    @AppStorage("financialExpenseItemsJSON") private var financialExpenseItemsJSON: String = ""
+    @AppStorage("financialRemainingItemsJSON") private var financialRemainingItemsJSON: String = ""
+    @AppStorage("financialShowBaseCost") private var financialShowBaseCost: Bool = true
+    @AppStorage("financialBaseCostLabel") private var financialBaseCostLabel: String = "Cost (Base)"
+    @AppStorage("businessType") private var businessType: String = "Custom Art Studio"
+    @AppStorage("businessDescriptionPrompt") private var businessDescriptionPrompt: String = ""
+    @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
+    @AppStorage("businessOnboardingCompletedCompanyIdsJSON") private var businessOnboardingCompletedCompanyIdsJSON: String = "[]"
+    @State private var businessOnboardingGateOpen: Bool = false
+    @AppStorage("activeStatusesJSON") private var activeStatusesJSON: String = "[\"New\",\"Not Yet\",\"In Progress\",\"Done\",\"Cancelled\"]"
+    @AppStorage("customFieldsJSON") private var customFieldsJSON: String = ""
+    @AppStorage("customTogglesJSON") private var customTogglesJSON: String = ""
+    @AppStorage("showStatusNotesSupplier") private var showStatusNotesSupplier: Bool = false
+    @AppStorage("statusNotesSupplierLabel") private var statusNotesSupplierLabel: String = "Notes / Supplier"
+    @AppStorage("communicationShowTelephoneV1") private var communicationShowTelephone: Bool = true
+    @AppStorage("communicationShowEmailV1") private var communicationShowEmail: Bool = true
+    @AppStorage("communicationShowAddressV1") private var communicationShowAddress: Bool = true
+    @AppStorage("communicationShowChannelV1") private var communicationShowChannel: Bool = true
+    @AppStorage("communicationShowCustomerNotesV1") private var communicationShowCustomerNotes: Bool = true
+    @AppStorage("communicationChannelLabelsJSONV1") private var communicationChannelLabelsJSON: String = ""
+    @AppStorage("specialNoteSectionsJSONV1") private var specialNoteSectionsJSON: String = ""
+
+    @AppStorage("invLabel1") private var invLabel1: String = "Dial Sourced"
+    @AppStorage("invLabel2") private var invLabel2: String = "Dial Received"
+    @AppStorage("invLabel3") private var invLabel3: String = "Watch Received"
+    @AppStorage("invLabel4") private var invLabel4: String = "Materials Ready"
+    @AppStorage("materialsDefaultChecksJSON") private var materialsDefaultChecksJSON: String = ""
+
+    @AppStorage("showCardCustomerNotes") private var showCardCustomerNotes = false
+    @AppStorage("showCardPreview") private var showCardPreview = true
+    @AppStorage("showCardSummary") private var showCardSummary = true
+    @AppStorage("showCardCustomer") private var showCardCustomer = true
+    @AppStorage("showCardDelivery") private var showCardDelivery = true
+    @AppStorage("showCardCommunication") private var showCardCommunication = true
+    @AppStorage("showCardNotes") private var showCardNotes = true
+    @AppStorage("showCardFinancial") private var showCardFinancial = true
+    @AppStorage("showCardStatus") private var showCardStatus = true
+    @AppStorage("showCardShipping") private var showCardShipping = true
+    @AppStorage("showCardMaterials") private var showCardMaterials = true
+    @AppStorage("showCardPriority") private var showCardPriority = true
+
+    var aktifTema: ColorScheme? { if appTheme == "Light" { return .light }; if appTheme == "Dark" { return .dark }; return nil }
+    var colorScheme: ColorScheme { aktifTema ?? systemColorScheme }
+    var bgHeader: Color { colorScheme == .dark ? Color(white: 0.1) : Color.white }
+    var bgSidebar: Color { colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.97) }
+    var bgMain: Color { colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.93) }
+    private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
+
+    private var currentWorkspaceRoleNormalized: String {
+        studioRoleForContentView(authVM.currentWorkspaceRole)
+    }
+
+    private var currentWorkspaceRoleDisplayLabel: String {
+        let label = authVM.currentWorkspaceRoleLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let standardLabels: Set<String> = ["Owner", "Admin", "Member", "View Only", "Workflow Only"]
+        if !label.isEmpty && !standardLabels.contains(label) {
+            return label
+        }
+        switch currentWorkspaceRoleNormalized {
+        case "owner": return t("Owner", lang: seciliDil)
+        case "admin": return t("Admin", lang: seciliDil)
+        case "viewer": return t("View Only", lang: seciliDil)
+        case "workflow": return t("Workflow Only", lang: seciliDil)
+        default: return t("Member", lang: seciliDil)
+        }
+    }
+
+    private func workspaceAccessAllows(_ key: String) -> Bool {
+        authVM.currentWorkspaceAccess[key] ?? true
+    }
+
+    private var canAccessOrders: Bool { workspaceAccessAllows("orders") }
+    private var canAccessDashboard: Bool { workspaceAccessAllows("dashboard") && canSeeFinancialData }
+    private var canAccessSchedule: Bool { workspaceAccessAllows("schedule") }
+    private var canAccessCustomers: Bool { workspaceAccessAllows("customers") }
+    private var canAccessQuickReply: Bool { workspaceAccessAllows("quickReply") }
+    private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
+
+    private var canEditCurrentWorkspace: Bool {
+        ["owner", "admin", "member"].contains(currentWorkspaceRoleNormalized) && canAccessOrders
+    }
+
+    private var canManageProjectAssignments: Bool {
+        currentWorkspaceRoleNormalized == "owner" ||
+            (canEditCurrentWorkspace && authVM.currentWorkspaceAccess["manageProjectAssignments"] == true)
+    }
+
+    private var canEditWorkflowFields: Bool {
+        (canEditCurrentWorkspace || isWorkflowOnlyWorkspace) && canAccessOrders
+    }
+
+    private var isViewOnlyWorkspace: Bool {
+        currentWorkspaceRoleNormalized == "viewer"
+    }
+
+    private var isWorkflowOnlyWorkspace: Bool {
+        currentWorkspaceRoleNormalized == "workflow"
+    }
+
+    private var canSeeFinancialData: Bool {
+        workspaceAccessAllows("financialInfo")
+    }
+
+    private var shouldShowOnlyAssignedProjects: Bool {
+        authVM.currentWorkspaceAccess["assignedProjectsOnly"] == true
+    }
+
+    private func orderIsAssignedToCurrentWorkspaceMember(_ siparis: Siparis) -> Bool {
+        let currentUid = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentEmail = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let assignedUid = siparis.assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignedEmail = siparis.assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return (!currentUid.isEmpty && assignedUid == currentUid) ||
+            (!currentEmail.isEmpty && assignedEmail == currentEmail)
+    }
+
+    private var workspaceVisibleOrders: [Siparis] {
+        guard shouldShowOnlyAssignedProjects else { return firebaseManager.siparisler }
+        return firebaseManager.siparisler.filter { orderIsAssignedToCurrentWorkspaceMember($0) }
+    }
+
+    private var cleanedAppLogoUrl: String { appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var cleanedAccountPhotoUrl: String { authVM.accountPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var topAccountInitials: String {
+        let displayName = authVM.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = displayName.isEmpty ? email : displayName
+        let cleaned = source
+            .replacingOccurrences(of: "@", with: " ")
+            .replacingOccurrences(of: ".", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+
+        let initials = cleaned
+            .split(whereSeparator: { $0.isWhitespace })
+            .prefix(2)
+            .compactMap { $0.first }
+            .map { String($0).uppercased() }
+            .joined()
+
+        return initials.isEmpty ? "?" : initials
+    }
+
+    var buAyNetKar: Double { let cal = Calendar.current; let simdi = Date(); return workspaceVisibleOrders.filter { cal.isDate($0.paymentDate, equalTo: simdi, toGranularity: .month) }.reduce(0) { $0 + $1.netKar } }
+    var buYilNetKar: Double { let cal = Calendar.current; let simdi = Date(); return workspaceVisibleOrders.filter { cal.isDate($0.paymentDate, equalTo: simdi, toGranularity: .year) }.reduce(0) { $0 + $1.netKar } }
+    
+    var aramaSonuclari: [Siparis] {
+        filteredAndSortedOrders(for: aktifSiparisFiltresi)
+    }
+
+    private func filteredAndSortedOrders(for filter: SiparisHizliFiltre) -> [Siparis] {
+        let searchedOrders = aramaMetni.isEmpty ? workspaceVisibleOrders : workspaceVisibleOrders.filter { siparis in
+            siparis.customerName.localizedStandardContains(aramaMetni) ||
+            siparis.designName.localizedStandardContains(aramaMetni) ||
+            siparis.watchRef.localizedStandardContains(aramaMetni) ||
+            siparis.emailAddress.localizedStandardContains(aramaMetni) ||
+            siparis.instagramUsername.localizedStandardContains(aramaMetni) ||
+            siparis.whatsappNumber.localizedStandardContains(aramaMetni)
+        }
+
+        let filteredOrders = searchedOrders.filter { orderMatchesQuickFilter($0, filter: filter) }
+
+        if seciliSiralama == .akilli {
+            return filteredOrders.sorted { smartOrderShouldComeBefore($0, $1) }
+        } else {
+            return filteredOrders.sorted { $0.paymentDate > $1.paymentDate }
+        }
+    }
+
+    private func applyOrderQuickFilter(_ filter: SiparisHizliFiltre) {
+        withAnimation(.snappy) {
+            aktifSiparisFiltresi = filter
+            phoneShowsOrderDetail = false
+        }
+
+        selectedOrderIds.removeAll()
+        lastSelectedOrderId = nil
+
+        let results = filteredAndSortedOrders(for: filter)
+        if let first = results.first {
+            seciliSiparis = first
+            let key = orderSelectionKey(first)
+            seciliSiparisGorunumKey = key
+            lastSelectedOrderId = key
+        } else {
+            seciliSiparis = nil
+            seciliSiparisGorunumKey = nil
+        }
+    }
+
+    private func smartOrderShouldComeBefore(_ s1: Siparis, _ s2: Siparis) -> Bool {
+        let b1 = smartOrderSortBucket(s1)
+        let b2 = smartOrderSortBucket(s2)
+        if b1 != b2 { return b1 < b2 }
+
+        let d1 = orderDaysUntilDue(s1)
+        let d2 = orderDaysUntilDue(s2)
+
+        // Smart sorting: active orders always stay above inactive orders.
+        // Active orders are sorted by the closest delivery deadline first.
+        // Cancelled / completed / dispatched orders are not forced to the very bottom;
+        // they stay below active orders and then keep their natural recent-date order.
+        if b1 == 0, d1 != d2 { return d1 < d2 }
+
+        return s1.paymentDate > s2.paymentDate
+    }
+
+    private func smartOrderSortBucket(_ siparis: Siparis) -> Int {
+        if orderIsActiveForSmartSorting(siparis) { return 0 }
+        return 1
+    }
+
+    private func orderIsActiveForSmartSorting(_ siparis: Siparis) -> Bool {
+        !orderIsClosed(siparis) && !siparis.isDispatched
+    }
+
+    private func orderMatchesQuickFilter(_ siparis: Siparis, filter: SiparisHizliFiltre) -> Bool {
+        switch filter {
+        case .all:
+            return true
+        case .active:
+            return !orderIsClosed(siparis)
+        case .waitingCustomer:
+            return orderNeedsCustomerReply(siparis)
+        case .inProduction:
+            return orderIsInProduction(siparis)
+        case .thisWeek:
+            return orderIsDueThisWeek(siparis)
+        case .lateOrders:
+            return orderIsLate(siparis)
+        case .unpaidBalance:
+            return siparis.remainingAmount > 0.009 || orderTexts(siparis).contains(where: { $0.contains("waiting for payment") || $0.contains("waiting for deposit") || $0.contains("awaiting payment") })
+        case .readyToShip:
+            return orderIsReadyToShip(siparis)
+        case .completed:
+            return orderIsCompleted(siparis)
+        }
+    }
+
+    private func quickFilterCount(_ filter: SiparisHizliFiltre) -> Int {
+        workspaceVisibleOrders.filter { orderMatchesQuickFilter($0, filter: filter) }.count
+    }
+
+    private func orderTexts(_ siparis: Siparis) -> [String] {
+        var values = [
+            siparis.status,
+            siparis.designStatus,
+            siparis.priority,
+            siparis.risk,
+            siparis.riskReason,
+            siparis.notes,
+            siparis.designName,
+            siparis.watchRef
+        ]
+
+        if let extras = siparis.extraStatuses {
+            values.append(contentsOf: extras.keys)
+            values.append(contentsOf: extras.values)
+        }
+
+        if let customFields = siparis.customFields {
+            values.append(contentsOf: customFields.keys)
+            values.append(contentsOf: customFields.values)
+        }
+
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func primaryOrderStatusText(_ siparis: Siparis) -> String {
+        siparis.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func orderIsClosed(_ siparis: Siparis) -> Bool {
+        orderIsCompleted(siparis) || orderIsCancelled(siparis)
+    }
+
+    private func orderIsCancelled(_ siparis: Siparis) -> Bool {
+        let status = primaryOrderStatusText(siparis)
+        return status == "cancel" ||
+            status == "cancelled" ||
+            status == "canceled" ||
+            status == "refunded" ||
+            status.contains("cancelled") ||
+            status.contains("canceled") ||
+            status.contains("cancel order") ||
+            status.contains("order cancelled") ||
+            status.contains("order canceled") ||
+            status.contains("refunded")
+    }
+
+    private func orderIsCompleted(_ siparis: Siparis) -> Bool {
+        if siparis.isDelivered { return true }
+        let status = primaryOrderStatusText(siparis)
+        return status == "done" ||
+            status == "completed" ||
+            status == "delivered" ||
+            status.contains("complete") ||
+            status.contains("delivered")
+    }
+
+    private func orderIsLate(_ siparis: Siparis) -> Bool {
+        !orderIsClosed(siparis) && !siparis.isDispatched && orderDaysUntilDue(siparis) < 0
+    }
+
+    private func orderIsDueThisWeek(_ siparis: Siparis) -> Bool {
+        guard !orderIsClosed(siparis), let dueDate = orderDueDate(siparis) else { return false }
+        return Calendar.current.isDate(dueDate, equalTo: Date(), toGranularity: .weekOfYear)
+    }
+
+    private func orderNeedsCustomerReply(_ siparis: Siparis) -> Bool {
+        let texts = orderTexts(siparis)
+        return texts.contains(where: {
+            $0.contains("waiting for customer") ||
+            $0.contains("customer waiting") ||
+            $0.contains("needs reply") ||
+            $0.contains("reply needed") ||
+            $0.contains("waiting for approval") ||
+            $0.contains("client approval") ||
+            $0.contains("customer approval")
+        })
+    }
+
+    private func orderIsInProduction(_ siparis: Siparis) -> Bool {
+        guard !orderIsClosed(siparis), !orderNeedsCustomerReply(siparis), !orderIsReadyToShip(siparis) else { return false }
+
+        let productionTerms = [
+            "in progress",
+            "painting",
+            "production",
+            "making",
+            "sourcing",
+            "quality check",
+            "ready for review",
+            "revision needed",
+            "repair",
+            "testing",
+            "preparation",
+            "draft",
+            "revision",
+            "editing",
+            "sewing",
+            "casting",
+            "polishing"
+        ]
+
+        return orderTexts(siparis).contains(where: { text in
+            productionTerms.contains(where: { text.contains($0) })
+        })
+    }
+
+    private func orderIsReadyToShip(_ siparis: Siparis) -> Bool {
+        guard !orderIsClosed(siparis), !siparis.isDispatched else { return false }
+
+        let readyTerms = [
+            "ready to ship",
+            "ready for shipping",
+            "ready for pickup",
+            "ready for collection",
+            "delivery ready",
+            "packed",
+            "packaging ready",
+            "box ready"
+        ]
+
+        return orderTexts(siparis).contains(where: { text in
+            readyTerms.contains(where: { text.contains($0) })
+        })
+    }
+
+    private func orderDueDate(_ siparis: Siparis) -> Date? {
+        Calendar.current.date(byAdding: .day, value: siparis.deliveryTime, to: siparis.paymentDate)
+    }
+
+    private func orderDaysUntilDue(_ siparis: Siparis) -> Int {
+        guard let dueDate = orderDueDate(siparis) else { return 0 }
+        return Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: Date()),
+            to: Calendar.current.startOfDay(for: dueDate)
+        ).day ?? 0
+    }
+
+
+    private var orderQuickFilterBar: some View {
+        let selectedFilter = aktifSiparisFiltresi
+        let selectedCount = quickFilterCount(selectedFilter)
+        let selectedSortTitle = seciliSiralama == .akilli ? t("Smart", lang: seciliDil) : t("Recent", lang: seciliDil)
+
+        return Menu {
+            Button {
+                seciliSiralama = .akilli
+            } label: {
+                Label(t("Smart", lang: seciliDil), systemImage: seciliSiralama == .akilli ? "checkmark.circle.fill" : "sparkles")
+            }
+
+            Button {
+                seciliSiralama = .sonEklenen
+            } label: {
+                Label(t("Recent", lang: seciliDil), systemImage: seciliSiralama == .sonEklenen ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+            }
+
+            Divider()
+
+            ForEach(SiparisHizliFiltre.allCases) { filter in
+                Button {
+                    applyOrderQuickFilter(filter)
+                } label: {
+                    Label(
+                        "\(t(filter.titleKey, lang: seciliDil))  (\(quickFilterCount(filter)))",
+                        systemImage: selectedFilter == filter ? "checkmark.circle.fill" : filter.iconName
+                    )
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.blue)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Order Filters", lang: seciliDil))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    Text("\(t(selectedFilter.titleKey, lang: seciliDil)) • \(selectedSortTitle)")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("\(selectedCount)")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(Capsule())
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.055))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(t("Order Filters", lang: seciliDil))
+    }
+
+
+    private var phoneOrderQuickFilterMenu: some View {
+        let selectedFilter = aktifSiparisFiltresi
+        let selectedSortTitle = seciliSiralama == .akilli ? t("Smart", lang: seciliDil) : t("Recent", lang: seciliDil)
+
+        return Menu {
+            Button {
+                seciliSiralama = .akilli
+            } label: {
+                Label(t("Smart", lang: seciliDil), systemImage: seciliSiralama == .akilli ? "checkmark.circle.fill" : "sparkles")
+            }
+
+            Button {
+                seciliSiralama = .sonEklenen
+            } label: {
+                Label(t("Recent", lang: seciliDil), systemImage: seciliSiralama == .sonEklenen ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+            }
+
+            Divider()
+
+            ForEach(SiparisHizliFiltre.allCases) { filter in
+                Button {
+                    applyOrderQuickFilter(filter)
+                } label: {
+                    Label(
+                        "\(t(filter.titleKey, lang: seciliDil))  (\(quickFilterCount(filter)))",
+                        systemImage: selectedFilter == filter ? "checkmark.circle.fill" : filter.iconName
+                    )
+                }
+            }
+
+            if canEditCurrentWorkspace, !selectedOrderIds.isEmpty {
+                Divider()
+
+                Button {
+                    clearBulkSelection()
+                } label: {
+                    Label(t("Clear Selection", lang: seciliDil), systemImage: "xmark.circle")
+                }
+
+                Button(role: .destructive) {
+                    silSeciliSiparisleri()
+                } label: {
+                    Label(t("Delete", lang: seciliDil) + " (\(selectedOrderIds.count))", systemImage: "trash")
+                }
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.blue)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(t("Order Filters", lang: seciliDil))
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                    Text("\(t(selectedFilter.titleKey, lang: seciliDil)) • \(selectedSortTitle)")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+
+                Spacer(minLength: 2)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.055))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(t("Order Filters", lang: seciliDil))
+    }
+
+    private let businessTypes = [
+        "Custom Art Studio",
+        "Freelancer / Designer",
+        "Repair Service",
+        "Handmade Products",
+        "Photography Studio",
+        "Tailor / Alteration Studio",
+        "Jewellery Studio",
+        "Agency / Creative Studio",
+        "Food / Bakery / Catering",
+        "Beauty / Clinic / Wellness",
+        "Consultancy / Professional Service",
+        "General Small Business",
+        "Other / Prompt Based"
+    ]
+
+    private var completedBusinessOnboardingCompanyIds: Set<String> {
+        guard let data = businessOnboardingCompletedCompanyIdsJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(decoded)
+    }
+
+    private var shouldShowBusinessOnboarding: Bool {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard authVM.isLoggedIn, !companyId.isEmpty, businessOnboardingGateOpen else { return false }
+        guard firebaseManager.siparisler.isEmpty else { return false }
+        return !completedBusinessOnboardingCompanyIds.contains(companyId)
+    }
+
+    private var effectiveOrdersSidebarWidth: Double {
+        min(max(temporaryOrdersSidebarWidth ?? ordersSidebarWidth, minOrdersSidebarWidth), maxOrdersSidebarWidth)
+    }
+
+    private func guvenliBinding(icin siparis: Siparis) -> Binding<Siparis> {
+        Binding(
+            get: {
+                if let index = firebaseManager.siparisler.firstIndex(where: { $0.id == siparis.id }) {
+                    return firebaseManager.siparisler[index]
+                }
+                return siparis
+            },
+            set: { newValue in
+                guard canEditWorkflowFields else { return }
+                if let index = firebaseManager.siparisler.firstIndex(where: { $0.id == siparis.id }) {
+                    let onceki = firebaseManager.siparisler[index]
+                    firebaseManager.registerSiparisChange(before: onceki, after: newValue)
+                    firebaseManager.siparisler[index] = newValue
+                }
+            }
+        )
+    }
+
+
+    private var pricePrivacyButton: some View {
+        Button(action: { hideSensitiveNumbers.toggle() }) {
+            Image(systemName: hideSensitiveNumbers ? "eye.slash.fill" : "eye.fill")
+                .font(.system(size: 15, weight: .bold))
+                .frame(width: isPhoneLayout ? 34 : 38, height: isPhoneLayout ? 34 : 38)
+                .background(hideSensitiveNumbers ? studioWarningOrange.opacity(0.18) : Color.primary.opacity(0.06))
+                .foregroundColor(hideSensitiveNumbers ? studioWarningOrange : .gray)
+                .clipShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 10 : 11, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: isPhoneLayout ? 10 : 11, style: .continuous)
+                        .stroke(hideSensitiveNumbers ? studioWarningOrange.opacity(0.35) : Color.primary.opacity(0.08), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(t(hideSensitiveNumbers ? "Show prices" : "Hide prices", lang: seciliDil))
+        .keyboardShortcut("h", modifiers: [.command, .shift])
+    }
+
+    private var topHeader: some View {
+        Group {
+            if isPhoneLayout {
+                phoneTopHeader
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    // Wide layout: Mac and iPad landscape
+                    HStack(spacing: 16) {
+                        topLogoView
+                        topStatsView
+                        Spacer(minLength: 12)
+                        topNavigationView
+                        Spacer(minLength: 12)
+                        if canSeeFinancialData {
+                            pricePrivacyButton
+                        }
+                        CloudSyncStatusBadge(
+                            state: cloudSyncState,
+                            message: cloudSyncMessage,
+                            lastSyncDate: lastCloudSyncDate
+                        )
+                        if canEditWorkflowFields { newOrderButton }
+                        topAccountAvatarIfAvailable
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Narrow layout: iPad portrait
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            topLogoView
+                            Spacer(minLength: 10)
+                            topStatsView
+                            Spacer(minLength: 10)
+                            if canSeeFinancialData {
+                                pricePrivacyButton
+                            }
+                            CloudSyncStatusBadge(
+                                state: cloudSyncState,
+                                message: cloudSyncMessage,
+                                lastSyncDate: lastCloudSyncDate
+                            )
+                            if canEditWorkflowFields { newOrderButton }
+                            topAccountAvatarIfAvailable
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            topNavigationView
+                                .padding(.trailing, 12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .background(bgHeader)
+    }
+
+    private var phoneTopHeader: some View {
+        HStack(spacing: 10) {
+            topLogoView
+                .frame(maxWidth: 130, alignment: .leading)
+
+            Spacer(minLength: 8)
+
+            if canSeeFinancialData {
+                pricePrivacyButton
+            }
+
+            CloudSyncStatusBadge(
+                state: cloudSyncState,
+                message: cloudSyncMessage,
+                lastSyncDate: lastCloudSyncDate
+            )
+
+            if canEditWorkflowFields {
+                phoneNewOrderButton
+            }
+            phoneMainMenuButton
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var phoneNewOrderButton: some View {
+        Button(action: yeniSiparisEkle) {
+            Text("+ \(t("Add Project", lang: seciliDil))")
+                .font(.system(size: 12.5, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(Color.green)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: Color.green.opacity(0.18), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("+ \(t("Add Project", lang: seciliDil))")
+    }
+
+    private var phoneMainMenuButton: some View {
+        Menu {
+            if canAccessOrders {
+                Button {
+                    aktifSekme = "Orders"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Orders", lang: seciliDil), systemImage: "list.bullet")
+                }
+            }
+
+            if canAccessDashboard {
+                Button {
+                    aktifSekme = "Dashboard"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Dashboard", lang: seciliDil), systemImage: "chart.bar.xaxis")
+                }
+            }
+
+            if canAccessSchedule {
+                Button {
+                    aktifSekme = "Schedule"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Schedule", lang: seciliDil), systemImage: "calendar")
+                }
+            }
+
+            if canAccessCustomers {
+                Button {
+                    aktifSekme = "Customers"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Customers", lang: seciliDil), systemImage: "person.2.fill")
+                }
+            }
+
+            if canAccessQuickReply {
+                Button {
+                    aktifSekme = "QuickReply"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Quick Reply", lang: seciliDil), systemImage: "text.bubble")
+                }
+            }
+
+            if canAccessSettings {
+                Button {
+                    aktifSekme = "Settings"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Settings", lang: seciliDil), systemImage: "gearshape")
+                }
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.primary)
+                .frame(width: 34, height: 34)
+                .background(Color.primary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    private var topLogoView: some View {
+        Button {
+            withAnimation(.snappy) {
+                aktifSekme = canAccessOrders ? "Orders" : firstAccessibleWorkspaceTab
+                phoneShowsOrderDetail = false
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if !cleanedAppLogoUrl.isEmpty, let logoURL = URL(string: cleanedAppLogoUrl) {
+                    AsyncImage(url: logoURL) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView().controlSize(.small)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 150, maxHeight: 34, alignment: .leading)
+                        case .failure:
+                            fallbackLogoView
+                        @unknown default:
+                            fallbackLogoView
+                        }
+                    }
+                    .id(cleanedAppLogoUrl)
+                } else {
+                    fallbackLogoView
+                }
+            }
+            .frame(minWidth: 120, maxWidth: 170, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("Orders", lang: seciliDil))
+        .help(t("Orders", lang: seciliDil))
+        .clipped()
+    }
+
+    private var fallbackLogoView: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "hexagon.fill")
+                .font(.system(size: 24))
+                .foregroundColor(studioWarningOrange)
+            Text(t("Studio", lang: seciliDil))
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.primary)
+        }
+    }
+
+    private var topStatsView: some View {
+        HStack(spacing: 14) {
+            if canSeeFinancialData {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Month Net", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                    Text(hideSensitiveNumbers ? "\(seciliParaBirimi)••••" : "\(seciliParaBirimi)\(formatFiyat(buAyNetKar, ondalik: seciliOndalik))")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.green)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(width: 96, alignment: .leading)
+
+                Divider()
+                    .frame(height: 24)
+                    .background(Color.primary.opacity(0.1))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Year Net", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                    Text(hideSensitiveNumbers ? "\(seciliParaBirimi)••••" : "\(seciliParaBirimi)\(formatFiyat(buYilNetKar, ondalik: seciliOndalik))")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.green)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(width: 96, alignment: .leading)
+            } else {
+                HStack(spacing: 7) {
+                    Image(systemName: "eye.slash.fill")
+                        .foregroundColor(.purple)
+                    Text(currentWorkspaceRoleDisplayLabel)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.purple)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.purple.opacity(0.10))
+                .clipShape(Capsule())
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var topNavigationView: some View {
+        HStack(spacing: 10) {
+            if canAccessOrders {
+                UstMenuButonu(title: t("Orders", lang: seciliDil), icon: "list.bullet", isSelected: aktifSekme == "Orders") { aktifSekme = "Orders" }
+            }
+            if canAccessDashboard {
+                UstMenuButonu(title: t("Dashboard", lang: seciliDil), icon: "chart.bar.xaxis", isSelected: aktifSekme == "Dashboard") { aktifSekme = "Dashboard" }
+            }
+            if canAccessSchedule {
+                UstMenuButonu(title: t("Schedule", lang: seciliDil), icon: "calendar", isSelected: aktifSekme == "Schedule") { aktifSekme = "Schedule" }
+            }
+            if canAccessCustomers {
+                UstMenuButonu(title: t("Customers", lang: seciliDil), icon: "person.2.fill", isSelected: aktifSekme == "Customers") { aktifSekme = "Customers" }
+            }
+            if canAccessQuickReply {
+                UstMenuButonu(title: t("Quick Reply", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
+            }
+            if canAccessSettings {
+                UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var topAccountAvatarIfAvailable: some View {
+        if !cleanedAccountPhotoUrl.isEmpty, canAccessSettings {
+            Button {
+                settingsStartSection = "Account"
+                aktifSekme = "Settings"
+            } label: {
+                AccountAvatarImage(urlString: cleanedAccountPhotoUrl, initials: topAccountInitials, size: 38)
+            }
+            .buttonStyle(.plain)
+            .help(t("Account", lang: seciliDil))
+            .accessibilityLabel(t("Account", lang: seciliDil))
+        }
+    }
+
+    private var newOrderButton: some View {
+        Button(action: yeniSiparisEkle) {
+            Text("+ \(t("Add Project", lang: seciliDil))")
+                .font(.system(size: 13.5, weight: .bold))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.green)
+                .foregroundColor(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: Color.green.opacity(0.18), radius: 9, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("+ \(t("Add Project", lang: seciliDil))")
+    }
 
     var body: some View {
-        NavigationViewWrapper {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
+        VStack(spacing: 0) {
+            if shouldShowBusinessOnboarding {
+                businessTemplateOnboardingView
+            } else {
+                topHeader
+                Divider().background(Color.primary.opacity(0.1))
+
+                if !canOpenTab(aktifSekme) {
+                    restrictedAccessView(
+                        title: "Workspace area hidden",
+                        message: "Your current role does not include access to this part of the workspace."
+                    )
+                } else if aktifSekme == "Orders" {
+                if isPhoneLayout {
+                    phoneOrdersView
+                } else {
+                HStack(spacing: 0) {
+                    if isOrdersSidebarVisible {
+                    VStack(spacing: 0) {
+                        VStack(spacing: 15) {
+                            HStack(spacing: 10) {
+                                HStack {
+                                    Image(systemName: "magnifyingglass")
+                                        .foregroundColor(.gray)
+                                    TextField(t("Search...", lang: seciliDil), text: $aramaMetni)
+                                        .focused($searchFocused)
+                                        .textFieldStyle(.plain)
+                                        .foregroundColor(.primary)
+                                }
+                                .padding(10)
+                                .background(Color.primary.opacity(0.05))
+                                .cornerRadius(8)
+
+                                Button {
+                                    withAnimation(.snappy) {
+                                        isOrdersSidebarVisible = false
+                                    }
+                                    syncWorkspaceSidebarLayout()
+                                } label: {
+                                    Image(systemName: "sidebar.leading")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.blue)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color.blue.opacity(0.10))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .help(t("Hide orders list", lang: seciliDil))
+                            }
+                            orderQuickFilterBar
+                        }
+                        .padding(20)
+                        Divider().background(Color.primary.opacity(0.1))
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(aramaSonuclari) { siparis in
+                                        let siparisKey = orderSelectionKey(siparis)
+                                        SiparisKarti(siparis: siparis, isSelected: siparisKey == seciliSiparisGorunumKey, isMultiSelected: isSiparisBulkSelected(siparis), showMultiSelection: !selectedOrderIds.isEmpty, showPreviewImage: showOrderPreviewImages, showDeliveryTime: orderCardShowDeliveryTime, showDesignName: orderCardShowDesignName, showOrderValue: orderCardShowOrderValue && canSeeFinancialData, showUpcomingSchedule: orderCardShowUpcomingSchedule, showStatusBadges: orderCardShowStatusBadges, showCustomerShortcut: canAccessCustomers, assignedMemberLabel: assignedMemberLabel(for: siparis), assignedMemberPhotoURL: assignedMemberPhotoURL(for: siparis), lblIsimsiz: t("New Project", lang: seciliDil), summaryStep1: orderListStep1, summaryStep2: orderListStep2, customStepsJSON: customStepsJSON, sembol: seciliParaBirimi, seciliDil: seciliDil, seciliOndalik: seciliOndalik) {
+                                            openCustomerForOrder(siparis)
+                                        }
+                                        .id(orderScrollId(siparis))
+                                        .onTapGesture {
+                                            handleOrderTap(siparis)
+                                        }
+                                        .contextMenu {
+                                            if canAccessCustomers, customerForOrder(siparis) != nil {
+                                                Button { openCustomerForOrder(siparis) } label: { Label(t("Open Customer", lang: seciliDil), systemImage: "person.crop.circle") }
+                                                Divider()
+                                            }
+                                            if isSiparisBulkSelected(siparis) {
+                                                Button { deselectSiparisForBulk(siparis) } label: { Label(t("Deselect", lang: seciliDil), systemImage: "minus.circle") }
+                                            } else {
+                                                Button { selectSiparisForBulk(siparis) } label: { Label(t("Select", lang: seciliDil), systemImage: "checkmark.circle") }
+                                            }
+                                            projectAssignmentMenuItems(for: siparis)
+                                            Menu {
+                                                orderCardDetailsMenuItems(adjustSidebarWidth: true)
+                                            } label: {
+                                                Label(t("Order Card Details", lang: seciliDil), systemImage: "rectangle.badge.checkmark")
+                                            }
+
+                                            Divider()
+
+                                            if canEditCurrentWorkspace {
+                                                if !selectedOrderIds.isEmpty {
+                                                    Button { clearBulkSelection() } label: { Label(t("Clear Selection", lang: seciliDil), systemImage: "xmark.circle") }
+                                                    Button(role: .destructive) { silSeciliSiparisleri() } label: { Label(t("Delete", lang: seciliDil) + " (\(selectedOrderIds.count))", systemImage: "trash") }
+                                                    Divider()
+                                                }
+                                                Button { hizliTamamla(siparis) } label: { Label(t("Mark as Done", lang: seciliDil), systemImage: "checkmark.circle.fill") }
+                                                Button { hizliIptalEt(siparis) } label: { Label(t("Cancel Order", lang: seciliDil), systemImage: "xmark.circle.fill") }
+                                                Divider()
+                                                Button(role: .destructive) { silSiparis(siparis) } label: { Label(t("Delete", lang: seciliDil), systemImage: "trash") }
+                                            }
+                                        }
+                                    }
+                                }.padding(20)
+                            }
+                            .focusable()
+                            .focusEffectDisabled()
+                            .focused($orderListFocused)
+                            #if os(macOS)
+                            .onMoveCommand(perform: handleOrderMove)
+                            #endif
+                            .onAppear { orderListFocused = true }
+                            .onChange(of: seciliSiparis?.id) { _, _ in
+                                guard orderSelectionShouldScroll, let siparis = seciliSiparis else { return }
+                                withAnimation {
+                                    proxy.scrollTo(orderScrollId(siparis), anchor: .center)
+                                }
+                                DispatchQueue.main.async {
+                                    orderSelectionShouldScroll = false
+                                }
+                            }
+                        }
+                        Divider().background(Color.primary.opacity(0.1))
+                        VStack(alignment: .leading, spacing: 4) { HStack { Image(systemName: "archivebox").foregroundColor(.gray); Text("\(firebaseManager.siparisler.count) \(t("Orders", lang: seciliDil))").font(.system(size: 14, weight: .bold)).foregroundColor(.primary) }; Text("\(firebaseManager.siparisler.filter({$0.status == "Done"}).count) \(t("Completed", lang: seciliDil))").font(.system(size: 12)).foregroundColor(.green).padding(.leading, 24) }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(bgSidebar)
+                    }
+                    .frame(width: effectiveOrdersSidebarWidth)
+                    .background(bgSidebar)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
+
+                    ordersSidebarResizeHandle
+
+                    } else {
+                        ordersSidebarRevealHandle
+                    }
+
+                    ZStack { bgMain.ignoresSafeArea(); if let siparis = seciliSiparis, firebaseManager.siparisler.contains(where: { $0.id == siparis.id }) {
+                        orderDetailView(for: siparis)
+                            .id(orderSelectionKey(siparis))
+                    } else if firebaseManager.siparisler.isEmpty {
+                        businessTemplateEmptyState
+                    } else { VStack(spacing: 15) { Image(systemName: "doc.text.magnifyingglass").font(.system(size: 40)).foregroundColor(.gray.opacity(0.5)); Text(t("Select an order to view details.", lang: seciliDil)).foregroundColor(.gray) } } }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                            }
+            } else if aktifSekme == "Schedule" {
+                if isPhoneLayout {
+                    SchedulePlannerView(canEditWorkspace: canEditWorkflowFields, sortMode: $seciliSiralama, selectedOrderKey: seciliSiparisGorunumKey, onSelectOrder: { order in
+                            handleOrderTap(order)
+                        }, onOpenOrder: { order in
+                            handleOrderTap(order)
+                            aktifSekme = "Orders"
+                            orderSelectionShouldScroll = true
+                        })
+                        .environmentObject(firebaseManager)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(bgMain)
+                } else {
+                    HStack(spacing: 0) {
+                    if isOrdersSidebarVisible {
+                    VStack(spacing: 0) {
+                        VStack(spacing: 15) {
+                            HStack(spacing: 10) {
+                                HStack {
+                                    Image(systemName: "magnifyingglass")
+                                        .foregroundColor(.gray)
+                                    TextField(t("Search...", lang: seciliDil), text: $aramaMetni)
+                                        .focused($searchFocused)
+                                        .textFieldStyle(.plain)
+                                        .foregroundColor(.primary)
+                                }
+                                .padding(10)
+                                .background(Color.primary.opacity(0.05))
+                                .cornerRadius(8)
+
+                                Button {
+                                    withAnimation(.snappy) {
+                                        isOrdersSidebarVisible = false
+                                    }
+                                    syncWorkspaceSidebarLayout()
+                                } label: {
+                                    Image(systemName: "sidebar.leading")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.blue)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color.blue.opacity(0.10))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .help(t("Hide orders list", lang: seciliDil))
+                            }
+                            orderQuickFilterBar
+                        }
+                        .padding(20)
+                        Divider().background(Color.primary.opacity(0.1))
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(aramaSonuclari) { siparis in
+                                        let siparisKey = orderSelectionKey(siparis)
+                                        SiparisKarti(siparis: siparis, isSelected: siparisKey == seciliSiparisGorunumKey, isMultiSelected: isSiparisBulkSelected(siparis), showMultiSelection: !selectedOrderIds.isEmpty, showPreviewImage: showOrderPreviewImages, showDeliveryTime: orderCardShowDeliveryTime, showDesignName: orderCardShowDesignName, showOrderValue: orderCardShowOrderValue && canSeeFinancialData, showUpcomingSchedule: orderCardShowUpcomingSchedule, showStatusBadges: orderCardShowStatusBadges, showCustomerShortcut: canAccessCustomers, assignedMemberLabel: assignedMemberLabel(for: siparis), assignedMemberPhotoURL: assignedMemberPhotoURL(for: siparis), lblIsimsiz: t("New Project", lang: seciliDil), summaryStep1: orderListStep1, summaryStep2: orderListStep2, customStepsJSON: customStepsJSON, sembol: seciliParaBirimi, seciliDil: seciliDil, seciliOndalik: seciliOndalik) {
+                                            openCustomerForOrder(siparis)
+                                        }
+                                        .id(orderScrollId(siparis))
+                                        .onTapGesture {
+                                            handleOrderTap(siparis)
+                                        }
+                                        .contextMenu {
+                                            if canAccessCustomers, customerForOrder(siparis) != nil {
+                                                Button { openCustomerForOrder(siparis) } label: { Label(t("Open Customer", lang: seciliDil), systemImage: "person.crop.circle") }
+                                                Divider()
+                                            }
+                                            if isSiparisBulkSelected(siparis) {
+                                                Button { deselectSiparisForBulk(siparis) } label: { Label(t("Deselect", lang: seciliDil), systemImage: "minus.circle") }
+                                            } else {
+                                                Button { selectSiparisForBulk(siparis) } label: { Label(t("Select", lang: seciliDil), systemImage: "checkmark.circle") }
+                                            }
+                                            projectAssignmentMenuItems(for: siparis)
+                                            Menu {
+                                                orderCardDetailsMenuItems(adjustSidebarWidth: true)
+                                            } label: {
+                                                Label(t("Order Card Details", lang: seciliDil), systemImage: "rectangle.badge.checkmark")
+                                            }
+
+                                            Divider()
+
+                                            if canEditCurrentWorkspace {
+                                                if !selectedOrderIds.isEmpty {
+                                                    Button { clearBulkSelection() } label: { Label(t("Clear Selection", lang: seciliDil), systemImage: "xmark.circle") }
+                                                    Button(role: .destructive) { silSeciliSiparisleri() } label: { Label(t("Delete", lang: seciliDil) + " (\(selectedOrderIds.count))", systemImage: "trash") }
+                                                    Divider()
+                                                }
+                                                Button { hizliTamamla(siparis) } label: { Label(t("Mark as Done", lang: seciliDil), systemImage: "checkmark.circle.fill") }
+                                                Button { hizliIptalEt(siparis) } label: { Label(t("Cancel Order", lang: seciliDil), systemImage: "xmark.circle.fill") }
+                                                Divider()
+                                                Button(role: .destructive) { silSiparis(siparis) } label: { Label(t("Delete", lang: seciliDil), systemImage: "trash") }
+                                            }
+                                        }
+                                    }
+                                }.padding(20)
+                            }
+                            .focusable()
+                            .focusEffectDisabled()
+                            .focused($orderListFocused)
+                            #if os(macOS)
+                            .onMoveCommand(perform: handleOrderMove)
+                            #endif
+                            .onAppear { orderListFocused = true }
+                            .onChange(of: seciliSiparis?.id) { _, _ in
+                                guard orderSelectionShouldScroll, let siparis = seciliSiparis else { return }
+                                withAnimation {
+                                    proxy.scrollTo(orderScrollId(siparis), anchor: .center)
+                                }
+                                DispatchQueue.main.async {
+                                    orderSelectionShouldScroll = false
+                                }
+                            }
+                        }
+                        Divider().background(Color.primary.opacity(0.1))
+                        VStack(alignment: .leading, spacing: 4) { HStack { Image(systemName: "archivebox").foregroundColor(.gray); Text("\(firebaseManager.siparisler.count) \(t("Orders", lang: seciliDil))").font(.system(size: 14, weight: .bold)).foregroundColor(.primary) }; Text("\(firebaseManager.siparisler.filter({$0.status == "Done"}).count) \(t("Completed", lang: seciliDil))").font(.system(size: 12)).foregroundColor(.green).padding(.leading, 24) }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(bgSidebar)
+                    }
+                    .frame(width: effectiveOrdersSidebarWidth)
+                    .background(bgSidebar)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
+
+                    ordersSidebarResizeHandle
+
+                    } else {
+                        ordersSidebarRevealHandle
+                    }
+
+
+                        SchedulePlannerView(canEditWorkspace: canEditWorkflowFields, sortMode: $seciliSiralama, selectedOrderKey: seciliSiparisGorunumKey, onSelectOrder: { order in
+                                handleOrderTap(order)
+                            }, onOpenOrder: { order in
+                                handleOrderTap(order)
+                                aktifSekme = "Orders"
+                                orderSelectionShouldScroll = true
+                            })
+                            .environmentObject(firebaseManager)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(bgMain)
+                    }
+                }
+            } else if aktifSekme == "Dashboard" {
+                if canAccessDashboard {
+                    DashboardView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Dashboard hidden", lang: seciliDil), message: t("Your current workspace role does not include dashboard or financial access.", lang: seciliDil))
+                }
+            } else if aktifSekme == "Customers" {
+                if canAccessCustomers {
+                    MusterilerView(seciliSiparis: $seciliSiparis, aktifSekme: $aktifSekme, seciliMusteri: $seciliMusteri).frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Customers hidden", lang: seciliDil), message: t("Your current workspace role does not include customer access.", lang: seciliDil))
+                }
+            } else if aktifSekme == "QuickReply" {
+                if canAccessQuickReply {
+                    AutoReplyView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Quick Reply hidden", lang: seciliDil), message: t("Your current workspace role does not include Quick Reply access.", lang: seciliDil))
+                }
+            } else {
+                if canAccessSettings {
+                    AyarlarView(
+                        startSection: settingsStartSection.isEmpty ? (canEditCurrentWorkspace ? "Theme & Brand" : "Account") : settingsStartSection,
+                        canEditWorkspace: canEditCurrentWorkspace
+                    )
+                    .environmentObject(authVM)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Settings hidden", lang: seciliDil), message: t("Your current workspace role does not include settings access.", lang: seciliDil))
+                }
+            }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 1550, minHeight: 700)
+        #else
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #endif
+        .background(bgMain)
+        .preferredColorScheme(aktifTema)
+        .onOpenURL { url in
+            handleStudioFlowDeepLink(url)
+        }
+        .sheet(isPresented: $sharedClientFileOrderPickerVisible) {
+            sharedClientFileOrderPickerSheet
+        }
+        .alert(t("Upload Policy", lang: seciliDil), isPresented: $showSharedClientFileUploadPolicyPrompt) {
+            Button(t("Cancel", lang: seciliDil), role: .cancel) {
+                pendingSharedClientFileOrderKey = nil
+            }
+            Button(t("I Agree and Upload", lang: seciliDil)) {
+                uploadSafetyPolicyAccepted = true
+                if let key = pendingSharedClientFileOrderKey,
+                   let order = firebaseManager.siparisler.first(where: { orderSelectionKey($0) == key }) {
+                    importSharedClientFilesFromPicker(to: order)
+                }
+                pendingSharedClientFileOrderKey = nil
+            }
+        } message: {
+            Text(t("Only upload legal, safe and work-related files that belong in this workspace.", lang: seciliDil))
+        }
+        .alert(t("Upload blocked", lang: seciliDil), isPresented: $showSharedClientFileImportError) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(sharedClientFileImportErrorMessage)
+        }
+        .alert(planAccessAlertTitle.isEmpty ? t("Plan limit", lang: seciliDil) : planAccessAlertTitle, isPresented: $showPlanAccessAlert) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+            Button(t("Plan & Access", lang: seciliDil)) {
+                settingsStartSection = "Plan & Access"
+                aktifSekme = "Settings"
+            }
+        } message: {
+            Text(planAccessAlertMessage)
+        }
+        .onAppear {
+            syncFirebaseManagerWithAuthCompany()
+            startCompanySettingsListener()
+            scheduleBusinessOnboardingGate()
+            enforceWorkspaceRoleAccess()
+            scheduleSharedClientFileInboxCheck()
+            refreshCloudSyncIndicatorForOfflineState()
+        }
+        .onDisappear { stopCompanySettingsListener() }
+        .onChange(of: authVM.currentCompanyId) { _, _ in
+            syncFirebaseManagerWithAuthCompany()
+            startCompanySettingsListener()
+            scheduleBusinessOnboardingGate()
+            enforceWorkspaceRoleAccess()
+        }
+        .onChange(of: firebaseManager.currentCompanyId) { _, _ in
+            startCompanySettingsListener()
+            scheduleBusinessOnboardingGate()
+            enforceWorkspaceRoleAccess()
+        }
+        .onChange(of: authVM.currentWorkspaceRole) { _, _ in
+            syncFirebaseManagerWithAuthCompany()
+            enforceWorkspaceRoleAccess()
+        }
+        .onChange(of: authVM.currentWorkspaceAccess) { _, _ in
+            enforceWorkspaceRoleAccess()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                scheduleSharedClientFileInboxCheck()
+                refreshCloudSyncIndicatorForOfflineState()
+            }
+        }
+        .onReceive(firebaseManager.$isOnline) { _ in
+            refreshCloudSyncIndicatorForOfflineState()
+        }
+        .onReceive(firebaseManager.$pendingOfflineChanges) { _ in
+            refreshCloudSyncIndicatorForOfflineState()
+        }
+        .onReceive(firebaseManager.$pendingClientFileUploadsCount) { _ in
+            refreshCloudSyncIndicatorForOfflineState()
+        }
+        .background(klavyeKisayollari.frame(width: 0, height: 0).opacity(0))
+        .onChange(of: firebaseManager.siparisler) { _, _ in
+            let mevcutOrderIds = Set(firebaseManager.siparisler.map { orderSelectionKey($0) })
+            selectedOrderIds = selectedOrderIds.intersection(mevcutOrderIds)
+            if let lastSelectedOrderId, !mevcutOrderIds.contains(lastSelectedOrderId) {
+                self.lastSelectedOrderId = nil
+            }
+            if let secili = seciliSiparis, !firebaseManager.siparisler.contains(where: { $0.id == secili.id }) {
+                seciliSiparis = nil
+                seciliSiparisGorunumKey = nil
+            }
+            if aktifSekme == "Orders", seciliSiparis == nil, let ilk = aramaSonuclari.first {
+                seciliSiparis = ilk
+                seciliSiparisGorunumKey = orderSelectionKey(ilk)
+                lastSelectedOrderId = orderSelectionKey(ilk)
+            } else if seciliSiparis != nil {
+                syncSelectedOrderCollectionsFromFirebase()
+                if let secili = seciliSiparis {
+                    seciliSiparisGorunumKey = orderSelectionKey(secili)
+                }
+            }
+        }
+    }
+
+
+    private var sharedClientFilePickerOrders: [Siparis] {
+        let query = sharedClientFileOrderSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let orders = firebaseManager.siparisler.sorted { first, second in
+            first.paymentDate > second.paymentDate
+        }
+        guard !query.isEmpty else { return orders }
+        return orders.filter { order in
+            order.customerName.lowercased().contains(query) ||
+            order.designName.lowercased().contains(query) ||
+            order.watchRef.lowercased().contains(query) ||
+            order.emailAddress.lowercased().contains(query) ||
+            order.whatsappNumber.lowercased().contains(query)
+        }
+    }
+
+    private var sharedClientFileOrderPickerSheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "square.and.arrow.down.on.square.fill")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 42, height: 42)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Choose order for shared files", lang: seciliDil))
+                        .font(.system(size: isPhoneLayout ? 20 : 24, weight: .bold))
+                    Text(String(format: t("%d shared file(s) ready", lang: seciliDil), sharedClientFileInbox.count))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    Text(t("Select the order that should receive the shared PDF or image.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    sharedClientFileOrderPickerVisible = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField(t("Search orders...", lang: seciliDil), text: $sharedClientFileOrderSearchText)
+                    .textFieldStyle(.plain)
+            }
+            .padding(11)
+            .background(Color.primary.opacity(0.055))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 18)
+            .padding(.bottom, 12)
+
+            Divider().background(Color.primary.opacity(0.08))
+
+            if sharedClientFilePickerOrders.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 34))
+                        .foregroundColor(.secondary.opacity(0.7))
+                    Text(t("No matching orders.", lang: seciliDil))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(sharedClientFilePickerOrders) { order in
+                            Button {
+                                chooseOrderForSharedClientFiles(order)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(order.customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("New Project", lang: seciliDil) : order.customerName)
+                                            .font(.system(size: 15, weight: .bold))
+                                            .foregroundColor(.primary)
+                                            .lineLimit(1)
+                                        Text(order.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "-" : order.designName)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                        Text(order.paymentDate.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.gray)
+                                    }
+
+                                    Spacer(minLength: 0)
+
+                                    if isImportingSharedClientFilesFromPicker && pendingSharedClientFileOrderKey == orderSelectionKey(order) {
+                                        ProgressView().controlSize(.small)
+                                    } else {
+                                        Label(t("Add to this order", lang: seciliDil), systemImage: "plus.circle.fill")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .padding(12)
+                                .background(Color.primary.opacity(0.045))
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isImportingSharedClientFilesFromPicker)
+                        }
+                    }
+                    .padding(18)
+                }
+            }
+
+            if !sharedClientFileImportMessage.isEmpty {
+                Divider().background(Color.primary.opacity(0.08))
+                Text(sharedClientFileImportMessage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(isImportingSharedClientFilesFromPicker ? .secondary : .green)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+            }
+        }
+        .frame(minWidth: isPhoneLayout ? 0 : 460, minHeight: isPhoneLayout ? 0 : 520)
+    }
+
+    private func handleStudioFlowDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "studioflow" else { return }
+        let host = url.host?.lowercased() ?? ""
+        let path = url.path.lowercased()
+        guard host == "client-files" || path.contains("client-files") else { return }
+        scheduleSharedClientFileInboxCheck(immediate: true)
+    }
+
+    private func presentPlanAccessAlert(title: String, message: String) {
+        planAccessAlertTitle = title
+        planAccessAlertMessage = message
+        showPlanAccessAlert = true
+    }
+
+    private func scheduleSharedClientFileInboxCheck(immediate: Bool = false) {
+        guard !sharedClientFileAutoPromptScheduled else { return }
+        guard !sharedClientFileOrderPickerVisible, !isImportingSharedClientFilesFromPicker else { return }
+        guard !SharedClientFileInbox.pendingFiles().isEmpty else { return }
+        guard authVM.currentPlanEntitlements.shareSheetEnabled else { return }
+
+        sharedClientFileAutoPromptScheduled = true
+        let delay: Double = immediate ? 0.15 : 0.8
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            sharedClientFileAutoPromptScheduled = false
+            guard !sharedClientFileOrderPickerVisible, !isImportingSharedClientFilesFromPicker else { return }
+            presentSharedClientFileOrderPicker()
+        }
+    }
+
+    private func presentSharedClientFileOrderPicker() {
+        guard authVM.currentPlanEntitlements.shareSheetEnabled && authVM.currentPlanEntitlements.clientFilesEnabled else {
+            sharedClientFileImportErrorMessage = t("Share Sheet and Client Files are available on Monthly Pro and Team plans.", lang: seciliDil)
+            showSharedClientFileImportError = true
+            return
+        }
+
+        let pending = SharedClientFileInbox.pendingFiles()
+        guard !pending.isEmpty else { return }
+        sharedClientFileInbox = pending
+        sharedClientFileOrderSearchText = ""
+        sharedClientFileImportMessage = firebaseManager.siparisler.isEmpty ? t("Loading orders...", lang: seciliDil) : ""
+        sharedClientFileImportErrorMessage = ""
+        aktifSekme = "Orders"
+        phoneShowsOrderDetail = false
+        sharedClientFileOrderPickerVisible = true
+    }
+
+    private func chooseOrderForSharedClientFiles(_ order: Siparis) {
+        guard authVM.currentPlanEntitlements.shareSheetEnabled && authVM.currentPlanEntitlements.clientFilesEnabled else {
+            sharedClientFileImportErrorMessage = t("Share Sheet and Client Files are available on Monthly Pro and Team plans.", lang: seciliDil)
+            showSharedClientFileImportError = true
+            return
+        }
+
+        guard canEditWorkflowFields else {
+            sharedClientFileImportErrorMessage = t("This account cannot upload client files.", lang: seciliDil)
+            showSharedClientFileImportError = true
+            return
+        }
+
+        pendingSharedClientFileOrderKey = orderSelectionKey(order)
+        if uploadSafetyRequirePolicyAcceptance && !uploadSafetyPolicyAccepted {
+            showSharedClientFileUploadPolicyPrompt = true
+            return
+        }
+        importSharedClientFilesFromPicker(to: order)
+    }
+
+    private func importSharedClientFilesFromPicker(to order: Siparis) {
+        let pending = SharedClientFileInbox.pendingFiles()
+        guard !pending.isEmpty else {
+            sharedClientFileOrderPickerVisible = false
+            return
+        }
+
+        let orderKey = orderSelectionKey(order)
+        pendingSharedClientFileOrderKey = orderKey
+        sharedClientFileInbox = pending
+        sharedClientFileImportMessage = t("Importing shared files...", lang: seciliDil)
+        isImportingSharedClientFilesFromPicker = true
+        aktifSekme = "Orders"
+        phoneShowsOrderDetail = true
+        setSeciliSiparisHizli(order, detayGuncellemesiniErtele: false)
+        importSharedClientFileFromPicker(at: 0, pendingFiles: pending, orderKey: orderKey, importedCount: 0)
+    }
+
+    private func importSharedClientFileFromPicker(at index: Int, pendingFiles: [SharedClientFileInbox.PendingFile], orderKey: String, importedCount: Int) {
+        guard index < pendingFiles.count else {
+            isImportingSharedClientFilesFromPicker = false
+            sharedClientFileInbox = SharedClientFileInbox.pendingFiles()
+            pendingSharedClientFileOrderKey = nil
+            sharedClientFileOrderPickerVisible = false
+            sharedClientFileImportMessage = String(format: t("%d shared file(s) added to this order.", lang: seciliDil), importedCount)
+            return
+        }
+
+        guard let orderIndex = firebaseManager.siparisler.firstIndex(where: { orderSelectionKey($0) == orderKey }) else {
+            isImportingSharedClientFilesFromPicker = false
+            sharedClientFileImportErrorMessage = t("Selected order could not be found.", lang: seciliDil)
+            showSharedClientFileImportError = true
+            return
+        }
+
+        let pending = pendingFiles[index]
+        guard let fileURL = SharedClientFileInbox.fileURL(for: pending) else {
+            SharedClientFileInbox.remove(pending)
+            importSharedClientFileFromPicker(at: index + 1, pendingFiles: pendingFiles, orderKey: orderKey, importedCount: importedCount)
+            return
+        }
+
+        let orderId = firebaseManager.siparisler[orderIndex].id
+        firebaseManager.uploadClientFile(fileURL: fileURL, orderId: orderId, source: "client_file_share_sheet") { item in
+            DispatchQueue.main.async {
+                if let item,
+                   let latestIndex = firebaseManager.siparisler.firstIndex(where: { orderSelectionKey($0) == orderKey }) {
+                    var updatedOrder = firebaseManager.siparisler[latestIndex]
+                    var files = updatedOrder.clientFiles ?? []
+                    files.insert(item, at: 0)
+                    updatedOrder.clientFiles = files
+                    firebaseManager.updateSiparis(updatedOrder)
+                    if seciliSiparisGorunumKey == orderKey {
+                        seciliSiparis = updatedOrder
+                    }
+                    SharedClientFileInbox.remove(pending)
+                    importSharedClientFileFromPicker(at: index + 1, pendingFiles: pendingFiles, orderKey: orderKey, importedCount: importedCount + 1)
+                } else {
+                    isImportingSharedClientFilesFromPicker = false
+                    sharedClientFileImportErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Shared file import failed.", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
+                    showSharedClientFileImportError = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var phoneOrdersView: some View {
+        if phoneShowsOrderDetail,
+           let siparis = seciliSiparis,
+           firebaseManager.siparisler.contains(where: { $0.id == siparis.id }) {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Button {
+                        withAnimation(.snappy) {
+                            phoneShowsOrderDetail = false
+                        }
                     } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                            Text(t("Orders", lang: seciliDil))
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(bgHeader)
+
+                Divider().background(Color.primary.opacity(0.1))
+
+                orderDetailView(for: siparis)
+                .id(orderSelectionKey(siparis))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(bgMain)
+        } else {
+            phoneOrderListView
+        }
+    }
+
+    private var phoneOrderListView: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t("Orders", lang: seciliDil))
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+
+                        Text("\(aramaSonuclari.count) " + t("orders", lang: seciliDil))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(minWidth: 76, maxWidth: 92, alignment: .leading)
+                    .layoutPriority(1)
+
+                    phoneOrderQuickFilterMenu
+                        .frame(maxWidth: .infinity)
+
+                    Button {
+                        withAnimation(.snappy) {
+                            phoneSearchVisible.toggle()
+                        }
+                        if phoneSearchVisible {
+                            DispatchQueue.main.async {
+                                searchFocused = true
+                            }
+                        }
+                    } label: {
+                        Image(systemName: phoneSearchVisible ? "xmark.circle.fill" : "magnifyingglass")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(phoneSearchVisible ? .red : .blue)
+                            .frame(width: 34, height: 34)
+                            .background((phoneSearchVisible ? Color.red : Color.blue).opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(phoneSearchVisible ? t("Hide Search", lang: seciliDil) : t("Show Search", lang: seciliDil))
+                }
+
+                if phoneSearchVisible {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+
+                        TextField(t("Search...", lang: seciliDil), text: $aramaMetni)
+                            .focused($searchFocused)
+                            .textFieldStyle(.plain)
+                            .foregroundColor(.primary)
+
+                        if !aramaMetni.isEmpty {
+                            Button {
+                                aramaMetni = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.primary.opacity(0.05))
+                    .cornerRadius(8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(bgSidebar)
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if firebaseManager.siparisler.isEmpty {
+                        businessTemplateEmptyState
+                            .padding(.top, 24)
+                    } else if aramaSonuclari.isEmpty {
+                        VStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 30))
+                                .foregroundColor(.gray.opacity(0.6))
+                            Text(t("No matching orders found.", lang: seciliDil))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(24)
+                    }
+
+                    ForEach(aramaSonuclari) { siparis in
+                        let siparisKey = orderSelectionKey(siparis)
+
+                        SiparisKarti(
+                            siparis: siparis,
+                            isSelected: siparisKey == seciliSiparisGorunumKey,
+                            isMultiSelected: isSiparisBulkSelected(siparis),
+                            showMultiSelection: !selectedOrderIds.isEmpty,
+                            showPreviewImage: showOrderPreviewImages,
+                            showDeliveryTime: orderCardShowDeliveryTime,
+                            showDesignName: orderCardShowDesignName,
+                            showOrderValue: orderCardShowOrderValue && canSeeFinancialData,
+                            showUpcomingSchedule: orderCardShowUpcomingSchedule,
+                            showStatusBadges: orderCardShowStatusBadges,
+                            showCustomerShortcut: false,
+                            assignedMemberLabel: assignedMemberLabel(for: siparis),
+                            assignedMemberPhotoURL: assignedMemberPhotoURL(for: siparis),
+                            lblIsimsiz: t("New Project", lang: seciliDil),
+                            summaryStep1: orderListStep1,
+                            summaryStep2: orderListStep2,
+                            customStepsJSON: customStepsJSON,
+                            sembol: seciliParaBirimi,
+                            seciliDil: seciliDil,
+                            seciliOndalik: seciliOndalik
+                        ) {
+                            openCustomerForOrder(siparis)
+                        }
+                        .onTapGesture {
+                            handleOrderTap(siparis)
+                            withAnimation(.snappy) {
+                                phoneShowsOrderDetail = true
+                            }
+                        }
+                        .contextMenu {
+                            if canAccessCustomers, customerForOrder(siparis) != nil {
+                                Button { openCustomerForOrder(siparis) } label: { Label(t("Open Customer", lang: seciliDil), systemImage: "person.crop.circle") }
+                                Divider()
+                            }
+                            if isSiparisBulkSelected(siparis) {
+                                Button { deselectSiparisForBulk(siparis) } label: { Label(t("Deselect", lang: seciliDil), systemImage: "minus.circle") }
+                            } else {
+                                Button { selectSiparisForBulk(siparis) } label: { Label(t("Select", lang: seciliDil), systemImage: "checkmark.circle") }
+                            }
+
+                            projectAssignmentMenuItems(for: siparis)
+
+                            Menu {
+                                orderCardDetailsMenuItems(adjustSidebarWidth: false)
+                            } label: {
+                                Label(t("Order Card Details", lang: seciliDil), systemImage: "rectangle.badge.checkmark")
+                            }
+
+                            Divider()
+
+                            if !selectedOrderIds.isEmpty {
+                                Button { clearBulkSelection() } label: { Label(t("Clear Selection", lang: seciliDil), systemImage: "xmark.circle") }
+                                Button(role: .destructive) { silSeciliSiparisleri() } label: { Label(t("Delete", lang: seciliDil) + " (\(selectedOrderIds.count))", systemImage: "trash") }
+                                Divider()
+                            }
+
+                            Button { hizliTamamla(siparis) } label: { Label(t("Mark as Done", lang: seciliDil), systemImage: "checkmark.circle.fill") }
+                            Button { hizliIptalEt(siparis) } label: { Label(t("Cancel Order", lang: seciliDil), systemImage: "xmark.circle.fill") }
+                            Divider()
+                            Button(role: .destructive) { silSiparis(siparis) } label: { Label(t("Delete", lang: seciliDil), systemImage: "trash") }
+                        }
                     }
                 }
-                .onDelete(perform: deleteItems)
+                .padding(14)
             }
+            .background(bgMain)
+        }
+    }
+
+    private func scheduleBusinessOnboardingGate() {
+        businessOnboardingGateOpen = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            businessOnboardingGateOpen = true
+        }
+    }
+
+    private var businessTemplateEmptyState: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "tray")
+                .font(.system(size: 42, weight: .semibold))
+                .foregroundColor(.blue)
+                .padding(16)
+                .background(Color.blue.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            VStack(spacing: 6) {
+                Text(t("Your workspace is ready", lang: seciliDil))
+                    .font(.system(size: 24, weight: .bold))
+                    .multilineTextAlignment(.center)
+
+                Text(t("Create your first order, or run the business setup again if you want StudioFlow to prepare workflow steps, fields and labels for you.", lang: seciliDil))
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    resetBusinessOnboardingForCurrentCompany()
+                } label: {
+                    Label(t("Run Business Setup", lang: seciliDil), systemImage: "wand.and.stars")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(Color.blue.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    yeniSiparisEkle()
+                } label: {
+                    Label(t("Create First Order", lang: seciliDil), systemImage: "plus.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(Color.blue)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(26)
+        .frame(maxWidth: 540)
+    }
+
+    private var businessTemplateOnboardingView: some View {
+        ZStack {
+            bgMain.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 22) {
+                    VStack(spacing: 12) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 46, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(18)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.blue, Color.purple],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                        Text(t("Set up your workspace", lang: seciliDil))
+                            .font(.system(size: isPhoneLayout ? 28 : 34, weight: .bold))
+                            .multilineTextAlignment(.center)
+
+                        Text(t("Choose your business type first. StudioFlow can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.", lang: seciliDil))
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
+                            .frame(maxWidth: 620)
+                    }
+
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(t("Business Type", lang: seciliDil))
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.secondary)
+
+                            onboardingBusinessTypeMenu
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "sparkles")
+                                    .foregroundColor(.purple)
+                                Text(t("Optional smart description", lang: seciliDil))
+                                    .font(.system(size: 13, weight: .bold))
+                            }
+
+                            Text(t("You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you leave this empty, StudioFlow will use the standard template for the selected business type.", lang: seciliDil))
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            ZStack(alignment: .topLeading) {
+                                TextEditor(text: $businessDescriptionPrompt)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.primary)
+                                    .frame(minHeight: isPhoneLayout ? 160 : 130)
+                                    .padding(8)
+                                    .background(Color.primary.opacity(0.05))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                                    )
+
+                                if businessDescriptionPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(t("Example: We create custom painted watch dials. We need watch model, dial size, artwork theme, client approval, deposit, painting stage, curing, final photos and shipping.", lang: seciliDil))
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.gray.opacity(0.72))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 18)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                        }
+
+                        VStack(spacing: 10) {
+                            Button {
+                                applyBusinessOnboardingTemplate(smart: true)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "wand.and.stars")
+                                    Text(t("Smart Customize", lang: seciliDil))
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.purple)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                applyBusinessOnboardingTemplate(smart: false)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "square.grid.2x2")
+                                    Text(t("Use Standard Template", lang: seciliDil))
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.blue)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.blue.opacity(0.10))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                markBusinessOnboardingCompletedForCurrentCompany()
+                            } label: {
+                                Text(t("Skip for now", lang: seciliDil))
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(22)
+                    .frame(maxWidth: 680)
+                    .background(bgHeader)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.20 : 0.08), radius: 24, x: 0, y: 12)
+
+                    Text(t("You can change this later from Settings > Workflow > Business Type.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(isPhoneLayout ? 18 : 38)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var onboardingBusinessTypeMenu: some View {
+        Menu {
+            ForEach(businessTypes, id: \.self) { type in
+                Button {
+                    businessType = type
+                    seedOnboardingPromptIfNeeded(for: type)
+                } label: {
+                    HStack {
+                        Text(type)
+                        if businessType == type {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "briefcase.fill")
+                    .foregroundColor(.blue)
+
+                Text(businessType)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Spacer()
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private struct BusinessOnboardingPreset {
+        let customFields: [String]
+        let customSteps: [String]
+        let customToggles: [String]
+        let inventoryLabels: [String]
+        let activeStatuses: [String]
+        let summaryStep1: String
+        let summaryStep2: String
+        let baseCostLabel: String
+        let expenseItems: [String]
+        let remainingItems: [String]
+        let showMaterials: Bool
+        let showShipping: Bool
+        let showPriority: Bool
+        let showCustomerNotes: Bool
+    }
+
+    private func seedOnboardingPromptIfNeeded(for type: String) {
+        guard businessDescriptionPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        switch type {
+        case "Watch Dial Painting Studio", "Custom Art Studio":
+            businessDescriptionPrompt = "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping."
+        case "Photography Studio":
+            businessDescriptionPrompt = "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes."
+        case "Repair Service":
+            businessDescriptionPrompt = "We repair customer items. We need model, serial number, issue reported, diagnostics, quote approval, parts order, repair, testing and collection or shipping."
+        case "Handmade Products":
+            businessDescriptionPrompt = "We make custom products. We need product type, size, colour, material, customer approval, production, packaging, shipping and balance payment."
+        default:
+            businessDescriptionPrompt = "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
+        }
+    }
+
+    private func applyBusinessOnboardingTemplate(smart: Bool) {
+        let text = smart ? (businessType + "\n" + businessDescriptionPrompt).lowercased() : businessType.lowercased()
+        let preset = onboardingPreset(for: text)
+        applyBusinessOnboardingPreset(preset)
+        markBusinessOnboardingCompletedForCurrentCompany()
+    }
+
+    private func applyBusinessOnboardingPreset(_ preset: BusinessOnboardingPreset) {
+        showCardPreview = true
+        showCardSummary = true
+        showCardCustomer = true
+        showCardDelivery = true
+        showCardCommunication = true
+        showCardNotes = true
+        showCardFinancial = true
+        showCardStatus = true
+        showCardMaterials = preset.showMaterials
+        showCardShipping = preset.showShipping
+        showCardPriority = preset.showPriority
+        showCardCustomerNotes = preset.showCustomerNotes
+
+        customFieldsJSON = encodeCustomStepTitles(preset.customFields)
+        customStepsJSON = encodeCustomStepTitles(preset.customSteps)
+        customTogglesJSON = encodeCustomStepTitles(preset.customToggles)
+
+        applyInventoryLabels(preset.inventoryLabels)
+
+        summaryStep1 = preset.summaryStep1
+        summaryStep2 = preset.summaryStep2
+        orderListStep1 = preset.summaryStep1
+        orderListStep2 = preset.summaryStep2
+
+        activeStatusesJSON = encodeStringList(preset.activeStatuses)
+        financialExpenseItemsJSON = encodeCustomStepTitles(preset.expenseItems)
+        financialRemainingItemsJSON = encodeCustomStepTitles(preset.remainingItems)
+        financialShowBaseCost = true
+        financialBaseCostLabel = preset.baseCostLabel
+
+        syncBusinessOnboardingSettingsToCloud()
+    }
+
+    private func applyInventoryLabels(_ labels: [String]) {
+        let cleanedLabels = labels
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let finalLabels = cleanedLabels.isEmpty ? ["Material Check 1"] : cleanedLabels
+        let padded = finalLabels + ["Item", "Item", "Item", "Item"]
+        invLabel1 = padded[0]
+        invLabel2 = padded[1]
+        invLabel3 = padded[2]
+        invLabel4 = padded[3]
+        materialsDefaultChecksJSON = encodeCustomStepTitles(finalLabels)
+    }
+
+    private func encodeCustomStepTitles(_ titles: [String]) -> String {
+        let items = titles
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { CustomStep(title: $0) }
+
+        guard let data = try? JSONEncoder().encode(items),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+
+        return encoded
+    }
+
+    private func encodeStringList(_ values: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(values),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+
+        return encoded
+    }
+
+    private func syncBusinessOnboardingSettingsToCloud() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(companyId)
+            .setData([
+                "businessType": businessType,
+                "businessDescriptionPrompt": businessDescriptionPrompt,
+                "activeStatusesJSON": activeStatusesJSON,
+                "customFieldsJSON": customFieldsJSON,
+                "customTogglesJSON": customTogglesJSON,
+                "customStepsJSON": customStepsJSON,
+                "financialExpenseItemsJSON": financialExpenseItemsJSON,
+                "financialRemainingItemsJSON": financialRemainingItemsJSON,
+                "financialShowBaseCost": financialShowBaseCost,
+                "financialBaseCostLabel": financialBaseCostLabel,
+                "summaryStep1": summaryStep1,
+                "summaryStep2": summaryStep2,
+                "orderListStep1": orderListStep1,
+                "orderListStep2": orderListStep2,
+                "invLabel1": invLabel1,
+                "invLabel2": invLabel2,
+                "invLabel3": invLabel3,
+                "invLabel4": invLabel4,
+                "materialsDefaultChecksJSON": materialsDefaultChecksJSON,
+                "showCardCustomerNotes": showCardCustomerNotes,
+                "showCardPreview": showCardPreview,
+                "showCardSummary": showCardSummary,
+                "showCardCustomer": showCardCustomer,
+                "showCardDelivery": showCardDelivery,
+                "showCardCommunication": showCardCommunication,
+                "showCardNotes": showCardNotes,
+                "showCardFinancial": showCardFinancial,
+                "showCardStatus": showCardStatus,
+                "showCardMaterials": showCardMaterials,
+                "showCardShipping": showCardShipping,
+                "showCardPriority": showCardPriority,
+                "businessTemplateAppliedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+    }
+
+    private func markBusinessOnboardingCompletedForCurrentCompany() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+
+        var ids = completedBusinessOnboardingCompanyIds
+        ids.insert(companyId)
+
+        if let data = try? JSONEncoder().encode(Array(ids).sorted()),
+           let encoded = String(data: data, encoding: .utf8) {
+            businessOnboardingCompletedCompanyIdsJSON = encoded
+        }
+    }
+
+    private func resetBusinessOnboardingForCurrentCompany() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+
+        var ids = completedBusinessOnboardingCompanyIds
+        ids.remove(companyId)
+
+        if let data = try? JSONEncoder().encode(Array(ids).sorted()),
+           let encoded = String(data: data, encoding: .utf8) {
+            businessOnboardingCompletedCompanyIdsJSON = encoded
+        }
+    }
+
+    private func onboardingPreset(for text: String) -> BusinessOnboardingPreset {
+        let normalized = text.lowercased()
+
+        if normalized.contains("photo") || normalized.contains("shoot") || normalized.contains("photography") {
+            return BusinessOnboardingPreset(
+                customFields: ["Shoot Type", "Location", "Shoot Date", "Package"],
+                customSteps: ["Enquiry", "Booking", "Pre-shoot", "Shooting", "Selection", "Editing", "Delivery"],
+                customToggles: ["Deposit Paid?", "Booking Confirmed?", "Shoot Completed?", "Selection Sent?", "Editing Completed?", "Gallery Delivered?"],
+                inventoryLabels: ["Location Confirmed", "Equipment Ready", "Assistant Booked", "Gallery Ready"],
+                activeStatuses: ["New", "Not Yet", "Booked", "In Progress", "Review", "Done", "Cancelled"],
+                summaryStep1: "Booking",
+                summaryStep2: "Editing",
+                baseCostLabel: "Shoot Cost (Base)",
+                expenseItems: ["Assistant Cost", "Studio / Location", "Editing Cost", "Travel Cost"],
+                remainingItems: ["Shoot Balance", "Extra Edits"],
+                showMaterials: true,
+                showShipping: false,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        if normalized.contains("repair") || normalized.contains("service") || normalized.contains("restore") {
+            return BusinessOnboardingPreset(
+                customFields: ["Item / Device Model", "Serial Number", "Issue Reported", "Warranty Status"],
+                customSteps: ["Check-in", "Diagnostics", "Quote Approval", "Parts Order", "Repair", "Testing", "Ready for Pickup"],
+                customToggles: ["Item Received?", "Customer Approved Cost?", "Parts Arrived?", "Repair Completed?", "Quality Tested?", "Warranty Note Added?"],
+                inventoryLabels: ["Parts Ordered", "Parts Received", "Tools Ready", "Quality Tested"],
+                activeStatuses: ["New", "Not Yet", "Waiting Parts", "In Progress", "Testing", "Done", "Cancelled"],
+                summaryStep1: "Diagnostics",
+                summaryStep2: "Repair",
+                baseCostLabel: "Service Cost (Base)",
+                expenseItems: ["Parts Cost", "Technician Cost", "Testing Cost"],
+                remainingItems: ["Repair Balance", "Parts Reimbursement"],
+                showMaterials: true,
+                showShipping: true,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        if normalized.contains("tailor") || normalized.contains("alteration") || normalized.contains("garment") || normalized.contains("fabric") {
+            return BusinessOnboardingPreset(
+                customFields: ["Garment Type", "Measurements", "Fabric", "Fitting Date"],
+                customSteps: ["Consultation", "Measurements", "Pinning", "Cutting", "Sewing", "Fitting", "Final Press"],
+                customToggles: ["Measurements Taken?", "Fabric Received?", "Fitting Approved?", "Final Pressed?", "Ready for Collection?"],
+                inventoryLabels: ["Fabric Received", "Trim Ready", "Fitting Booked", "Final Pressed"],
+                activeStatuses: ["New", "Not Yet", "In Progress", "Fitting", "Ready", "Done", "Cancelled"],
+                summaryStep1: "Measurements",
+                summaryStep2: "Sewing",
+                baseCostLabel: "Labour Cost (Base)",
+                expenseItems: ["Fabric Cost", "Trim / Accessories", "Outwork Cost"],
+                remainingItems: ["Final Fitting Balance"],
+                showMaterials: true,
+                showShipping: false,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        if normalized.contains("jewellery") || normalized.contains("jewelry") || normalized.contains("stone") || normalized.contains("metal") {
+            return BusinessOnboardingPreset(
+                customFields: ["Metal Type", "Size", "Stone / Setting", "Design Reference"],
+                customSteps: ["Consultation", "Design", "CAD / Mockup", "Casting", "Stone Setting", "Polishing", "Final Check"],
+                customToggles: ["Deposit Paid?", "Design Approved?", "Metal Sourced?", "Stones Arrived?", "Hallmarked?", "Box Ready?"],
+                inventoryLabels: ["Metal Sourced", "Stones Ready", "Hallmark Done", "Box Ready"],
+                activeStatuses: ["New", "Not Yet", "Design", "In Progress", "Final Review", "Done", "Cancelled"],
+                summaryStep1: "Design",
+                summaryStep2: "Stone Setting",
+                baseCostLabel: "Workshop Cost (Base)",
+                expenseItems: ["Metal Cost", "Stone Cost", "Casting Cost", "Hallmark Cost"],
+                remainingItems: ["Final Jewellery Balance"],
+                showMaterials: true,
+                showShipping: true,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        if normalized.contains("food") || normalized.contains("bakery") || normalized.contains("catering") {
+            return BusinessOnboardingPreset(
+                customFields: ["Event Type", "Guest Count", "Dietary Notes", "Delivery Time"],
+                customSteps: ["Enquiry", "Quote", "Deposit", "Menu Approval", "Preparation", "Packaging", "Delivery"],
+                customToggles: ["Deposit Paid?", "Menu Approved?", "Ingredients Ordered?", "Prep Completed?", "Packed?", "Delivered?"],
+                inventoryLabels: ["Ingredients Ready", "Packaging Ready", "Kitchen Slot", "Delivery Ready"],
+                activeStatuses: ["New", "Not Yet", "Booked", "In Progress", "Ready", "Done", "Cancelled"],
+                summaryStep1: "Menu Approval",
+                summaryStep2: "Preparation",
+                baseCostLabel: "Order Cost (Base)",
+                expenseItems: ["Ingredient Cost", "Kitchen / Prep Cost", "Packaging Cost", "Delivery Prep"],
+                remainingItems: ["Event Balance"],
+                showMaterials: true,
+                showShipping: true,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        if normalized.contains("beauty") || normalized.contains("clinic") || normalized.contains("wellness") {
+            return BusinessOnboardingPreset(
+                customFields: ["Treatment Type", "Appointment Date", "Client Notes", "Follow-up"],
+                customSteps: ["Enquiry", "Consultation", "Booking", "Preparation", "Appointment", "Aftercare", "Follow-up"],
+                customToggles: ["Consultation Done?", "Deposit Paid?", "Consent Form?", "Appointment Completed?", "Aftercare Sent?", "Follow-up Booked?"],
+                inventoryLabels: ["Room Ready", "Equipment Ready", "Products Ready", "Aftercare Ready"],
+                activeStatuses: ["New", "Not Yet", "Booked", "In Progress", "Follow-up", "Done", "Cancelled"],
+                summaryStep1: "Booking",
+                summaryStep2: "Appointment",
+                baseCostLabel: "Treatment Cost (Base)",
+                expenseItems: ["Product Cost", "Room / Equipment", "Practitioner Cost"],
+                remainingItems: ["Treatment Balance", "Follow-up Payment"],
+                showMaterials: true,
+                showShipping: false,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        if normalized.contains("designer") || normalized.contains("freelancer") || normalized.contains("agency") || normalized.contains("creative") || normalized.contains("consult") {
+            return BusinessOnboardingPreset(
+                customFields: ["Project Type", "Brief", "Deadline", "Revision Limit"],
+                customSteps: ["Enquiry", "Brief", "Quote", "Deposit", "Draft", "Revision", "Delivery"],
+                customToggles: ["Brief Received?", "Deposit Paid?", "Draft Sent?", "Revision Approved?", "Final Files Sent?"],
+                inventoryLabels: ["Brief Ready", "Assets Received", "Draft Sent", "Final Delivered"],
+                activeStatuses: ["New", "Not Yet", "In Progress", "Review", "Done", "Cancelled"],
+                summaryStep1: "Draft",
+                summaryStep2: "Revision",
+                baseCostLabel: "Project Cost (Base)",
+                expenseItems: ["Freelancer Cost", "Software / Tools", "Asset Purchase"],
+                remainingItems: ["Project Balance", "Extra Revision Fee"],
+                showMaterials: false,
+                showShipping: false,
+                showPriority: true,
+                showCustomerNotes: true
+            )
+        }
+
+        return BusinessOnboardingPreset(
+            customFields: ["Design Theme", "Size / Model", "Special Request"],
+            customSteps: ["Enquiry", "Concept", "Mockup", "Client Approval", "Production", "Final Review", "Delivery"],
+            customToggles: ["Deposit Paid?", "Reference Received?", "Mockup Approved?", "Production Completed?", "Final Photos Sent?", "Ready to Ship?"],
+            inventoryLabels: ["Materials Ready", "Item Received", "Packaging Ready", "Final Checked"],
+            activeStatuses: ["New", "Not Yet", "In Progress", "Review", "Done", "Cancelled"],
+            summaryStep1: "Concept",
+            summaryStep2: "Production",
+            baseCostLabel: "Cost (Base)",
+            expenseItems: ["Material Cost", "Supplier Cost", "Packaging Cost"],
+            remainingItems: ["Remaining Balance"],
+            showMaterials: true,
+            showShipping: true,
+            showPriority: true,
+            showCustomerNotes: true
+        )
+    }
+
+    private var ordersSidebarResizeHandle: some View {
+        OrdersSidebarResizeHandle(
+            storedWidth: $ordersSidebarWidth,
+            temporaryWidth: $temporaryOrdersSidebarWidth,
+            isHovering: $orderSidebarResizerHovering,
+            minWidth: minOrdersSidebarWidth,
+            maxWidth: maxOrdersSidebarWidth,
+            resetWidth: defaultOrdersSidebarWidth,
+            onWidthChangeEnd: { _ in
+                syncWorkspaceSidebarLayout()
+            }
+        )
+        .frame(width: 8)
+        .frame(maxHeight: .infinity)
+        .help(t("Drag to resize the orders list. Double-click to reset.", lang: seciliDil))
+    }
+
+    private var ordersSidebarRevealHandle: some View {
+        VStack(spacing: 12) {
+            Button {
+                withAnimation(.snappy) {
+                    isOrdersSidebarVisible = true
+                }
+                syncWorkspaceSidebarLayout()
+            } label: {
+                Image(systemName: "sidebar.leading")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help(t("Show orders list", lang: seciliDil))
+
+            Text(t("Orders", lang: seciliDil))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.secondary)
+                .rotationEffect(.degrees(-90))
+                .fixedSize()
+                .frame(width: 34, height: 80)
+        }
+        .frame(width: 48)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 16)
+        .background(bgSidebar)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(width: 1)
+        }
+    }
+
+
+    private func localizedCloudSyncFileText(_ count: Int, uploading: Bool) -> String {
+        guard count > 0 else { return "" }
+        let key = uploading ? "%d file(s) uploading" : "%d file(s) waiting to upload"
+        return " • " + String(format: t(key, lang: seciliDil), count)
+    }
+
+    private func localizedCloudWaitingMessage(waitingChanges: Int, waitingFiles: Int, isOffline: Bool) -> String {
+        let fileText = localizedCloudSyncFileText(waitingFiles, uploading: !isOffline)
+        let key = isOffline ? "Offline. %d change(s) waiting to sync%@." : "Online. Syncing %d waiting change(s)%@."
+        return String(format: t(key, lang: seciliDil), waitingChanges, fileText)
+    }
+
+    @discardableResult
+    private func refreshCloudSyncIndicatorForOfflineState() -> Bool {
+        let waitingChanges = firebaseManager.pendingOfflineChanges
+        let waitingFiles = firebaseManager.pendingClientFileUploadsCount
+        let totalWaiting = waitingChanges + waitingFiles
+
+        if !firebaseManager.isOnline {
+            cloudSyncState = "offline"
+            if totalWaiting > 0 {
+                cloudSyncMessage = localizedCloudWaitingMessage(waitingChanges: waitingChanges, waitingFiles: waitingFiles, isOffline: true)
+            } else {
+                cloudSyncMessage = t("Offline. Showing saved local data.", lang: seciliDil)
+            }
+            return true
+        }
+
+        if totalWaiting > 0 {
+            cloudSyncState = "syncing"
+            cloudSyncMessage = localizedCloudWaitingMessage(waitingChanges: waitingChanges, waitingFiles: waitingFiles, isOffline: false)
+            return true
+        }
+
+        if cloudSyncState == "offline" || cloudSyncState == "syncing" {
+            cloudSyncState = "saved"
+            cloudSyncMessage = t("Saved to cloud.", lang: seciliDil)
+            lastCloudSyncDate = Date()
+        }
+        return false
+    }
+
+    private func updateCloudSyncIndicator(snapshot: DocumentSnapshot?, error: Error?) {
+        if refreshCloudSyncIndicatorForOfflineState() { return }
+
+        if let error = error {
+            cloudSyncState = "error"
+            cloudSyncMessage = error.localizedDescription
+            return
+        }
+
+        guard let snapshot else {
+            cloudSyncState = "connecting"
+            cloudSyncMessage = t("Connecting to cloud...", lang: seciliDil)
+            return
+        }
+
+        if snapshot.metadata.hasPendingWrites {
+            cloudSyncState = "saving"
+            cloudSyncMessage = t("Saving to cloud...", lang: seciliDil)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if cloudSyncState == "saving" {
+                    cloudSyncState = "saved"
+                    cloudSyncMessage = t("Saved to cloud.", lang: seciliDil)
+                    lastCloudSyncDate = Date()
+                }
+            }
+        } else {
+            cloudSyncState = "saved"
+            cloudSyncMessage = t("Saved to cloud.", lang: seciliDil)
+            lastCloudSyncDate = Date()
+        }
+    }
+
+    private func syncFirebaseManagerWithAuthCompany() {
+        let companyId = authVM.currentCompanyId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        guard authVM.isLoggedIn, !companyId.isEmpty else {
+            firebaseManager.resetForLogout()
+            return
+        }
+
+        firebaseManager.configure(companyId: companyId, workspaceRole: authVM.currentWorkspaceRole)
+    }
+
+    private func startCompanySettingsListener() {
+        companySettingsListener?.remove()
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else {
+            companySettingsListener = nil
+            cloudSyncState = "connecting"
+            cloudSyncMessage = t("Waiting for account workspace...", lang: seciliDil)
+            return
+        }
+        companySettingsListener = Firestore.firestore()
+            .collection("companySettings")
+            .document(companyId)
+            .addSnapshotListener { snapshot, error in
+                updateCloudSyncIndicator(snapshot: snapshot, error: error)
+
+                if let error = error {
+                    print("Company settings listener error: \(error)")
+                    return
+                }
+
+                guard let data = snapshot?.data() else { return }
+
+                func applyString(_ key: String, _ setter: (String) -> Void, _ current: String) {
+                    if let cloudValue = data[key] as? String, cloudValue != current {
+                        setter(cloudValue)
+                    }
+                }
+
+                func applyBool(_ key: String, _ setter: (Bool) -> Void, _ current: Bool) {
+                    if let cloudValue = data[key] as? Bool, cloudValue != current {
+                        setter(cloudValue)
+                    }
+                }
+
+                func applyDouble(_ key: String, _ setter: (Double) -> Void, _ current: Double) {
+                    let cloudValue: Double?
+                    if let value = data[key] as? Double {
+                        cloudValue = value
+                    } else if let value = data[key] as? Int {
+                        cloudValue = Double(value)
+                    } else {
+                        cloudValue = nil
+                    }
+
+                    if let cloudValue, abs(cloudValue - current) > 0.5 {
+                        setter(cloudValue)
+                    }
+                }
+
+                if let cloudLogo = data["appLogoUrl"] as? String {
+                    let cleaned = cloudLogo.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if cleaned != appLogoUrl {
+                        appLogoUrl = cleaned
+                    }
+                }
+
+                applyString("businessType", { businessType = $0 }, businessType)
+                applyString("businessDescriptionPrompt", { businessDescriptionPrompt = $0 }, businessDescriptionPrompt)
+                applyString("seciliDil", { seciliDil = $0 }, seciliDil)
+                applyString("appTheme", { appTheme = $0 }, appTheme)
+                applyString("appSubtitle", { appSubtitle = $0 }, appSubtitle)
+                applyString("activeStatusesJSON", { activeStatusesJSON = $0 }, activeStatusesJSON)
+                applyString("customFieldsJSON", { customFieldsJSON = $0 }, customFieldsJSON)
+                applyString("customTogglesJSON", { customTogglesJSON = $0 }, customTogglesJSON)
+                applyBool("communicationShowTelephone", { communicationShowTelephone = $0 }, communicationShowTelephone)
+                applyBool("communicationShowEmail", { communicationShowEmail = $0 }, communicationShowEmail)
+                applyBool("communicationShowAddress", { communicationShowAddress = $0 }, communicationShowAddress)
+                applyBool("communicationShowChannel", { communicationShowChannel = $0 }, communicationShowChannel)
+                applyBool("communicationShowCustomerNotes", { communicationShowCustomerNotes = $0 }, communicationShowCustomerNotes)
+                applyString("communicationChannelLabelsJSON", { communicationChannelLabelsJSON = $0 }, communicationChannelLabelsJSON)
+                applyString("specialNoteSectionsJSON", { specialNoteSectionsJSON = $0 }, specialNoteSectionsJSON)
+                applyString("customStepsJSON", { customStepsJSON = $0 }, customStepsJSON)
+                applyString("financialExpenseItemsJSON", { financialExpenseItemsJSON = $0 }, financialExpenseItemsJSON)
+                applyString("financialRemainingItemsJSON", { financialRemainingItemsJSON = $0 }, financialRemainingItemsJSON)
+                applyBool("financialShowBaseCost", { financialShowBaseCost = $0 }, financialShowBaseCost)
+                applyString("financialBaseCostLabel", { financialBaseCostLabel = $0 }, financialBaseCostLabel)
+                applyString("summaryStep1", { summaryStep1 = $0 }, summaryStep1)
+                applyString("summaryStep2", { summaryStep2 = $0 }, summaryStep2)
+                applyString("orderListStep1", { orderListStep1 = $0 }, orderListStep1)
+                applyString("orderListStep2", { orderListStep2 = $0 }, orderListStep2)
+                applyBool("orderCardShowPreviewImage", { showOrderPreviewImages = $0 }, showOrderPreviewImages)
+                applyBool("orderCardShowDeliveryTime", { orderCardShowDeliveryTime = $0 }, orderCardShowDeliveryTime)
+                applyBool("orderCardShowDesignName", { orderCardShowDesignName = $0 }, orderCardShowDesignName)
+                applyBool("orderCardShowOrderValue", { orderCardShowOrderValue = $0 }, orderCardShowOrderValue)
+                applyBool("orderCardShowUpcomingSchedule", { orderCardShowUpcomingSchedule = $0 }, orderCardShowUpcomingSchedule)
+                applyBool("orderCardShowStatusBadges", { orderCardShowStatusBadges = $0 }, orderCardShowStatusBadges)
+                applyDouble("ordersSidebarWidth", { ordersSidebarWidth = min(max($0, minOrdersSidebarWidth), maxOrdersSidebarWidth) }, ordersSidebarWidth)
+                applyBool("ordersSidebarVisible", { isOrdersSidebarVisible = $0 }, isOrdersSidebarVisible)
+                applyBool("dashShowRevenue", { dashShowRevenue = $0 }, dashShowRevenue)
+                applyBool("dashShowPending", { dashShowPending = $0 }, dashShowPending)
+                applyBool("dashShowCost", { dashShowCost = $0 }, dashShowCost)
+                applyBool("dashShowFee", { dashShowFee = $0 }, dashShowFee)
+                applyBool("dashShowShipping", { dashShowShipping = $0 }, dashShowShipping)
+                applyBool("dashShowTax", { dashShowTax = $0 }, dashShowTax)
+                applyBool("dashShowProfit", { dashShowProfit = $0 }, dashShowProfit)
+
+                applyString("invLabel1", { invLabel1 = $0 }, invLabel1)
+                applyString("invLabel2", { invLabel2 = $0 }, invLabel2)
+                applyString("invLabel3", { invLabel3 = $0 }, invLabel3)
+                applyString("invLabel4", { invLabel4 = $0 }, invLabel4)
+                applyString("materialsDefaultChecksJSON", { materialsDefaultChecksJSON = $0 }, materialsDefaultChecksJSON)
+
+                applyBool("showCardCustomerNotes", { showCardCustomerNotes = $0 }, showCardCustomerNotes)
+                applyBool("showCardPreview", { showCardPreview = $0 }, showCardPreview)
+                applyBool("showCardSummary", { showCardSummary = $0 }, showCardSummary)
+                applyBool("showCardCustomer", { showCardCustomer = $0 }, showCardCustomer)
+                applyBool("showCardDelivery", { showCardDelivery = $0 }, showCardDelivery)
+                applyBool("showCardCommunication", { showCardCommunication = $0 }, showCardCommunication)
+                applyBool("showCardNotes", { showCardNotes = $0 }, showCardNotes)
+                applyBool("showCardFinancial", { showCardFinancial = $0 }, showCardFinancial)
+                applyBool("showCardStatus", { showCardStatus = $0 }, showCardStatus)
+                applyBool("showCardShipping", { showCardShipping = $0 }, showCardShipping)
+                applyBool("showCardMaterials", { showCardMaterials = $0 }, showCardMaterials)
+                applyBool("showCardPriority", { showCardPriority = $0 }, showCardPriority)
+            }
+    }
+
+    @ViewBuilder
+    private func orderDetailView(for siparis: Siparis) -> some View {
+        if isViewOnlyWorkspace {
+            ViewOnlyOrderDetailView(
+                siparis: siparis,
+                seciliDil: seciliDil,
+                summaryStep1: summaryStep1,
+                summaryStep2: summaryStep2
+            )
+        } else {
+            SiparisDetayView(
+                siparis: guvenliBinding(icin: siparis),
+                seciliMusteri: $seciliMusteri,
+                aktifSekme: $aktifSekme,
+                hideFinancialForWorkflow: !canSeeFinancialData
+            )
+        }
+    }
+
+    private func canOpenTab(_ tab: String) -> Bool {
+        switch tab {
+        case "Orders": return canAccessOrders
+        case "Dashboard": return canAccessDashboard
+        case "Schedule": return canAccessSchedule
+        case "Customers": return canAccessCustomers
+        case "QuickReply": return canAccessQuickReply
+        case "Settings": return canAccessSettings
+        default: return false
+        }
+    }
+
+    private var firstAccessibleWorkspaceTab: String {
+        ["Orders", "Dashboard", "Schedule", "Customers", "QuickReply", "Settings"].first(where: canOpenTab) ?? "Orders"
+    }
+
+    private func enforceWorkspaceRoleAccess() {
+        if !canOpenTab(aktifSekme) {
+            aktifSekme = firstAccessibleWorkspaceTab
+        }
+    }
+
+    private func restrictedAccessView(title: String, message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 42))
+                .foregroundColor(.purple)
+            Text(title)
+                .font(.system(size: 22, weight: .bold))
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(bgMain)
+    }
+
+    private func stopCompanySettingsListener() {
+        companySettingsListener?.remove()
+        companySettingsListener = nil
+        cloudSyncState = "connecting"
+        cloudSyncMessage = t("Cloud listener stopped.", lang: seciliDil)
+    }
+
+    @ViewBuilder
+    private var klavyeKisayollari: some View {
+        Group {
+            Button(t("Undo", lang: seciliDil)) { firebaseManager.undo() }
+                .keyboardShortcut("z", modifiers: .command)
+                .disabled(!firebaseManager.canUndo)
+            Button(t("Redo", lang: seciliDil)) { firebaseManager.redo() }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(!firebaseManager.canRedo)
+            Button(t("New Project", lang: seciliDil)) { yeniSiparisEkle() }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(!canEditWorkflowFields)
+            Button(t("Save", lang: seciliDil)) { kaydetSeciliSiparis() }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!canEditWorkflowFields)
+            Button(t("Find", lang: seciliDil)) { if canAccessOrders { aktifSekme = "Orders"; searchFocused = true } }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(!canAccessOrders)
+            Button(t("Orders", lang: seciliDil)) { if canAccessOrders { aktifSekme = "Orders"; orderListFocused = true } }
+                .keyboardShortcut("1", modifiers: .command)
+                .disabled(!canAccessOrders)
+            Button(t("Dashboard", lang: seciliDil)) { if canAccessDashboard { aktifSekme = "Dashboard" } }
+                .keyboardShortcut("2", modifiers: .command)
+                .disabled(!canAccessDashboard)
+            Button(t("Schedule", lang: seciliDil)) { if canAccessSchedule { aktifSekme = "Schedule" } }
+                .keyboardShortcut("3", modifiers: .command)
+                .disabled(!canAccessSchedule)
+            Button(t("Customers", lang: seciliDil)) { if canAccessCustomers { aktifSekme = "Customers" } }
+                .keyboardShortcut("4", modifiers: .command)
+                .disabled(!canAccessCustomers)
+            Button(t("Quick Reply", lang: seciliDil)) { if canAccessQuickReply { aktifSekme = "QuickReply" } }
+                .keyboardShortcut("5", modifiers: .command)
+                .disabled(!canAccessQuickReply)
+            Button(t("Settings", lang: seciliDil)) { if canAccessSettings { aktifSekme = "Settings" } }
+                .keyboardShortcut(",", modifiers: .command)
+                .disabled(!canAccessSettings)
+            Button(t("Delete Selected Order", lang: seciliDil)) { silSeciliSiparis() }
+                .keyboardShortcut(.delete, modifiers: [])
+                .disabled(!canEditCurrentWorkspace)
+        }
+    }
+
+    @ViewBuilder
+    private func orderCardDetailsMenuItems(adjustSidebarWidth: Bool) -> some View {
+        Button { toggleOrderPreviewImages(adjustSidebarWidth: adjustSidebarWidth) } label: {
+            Label(t("Preview Image", lang: seciliDil), systemImage: showOrderPreviewImages ? "checkmark.circle.fill" : "circle")
+        }
+
+        Divider()
+
+        Button { toggleOrderCardOption("deliveryTime") } label: { Label(t("Delivery Time", lang: seciliDil), systemImage: orderCardShowDeliveryTime ? "checkmark.circle.fill" : "circle") }
+        Button { toggleOrderCardOption("designName") } label: { Label(t("Design Name", lang: seciliDil), systemImage: orderCardShowDesignName ? "checkmark.circle.fill" : "circle") }
+        if canSeeFinancialData {
+            Button { toggleOrderCardOption("orderValue") } label: { Label(t("Order Value", lang: seciliDil), systemImage: orderCardShowOrderValue ? "checkmark.circle.fill" : "circle") }
+        }
+        Button { toggleOrderCardOption("upcomingSchedule") } label: { Label(t("Upcoming Schedule", lang: seciliDil), systemImage: orderCardShowUpcomingSchedule ? "checkmark.circle.fill" : "circle") }
+        Button { toggleOrderCardOption("statusBadges") } label: { Label(t("Production Status", lang: seciliDil), systemImage: orderCardShowStatusBadges ? "checkmark.circle.fill" : "circle") }
+    }
+
+    private func toggleOrderPreviewImages(adjustSidebarWidth: Bool = true) {
+        let wasShowing = showOrderPreviewImages
+        let currentWidth = effectiveOrdersSidebarWidth
+        showOrderPreviewImages.toggle()
+
+        if adjustSidebarWidth {
+            let adjustedWidth = wasShowing ? currentWidth - 72 : currentWidth + 72
+            ordersSidebarWidth = min(max(adjustedWidth, minOrdersSidebarWidth), maxOrdersSidebarWidth)
+            temporaryOrdersSidebarWidth = nil
+        }
+
+        syncOrderCardDetailSettings()
+    }
+
+    private func toggleOrderCardOption(_ option: String) {
+        switch option {
+        case "deliveryTime": orderCardShowDeliveryTime.toggle()
+        case "designName": orderCardShowDesignName.toggle()
+        case "orderValue": orderCardShowOrderValue.toggle()
+        case "upcomingSchedule": orderCardShowUpcomingSchedule.toggle()
+        case "statusBadges": orderCardShowStatusBadges.toggle()
+        default: return
+        }
+        syncOrderCardDetailSettings()
+    }
+
+    private func syncOrderCardDetailSettings() {
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(firebaseManager.currentCompanyId)
+            .setData([
+                "orderCardShowPreviewImage": showOrderPreviewImages,
+                "orderCardShowDeliveryTime": orderCardShowDeliveryTime,
+                "orderCardShowDesignName": orderCardShowDesignName,
+                "orderCardShowOrderValue": orderCardShowOrderValue,
+                "orderCardShowUpcomingSchedule": orderCardShowUpcomingSchedule,
+                "orderCardShowStatusBadges": orderCardShowStatusBadges,
+                "orderCardSettingsUpdatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+    }
+
+    private func syncWorkspaceSidebarLayout() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(companyId)
+            .setData([
+                "ordersSidebarWidth": min(max(ordersSidebarWidth, minOrdersSidebarWidth), maxOrdersSidebarWidth),
+                "ordersSidebarVisible": isOrdersSidebarVisible,
+                "workspaceSidebarLayoutUpdatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+    }
+
+    private func yeniSiparisEkle() {
+        guard canEditWorkflowFields else { return }
+        guard authVM.canCreateMoreOrders(currentCount: firebaseManager.siparisler.count) else {
+            presentPlanAccessAlert(
+                title: t("Plan limit reached", lang: seciliDil),
+                message: t("Your current plan has reached its order limit. Upgrade the workspace plan to add more orders.", lang: seciliDil)
+            )
+            return
+        }
+
+        withAnimation {
+            var yeni = Siparis()
+            yeni.companyId = firebaseManager.currentCompanyId
+            yeni.customerName = t("New Project", lang: seciliDil)
+            yeni.historyLog = [
+                OrderHistoryLogItem(
+                    id: UUID(),
+                    createdAt: Date(),
+                    title: "Order created",
+                    oldValue: "-",
+                    newValue: t("Created", lang: seciliDil)
+                )
+            ]
+            firebaseManager.addSiparis(yeni)
+            aktifSekme = "Orders"
+            orderListFocused = true
+        }
+    }
+    
+    private func hizliTamamla(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Done"; guncelSiparis.status = "Done"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Done" }; guncelSiparis.extraStatuses = yeniExtralar }; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
+    private func hizliIptalEt(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Cancelled"; guncelSiparis.status = "Cancelled"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Cancelled" }; guncelSiparis.extraStatuses = yeniExtralar }; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
+    private func silSiparis(_ siparis: Siparis) {
+        guard canEditCurrentWorkspace else { return }
+        withAnimation {
+            selectedOrderIds.remove(orderSelectionKey(siparis))
+            if lastSelectedOrderId == orderSelectionKey(siparis) { lastSelectedOrderId = nil }
+            if seciliSiparis?.id == siparis.id { seciliSiparis = nil; seciliSiparisGorunumKey = nil }
+            firebaseManager.deleteSiparis(siparis)
+        }
+    }
+    
+    private func silSeciliSiparis() {
+        guard canEditCurrentWorkspace else { return }
+        if aktifSekme == "Orders" {
+            if !selectedOrderIds.isEmpty {
+                silSeciliSiparisleri()
+            } else if let siparis = seciliSiparis {
+                silSiparis(siparis)
+            }
+        }
+    }
+    
+    private func silSeciliSiparisleri() {
+        guard canEditCurrentWorkspace, aktifSekme == "Orders", !selectedOrderIds.isEmpty else { return }
+        let silinecekler = firebaseManager.siparisler.filter { selectedOrderIds.contains(orderSelectionKey($0)) }
+        let silinecekKeys = Set(silinecekler.map { orderSelectionKey($0) })
+        withAnimation {
+            if let secili = seciliSiparis, silinecekKeys.contains(orderSelectionKey(secili)) {
+                seciliSiparis = nil
+                seciliSiparisGorunumKey = nil
+            }
+            selectedOrderIds.removeAll()
+            lastSelectedOrderId = nil
+            for siparis in silinecekler {
+                firebaseManager.deleteSiparis(siparis)
+            }
+        }
+    }
+    
+    private func kaydetSeciliSiparis() { if canEditWorkflowFields, aktifSekme == "Orders", let siparis = seciliSiparis { firebaseManager.updateSiparis(siparis) } }
+    
+    private func orderScrollId(_ siparis: Siparis) -> String {
+        siparis.id ?? "temp-\(siparis.paymentDate.timeIntervalSince1970)-\(siparis.customerName)"
+    }
+    
+    private func orderSelectionKey(_ siparis: Siparis) -> String {
+        orderScrollId(siparis)
+    }
+
+    private func syncSelectedOrderCollectionsFromFirebase() {
+        guard var selected = seciliSiparis else { return }
+        let selectedKey = orderSelectionKey(selected)
+        guard let latest = firebaseManager.siparisler.first(where: { orderSelectionKey($0) == selectedKey }) else { return }
+
+        var changed = false
+        func sync<Value: Equatable>(_ keyPath: WritableKeyPath<Siparis, Value>) {
+            if selected[keyPath: keyPath] != latest[keyPath: keyPath] {
+                selected[keyPath: keyPath] = latest[keyPath: keyPath]
+                changed = true
+            }
+        }
+
+        sync(\.paymentMethod)
+        sync(\.paidAmount)
+        sync(\.remainingAmount)
+        sync(\.watchPurchasePrice)
+        sync(\.paymentFee)
+        sync(\.deliveryCost)
+        sync(\.taxType)
+        sync(\.taxRate)
+        sync(\.taxAmount)
+
+        if selected.clientFiles != latest.clientFiles {
+            selected.clientFiles = latest.clientFiles
+            changed = true
+        }
+        if selected.historyLog != latest.historyLog {
+            selected.historyLog = latest.historyLog
+            changed = true
+        }
+        if selected.todoItems != latest.todoItems {
+            selected.todoItems = latest.todoItems
+            changed = true
+        }
+
+        if changed {
+            seciliSiparis = selected
+        }
+    }
+
+    private func customerForOrder(_ siparis: Siparis) -> Musteri? {
+        let customerName = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !customerName.isEmpty else { return nil }
+        return firebaseManager.musteriler.first { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == customerName }
+    }
+
+    private func assignedMember(for siparis: Siparis) -> StudioTeamMember? {
+        let assignedUid = siparis.assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignedEmail = siparis.assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !assignedUid.isEmpty, let member = authVM.teamMembers.first(where: { $0.id == assignedUid }) {
+            return member
+        }
+        if !assignedEmail.isEmpty, let member = authVM.teamMembers.first(where: { $0.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == assignedEmail }) {
+            return member
+        }
+        return nil
+    }
+
+    private func displayName(for member: StudioTeamMember) -> String {
+        let name = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let emailName = displayNameFromEmail(member.email)
+        return emailName.isEmpty ? member.id : emailName
+    }
+
+    private func displayNameFromEmail(_ email: String) -> String {
+        let cleaned = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "" }
+        let localPart = cleaned.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? cleaned
+        let readable = localPart
+            .replacingOccurrences(of: ".", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return readable
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { part -> String in
+                let word = String(part)
+                guard let first = word.first else { return "" }
+                return String(first).uppercased() + String(word.dropFirst()).lowercased()
+            }
+            .joined(separator: " ")
+    }
+
+    private func assignedMemberLabel(for siparis: Siparis) -> String {
+        if let member = assignedMember(for: siparis) {
+            return displayName(for: member)
+        }
+        return displayNameFromEmail(siparis.assignedToEmail)
+    }
+
+    private func assignedMemberPhotoURL(for siparis: Siparis) -> String {
+        assignedMember(for: siparis)?.photoURL.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private func assignProject(_ siparis: Siparis, to member: StudioTeamMember?) {
+        guard canManageProjectAssignments else { return }
+        var updated = siparis
+        let previous = siparis
+        updated.assignedToUid = member?.id ?? ""
+        updated.assignedToEmail = member?.email ?? ""
+        firebaseManager.updateSiparis(updated, previousSiparis: previous)
+        if seciliSiparis?.id == siparis.id {
+            seciliSiparis = updated
+        }
+    }
+
+    @ViewBuilder
+    private func projectAssignmentMenuItems(for siparis: Siparis) -> some View {
+        if canManageProjectAssignments {
+            Menu {
+                Button {
+                    assignProject(siparis, to: nil)
+                } label: {
+                    Label(t("Unassigned", lang: seciliDil), systemImage: siparis.assignedToUid.isEmpty ? "checkmark.circle.fill" : "circle")
+                }
+
+                ForEach(authVM.teamMembers.filter { $0.normalizedRole != "owner" }) { member in
+                    Button {
+                        assignProject(siparis, to: member)
+                    } label: {
+                        Label(displayName(for: member), systemImage: siparis.assignedToUid == member.id ? "checkmark.circle.fill" : "person.crop.circle")
+                    }
+                }
+            } label: {
+                Label(t("Assign Project", lang: seciliDil), systemImage: "person.crop.circle.badge.checkmark")
+            }
+            Divider()
+        }
+    }
+
+    private func openCustomerForOrder(_ siparis: Siparis) {
+        guard canAccessCustomers else { return }
+        guard let musteri = customerForOrder(siparis) else { return }
+        seciliMusteri = musteri
+        phoneShowsOrderDetail = false
+        withAnimation { aktifSekme = "Customers" }
+    }
+    
+    private func isSiparisBulkSelected(_ siparis: Siparis) -> Bool {
+        selectedOrderIds.contains(orderSelectionKey(siparis))
+    }
+    
+    private func setSeciliSiparisHizli(_ siparis: Siparis, detayGuncellemesiniErtele: Bool = true) {
+        let key = orderSelectionKey(siparis)
+        let isSameVisibleOrder = seciliSiparisGorunumKey == key
+        let isSameDetailOrder = seciliSiparis.map { orderSelectionKey($0) == key } ?? false
+
+        if isSameVisibleOrder && isSameDetailOrder {
+            return
+        }
+
+        pendingOrderSelectionWorkItem?.cancel()
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            seciliSiparisGorunumKey = key
+            if !detayGuncellemesiniErtele {
+                seciliSiparis = siparis
+            }
+        }
+
+        guard detayGuncellemesiniErtele else { return }
+
+        let workItem = DispatchWorkItem {
+            guard self.seciliSiparisGorunumKey == key else { return }
+            var delayedTransaction = Transaction()
+            delayedTransaction.animation = nil
+            withTransaction(delayedTransaction) {
+                self.seciliSiparis = siparis
+            }
+        }
+
+        pendingOrderSelectionWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: workItem)
+    }
+
+    private func handleOrderTap(_ siparis: Siparis) {
+        orderSelectionShouldScroll = false
+        orderListFocused = true
+
+        let key = orderSelectionKey(siparis)
+        let isSelectionModeActive = !selectedOrderIds.isEmpty
+        let hasSelectionModifier = platformShiftPressed() || platformCommandPressed()
+
+        if seciliSiparisGorunumKey == key && !isSelectionModeActive && !hasSelectionModifier {
+            return
+        }
+
+        setSeciliSiparisHizli(siparis, detayGuncellemesiniErtele: !isPhoneLayout)
+        
+        if platformShiftPressed() {
+            extendBulkSelection(to: siparis)
+        } else if platformCommandPressed() || isSelectionModeActive {
+            toggleSiparisForBulk(siparis)
+        } else {
+            selectedOrderIds.removeAll()
+            lastSelectedOrderId = key
+        }
+    }
+    
+    private func selectSiparisForBulk(_ siparis: Siparis) {
+        setSeciliSiparisHizli(siparis)
+        orderListFocused = true
+        let key = orderSelectionKey(siparis)
+        selectedOrderIds.insert(key)
+        lastSelectedOrderId = key
+    }
+    
+    private func deselectSiparisForBulk(_ siparis: Siparis) {
+        selectedOrderIds.remove(orderSelectionKey(siparis))
+        if lastSelectedOrderId == orderSelectionKey(siparis) {
+            lastSelectedOrderId = nil
+        }
+    }
+    
+    private func toggleSiparisForBulk(_ siparis: Siparis) {
+        let key = orderSelectionKey(siparis)
+        if selectedOrderIds.contains(key) {
+            selectedOrderIds.remove(key)
+        } else {
+            selectedOrderIds.insert(key)
+        }
+        lastSelectedOrderId = key
+    }
+    
+    private func extendBulkSelection(to siparis: Siparis) {
+        let targetKey = orderSelectionKey(siparis)
+        guard let targetIndex = aramaSonuclari.firstIndex(where: { orderSelectionKey($0) == targetKey }) else {
+            selectedOrderIds.insert(targetKey)
+            lastSelectedOrderId = targetKey
+            return
+        }
+        let startIndex: Int
+        if let lastSelectedOrderId,
+           let foundIndex = aramaSonuclari.firstIndex(where: { orderSelectionKey($0) == lastSelectedOrderId }) {
+            startIndex = foundIndex
+        } else if let current = seciliSiparis,
+                  let foundIndex = aramaSonuclari.firstIndex(where: { orderSelectionKey($0) == orderSelectionKey(current) }) {
+            startIndex = foundIndex
+        } else {
+            startIndex = targetIndex
+        }
+        let range = min(startIndex, targetIndex)...max(startIndex, targetIndex)
+        for index in range {
+            selectedOrderIds.insert(orderSelectionKey(aramaSonuclari[index]))
+        }
+        lastSelectedOrderId = targetKey
+    }
+    
+    private func clearBulkSelection() {
+        selectedOrderIds.removeAll()
+        lastSelectedOrderId = nil
+    }
+    
+    #if os(macOS)
+    private func handleOrderMove(_ direction: MoveCommandDirection) {
+        guard aktifSekme == "Orders", orderListFocused else { return }
+        switch direction {
+        case .down:
+            seciliSiparisiTasi(offset: 1)
+        case .up:
+            seciliSiparisiTasi(offset: -1)
+        default:
+            break
+        }
+    }
+    #endif
+    
+    private func seciliSiparisiTasi(offset: Int) {
+        guard !aramaSonuclari.isEmpty else { return }
+        let currentIndex = seciliSiparis.flatMap { secili in aramaSonuclari.firstIndex(where: { orderSelectionKey($0) == orderSelectionKey(secili) }) } ?? -1
+        let nextIndex = min(max(currentIndex + offset, 0), aramaSonuclari.count - 1)
+        let nextSiparis = aramaSonuclari[nextIndex]
+        orderSelectionShouldScroll = true
+        setSeciliSiparisHizli(nextSiparis, detayGuncellemesiniErtele: false)
+        if platformShiftPressed() {
+            extendBulkSelection(to: nextSiparis)
+        } else {
+            selectedOrderIds.removeAll()
+            lastSelectedOrderId = orderSelectionKey(nextSiparis)
+        }
+    }
+}
+
 #if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+struct OrdersSidebarResizeHandle: NSViewRepresentable {
+    @Binding var storedWidth: Double
+    @Binding var temporaryWidth: Double?
+    @Binding var isHovering: Bool
+
+    let minWidth: Double
+    let maxWidth: Double
+    let resetWidth: Double
+    var onWidthChangeEnd: (Double) -> Void = { _ in }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            storedWidth: $storedWidth,
+            temporaryWidth: $temporaryWidth,
+            isHovering: $isHovering,
+            minWidth: minWidth,
+            maxWidth: maxWidth,
+            resetWidth: resetWidth,
+            onWidthChangeEnd: onWidthChangeEnd
+        )
+    }
+
+    func makeNSView(context: Context) -> OrdersSidebarResizeNSView {
+        let view = OrdersSidebarResizeNSView()
+        view.coordinator = context.coordinator
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        return view
+    }
+
+    func updateNSView(_ nsView: OrdersSidebarResizeNSView, context: Context) {
+        context.coordinator.storedWidth = $storedWidth
+        context.coordinator.temporaryWidth = $temporaryWidth
+        context.coordinator.isHovering = $isHovering
+        context.coordinator.minWidth = minWidth
+        context.coordinator.maxWidth = maxWidth
+        context.coordinator.resetWidth = resetWidth
+        context.coordinator.onWidthChangeEnd = onWidthChangeEnd
+        nsView.coordinator = context.coordinator
+        nsView.needsDisplay = true
+    }
+
+    final class Coordinator {
+        var storedWidth: Binding<Double>
+        var temporaryWidth: Binding<Double?>
+        var isHovering: Binding<Bool>
+        var minWidth: Double
+        var maxWidth: Double
+        var resetWidth: Double
+        var onWidthChangeEnd: (Double) -> Void
+
+        var isDragging = false
+        var startMouseX: CGFloat = 0
+        var startWidth: Double = 0
+
+        init(storedWidth: Binding<Double>, temporaryWidth: Binding<Double?>, isHovering: Binding<Bool>, minWidth: Double, maxWidth: Double, resetWidth: Double, onWidthChangeEnd: @escaping (Double) -> Void) {
+            self.storedWidth = storedWidth
+            self.temporaryWidth = temporaryWidth
+            self.isHovering = isHovering
+            self.minWidth = minWidth
+            self.maxWidth = maxWidth
+            self.resetWidth = resetWidth
+            self.onWidthChangeEnd = onWidthChangeEnd
+        }
+
+        var currentWidth: Double {
+            min(max(temporaryWidth.wrappedValue ?? storedWidth.wrappedValue, minWidth), maxWidth)
+        }
+
+        func beginDrag() {
+            isDragging = true
+            startMouseX = NSEvent.mouseLocation.x
+            startWidth = currentWidth
+            NSCursor.resizeLeftRight.set()
+        }
+
+        func updateDrag() {
+            guard isDragging else { return }
+            let delta = Double(NSEvent.mouseLocation.x - startMouseX)
+            temporaryWidth.wrappedValue = min(max(startWidth + delta, minWidth), maxWidth)
+            NSCursor.resizeLeftRight.set()
+        }
+
+        func endDrag() {
+            if let temporary = temporaryWidth.wrappedValue {
+                let finalWidth = min(max(temporary, minWidth), maxWidth)
+                storedWidth.wrappedValue = finalWidth
+                onWidthChangeEnd(finalWidth)
+            }
+            temporaryWidth.wrappedValue = nil
+            isDragging = false
+            if isHovering.wrappedValue {
+                NSCursor.resizeLeftRight.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+
+        func reset() {
+            temporaryWidth.wrappedValue = nil
+            let finalWidth = min(max(resetWidth, minWidth), maxWidth)
+            storedWidth.wrappedValue = finalWidth
+            onWidthChangeEnd(finalWidth)
+        }
+    }
+}
+
+final class OrdersSidebarResizeNSView: NSView {
+    var coordinator: OrdersSidebarResizeHandle.Coordinator?
+    private var trackingAreaRef: NSTrackingArea?
+
+    override var isFlipped: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef {
+            removeTrackingArea(trackingAreaRef)
+        }
+        let tracking = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(tracking)
+        trackingAreaRef = tracking
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseEntered(with event: NSEvent) {
+        coordinator?.isHovering.wrappedValue = true
+        NSCursor.resizeLeftRight.set()
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        coordinator?.isHovering.wrappedValue = false
+        if coordinator?.isDragging == true {
+            NSCursor.resizeLeftRight.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            coordinator?.reset()
+            return
+        }
+        coordinator?.beginDrag()
+        needsDisplay = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        coordinator?.updateDrag()
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        coordinator?.endDrag()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.separatorColor.withAlphaComponent(0.55).setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 1, height: bounds.height)).fill()
+
+        let shouldShowHandle = (coordinator?.isHovering.wrappedValue == true) || (coordinator?.isDragging == true)
+        guard shouldShowHandle else { return }
+
+        NSColor.labelColor.withAlphaComponent(0.35).setFill()
+        let barHeight: CGFloat = 46
+        let barRect = NSRect(x: 2, y: max((bounds.height - barHeight) / 2, 0), width: 3, height: barHeight)
+        NSBezierPath(roundedRect: barRect, xRadius: 2, yRadius: 2).fill()
+    }
+}
+
+#else
+struct OrdersSidebarResizeHandle: View {
+    @Binding var storedWidth: Double
+    @Binding var temporaryWidth: Double?
+    @Binding var isHovering: Bool
+
+    let minWidth: Double
+    let maxWidth: Double
+    let resetWidth: Double
+    var onWidthChangeEnd: (Double) -> Void = { _ in }
+
+    @State private var dragStartWidth: Double?
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.primary.opacity(0.14))
+                .frame(width: 1)
+                .frame(maxHeight: .infinity)
+
+            if isHovering || temporaryWidth != nil {
+                Capsule()
+                    .fill(Color.primary.opacity(0.28))
+                    .frame(width: 3, height: 46)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if dragStartWidth == nil {
+                        dragStartWidth = min(max(temporaryWidth ?? storedWidth, minWidth), maxWidth)
+                    }
+
+                    let base = dragStartWidth ?? storedWidth
+                    temporaryWidth = min(max(base + Double(value.translation.width), minWidth), maxWidth)
+                    isHovering = true
                 }
+                .onEnded { _ in
+                    if let temporary = temporaryWidth {
+                        let finalWidth = min(max(temporary, minWidth), maxWidth)
+                        storedWidth = finalWidth
+                        onWidthChangeEnd(finalWidth)
+                    }
+                    temporaryWidth = nil
+                    dragStartWidth = nil
+                }
+        )
+        .onTapGesture(count: 2) {
+            temporaryWidth = nil
+            let finalWidth = min(max(resetWidth, minWidth), maxWidth)
+            storedWidth = finalWidth
+            onWidthChangeEnd(finalWidth)
+        }
+    }
+}
 #endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+
+
+struct CloudSyncStatusBadge: View {
+    let state: String
+    let message: String
+    let lastSyncDate: Date?
+
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showInfo = false
+
+    private var iconName: String {
+        switch state {
+        case "offline": return "wifi.slash"
+        case "syncing": return "arrow.triangle.2.circlepath.icloud"
+        case "saving": return "icloud.and.arrow.up"
+        case "saved": return "checkmark.icloud"
+        case "error": return "exclamationmark.icloud"
+        default: return "icloud"
+        }
+    }
+
+    private var iconColor: Color {
+        switch state {
+        case "offline": return studioWarningOrange
+        case "syncing": return studioWarningOrange
+        case "saving": return studioWarningOrange
+        case "saved": return .green
+        case "error": return .red
+        default: return .blue
+        }
+    }
+
+    private var title: String {
+        switch state {
+        case "offline": return t("Offline mode", lang: seciliDil)
+        case "syncing": return t("Syncing changes", lang: seciliDil)
+        case "saving": return t("Saving to cloud", lang: seciliDil)
+        case "saved": return t("Saved to cloud", lang: seciliDil)
+        case "error": return t("Cloud sync issue", lang: seciliDil)
+        default: return t("Connecting to cloud", lang: seciliDil)
+        }
+    }
+
+    private var subtitle: String {
+        if state == "offline" {
+            return message.isEmpty ? t("You can keep viewing cached orders and customers. Changes will wait until the connection returns.", lang: seciliDil) : t(message, lang: seciliDil)
+        }
+
+        if state == "syncing" {
+            return message.isEmpty ? t("Your offline changes are being sent to the cloud.", lang: seciliDil) : t(message, lang: seciliDil)
+        }
+
+        if state == "saved" {
+            if let lastSyncDate {
+                return t("Saved. You can open the same design on Mac and iPad.", lang: seciliDil) + "\n" + String(format: t("Last sync: %@", lang: seciliDil), formatDate(lastSyncDate))
+            }
+            return t("Saved. You can open the same design on Mac and iPad.", lang: seciliDil)
+        }
+
+        if state == "saving" {
+            return t("Your latest layout and color changes are being saved.", lang: seciliDil)
+        }
+
+        if state == "error" {
+            return message.isEmpty ? t("There was a problem syncing your changes.", lang: seciliDil) : t(message, lang: seciliDil)
+        }
+
+        return t("Checking cloud connection for shared layout and settings.", lang: seciliDil)
+    }
+
+    var body: some View {
+        Button {
+            showInfo.toggle()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                    .frame(width: 36, height: 36)
+
+                Image(systemName: iconName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(iconColor)
+            }
+            .overlay(
+                Circle()
+                    .stroke(iconColor.opacity(colorScheme == .dark ? 0.45 : 0.22), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .popover(isPresented: $showInfo, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: iconName)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(iconColor)
+
+                    Text(title)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.primary)
+                }
+
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(width: 320, alignment: .leading)
+        }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+
+struct UstMenuButonu: View { let title: String; let icon: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { HStack(spacing: 8) { Image(systemName: icon); Text(title).font(.system(size: 14, weight: .medium)) }.padding(.horizontal, 16).padding(.vertical, 8).background(isSelected ? Color.blue.opacity(0.2) : Color.clear).foregroundColor(isSelected ? .blue : .gray).cornerRadius(20) }.buttonStyle(.plain) } }
+struct SolMenuSiralamaButonu: View { let title: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { Text(title).font(.system(size: 12, weight: isSelected ? .bold : .regular)).padding(.horizontal, 16).padding(.vertical, 6).background(isSelected ? Color.blue : Color.clear).foregroundColor(isSelected ? .white : .gray).cornerRadius(15).overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)) }.buttonStyle(.plain) } }
+struct CustomStepDTOList: Codable { var id = UUID(); var title: String }
+
+private func statusStepStorageKey(for step: CustomStepDTOList) -> String {
+    "statusStep::\(step.id.uuidString.lowercased())"
+}
+
+private func statusStepValue(from statuses: [String: String]?, step: CustomStepDTOList) -> String {
+    let storageKey = statusStepStorageKey(for: step)
+    let legacyUUIDKey = "statusStep::\(step.id.uuidString)"
+    return statuses?[storageKey] ?? statuses?[legacyUUIDKey] ?? statuses?[step.title] ?? "Not Yet"
+}
+
+struct SiparisKarti: View {
+    @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
+    @AppStorage("orderListStep1") private var orderListStep1Storage: String = "Design"
+    @AppStorage("orderListStep2") private var orderListStep2Storage: String = "Painting"
+    let siparis: Siparis; let isSelected: Bool; let isMultiSelected: Bool; let showMultiSelection: Bool; let showPreviewImage: Bool; let showDeliveryTime: Bool; let showDesignName: Bool; let showOrderValue: Bool; let showUpcomingSchedule: Bool; let showStatusBadges: Bool; let showCustomerShortcut: Bool; let assignedMemberLabel: String; let assignedMemberPhotoURL: String; let lblIsimsiz: String; let summaryStep1: String; let summaryStep2: String; let customStepsJSON: String; let sembol: String; let seciliDil: String
+    
+    let seciliOndalik: String // 🌟 YENİ FORMAT GEÇİŞİ 🌟
+    
+    var onCustomerNameTapped: () -> Void
+    
+    
+    var decodedSteps: [CustomStepDTOList] { if let data = customStepsJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTOList].self, from: data) { if dec.isEmpty { return [CustomStepDTOList(title: "Design"), CustomStepDTOList(title: "Painting")] }; return dec }; return [CustomStepDTOList(title: "Design"), CustomStepDTOList(title: "Painting")] }
+
+    private var availableBadgeSteps: [String] {
+        let steps = decodedSteps
+            .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return steps.isEmpty ? ["Design", "Painting"] : steps
+    }
+
+    private func resolvedBadgeStep(_ storedValue: String, fallbackIndex: Int) -> String {
+        let cleaned = storedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleaned.isEmpty {
+            return ""
+        }
+
+        if availableBadgeSteps.contains(cleaned) {
+            return cleaned
+        }
+
+        if availableBadgeSteps.indices.contains(fallbackIndex) {
+            return availableBadgeSteps[fallbackIndex]
+        }
+
+        return ""
+    }
+
+    private var resolvedOrderCardStep1: String {
+        resolvedBadgeStep(summaryStep1, fallbackIndex: 0)
+    }
+
+    private var resolvedOrderCardStep2: String {
+        resolvedBadgeStep(summaryStep2, fallbackIndex: 1)
+    }
+    
+    private var kartArkaPlanRengi: Color {
+        if isSelected { return Color.blue.opacity(0.15) }
+        if isMultiSelected { return Color.blue.opacity(0.08) }
+        if siparis.priority == "Urgent" { return Color.red.opacity(0.08) }
+        if siparis.priority == "High" { return studioWarningOrange.opacity(0.08) }
+        return colorScheme == .dark ? Color(white: 0.15) : .white
+    }
+    
+    private var kartCizgiRengi: Color {
+        if isSelected { return Color.blue.opacity(0.5) }
+        if isMultiSelected { return Color.blue.opacity(0.35) }
+        if siparis.priority == "Urgent" { return Color.red.opacity(0.3) }
+        if siparis.priority == "High" { return studioWarningOrange.opacity(0.3) }
+        return Color.clear
+    }
+
+    private var shouldShowDeliveryCountdown: Bool {
+        siparis.status != "Done" && siparis.status != "Cancelled" && !siparis.isDispatched
+    }
+
+    private var deliveryIconName: String {
+        if siparis.status == "Cancelled" { return "xmark.circle.fill" }
+        if siparis.isDispatched { return "checkmark.circle.fill" }
+        let days = kalanGunSayisi(siparis: siparis)
+        if days < 0 { return "exclamationmark.triangle.fill" }
+        if days <= 7 { return "clock.badge.exclamationmark.fill" }
+        return "calendar.badge.clock"
+    }
+
+    private var deliveryCountdownText: String {
+        if siparis.status == "Cancelled" { return t("Cancelled", lang: seciliDil) }
+        if siparis.isDispatched { return t("Dispatched", lang: seciliDil) }
+        let days = kalanGunSayisi(siparis: siparis)
+        if days > 0 { return "\(days)d" }
+        if days == 0 { return t("Today", lang: seciliDil) }
+        return "\(-days)d " + t("late", lang: seciliDil)
+    }
+
+    private var shortPaymentDateText: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yy"
+        return formatter.string(from: siparis.paymentDate)
+    }
+
+    private var scheduleItemsCustomKey: String { "__scheduleAlertItemsV1" }
+
+    private var nextScheduleItem: ScheduleAlertItem? {
+        guard let json = siparis.customFields?[scheduleItemsCustomKey],
+              let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([ScheduleAlertItem].self, from: data) else {
+            return nil
+        }
+
+        let now = Date()
+        return decoded
+            .filter { $0.status != "Done" }
+            .sorted {
+                let firstOverdue = $0.dueAt < now
+                let secondOverdue = $1.dueAt < now
+                if firstOverdue != secondOverdue { return firstOverdue }
+                return $0.dueAt < $1.dueAt
+            }
+            .first
+    }
+
+    private func scheduleTitle(for item: ScheduleAlertItem) -> String {
+        let trimmed = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return t("Reminder", lang: seciliDil) }
+        return trimmed
+    }
+
+    private func scheduleColor(for item: ScheduleAlertItem) -> Color {
+        if item.dueAt < Date() { return .red }
+        let hours = Calendar.current.dateComponents([.hour], from: Date(), to: item.dueAt).hour ?? 0
+        if hours <= 24 { return studioWarningOrange }
+        return .blue
+    }
+
+    private var compactDeliveryBadge: some View {
+        HStack(spacing: 5) {
+            Image(systemName: deliveryIconName)
+                .font(.system(size: 14, weight: .bold))
+            Text(deliveryCountdownText)
+                .font(.system(size: 20, weight: .heavy))
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
+        }
+        .foregroundColor(kalanGunRengi(siparis: siparis))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(kalanGunRengi(siparis: siparis).opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(kalanGunRengi(siparis: siparis).opacity(0.22), lineWidth: 1)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var displayCustomerName: String {
+        let cleaned = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || cleaned == "New Order" || cleaned == "New Project" || cleaned == "Yeni Sipariş" || cleaned == "Yeni Proje" {
+            return lblIsimsiz
+        }
+        return cleaned
+    }
+
+    private var shouldShowCustomerShortcut: Bool {
+        showCustomerShortcut && displayCustomerName != lblIsimsiz
+    }
+
+    private func detailChip(systemImage: String, text: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .truncationMode(.tail)
+        }
+        .foregroundColor(color)
+        .allowsTightening(true)
+    }
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            if showMultiSelection || isMultiSelected {
+                Image(systemName: isMultiSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(isMultiSelected ? .blue : .gray.opacity(0.45))
+                    .frame(width: 20)
+            }
+            if showPreviewImage {
+                AsyncImage(url: URL(string: siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines))) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.primary.opacity(0.10))
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            )
+                    }
+                }
+                .frame(width: 56, height: 56)
+                .cornerRadius(10)
+                .clipped()
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Text(displayCustomerName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    if shouldShowCustomerShortcut {
+                        Button(action: onCustomerNameTapped) {
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.blue.opacity(0.85))
+                                .frame(width: 24, height: 24)
+                                .background(Color.blue.opacity(0.10))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Open Customer", lang: seciliDil))
+                        .accessibilityLabel(t("Open Customer", lang: seciliDil))
+                    }
+
+                    if showDeliveryTime, shouldShowDeliveryCountdown {
+                        compactDeliveryBadge
+                    }
+                }
+
+                if !assignedMemberLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    HStack(spacing: 7) {
+                        Capsule()
+                            .fill(Color.blue)
+                            .frame(width: 2, height: 28)
+
+                        AsyncImage(url: URL(string: assignedMemberPhotoURL)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            default:
+                                Text(String(assignedMemberLabel.prefix(1)).uppercased())
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .frame(width: 26, height: 26)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Circle())
+
+                        Text(t("Assigned to", lang: seciliDil) + " " + assignedMemberLabel)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+
+                if showDesignName {
+                    detailChip(systemImage: "paintpalette.fill", text: siparis.designName.isEmpty ? "-" : siparis.designName, color: .secondary)
+                }
+
+                HStack(spacing: 7) {
+                    detailChip(systemImage: "calendar", text: shortPaymentDateText, color: .secondary)
+
+                    if showUpcomingSchedule, let schedule = nextScheduleItem {
+                        detailChip(systemImage: "bell.badge.fill", text: scheduleTitle(for: schedule), color: scheduleColor(for: schedule))
+                    }
+                }
+            }
+            .layoutPriority(1);
+            Spacer();
+            VStack(alignment: .trailing, spacing: 10) {
+                if showStatusBadges {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        statusBadge(slot: 1, stepName: resolvedOrderCardStep1)
+                        statusBadge(slot: 2, stepName: resolvedOrderCardStep2)
+                    }
+                }
+                if showOrderValue {
+                    Text(hideSensitiveNumbers ? "\(sembol)••••" : "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: seciliOndalik))")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(siparis.status == "Cancelled" ? .gray : .green)
+                }
+            }
+        }
+        .padding(16)
+        .background(kartArkaPlanRengi)
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(kartCizgiRengi, lineWidth: 1.5))
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.04), radius: 5, y: 2)
+        .opacity(siparis.status == "Cancelled" ? 0.6 : 1.0)
+        .contentShape(Rectangle())
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+    }
+    
+    private func shortStepTitle(_ stepName: String) -> String {
+        let translated = t(stepName, lang: seciliDil)
+        let cleaned = translated
+            .replacingOccurrences(of: "/", with: " ")
+            .replacingOccurrences(of: "&", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleaned.isEmpty else { return "ST" }
+
+        let firstWord = cleaned.components(separatedBy: .whitespacesAndNewlines).first ?? cleaned
+        let prefix = String(firstWord.prefix(4))
+        return prefix.uppercased()
+    }
+
+    @ViewBuilder
+    private func statusBadge(slot: Int, stepName: String) -> some View {
+        let cleanedStepName = stepName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let labelFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+        let border = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+
+        if cleanedStepName.isEmpty {
+            Menu {
+                ForEach(availableBadgeSteps, id: \.self) { step in
+                    Button {
+                        setOrderListBadge(slot: slot, step: step)
+                    } label: {
+                        Label(t(step, lang: seciliDil), systemImage: "plus.circle")
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(t("Add", lang: seciliDil))
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundColor(.blue)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.blue.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(Color.blue.opacity(0.20), lineWidth: 1)
+                )
+                .frame(maxWidth: 124, alignment: .trailing)
+            }
+            .buttonStyle(.plain)
+        } else {
+            let val = getStepValue(for: cleanedStepName)
+            let color = getStatusColor(val)
+
+            HStack(spacing: 5) {
+                Text(shortStepTitle(cleanedStepName))
+                    .font(.system(size: 8, weight: .heavy))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 4)
+                    .frame(minWidth: 31, alignment: .center)
+                    .background(labelFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(border, lineWidth: 1)
+                    )
+
+                Text(getStatusText(val))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: 82, alignment: .center)
+                    .background(color.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(color.opacity(colorScheme == .dark ? 0.24 : 0.18), lineWidth: 1)
+                    )
+            }
+            .frame(maxWidth: 124, alignment: .trailing)
+            .contextMenu {
+                Button {
+                    removeOrderListBadge(slot: slot)
+                } label: {
+                    Label(t("Remove", lang: seciliDil), systemImage: "xmark.circle")
+                }
+
+                Divider()
+
+                ForEach(availableBadgeSteps, id: \.self) { step in
+                    Button {
+                        setOrderListBadge(slot: slot, step: step)
+                    } label: {
+                        Label(t(step, lang: seciliDil), systemImage: step == cleanedStepName ? "checkmark.circle.fill" : "circle")
                     }
                 }
             }
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    private func setOrderListBadge(slot: Int, step: String) {
+        let cleaned = step.trimmingCharacters(in: .whitespacesAndNewlines)
+        if slot == 1 {
+            orderListStep1Storage = cleaned
+        } else {
+            orderListStep2Storage = cleaned
+        }
+        syncOrderListBadgeSettings()
+    }
+
+    private func removeOrderListBadge(slot: Int) {
+        if slot == 1 {
+            orderListStep1Storage = ""
+        } else {
+            orderListStep2Storage = ""
+        }
+        syncOrderListBadgeSettings()
+    }
+
+    private func syncOrderListBadgeSettings() {
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(firebaseManager.currentCompanyId)
+            .setData([
+                "orderListStep1": orderListStep1Storage,
+                "orderListStep2": orderListStep2Storage,
+                "workflowSettingsUpdatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+    }
+
+    private func getStepValue(for stepName: String) -> String {
+        if let index = decodedSteps.firstIndex(where: { $0.title == stepName }) {
+            if index == 0 { return siparis.designStatus }
+            if index == 1 { return siparis.status }
+            return statusStepValue(from: siparis.extraStatuses, step: decodedSteps[index])
+        }
+        return siparis.extraStatuses?[stepName] ?? "Not Yet"
+    }
+    private func getStatusText(_ val: String) -> String { return t(val, lang: seciliDil) }
+    private func getStatusColor(_ val: String) -> Color {
+        let normalized = val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let yesiller: Set<String> = ["none", "done", "completed", "delivered", "approved", "deposit paid", "shipped", "ready to ship"]
+        let kirmizilar: Set<String> = ["not yet", "blocked", "overdue", "urgent"]
+        let griler: Set<String> = ["cancelled", "refunded", "new", "quoted", "low"]
+        if yesiller.contains(normalized) { return .green }
+        if kirmizilar.contains(normalized) { return .red }
+        if griler.contains(normalized) { return .gray }
+        return studioWarningOrange
+    }
+    private func kalanGunSayisi(siparis: Siparis) -> Int { let cal = Calendar.current; guard let t = cal.date(byAdding: .day, value: siparis.deliveryTime, to: siparis.paymentDate) else { return 0 }; return cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: t)).day ?? 0 }
+    private func kalanGunMetni(siparis: Siparis) -> String { if siparis.status == "Cancelled" { return "❌" }; if siparis.isDispatched { return "✅" }; let gun = kalanGunSayisi(siparis: siparis); return gun > 0 ? "⏳ \(gun)" : (gun == 0 ? "📦" : "🚨 \(-gun)") }
+    private func kalanGunRengi(siparis: Siparis) -> Color {
+        if siparis.status == "Cancelled" || siparis.isDispatched { return .gray }
+        let gun = kalanGunSayisi(siparis: siparis)
+        if gun <= 7 { return .red }
+        if gun <= 14 { return studioWarningOrange }
+        return .green
+    }
+}
+
+
+
+struct ViewOnlyOrderDetailView: View {
+    let siparis: Siparis
+    let seciliDil: String
+    let summaryStep1: String
+    let summaryStep2: String
+
+    private var statusRows: [(String, String)] {
+        var rows: [(String, String)] = [
+            (summaryStep1.isEmpty ? "Design" : summaryStep1, siparis.designStatus),
+            (summaryStep2.isEmpty ? "Production" : summaryStep2, siparis.status)
+        ]
+
+        if let extras = siparis.extraStatuses {
+            for key in extras.keys.sorted() {
+                rows.append((key, extras[key] ?? ""))
+            }
+        }
+
+        return rows.filter { !$0.0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private var totalOrderValue: Double {
+        siparis.paidAmount + siparis.remainingAmount
+    }
+
+    private var profitValue: Double {
+        siparis.netKar
+    }
+
+    private var dateText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: siparis.paymentDate)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "eye.fill")
+                            .foregroundColor(.blue)
+                        Text(t("View Only", lang: seciliDil))
+                            .font(.system(size: 24, weight: .bold))
+                        Spacer()
+                        Text(t("Read only", lang: seciliDil))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.blue.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    Text(t("You can review this order, including prices and customer information, but editing tools are locked for this account.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+                .padding(18)
+                .background(Color.primary.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                readOnlyCard(title: "Order", icon: "doc.text.fill") {
+                    readOnlyRow("Customer", siparis.customerName.isEmpty ? "-" : siparis.customerName)
+                    readOnlyRow("Design", siparis.designName.isEmpty ? "-" : siparis.designName)
+                    readOnlyRow("Date", dateText)
+                    readOnlyRow("Priority", siparis.priority.isEmpty ? "Normal" : siparis.priority)
+                    readOnlyRow("Risk", siparis.risk.isEmpty ? "None" : siparis.risk)
+                }
+
+                readOnlyCard(title: "Contact", icon: "person.crop.circle.fill") {
+                    readOnlyRow("Email", siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress)
+                    readOnlyRow("WhatsApp", siparis.whatsappNumber.isEmpty ? "-" : siparis.whatsappNumber)
+                    readOnlyRow("Instagram", siparis.instagramUsername.isEmpty ? "-" : siparis.instagramUsername)
+                }
+
+                readOnlyCard(title: "Progress", icon: "checklist") {
+                    ForEach(statusRows, id: \.0) { row in
+                        readOnlyStatusRow(row.0, row.1.isEmpty ? "-" : row.1)
+                    }
+                }
+
+                readOnlyCard(title: "Financial", icon: "sterlingsign.circle.fill") {
+                    readOnlyRow("Order value", money(totalOrderValue))
+                    readOnlyRow("Paid", money(siparis.paidAmount))
+                    readOnlyRow("Remaining", money(siparis.remainingAmount))
+                    readOnlyRow("Purchase cost", money(siparis.watchPurchasePrice))
+                    readOnlyRow("Delivery cost", money(siparis.deliveryCost))
+                    readOnlyRow("Payment fee", money(siparis.paymentFee))
+                    readOnlyRow("Estimated net", money(profitValue))
+                    readOnlyRow("Payment method", siparis.paymentMethod.isEmpty ? "-" : siparis.paymentMethod)
+                }
+
+                readOnlyCard(title: "Delivery", icon: "shippingbox.fill") {
+                    readOnlyRow("Delivery time", "\(siparis.deliveryTime) days")
+                    readOnlyRow("Courier", siparis.courier.isEmpty ? "Auto Detect" : siparis.courier)
+                    readOnlyRow("Tracking", siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber)
+                    readOnlyRow("Dispatched", siparis.isDispatched ? "Yes" : "No")
+                    readOnlyRow("Delivered", siparis.isDelivered ? "Yes" : "No")
+                }
+
+                if !siparis.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    readOnlyCard(title: "Notes", icon: "note.text") {
+                        Text(siparis.notes)
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 920, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .background(Color.primary.opacity(0.02))
+    }
+
+    private func readOnlyCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(.blue)
+                Text(title)
+                    .font(.system(size: 16, weight: .bold))
+            }
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func readOnlyRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+    private func readOnlyStatusRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(statusColor(value))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(statusColor(value).opacity(0.12))
+                .clipShape(Capsule())
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func statusColor(_ value: String) -> Color {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if ["done", "completed", "delivered", "approved", "paid", "shipped", "ready to ship"].contains(normalized) { return .green }
+        if ["not yet", "blocked", "overdue", "urgent"].contains(normalized) { return .red }
+        if ["cancelled", "refunded", "new", "quoted", "low", "-"].contains(normalized) { return .gray }
+        return studioWarningOrange
+    }
+
+    private func money(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "GBP"
+        formatter.maximumFractionDigits = value.rounded() == value ? 0 : 2
+        return formatter.string(from: NSNumber(value: value)) ?? "£\(String(format: "%.2f", value))"
+    }
+}
+
+struct WorkflowOnlyOrderDetailView: View {
+    @Binding var siparis: Siparis
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    let seciliDil: String
+    let summaryStep1: String
+    let summaryStep2: String
+    let customStepsJSON: String
+    let customTogglesJSON: String
+    let showStatusNotesSupplier: Bool
+    let statusNotesSupplierLabel: String
+    let canEditWorkflowFields: Bool
+
+    @AppStorage("activeStatusesJSON") private var activeStatusesJSON: String = "[\"New\",\"Not Yet\",\"In Progress\",\"Done\",\"Cancelled\"]"
+
+    private var userStatuses: [String] {
+        if let data = activeStatusesJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([String].self, from: data),
+           !decoded.isEmpty {
+            return decoded
+        }
+        return ["New", "Not Yet", "In Progress", "Done", "Cancelled"]
+    }
+
+    private var decodedSteps: [CustomStepDTOList] {
+        if let data = customStepsJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CustomStepDTOList].self, from: data),
+           !decoded.isEmpty {
+            return decoded
+        }
+        return [CustomStepDTOList(title: summaryStep1.isEmpty ? "Design" : summaryStep1), CustomStepDTOList(title: summaryStep2.isEmpty ? "Production" : summaryStep2)]
+    }
+
+    private var customTogglesList: [CustomStepDTOList] {
+        if let data = customTogglesJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CustomStepDTOList].self, from: data) {
+            return decoded.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+        return []
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "list.bullet")
+                            .foregroundColor(.purple)
+                        Text(t("Workflow View", lang: seciliDil))
+                            .font(.system(size: 24, weight: .bold))
+                        Spacer()
+                        Text(t("No prices", lang: seciliDil))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.purple)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.purple.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    Text(t("This account can follow the work progress, but financial details and editing tools are hidden.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                    if canEditWorkflowFields {
+                        Text(t("Workflow Only can update production, priority and delivery workflow fields.", lang: seciliDil))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.blue)
+                    }
+                }
+                .padding(18)
+                .background(Color.primary.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                workflowCard(title: "Order", icon: "doc.text.fill") {
+                    workflowTextValue(label: "Customer", value: siparis.customerName) { value in
+                        siparis.customerName = value.isEmpty ? "New Project" : value
+                        saveWorkflowOrder()
+                    }
+                    workflowTextValue(label: "Design", value: siparis.designName) { value in
+                        siparis.designName = value
+                        saveWorkflowOrder()
+                    }
+                    workflowTextValue(label: "Reference", value: siparis.watchRef) { value in
+                        siparis.watchRef = value
+                        saveWorkflowOrder()
+                    }
+                    workflowStatusMenu(label: "Priority", value: siparis.priority.isEmpty ? "Normal" : siparis.priority, options: ["Low", "Normal", "High", "Urgent"]) { value in
+                        siparis.priority = value
+                        saveWorkflowOrder()
+                    }
+                    workflowStatusMenu(label: "Risk", value: siparis.risk.isEmpty ? "None" : siparis.risk, options: ["None", "Waiting", "Blocked", "Overdue"]) { value in
+                        siparis.risk = value
+                        saveWorkflowOrder()
+                    }
+                }
+
+                workflowCard(title: "Customer & Communication", icon: "person.crop.circle") {
+                    workflowTextValue(label: "Telephone", value: siparis.whatsappNumber) { value in
+                        siparis.whatsappNumber = value
+                        saveWorkflowOrder()
+                    }
+                    workflowTextValue(label: "Email", value: siparis.emailAddress) { value in
+                        siparis.emailAddress = value
+                        saveWorkflowOrder()
+                    }
+                    workflowCustomField(label: "Address", key: "communicationAddress")
+                    workflowTextValue(label: "Instagram", value: siparis.instagramUsername) { value in
+                        siparis.instagramUsername = value
+                        saveWorkflowOrder()
+                    }
+                    workflowCustomField(label: "TikTok", key: "communicationChannel::TikTok")
+                }
+
+                workflowCard(title: "Progress", icon: "checklist") {
+                    ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in
+                        let label = step.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if index == 0 {
+                            workflowStatusMenu(label: label.isEmpty ? "Design" : label, value: siparis.designStatus.isEmpty ? "Not Yet" : siparis.designStatus, options: userStatuses) { value in
+                                siparis.designStatus = value
+                                if value == "Cancelled" {
+                                    siparis.status = "Cancelled"
+                                }
+                                saveWorkflowOrder()
+                            }
+                        } else if index == 1 {
+                            workflowStatusMenu(label: label.isEmpty ? "Production" : label, value: siparis.status.isEmpty ? "Not Yet" : siparis.status, options: userStatuses) { value in
+                                siparis.status = value
+                                if value == "In Progress" || value == "Done" {
+                                    siparis.designStatus = "Done"
+                                }
+                                saveWorkflowOrder()
+                            }
+                        } else {
+                            workflowStatusMenu(label: label, value: statusStepValue(from: siparis.extraStatuses, step: step), options: userStatuses) { value in
+                                var current = siparis.extraStatuses ?? [:]
+                                current[statusStepStorageKey(for: step)] = value
+                                siparis.extraStatuses = current
+                                saveWorkflowOrder()
+                            }
+                        }
+                    }
+
+                    if !customTogglesList.isEmpty {
+                        Divider().background(Color.primary.opacity(0.10))
+                        ForEach(customTogglesList, id: \.id) { toggle in
+                            workflowYesNo(label: toggle.title, value: statusToggleValue(toggle)) { value in
+                                var current = siparis.customToggles ?? [:]
+                                current[statusToggleStorageKey(for: toggle)] = value
+                                siparis.customToggles = current
+                                saveWorkflowOrder()
+                            }
+                        }
+                    }
+
+                    if showStatusNotesSupplier {
+                        Divider().background(Color.primary.opacity(0.10))
+                        workflowTextField(label: statusNotesSupplierLabel) { newValue in
+                            var current = siparis.customFields ?? [:]
+                            let cleaned = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if cleaned.isEmpty {
+                                current.removeValue(forKey: "status::notesSupplier")
+                            } else {
+                                current["status::notesSupplier"] = cleaned
+                            }
+                            siparis.customFields = current
+                            saveWorkflowOrder()
+                        }
+                    }
+                }
+
+                workflowCard(title: "Delivery", icon: "shippingbox.fill") {
+                    workflowNumberValue(label: "Delivery time", value: siparis.deliveryTime, suffix: "days") { value in
+                        siparis.deliveryTime = value
+                        saveWorkflowOrder()
+                    }
+                    workflowStatusMenu(label: "Courier", value: siparis.courier.isEmpty ? "Auto Detect" : siparis.courier, options: ["Auto Detect", "Royal Mail", "DHL", "FedEx", "UPS"]) { value in
+                        siparis.courier = value
+                        saveWorkflowOrder()
+                    }
+                    workflowTextValue(label: "Tracking", value: siparis.trackingNumber) { value in
+                        siparis.trackingNumber = value
+                        saveWorkflowOrder()
+                    }
+                    workflowYesNo(label: "Dispatched", value: siparis.isDispatched) { value in
+                        siparis.isDispatched = value
+                        if value && siparis.status != "Cancelled" {
+                            siparis.designStatus = "Done"
+                            siparis.status = "Done"
+                        }
+                        saveWorkflowOrder()
+                    }
+                    workflowYesNo(label: "Delivered", value: siparis.isDelivered) { value in
+                        siparis.isDelivered = value
+                        saveWorkflowOrder()
+                    }
+                }
+
+                if !siparis.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    workflowCard(title: "Notes", icon: "note.text") {
+                        Text(siparis.notes)
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 880, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .background(Color.primary.opacity(0.02))
+    }
+
+    private func saveWorkflowOrder() {
+        guard canEditWorkflowFields else { return }
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func statusToggleStorageKey(for toggle: CustomStepDTOList) -> String {
+        "statusToggle::\(toggle.id.uuidString.lowercased())"
+    }
+
+    private func statusToggleValue(_ toggle: CustomStepDTOList) -> Bool {
+        let lowerKey = statusToggleStorageKey(for: toggle)
+        let legacyKey = "statusToggle::\(toggle.id.uuidString)"
+        return siparis.customToggles?[lowerKey] ?? siparis.customToggles?[legacyKey] ?? siparis.customToggles?[toggle.title] ?? false
+    }
+
+    private func workflowCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(.blue)
+                Text(title)
+                    .font(.system(size: 16, weight: .bold))
+            }
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func workflowRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func workflowTextValue(label: String, value: String, onChange: @escaping (String) -> Void) -> some View {
+        WorkflowTextEditRow(label: t(label, lang: seciliDil), value: value, canEdit: canEditWorkflowFields, onSave: onChange)
+    }
+
+    private func workflowNumberValue(label: String, value: Int, suffix: String, onChange: @escaping (Int) -> Void) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(t(label, lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Stepper(value: Binding(
+                get: { value },
+                set: { nextValue in
+                    guard canEditWorkflowFields else { return }
+                    onChange(max(1, min(nextValue, 730)))
+                }
+            ), in: 1...730) {
+                Text("\(value) \(t(suffix, lang: seciliDil))")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+            .disabled(!canEditWorkflowFields)
+        }
+    }
+
+    private func workflowCustomField(label: String, key: String) -> some View {
+        workflowTextValue(label: label, value: siparis.customFields?[key] ?? "") { nextValue in
+            var current = siparis.customFields ?? [:]
+            let cleaned = nextValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleaned.isEmpty {
+                current.removeValue(forKey: key)
+            } else {
+                current[key] = nextValue
+            }
+            siparis.customFields = current
+            saveWorkflowOrder()
+        }
+    }
+
+    private func workflowStatusMenu(label: String, value: String, options: [String], onSelect: @escaping (String) -> Void) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(t(label, lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Spacer(minLength: 0)
+            Menu {
+                ForEach(options, id: \.self) { option in
+                    Button(t(option, lang: seciliDil)) {
+                        guard canEditWorkflowFields else { return }
+                        onSelect(option)
+                    }
+                }
+            } label: {
+                Text(t(value.isEmpty ? "Not Yet" : value, lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(canEditWorkflowFields ? .blue : .secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background((canEditWorkflowFields ? Color.blue : Color.secondary).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canEditWorkflowFields)
+        }
+    }
+
+    private func workflowYesNo(label: String, value: Bool, onSelect: @escaping (Bool) -> Void) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(t(label, lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Spacer(minLength: 0)
+            HStack(spacing: 6) {
+                Button {
+                    guard canEditWorkflowFields else { return }
+                    onSelect(true)
+                } label: {
+                    Text(t("Yes", lang: seciliDil))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(value ? .green : .secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(value ? Color.green.opacity(0.18) : Color.secondary.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                Button {
+                    guard canEditWorkflowFields else { return }
+                    onSelect(false)
+                } label: {
+                    Text(t("No", lang: seciliDil))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(!value ? .red : .secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(!value ? Color.red.opacity(0.18) : Color.secondary.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!canEditWorkflowFields)
+        }
+    }
+
+    private func workflowTextField(label: String, onCommit: @escaping (String) -> Void) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(t(label, lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            TextField("-", text: Binding(
+                get: { siparis.customFields?["status::notesSupplier"] ?? "" },
+                set: { newValue in
+                    var current = siparis.customFields ?? [:]
+                    current["status::notesSupplier"] = newValue
+                    siparis.customFields = current
+                }
+            ))
+            .font(.system(size: 13, weight: .medium))
+            .textFieldStyle(.roundedBorder)
+            .disabled(!canEditWorkflowFields)
+            .onSubmit {
+                onCommit(siparis.customFields?["status::notesSupplier"] ?? "")
             }
         }
     }
 }
 
-fileprivate struct NavigationViewWrapper<Content: View>: View {
-    let content: () -> Content
+private struct WorkflowTextEditRow: View {
+    let label: String
+    let value: String
+    let canEdit: Bool
+    let onSave: (String) -> Void
+
+    @State private var draft: String = ""
 
     var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 140, alignment: .leading)
+            TextField("-", text: $draft)
+                .font(.system(size: 13, weight: .medium))
+                .textFieldStyle(.roundedBorder)
+                .disabled(!canEdit)
+                .onSubmit { saveIfNeeded() }
+                .onAppear { draft = value }
+                .onChange(of: value) { _, newValue in
+                    if draft != newValue { draft = newValue }
+                }
+        }
+    }
+
+    private func saveIfNeeded() {
+        guard canEdit else { return }
+        if draft != value {
+            onSave(draft)
+        }
+    }
+}
+
+#if canImport(UIKit)
+struct AvatarDocumentPicker: UIViewControllerRepresentable {
+    var onPick: (URL) -> Void
+    var onCancel: () -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.image], asCopy: true)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) { }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onPick: onPick, onCancel: onCancel)
+    }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        let onCancel: () -> Void
+
+        init(onPick: @escaping (URL) -> Void, onCancel: @escaping () -> Void) {
+            self.onPick = onPick
+            self.onCancel = onCancel
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else {
+                onCancel()
+                return
+            }
+            onPick(url)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onCancel()
+        }
+    }
+}
+#endif
+
+struct AccountAvatarImage: View {
+    let urlString: String
+    let initials: String
+    let size: CGFloat
+    var fallbackSystemImage: String? = nil
+    var fallbackColor: Color = .blue
+
+    private var cleanedURL: String {
+        urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(fallbackColor.opacity(0.14))
+
+            if !cleanedURL.isEmpty, let url = URL(string: cleanedURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .controlSize(.small)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        fallbackContent
+                    @unknown default:
+                        fallbackContent
+                    }
+                }
+            } else {
+                fallbackContent
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.primary.opacity(0.10), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var fallbackContent: some View {
+        if let fallbackSystemImage, !fallbackSystemImage.isEmpty {
+            Image(systemName: fallbackSystemImage)
+                .font(.system(size: max(13, size * 0.42), weight: .semibold))
+                .foregroundColor(fallbackColor)
+        } else {
+            Text(initials.isEmpty ? "?" : initials)
+                .font(.system(size: max(12, size * 0.36), weight: .bold))
+                .foregroundColor(fallbackColor)
+        }
+    }
+}
+
+struct AccountProfileView: View {
+    enum SectionMode: Equatable {
+        case account
+        case planAccess
+        case teamAccess
+    }
+
+    private let sectionMode: SectionMode
+
+    init(sectionMode: SectionMode = .account) {
+        self.sectionMode = sectionMode
+    }
+
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("appLogoUrl") private var appLogoUrl: String = ""
+    @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
+    @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
+
+    @State private var displayName: String = ""
+    @State private var companyName: String = ""
+    @State private var emailDraft: String = ""
+    @State private var signOutConfirmationVisible = false
+    @State private var copiedInfoMessage: String = ""
+    @State private var showAvatarImporter: Bool = false
+    @State private var showAvatarDocumentPicker: Bool = false
+    @State private var isUploadingAvatar: Bool = false
+    @State private var pendingAvatarURL: URL? = nil
+    @State private var showAvatarUploadPolicyPrompt: Bool = false
+    @State private var showAvatarUploadError: Bool = false
+    @State private var avatarUploadErrorMessage: String = ""
+    @StateObject private var storeKitManager = StudioStoreKitManager()
+    @State private var showStoreKitActionAlert: Bool = false
+    @State private var storeKitActionAlertMessage: String = ""
+    @State private var showOwnerTestingControls: Bool = false
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.white
+    }
+
+    private var fieldBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.045)
+    }
+
+    private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
+    private var accountOuterPadding: CGFloat { isPhoneLayout ? 12 : 24 }
+    private var accountCardPadding: CGFloat { isPhoneLayout ? 14 : 20 }
+    private var accountCornerRadius: CGFloat { isPhoneLayout ? 14 : 18 }
+
+    private var canEditWorkspaceBranding: Bool {
+        let role = studioRoleForContentView(authVM.currentWorkspaceRole)
+        return authVM.isCompanyOwner || role == "owner" || role == "admin" || role == "member"
+    }
+
+    private var accountInitials: String {
+        initials(from: displayName.isEmpty ? authVM.accountEmail : displayName)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                headerCard
+
+                switch sectionMode {
+                case .account:
+                    profileCard
+                    if canEditWorkspaceBranding {
+                        workspaceLogoCard
+                    }
+                    securityCard
+                case .planAccess:
+                    planAndAccessCard
+                case .teamAccess:
+                    teamAccessCard
+                }
+            }
+            .padding(accountOuterPadding)
+            .frame(maxWidth: isPhoneLayout ? .infinity : 820, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .onAppear {
+            displayName = authVM.accountDisplayName
+            companyName = authVM.companyName
+            emailDraft = authVM.accountEmail
+            authVM.loadAccountProfile()
+            if sectionMode == .planAccess {
+                Task {
+                    await storeKitManager.loadProducts()
+                    await syncCurrentStoreKitEntitlement()
+                }
+            }
+        }
+        .onChange(of: authVM.accountDisplayName) { _, newValue in
+            displayName = newValue
+        }
+        .onChange(of: authVM.companyName) { _, newValue in
+            companyName = newValue
+        }
+        .onChange(of: authVM.accountEmail) { _, newValue in
+            emailDraft = newValue
+        }
+        .confirmationDialog(t("Sign out of StudioFlow?", lang: seciliDil), isPresented: $signOutConfirmationVisible, titleVisibility: .visible) {
+            Button(t("Sign Out", lang: seciliDil), role: .destructive) {
+                authVM.logout()
+            }
+            Button(t("Cancel", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(t("You can sign back in with your email and password.", lang: seciliDil))
+        }
+        #if canImport(UIKit)
+        .sheet(isPresented: $showAvatarDocumentPicker) {
+            AvatarDocumentPicker { url in
+                showAvatarDocumentPicker = false
+                requestSafeAvatarUpload(url: url)
+            } onCancel: {
+                showAvatarDocumentPicker = false
+            }
+        }
+        #endif
+        .fileImporter(isPresented: $showAvatarImporter, allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                requestSafeAvatarUpload(url: url)
+            case .failure(let error):
+                avatarUploadErrorMessage = error.localizedDescription
+                showAvatarUploadError = true
+            }
+        }
+        .alert(t("Upload Policy", lang: seciliDil), isPresented: $showAvatarUploadPolicyPrompt) {
+            Button(t("Cancel", lang: seciliDil), role: .cancel) {
+                pendingAvatarURL = nil
+            }
+            Button(t("I Agree and Upload", lang: seciliDil)) {
+                uploadSafetyPolicyAccepted = true
+                if let url = pendingAvatarURL {
+                    uploadAvatar(url)
+                }
+                pendingAvatarURL = nil
+            }
+        } message: {
+            Text(t("Only upload legal, safe and work-related images that belong in this workspace. Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded.", lang: seciliDil))
+        }
+        .alert(t("Upload blocked", lang: seciliDil), isPresented: $showAvatarUploadError) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(avatarUploadErrorMessage)
+        }
+        .alert(t("Plan action", lang: seciliDil), isPresented: $showStoreKitActionAlert) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(t(storeKitActionAlertMessage, lang: seciliDil))
+        }
+    }
+
+    private var sectionHeaderTitle: String {
+        switch sectionMode {
+        case .account:
+            return "Account"
+        case .planAccess:
+            return "Plan & Access"
+        case .teamAccess:
+            return "Team Access"
+        }
+    }
+
+    private var sectionHeaderSubtitle: String {
+        switch sectionMode {
+        case .account:
+            return "Manage your StudioFlow profile, company details and sign-in security."
+        case .planAccess:
+            return "Manage your plan, limits and feature access."
+        case .teamAccess:
+            return "Manage workspace members, roles and join requests."
+        }
+    }
+
+    private var sectionHeaderIcon: String {
+        switch sectionMode {
+        case .account:
+            return "person.crop.circle"
+        case .planAccess:
+            return "creditcard.fill"
+        case .teamAccess:
+            return "person.2.fill"
+        }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                if sectionMode == .account {
+                    AccountAvatarImage(urlString: authVM.accountPhotoURL, initials: accountInitials, size: isPhoneLayout ? 40 : 48)
+                } else {
+                    Image(systemName: sectionHeaderIcon)
+                        .font(.system(size: isPhoneLayout ? 20 : 24, weight: .bold))
+                        .foregroundColor(.blue)
+                        .frame(width: isPhoneLayout ? 40 : 48, height: isPhoneLayout ? 40 : 48)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t(sectionHeaderTitle, lang: seciliDil))
+                        .font(.system(size: isPhoneLayout ? 22 : 28, weight: .bold))
+                    Text(t(sectionHeaderSubtitle, lang: seciliDil))
+                        .font(.system(size: isPhoneLayout ? 12 : 13))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(accountCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.06), radius: 16, y: 8)
+    }
+
+    private var profileCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(t("Profile & Company", lang: seciliDil), icon: "building.2.fill")
+
+            avatarEditor
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("Email", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        accountEmailTextField
+                        changeEmailButton
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        accountEmailTextField
+                        changeEmailButton
+                    }
+                }
+                Text(t("After changing your sign-in email, you can change it again after 10 days.", lang: seciliDil))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            labeledField(title: t("Your Name", lang: seciliDil), text: $displayName, placeholder: t("Your name", lang: seciliDil))
+            labeledField(title: t("Company / Studio Name", lang: seciliDil), text: $companyName, placeholder: t("My Studio", lang: seciliDil))
+
+            if let companyId = authVM.currentCompanyId, !companyId.isEmpty {
+                copyableIdField(title: t("Company ID", lang: seciliDil), value: companyId, copiedMessage: t("Company ID copied.", lang: seciliDil))
+            }
+
+            if let userId = authVM.currentUserId, !userId.isEmpty {
+                copyableIdField(title: t("User ID", lang: seciliDil), value: userId, copiedMessage: t("User ID copied.", lang: seciliDil))
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    saveProfileButton
+                    resetProfileButton
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    saveProfileButton
+                    resetProfileButton
+                }
+            }
+
+            statusMessages
+        }
+        .padding(accountCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+    }
+
+    private var avatarEditor: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 14) {
+                avatarPreview
+                avatarTextAndButtons
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                avatarPreview
+                avatarTextAndButtons
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var avatarPreview: some View {
+        AccountAvatarImage(urlString: authVM.accountPhotoURL, initials: accountInitials, size: isPhoneLayout ? 66 : 76)
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(authVM.isGoogleAccount && authVM.accountPhotoURL == authVM.googleProfilePhotoURL ? Color.green : Color.blue)
+                    .frame(width: isPhoneLayout ? 18 : 20, height: isPhoneLayout ? 18 : 20)
+                    .overlay(
+                        Image(systemName: authVM.isGoogleAccount && authVM.accountPhotoURL == authVM.googleProfilePhotoURL ? "g.circle.fill" : "pencil")
+                            .font(.system(size: isPhoneLayout ? 10 : 11, weight: .bold))
+                            .foregroundColor(.white)
+                    )
+            }
+    }
+
+    private var avatarTextAndButtons: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t("Profile Photo", lang: seciliDil))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Text(t("Your profile photo is shown to team members in this workspace.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    uploadAvatarButton
+                    googlePhotoButton
+                    removeAvatarButton
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    uploadAvatarButton
+                    googlePhotoButton
+                    removeAvatarButton
+                }
+            }
+        }
+    }
+
+    private var uploadAvatarButton: some View {
+        Button {
+            presentAvatarPicker()
+        } label: {
+            if isUploadingAvatar {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Label(t(authVM.accountPhotoURL.isEmpty ? "Upload Avatar" : "Change Avatar", lang: seciliDil), systemImage: "photo.badge.plus")
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(isUploadingAvatar)
+    }
+
+    @ViewBuilder
+    private var googlePhotoButton: some View {
+        let googleURL = authVM.googleProfilePhotoURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if authVM.isGoogleAccount && !googleURL.isEmpty && googleURL != authVM.accountPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines) {
+            Button {
+                authVM.updateAccountAvatar(photoURL: googleURL)
+            } label: {
+                Label(t("Use Google Photo", lang: seciliDil), systemImage: "g.circle.fill")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isUploadingAvatar || authVM.isProfileLoading)
+        }
+    }
+
+    @ViewBuilder
+    private var removeAvatarButton: some View {
+        if !authVM.accountPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !authVM.isGoogleAccount {
+            Button(role: .destructive) {
+                authVM.updateAccountAvatar(photoURL: "")
+            } label: {
+                Label(t("Remove Avatar", lang: seciliDil), systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isUploadingAvatar || authVM.isProfileLoading)
+        }
+    }
+
+
+
+    private var planAndAccessCard: some View {
+        let entitlements = authVM.currentPlanEntitlements
+
+        return VStack(alignment: .leading, spacing: 18) {
+            sectionTitle(t("Plan & Access", lang: seciliDil), icon: "creditcard.fill")
+
+            currentPlanHero(entitlements)
+
+            storeKitPurchaseCard
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
+                    Label(t("Compare plans", lang: seciliDil), systemImage: "rectangle.3.group.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Spacer(minLength: 0)
+                    Text(t("Current plan", lang: seciliDil))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: isPhoneLayout ? 230 : 260), spacing: 12)], alignment: .leading, spacing: 12) {
+                    ForEach(StudioBillingPlan.allCases) { plan in
+                        planComparisonCard(plan)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Label(t("Available now", lang: seciliDil), systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 13, weight: .bold))
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: isPhoneLayout ? 140 : 180), spacing: 10)], alignment: .leading, spacing: 10) {
+                    planFeaturePill(title: planOrderLimitText(entitlements), icon: "shippingbox.fill", enabled: true)
+                    planFeaturePill(title: planCustomerLimitText(entitlements), icon: "person.crop.circle.fill", enabled: true)
+                    planFeaturePill(title: planStorageLimitText(entitlements), icon: "externaldrive.fill", enabled: entitlements.clientFilesEnabled)
+                    planFeaturePill(title: planTeamLimitText(entitlements), icon: "person.2.fill", enabled: entitlements.teamAccessEnabled)
+                    planFeaturePill(title: "Client Files", icon: "folder.fill", enabled: entitlements.clientFilesEnabled)
+                    planFeaturePill(title: "Share Sheet", icon: "square.and.arrow.down.on.square.fill", enabled: entitlements.shareSheetEnabled)
+                    planFeaturePill(title: "Audit Log", icon: "list.bullet.clipboard.fill", enabled: entitlements.auditLogEnabled)
+                    planFeaturePill(title: "Card Profile Sync", icon: "rectangle.3.group.fill", enabled: entitlements.cardProfileSyncEnabled)
+                    planFeaturePill(title: planTaskLimitText(entitlements), icon: "checklist", enabled: entitlements.taskLimitPerOrder == nil)
+                    planFeaturePill(title: "Financial Cards", icon: "sterlingsign.circle.fill", enabled: entitlements.financialCardsEnabled)
+                    planFeaturePill(title: "Materials Cards", icon: "shippingbox.circle.fill", enabled: entitlements.materialsInventoryCardsEnabled)
+                    planFeaturePill(title: "History / Log", icon: "clock.arrow.circlepath", enabled: entitlements.historyLogEnabled)
+                    planFeaturePill(title: "Card Customise", icon: "rectangle.3.group.bubble.left.fill", enabled: entitlements.cardCustomizationEnabled)
+                    planFeaturePill(title: "Schedule Filters", icon: "line.3.horizontal.decrease.circle.fill", enabled: entitlements.scheduleAdvancedFiltersEnabled)
+                    planFeaturePill(title: "Long Range Schedule", icon: "calendar.badge.clock", enabled: entitlements.scheduleLongRangeEnabled)
+                }
+            }
+
+            if authVM.isCompanyOwner {
+                Divider().background(Color.primary.opacity(0.08))
+                DisclosureGroup(isExpanded: $showOwnerTestingControls) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Picker("", selection: Binding(
+                            get: { authVM.currentBillingPlan },
+                            set: { authVM.updateWorkspaceBillingPlan($0) }
+                        )) {
+                            ForEach(StudioBillingPlan.allCases) { plan in
+                                Text(t(plan.displayName, lang: seciliDil)).tag(plan)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(authVM.isProfileLoading)
+
+                        Text(t("Plan comparison is shown for testing now. StoreKit purchases will replace manual switching later.", lang: seciliDil))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Label(t("Owner testing controls", lang: seciliDil), systemImage: "hammer.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Text(t("Only the workspace owner can manage the plan.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(accountCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+    }
+
+
+    private var storeKitPurchaseCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "bag.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 36, height: 36)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("App Store Purchases", lang: seciliDil))
+                        .font(.system(size: 14, weight: .bold))
+                    Text(t("Connect real App Store products to StudioFlow plans.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(t("Use these product IDs in App Store Connect. Purchases will update the workspace plan after StoreKit confirms them.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: isPhoneLayout ? 210 : 235), spacing: 10)], alignment: .leading, spacing: 10) {
+                storeProductCard(.lifetimeLite)
+                storeProductCard(.proMonthly)
+                storeProductCard(.teamMonthly)
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    Task { await storeKitManager.loadProducts() }
+                } label: {
+                    if storeKitManager.isLoadingProducts {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label(t("Load products", lang: seciliDil), systemImage: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(storeKitManager.isLoadingProducts || storeKitManager.isPurchasing)
+
+                Button {
+                    Task { await restoreStoreKitPurchases() }
+                } label: {
+                    if storeKitManager.isPurchasing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label(t("Restore Purchases", lang: seciliDil), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!authVM.isCompanyOwner || storeKitManager.isPurchasing || storeKitManager.isLoadingProducts)
+
+                Spacer(minLength: 0)
+            }
+
+            if !storeKitManager.message.isEmpty {
+                Text(t(storeKitManager.message, lang: seciliDil))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.green)
+            }
+
+            if !storeKitManager.errorMessage.isEmpty {
+                Text(t(storeKitManager.errorMessage, lang: seciliDil))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(studioWarningOrange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(13)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func storeProductCard(_ plan: StudioBillingPlan) -> some View {
+        let product = storeKitManager.productSummary(for: plan)
+        let isCurrent = authVM.currentBillingPlan == plan
+        let productId = storeKitManager.configuredProductId(for: plan)
+        let accent = planAccentColor(plan)
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: plan.systemImage)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(accent)
+                    .frame(width: 26, height: 26)
+                    .background(accent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t(plan.displayName, lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                    Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(product == nil ? .secondary : accent)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t("Product ID", lang: seciliDil))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.secondary)
+                Text(productId)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+
+            if product == nil {
+                Text(t("Create this product ID in App Store Connect.", lang: seciliDil))
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                Task { await purchaseStoreKitPlan(plan) }
+            } label: {
+                Text(t(isCurrent ? "Current plan" : storeKitButtonTitle(for: plan), lang: seciliDil))
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isCurrent || !authVM.isCompanyOwner || product == nil || storeKitManager.isPurchasing || authVM.isProfileLoading)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(isCurrent ? accent.opacity(0.50) : Color.primary.opacity(0.08), lineWidth: isCurrent ? 1.1 : 0.8)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+    }
+
+    private func storeKitButtonTitle(for plan: StudioBillingPlan) -> String {
+        switch plan {
+        case .lifetimeLite:
+            return "Buy once"
+        case .proMonthly, .teamMonthly:
+            return "Subscribe"
+        case .demo:
+            return "Current plan"
+        }
+    }
+
+    private func syncCurrentStoreKitEntitlement() async {
+        guard authVM.isCompanyOwner else { return }
+        guard let activePlan = await storeKitManager.currentEntitlementPlan(),
+              let productId = StudioStoreKitManager.productId(for: activePlan) else { return }
+
+        if authVM.currentBillingPlan != activePlan {
+            authVM.updateWorkspaceBillingPlanFromStoreKit(activePlan, productId: productId)
+        }
+    }
+
+    private func purchaseStoreKitPlan(_ plan: StudioBillingPlan) async {
+        guard authVM.isCompanyOwner else {
+            storeKitActionAlertMessage = "Only the workspace owner can buy or restore a plan."
+            showStoreKitActionAlert = true
+            return
+        }
+
+        if storeKitManager.productSummary(for: plan) == nil {
+            await storeKitManager.loadProducts()
+        }
+
+        guard let productId = StudioStoreKitManager.productId(for: plan) else {
+            storeKitActionAlertMessage = "Purchase unavailable."
+            showStoreKitActionAlert = true
+            return
+        }
+
+        if let purchasedPlan = await storeKitManager.purchase(plan) {
+            authVM.updateWorkspaceBillingPlanFromStoreKit(purchasedPlan, productId: productId)
+            storeKitActionAlertMessage = "Purchase confirmed. Workspace plan is updating."
+            showStoreKitActionAlert = true
+        } else if !storeKitManager.errorMessage.isEmpty {
+            storeKitActionAlertMessage = storeKitManager.errorMessage
+            showStoreKitActionAlert = true
+        } else if !storeKitManager.message.isEmpty {
+            storeKitActionAlertMessage = storeKitManager.message
+            showStoreKitActionAlert = true
+        }
+    }
+
+    private func restoreStoreKitPurchases() async {
+        guard authVM.isCompanyOwner else {
+            storeKitActionAlertMessage = "Only the workspace owner can buy or restore a plan."
+            showStoreKitActionAlert = true
+            return
+        }
+
+        if let restoredPlan = await storeKitManager.restorePurchases(),
+           let productId = StudioStoreKitManager.productId(for: restoredPlan) {
+            authVM.updateWorkspaceBillingPlanFromStoreKit(restoredPlan, productId: productId)
+            storeKitActionAlertMessage = "Purchase restored. Workspace plan is updating."
+        } else if !storeKitManager.errorMessage.isEmpty {
+            storeKitActionAlertMessage = storeKitManager.errorMessage
+        } else if !storeKitManager.message.isEmpty {
+            storeKitActionAlertMessage = storeKitManager.message
+        } else {
+            storeKitActionAlertMessage = "No active purchase was found."
+        }
+        showStoreKitActionAlert = true
+    }
+
+    private func currentPlanHero(_ entitlements: StudioPlanEntitlements) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: authVM.currentBillingPlan.systemImage)
+                .font(.system(size: 23, weight: .bold))
+                .foregroundColor(planAccentColor(authVM.currentBillingPlan))
+                .frame(width: 46, height: 46)
+                .background(planAccentColor(authVM.currentBillingPlan).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(t(authVM.currentBillingPlan.displayName, lang: seciliDil))
+                        .font(.system(size: 18, weight: .bold))
+                    Text(t(authVM.currentBillingPlan.purchaseModel, lang: seciliDil))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(planAccentColor(authVM.currentBillingPlan))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(planAccentColor(authVM.currentBillingPlan).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                Text(t(planSummaryText(authVM.currentBillingPlan), lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    compactPlanMetric(planOrderLimitText(entitlements), icon: "shippingbox.fill")
+                    compactPlanMetric(planStorageLimitText(entitlements), icon: "externaldrive.fill")
+                    compactPlanMetric(planTeamLimitText(entitlements), icon: "person.2.fill")
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(13)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func compactPlanMetric(_ title: String, icon: String) -> some View {
+        Label(t(title, lang: seciliDil), systemImage: icon)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(Capsule())
+    }
+
+    private func planComparisonCard(_ plan: StudioBillingPlan) -> some View {
+        let entitlements = plan.entitlements
+        let isCurrent = authVM.currentBillingPlan == plan
+        let accent = planAccentColor(plan)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: plan.systemImage)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(accent)
+                    .frame(width: 34, height: 34)
+                    .background(accent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(t(plan.displayName, lang: seciliDil))
+                            .font(.system(size: 14, weight: .bold))
+                        if isCurrent {
+                            Text(t("Current plan", lang: seciliDil))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.blue)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.10))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    Text(t(plan.purchaseModel, lang: seciliDil))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(t(planBestForText(plan), lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 7) {
+                planComparisonRow(title: planOrderLimitText(entitlements), enabled: true)
+                planComparisonRow(title: planCustomerLimitText(entitlements), enabled: true)
+                planComparisonRow(title: planStorageLimitText(entitlements), enabled: entitlements.clientFilesEnabled)
+                planComparisonRow(title: "Client Files", enabled: entitlements.clientFilesEnabled)
+                planComparisonRow(title: "Share Sheet", enabled: entitlements.shareSheetEnabled)
+                planComparisonRow(title: "Team Access", enabled: entitlements.teamAccessEnabled)
+                planComparisonRow(title: "Advanced Dashboard", enabled: entitlements.advancedDashboardEnabled)
+                planComparisonRow(title: "Card Profile Sync", enabled: entitlements.cardProfileSyncEnabled)
+            }
+
+            if authVM.isCompanyOwner && !isCurrent {
+                if plan != .demo {
+                    Button {
+                        Task { await purchaseStoreKitPlan(plan) }
+                    } label: {
+                        Text(t(storeKitButtonTitle(for: plan), lang: seciliDil))
+                            .font(.system(size: 11, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(storeKitManager.isPurchasing || storeKitManager.productSummary(for: plan) == nil || authVM.isProfileLoading)
+                }
+            } else if isCurrent {
+                Text(t("Your workspace is using this plan.", lang: seciliDil))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isCurrent ? accent.opacity(0.10) : Color.secondary.opacity(0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isCurrent ? accent.opacity(0.55) : Color.primary.opacity(0.08), lineWidth: isCurrent ? 1.2 : 0.8)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func planComparisonRow(title: String, enabled: Bool) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: enabled ? "checkmark.circle.fill" : "lock.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(enabled ? .green : .secondary)
+                .frame(width: 14)
+            Text(t(title, lang: seciliDil))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(enabled ? .primary : .secondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func planAccentColor(_ plan: StudioBillingPlan) -> Color {
+        switch plan {
+        case .demo: return studioWarningOrange
+        case .lifetimeLite: return .green
+        case .proMonthly: return .blue
+        case .teamMonthly: return .purple
+        }
+    }
+
+    private func planSummaryText(_ plan: StudioBillingPlan) -> String {
+        switch plan {
+        case .demo:
+            return "Try the core order workflow with safe limits before upgrading."
+        case .lifetimeLite:
+            return "One-time access for solo local order management and personal scheduling."
+        case .proMonthly:
+            return "Cloud files, Share Sheet, advanced schedule tools and professional dashboard access."
+        case .teamMonthly:
+            return "Shared workspace access with roles, team scheduling and live card profile sync."
+        }
+    }
+
+    private func planBestForText(_ plan: StudioBillingPlan) -> String {
+        switch plan {
+        case .demo:
+            return "Best for testing the app with a small sample workspace."
+        case .lifetimeLite:
+            return "Best for solo makers who want local order tracking without team tools."
+        case .proMonthly:
+            return "Best for active studios that need cloud files and advanced workflows."
+        case .teamMonthly:
+            return "Best for studios working with multiple people in one shared workspace."
+        }
+    }
+
+    private func planOrderLimitText(_ entitlements: StudioPlanEntitlements) -> String {
+        if let limit = entitlements.orderLimit {
+            return String(format: t("%d orders", lang: seciliDil), limit)
+        }
+        return t("Unlimited orders", lang: seciliDil)
+    }
+
+    private func planCustomerLimitText(_ entitlements: StudioPlanEntitlements) -> String {
+        if let limit = entitlements.customerLimit {
+            return String(format: t("%d customers", lang: seciliDil), limit)
+        }
+        return t("Unlimited customers", lang: seciliDil)
+    }
+
+    private func planStorageLimitText(_ entitlements: StudioPlanEntitlements) -> String {
+        String(format: t("Storage: %@", lang: seciliDil), entitlements.storageLimitText)
+    }
+
+    private func planTeamLimitText(_ entitlements: StudioPlanEntitlements) -> String {
+        if entitlements.teamMemberLimit <= 1 {
+            return t("1 user", lang: seciliDil)
+        }
+        return String(format: t("Up to %d users", lang: seciliDil), entitlements.teamMemberLimit)
+    }
+
+    private func planTaskLimitText(_ entitlements: StudioPlanEntitlements) -> String {
+        if let limit = entitlements.taskLimitPerOrder {
+            return String(format: t("Up to %d tasks per order", lang: seciliDil), limit)
+        }
+        return t("Unlimited tasks", lang: seciliDil)
+    }
+
+    private func planFeaturePill(title: String, icon: String, enabled: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: enabled ? icon : "lock.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(enabled ? .green : .secondary)
+                .frame(width: 18)
+            Text(t(title, lang: seciliDil))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(enabled ? .primary : .secondary)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((enabled ? Color.green.opacity(0.08) : Color.secondary.opacity(0.08)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func planLockedNotice(title: String, message: String, icon: String = "lock.fill") -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(studioWarningOrange)
+                .frame(width: 30, height: 30)
+                .background(studioWarningOrange.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t(title, lang: seciliDil))
+                    .font(.system(size: 13, weight: .bold))
+                Text(t(message, lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(studioWarningOrange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var workspaceLogoCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(t("Workspace Logo", lang: seciliDil), icon: "photo.badge.plus")
+
+            Text(t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.", lang: seciliDil))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            SettingsLogoURLField(label: t("Workspace Logo", lang: seciliDil), text: $appLogoUrl)
+        }
+        .padding(accountCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+    }
+
+    private var accountEmailTextField: some View {
+        TextField(t("Email", lang: seciliDil), text: $emailDraft)
+            .font(.system(size: 14, weight: .medium))
+            .textFieldStyle(.plain)
+            .textContentType(.emailAddress)
+            .autocorrectionDisabled(true)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .disabled(authVM.isProfileLoading)
+            .onSubmit { submitAccountEmailChange() }
+    }
+
+    private var changeEmailButton: some View {
+        Button { submitAccountEmailChange() } label: {
+            if authVM.isProfileLoading {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Label(t("Change Email", lang: seciliDil), systemImage: "envelope.badge.fill")
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(authVM.isProfileLoading || emailDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    private func submitAccountEmailChange() {
+        authVM.changeAccountEmail(emailDraft)
+    }
+
+    private var saveProfileButton: some View {
+        Button {
+            authVM.updateAccountProfile(displayName: displayName, companyName: companyName)
+        } label: {
+            if authVM.isProfileLoading {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Label(t("Save Profile", lang: seciliDil), systemImage: "checkmark.circle.fill")
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(authVM.isProfileLoading)
+    }
+
+    private var resetProfileButton: some View {
+        Button {
+            displayName = authVM.accountDisplayName
+            companyName = authVM.companyName
+        } label: {
+            Label(t("Reset", lang: seciliDil), systemImage: "arrow.counterclockwise")
+        }
+        .buttonStyle(.plain)
+        .disabled(authVM.isProfileLoading)
+    }
+
+    private var securityCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle(t("Security", lang: seciliDil), icon: "lock.fill")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: Binding(
+                    get: { authVM.isLocalUnlockEnabled },
+                    set: { authVM.setLocalUnlockEnabled($0) }
+                )) {
+                    Label(t("Require Face ID / device passcode on app launch", lang: seciliDil), systemImage: "lock.shield.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .toggleStyle(.switch)
+
+                Text(t("When enabled, StudioFlow asks for Face ID, Touch ID or your device passcode whenever the app opens with an existing session.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text(t("Password changes are handled securely by Firebase. We send a reset link to your account email instead of storing or editing your password inside the app.", lang: seciliDil))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    passwordResetButton
+                    Spacer()
+                    signOutButton
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    passwordResetButton
+                    signOutButton
+                }
+            }
+        }
+        .padding(accountCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+    }
+
+    private var passwordResetButton: some View {
+        Button {
+            authVM.sendPasswordResetEmail()
+        } label: {
+            Label(t("Send Password Reset Email", lang: seciliDil), systemImage: "envelope.fill")
+        }
+        .buttonStyle(.plain)
+        .disabled(authVM.isProfileLoading)
+    }
+
+    private var signOutButton: some View {
+        Button(role: .destructive) {
+            signOutConfirmationVisible = true
+        } label: {
+            Label(t("Sign Out", lang: seciliDil), systemImage: "arrow.right.square")
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var teamAccessCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(t("Team Access", lang: seciliDil), icon: "person.2.fill")
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 14) {
+                    currentWorkspaceCard
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    availableWorkspacesSection
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    currentWorkspaceCard
+                    availableWorkspacesSection
+                }
+            }
+
+            if ["viewer", "workflow"].contains(studioRoleForContentView(authVM.currentWorkspaceRole)) {
+                readOnlyWorkspaceNotice
+            }
+
+            // Requesting access to another workspace must remain available on every device,
+            // every plan and every role. A user may be the owner of their own workspace on Mac,
+            // but still need to request access to a different owner workspace.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 14) {
+                    requestAccessCard
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    if authVM.currentPlanEntitlements.teamAccessEnabled, authVM.isCompanyOwner {
+                        ownerInviteCard
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    requestAccessCard
+                    if authVM.currentPlanEntitlements.teamAccessEnabled, authVM.isCompanyOwner {
+                        ownerInviteCard
+                    }
+                }
+            }
+
+            if authVM.currentPlanEntitlements.teamAccessEnabled {
+                if authVM.isCompanyOwner {
+                    pendingJoinRequestsSection
+                    roleProfilesSection
+                }
+                teamMembersSection
+                roleMixSection
+            } else {
+                planLockedNotice(
+                    title: "Team access is locked",
+                    message: "Team members, roles and shared workspace access are available on the StudioFlow Team monthly plan.",
+                    icon: "person.2.slash.fill"
+                )
+            }
+        }
+        .padding(accountCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+    }
+
+    @State private var joinCompanyId: String = ""
+    @State private var requestOwnerIdentifier: String = ""
+    @State private var newCustomRoleName: String = ""
+    @State private var newCustomRoleBaseRole: String = "member"
+    @State private var newCustomRoleAccess: [String: Bool] = studioDefaultMemberAccess()
+    @State private var newCustomRoleExpanded: Bool = false
+    @State private var editingTeamMember: StudioTeamMember?
+    @State private var editingMemberDisplayName: String = ""
+    @State private var editingMemberEmail: String = ""
+
+    private var currentWorkspaceRoleDisplayLabel: String {
+        let label = authVM.currentWorkspaceRoleLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let standardLabels: Set<String> = ["Owner", "Admin", "Member", "View Only", "Workflow Only"]
+        if !label.isEmpty && !standardLabels.contains(label) {
+            return label
+        }
+        return roleLabel(authVM.currentWorkspaceRole)
+    }
+
+    private var currentWorkspaceCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Current Workspace", lang: seciliDil))
+                .font(.system(size: 14, weight: .bold))
+
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: authVM.isCompanyOwner ? "crown.fill" : "person.2.fill")
+                    .foregroundColor(authVM.isCompanyOwner ? studioWarningOrange : .blue)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(authVM.companyName.isEmpty ? t("My Studio", lang: seciliDil) : authVM.companyName)
+                        .font(.system(size: 15, weight: .bold))
+
+                    HStack(spacing: 8) {
+                        Text(currentWorkspaceRoleDisplayLabel)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(roleColor(authVM.currentWorkspaceRole))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(roleColor(authVM.currentWorkspaceRole).opacity(0.12))
+                            .clipShape(Capsule())
+
+                        Text(authVM.isCompanyOwner ? t("You own this workspace", lang: seciliDil) : t("Shared with you", lang: seciliDil))
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let companyId = authVM.currentCompanyId, !companyId.isEmpty {
+                        HStack(spacing: 8) {
+                            Text(t("Company ID", lang: seciliDil) + ": \(companyId)")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+
+                            Button {
+                                copyAccountText(companyId, message: t("Company ID copied.", lang: seciliDil))
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .help(t("Copy", lang: seciliDil))
+                        }
+                    }
+                }
+
+                Spacer()
+            }
+        }
+        .padding(14)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var ownerInviteCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(t("Invite People", lang: seciliDil))
+                .font(.system(size: 14, weight: .bold))
+
+            Text(t("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let companyId = authVM.currentCompanyId, !companyId.isEmpty {
+                HStack(spacing: 10) {
+                    Text(companyId)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundColor(.primary)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Button {
+                        copyAccountText(companyId, message: t("Company ID copied.", lang: seciliDil))
+                    } label: {
+                        Label(t("Copy", lang: seciliDil), systemImage: "doc.on.doc")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var availableWorkspacesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(t("Workspaces", lang: seciliDil))
+                    .font(.system(size: 14, weight: .bold))
+
+                Spacer()
+
+                Button {
+                    authVM.refreshAvailableWorkspaces()
+                } label: {
+                    Label(t("Refresh", lang: seciliDil), systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .controlSize(.small)
+                .disabled(authVM.isProfileLoading)
+            }
+
+            if authVM.availableWorkspaces.isEmpty {
+                Text(t("Approved workspaces will appear here.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(authVM.availableWorkspaces) { workspace in
+                        workspaceOptionRow(workspace)
+                    }
+                }
+            }
+
+            DisclosureGroup(t("Advanced: connect with Company ID", lang: seciliDil)) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(t("Use this only if the owner has already approved your account and the workspace does not appear above.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            joinCompanyField
+                            joinCompanyButton
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            joinCompanyField
+                            joinCompanyButton
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .font(.system(size: 12, weight: .semibold))
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var joinCompanyField: some View {
+        TextField(t("Company ID", lang: seciliDil), text: $joinCompanyId)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12, design: .monospaced))
+            .padding(10)
+            .background(fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var joinCompanyButton: some View {
+        Button {
+            authVM.joinCompany(companyId: joinCompanyId)
+        } label: {
+            Label(t("Connect", lang: seciliDil), systemImage: "link.circle.fill")
+        }
+        .buttonStyle(.plain)
+        .disabled(authVM.isProfileLoading || joinCompanyId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private var requestAccessCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Request Access", lang: seciliDil))
+                .font(.system(size: 14, weight: .bold))
+
+            Text(t("Enter the owner’s email address or Company ID and send a request.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    requestOwnerCompanyField
+                    requestOwnerCompanyButton
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    requestOwnerCompanyField
+                    requestOwnerCompanyButton
+                }
+            }
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var requestOwnerCompanyField: some View {
+        TextField(t("Owner email or Company ID", lang: seciliDil), text: $requestOwnerIdentifier)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12, design: .monospaced))
+            .padding(10)
+            .background(fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var requestOwnerCompanyButton: some View {
+        Button {
+            authVM.requestWorkspaceAccess(ownerIdentifier: requestOwnerIdentifier)
+            requestOwnerIdentifier = ""
+        } label: {
+            Label(t("Send", lang: seciliDil), systemImage: "paperplane.fill")
+        }
+        .buttonStyle(.plain)
+        .disabled(authVM.isProfileLoading || requestOwnerIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func workspaceOptionRow(_ workspace: StudioWorkspaceOption) -> some View {
+        let isCurrent = workspace.id == authVM.currentCompanyId
+
+        return HStack(spacing: 10) {
+            Image(systemName: workspace.role == "owner" ? "crown.fill" : "person.2.fill")
+                .foregroundColor(workspace.role == "owner" ? studioWarningOrange : .blue)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(workspace.name.isEmpty ? "My Studio" : workspace.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+
+                    if isCurrent {
+                        Text(t("Current", lang: seciliDil))
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.13))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                Text(t(workspace.roleLabel, lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                if !workspace.ownerEmail.isEmpty, workspace.role != "owner" {
+                    Text(t("Owner", lang: seciliDil) + ": \(workspace.ownerEmail)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                if !isCurrent {
+                    authVM.switchToWorkspace(workspace)
+                }
+            } label: {
+                Text(isCurrent ? t("Connected", lang: seciliDil) : t("Switch", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(isCurrent ? .secondary : .white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(isCurrent ? Color.secondary.opacity(0.14) : Color.accentColor)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isCurrent || authVM.isProfileLoading)
+        }
+        .padding(10)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var pendingJoinRequestsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(t("Join Requests", lang: seciliDil))
+                    .font(.system(size: 14, weight: .bold))
+
+                Spacer()
+
+                Button {
+                    authVM.loadAccountProfile()
+                } label: {
+                    Label(t("Refresh", lang: seciliDil), systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .controlSize(.small)
+                .disabled(authVM.isProfileLoading)
+            }
+
+            if authVM.joinRequests.isEmpty {
+                Text(t("No pending requests.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(authVM.joinRequests) { request in
+                        joinRequestRow(request)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func joinRequestRow(_ request: StudioJoinRequest) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person.badge.plus")
+                .foregroundColor(.blue)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(request.requesterLabel)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(request.requesterUid)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+            }
+
+            Spacer()
+
+            Menu(t("Approve", lang: seciliDil)) {
+                Button(t("Member: can edit", lang: seciliDil)) {
+                    authVM.acceptJoinRequest(request, role: "member")
+                }
+                Button(t("View Only", lang: seciliDil)) {
+                    authVM.acceptJoinRequest(request, role: "viewer")
+                }
+                Button(t("Workflow Only", lang: seciliDil)) {
+                    authVM.acceptJoinRequest(request, role: "workflow")
+                }
+                if !authVM.customTeamRoles.isEmpty {
+                    Divider()
+                    ForEach(authVM.customTeamRoles) { customRole in
+                        Button(customRole.roleLabel) {
+                            authVM.acceptJoinRequest(request, role: customRole.id)
+                        }
+                    }
+                }
+            }
+            .controlSize(.small)
+            .disabled(authVM.isProfileLoading)
+
+            Button(role: .destructive) {
+                authVM.declineJoinRequest(request)
+            } label: {
+                Text(t("Decline", lang: seciliDil))
+            }
+            .buttonStyle(.plain)
+            .controlSize(.small)
+            .disabled(authVM.isProfileLoading)
+        }
+        .padding(10)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var roleProfilesSection: some View {
+        let newRoleNameConflict = studioCustomRoleNameExists(newCustomRoleName, roles: authVM.customTeamRoles)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Role Profiles")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Create custom access roles, then assign one to any workspace member.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+
+            DisclosureGroup(isExpanded: $newCustomRoleExpanded) {
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("Role name", text: $newCustomRoleName)
+                        .textFieldStyle(.plain)
+                        .padding(10)
+                        .background(fieldBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    StudioStandardRolePicker(title: "Base behavior", role: $newCustomRoleBaseRole)
+
+                    StudioRoleAccessEditor(access: $newCustomRoleAccess)
+
+                    Button {
+                        authVM.saveCustomTeamRole(name: newCustomRoleName, baseRole: newCustomRoleBaseRole, access: newCustomRoleAccess) { success in
+                            guard success else { return }
+                            newCustomRoleName = ""
+                            newCustomRoleBaseRole = "member"
+                            newCustomRoleAccess = studioDefaultMemberAccess()
+                            newCustomRoleExpanded = false
+                        }
+                    } label: {
+                        Label("Create role", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(authVM.isProfileLoading || newCustomRoleName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newRoleNameConflict)
+
+                    Text(newRoleNameConflict ? "A role with this name already exists." : "Assign this role to members after creating it.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(newRoleNameConflict ? .red : .secondary)
+                }
+                .padding(.top, 10)
+            } label: {
+                HStack {
+                    Text("Create role profile")
+                        .font(.system(size: 12, weight: .bold))
+                    Spacer()
+                    Text(newCustomRoleExpanded ? "Hide" : "Show")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .padding(12)
+            .background(fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if authVM.customTeamRoles.isEmpty {
+                Text("No custom role profiles yet.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(authVM.customTeamRoles) { role in
+                        StudioCustomRoleProfileEditor(role: role)
+                            .environmentObject(authVM)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var teamMembersSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Team Members", lang: seciliDil))
+                .font(.system(size: 14, weight: .bold))
+
+            if !authVM.isCompanyOwner {
+                Text(t("Only the workspace owner can change team access.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+
+            teamMembersList
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .sheet(item: $editingTeamMember) { member in
+            teamMemberProfileSheet(member)
+        }
+    }
+
+    private var roleMixSection: some View {
+        let counts = currentRoleMixCounts
+
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Current role mix")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Role counts")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+
+            if counts.isEmpty {
+                roleMixTile(label: "Members", count: 0, color: .secondary)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 8)], spacing: 8) {
+                    ForEach(counts, id: \.label) { item in
+                        roleMixTile(label: item.label, count: item.count, color: item.color)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var currentRoleMixCounts: [(label: String, count: Int, color: Color)] {
+        var counts: [String: (count: Int, color: Color, order: Int)] = [:]
+
+        for member in authVM.teamMembers {
+            let label = member.roleLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? roleLabel(member.role) : member.roleLabel
+            let roleOrder = roleSortOrder(member.role, label: label)
+            let existing = counts[label]
+            counts[label] = (
+                count: (existing?.count ?? 0) + 1,
+                color: existing?.color ?? roleColor(member.role),
+                order: min(existing?.order ?? roleOrder, roleOrder)
+            )
+        }
+
+        return counts
+            .map { (label: $0.key, count: $0.value.count, color: $0.value.color, order: $0.value.order) }
+            .sorted {
+                if $0.order != $1.order { return $0.order < $1.order }
+                return $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending
+            }
+            .map { (label: $0.label, count: $0.count, color: $0.color) }
+    }
+
+    private func roleMixTile(label: String, count: Int, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(t(label, lang: seciliDil))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+
+            Text("\(count)")
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundColor(color)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(color.opacity(0.20), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func teamMemberProfileSheet(_ member: StudioTeamMember) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(t("Edit Team Member", lang: seciliDil))
+                    .font(.system(size: 18, weight: .bold))
+                Spacer()
+                Button {
+                    editingTeamMember = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text(member.id)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
+
+            TextField(t("Visible name", lang: seciliDil), text: $editingMemberDisplayName)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            TextField(t("Email", lang: seciliDil), text: $editingMemberEmail)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            HStack {
+                Spacer()
+                Button(t("Cancel", lang: seciliDil)) {
+                    editingTeamMember = nil
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    authVM.updateTeamMemberProfile(uid: member.id, displayName: editingMemberDisplayName, email: editingMemberEmail)
+                    editingTeamMember = nil
+                } label: {
+                    Label(t("Save", lang: seciliDil), systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .disabled(authVM.isProfileLoading)
+            }
+        }
+        .padding(18)
+        .frame(width: 380)
+    }
+
+    private var teamMembersList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(authVM.teamMembers) { member in
+                HStack(spacing: 10) {
+                    AccountAvatarImage(urlString: member.photoURL, initials: initials(from: member.displayName.isEmpty ? member.email : member.displayName), size: 32, fallbackSystemImage: roleIcon(member.role), fallbackColor: roleColor(member.role))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(member.email.isEmpty ? (member.displayName.isEmpty ? member.id : member.displayName) : member.email)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+
+                        HStack(spacing: 6) {
+                            Text(t(member.roleLabel, lang: seciliDil))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(roleColor(member.role))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(roleColor(member.role).opacity(0.12))
+                                .clipShape(Capsule())
+                            Text(member.id)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    Spacer()
+
+                    if authVM.isCompanyOwner,
+                       member.normalizedRole != "owner",
+                       member.id != authVM.currentUserId {
+                        Menu(t("Manage", lang: seciliDil)) {
+                            Button {
+                                authVM.updateTeamMemberRole(uid: member.id, role: "member")
+                            } label: {
+                                Label(t("Member: can edit", lang: seciliDil), systemImage: "pencil.circle")
+                            }
+                            Button {
+                                authVM.updateTeamMemberRole(uid: member.id, role: "viewer")
+                            } label: {
+                                Label(t("View Only", lang: seciliDil), systemImage: "eye")
+                            }
+                            Button {
+                                authVM.updateTeamMemberRole(uid: member.id, role: "workflow")
+                            } label: {
+                                Label(t("Workflow Only", lang: seciliDil), systemImage: "list.bullet")
+                            }
+                            if !authVM.customTeamRoles.isEmpty {
+                                Divider()
+                                ForEach(authVM.customTeamRoles) { customRole in
+                                    Button {
+                                        authVM.updateTeamMemberRole(uid: member.id, role: customRole.id)
+                                    } label: {
+                                        Label(customRole.roleLabel, systemImage: "person.crop.circle.badge.checkmark")
+                                    }
+                                }
+                            }
+                            Button {
+                                editingMemberDisplayName = member.displayName
+                                editingMemberEmail = member.email
+                                editingTeamMember = member
+                            } label: {
+                                Label(t("Edit Name / Email", lang: seciliDil), systemImage: "person.text.rectangle")
+                            }
+                            Divider()
+                            Menu(t("Custom Access", lang: seciliDil)) {
+                                ForEach(studioMemberAccessOptions, id: \.key) { option in
+                                    let isEnabled = member.access[option.key] ?? true
+                                    Button {
+                                        var nextAccess = member.access
+                                        nextAccess[option.key] = !isEnabled
+                                        authVM.updateTeamMemberAccess(uid: member.id, access: nextAccess)
+                                    } label: {
+                                        Label(t(option.label, lang: seciliDil), systemImage: isEnabled ? "checkmark.circle.fill" : "circle")
+                                    }
+                                }
+                            }
+                            Divider()
+                            Button(role: .destructive) {
+                                authVM.removeTeamMember(uid: member.id)
+                            } label: {
+                                Label(t("Remove", lang: seciliDil), systemImage: "trash")
+                            }
+                        }
+                        .controlSize(.small)
+                        .disabled(authVM.isProfileLoading)
+                    }
+                }
+                .padding(10)
+                .background(fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            if authVM.teamMembers.isEmpty {
+                Text(t("No team members yet.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+
+    private var statusMessages: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !copiedInfoMessage.isEmpty {
+                Label(copiedInfoMessage, systemImage: "doc.on.doc.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.green)
+            }
+
+            if !authVM.profileMessage.isEmpty {
+                Label(t(authVM.profileMessage, lang: seciliDil), systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.green)
+            }
+
+            if !authVM.profileErrorMessage.isEmpty {
+                Label(t(authVM.profileErrorMessage, lang: seciliDil), systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.red)
+            }
+        }
+    }
+
+    private func presentAvatarPicker() {
+        #if os(macOS)
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.canCreateDirectories = false
+            panel.title = t("Upload Avatar", lang: seciliDil)
+            panel.message = t("Choose a JPG, PNG, HEIC, HEIF or WEBP image for your account avatar.", lang: seciliDil)
+
+            if #available(macOS 12.0, *) {
+                panel.allowedContentTypes = [.image]
+            } else {
+                panel.allowedFileTypes = ["jpg", "jpeg", "png", "heic", "heif", "webp"]
+            }
+
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            requestSafeAvatarUpload(url: url)
+        }
+        #elseif canImport(UIKit)
+        showAvatarDocumentPicker = true
+        #else
+        showAvatarImporter = true
+        #endif
+    }
+
+    private func requestSafeAvatarUpload(url: URL) {
+        if uploadSafetyRequirePolicyAcceptance && !uploadSafetyPolicyAccepted {
+            pendingAvatarURL = url
+            showAvatarUploadPolicyPrompt = true
+            return
+        }
+        uploadAvatar(url)
+    }
+
+    private func uploadAvatar(_ url: URL) {
+        isUploadingAvatar = true
+        firebaseManager.uploadDesignImage(fileURL: url, orderId: nil, source: "account_avatar") { downloadURL in
+            DispatchQueue.main.async {
+                isUploadingAvatar = false
+                if let downloadURL {
+                    authVM.updateAccountAvatar(photoURL: downloadURL)
+                } else {
+                    avatarUploadErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Upload blocked. Please check Upload Safety settings and try again.", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
+                    showAvatarUploadError = true
+                }
+            }
+        }
+    }
+
+    private func initials(from value: String) -> String {
+        let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "?" }
+        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".@_-"))
+        let parts = cleaned.components(separatedBy: separators).filter { !$0.isEmpty }
+        let letters = parts.prefix(2).compactMap { $0.first }.map { String($0).uppercased() }
+        return letters.isEmpty ? String(cleaned.prefix(1)).uppercased() : letters.joined()
+    }
+
+    private func displayName(for member: StudioTeamMember) -> String {
+        let name = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let emailName = displayNameFromEmail(member.email)
+        return emailName.isEmpty ? member.id : emailName
+    }
+
+    private func displayNameFromEmail(_ email: String) -> String {
+        let cleaned = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "" }
+        let localPart = cleaned.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? cleaned
+        let readable = localPart
+            .replacingOccurrences(of: ".", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return readable
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+            .joined(separator: " ")
+    }
+
+    private func sectionTitle(_ title: String, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundColor(.blue)
+            Text(title)
+                .font(.system(size: isPhoneLayout ? 16 : 18, weight: .bold))
+            Spacer()
+        }
+    }
+
+    private var readOnlyWorkspaceNotice: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "eye.fill")
+                .foregroundColor(.purple)
+            Text(studioRoleForContentView(authVM.currentWorkspaceRole) == "workflow" ? t("This workspace is workflow-only for your account. You can follow order progress, but prices, dashboard and editing tools are hidden.", lang: seciliDil) : t("This workspace is view-only for your account. You can review orders and customer information, but saving changes may be blocked by the workspace permissions.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.purple.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func roleSelector(title: String, role: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            if authVM.customTeamRoles.isEmpty {
+                Picker(title, selection: role) {
+                    Text(t("Member: can edit", lang: seciliDil)).tag("member")
+                    Text(t("View Only", lang: seciliDil)).tag("viewer")
+                    Text(t("Workflow Only", lang: seciliDil)).tag("workflow")
+                }
+                .pickerStyle(.segmented)
+            } else {
+                Picker(title, selection: role) {
+                    Text(t("Member: can edit", lang: seciliDil)).tag("member")
+                    Text(t("View Only", lang: seciliDil)).tag("viewer")
+                    Text(t("Workflow Only", lang: seciliDil)).tag("workflow")
+                    Divider()
+                    ForEach(authVM.customTeamRoles) { customRole in
+                        Text(customRole.roleLabel).tag(customRole.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+    }
+
+    private func roleLabel(_ role: String) -> String {
+        switch role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "owner": return t("Owner", lang: seciliDil)
+        case "admin": return t("Admin", lang: seciliDil)
+        case "viewer": return t("View Only", lang: seciliDil)
+        case "workflow": return t("Workflow Only", lang: seciliDil)
+        default: return t("Member", lang: seciliDil)
+        }
+    }
+
+    private func roleIcon(_ role: String) -> String {
+        switch role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "owner": return "crown.fill"
+        case "viewer": return "eye.fill"
+        case "workflow": return "list.bullet"
+        default: return "person.fill"
+        }
+    }
+
+    private func roleColor(_ role: String) -> Color {
+        switch role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "owner": return studioWarningOrange
+        case "viewer": return .purple
+        case "workflow": return .purple
+        default: return .blue
+        }
+    }
+
+    private func roleSortOrder(_ role: String, label: String) -> Int {
+        switch role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "owner": return 0
+        case "admin": return 1
+        case "member": return 2
+        case "viewer": return 3
+        case "workflow": return 4
+        default:
+            return label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 9 : 5
+        }
+    }
+
+    private func copyAccountText(_ value: String, message: String) {
+        if platformCopyText(value) {
+            copiedInfoMessage = message
+        }
+    }
+
+    private func copyableIdField(title: String, value: String, copiedMessage: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 10) {
+                Text(value)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(isPhoneLayout ? 2 : 1)
+                    .minimumScaleFactor(0.8)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    copyAccountText(value, message: copiedMessage)
+                } label: {
+                    Label(t("Copy", lang: seciliDil), systemImage: "doc.on.doc")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    private func labeledField(title: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .padding(12)
+                .background(fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+}
+
+private func studioNormalizedCustomRoleName(_ value: String) -> String {
+    value
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+        .lowercased()
+}
+
+private func studioCustomRoleNameExists(_ value: String, roles: [StudioCustomTeamRole], exceptId: String = "") -> Bool {
+    let normalized = studioNormalizedCustomRoleName(value)
+    guard !normalized.isEmpty else { return false }
+    return roles.contains { role in
+        role.id != exceptId && studioNormalizedCustomRoleName(role.name) == normalized
+    }
+}
+
+private struct StudioStandardRolePicker: View {
+    let title: String
+    @Binding var role: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            Picker(title, selection: $role) {
+                Text("Member").tag("member")
+                Text("View Only").tag("viewer")
+                Text("Workflow Only").tag("workflow")
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+}
+
+private struct StudioRoleAccessEditor: View {
+    @Binding var access: [String: Bool]
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var fieldBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.045)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            accessSection(
+                eyebrow: "Workspace access",
+                title: "Navigation & menus",
+                note: "Controls main app areas shown in sidebar and settings.",
+                options: studioNavigationAccessOptions,
+                onLabel: "Allowed",
+                offLabel: "Hidden / locked",
+                tint: .blue,
+                allowBulk: true
+            )
+
+            accessSection(
+                eyebrow: "Project detail",
+                title: "Order detail cards",
+                note: "Controls which cards are visible inside each project.",
+                options: studioCardAccessOptions,
+                onLabel: "Visible",
+                offLabel: "Hidden",
+                tint: studioWarningOrange,
+                allowBulk: true
+            )
+
+            accessSection(
+                eyebrow: "Scope",
+                title: "Project assignment",
+                note: "Controls assigned-project scope and whether this role can change project assignees.",
+                options: studioScopeAccessOptions,
+                onLabel: "Only assigned projects",
+                offLabel: "All projects",
+                tint: .purple,
+                allowBulk: false
+            )
+        }
+    }
+
+    private func accessSection(
+        eyebrow: String,
+        title: String,
+        note: String,
+        options: [(key: String, label: String)],
+        onLabel: String,
+        offLabel: String,
+        tint: Color,
+        allowBulk: Bool
+    ) -> some View {
+        let enabledCount = options.filter { isEnabled($0.key) }.count
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(eyebrow.uppercased())
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundColor(.secondary)
+                    Text(title)
+                        .font(.system(size: 13, weight: .bold))
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Text("\(enabledCount)/\(options.count)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+
+            if allowBulk {
+                HStack(spacing: 8) {
+                    Button("All on") { setAll(options, true) }
+                    Button("All off") { setAll(options, false) }
+                }
+                .font(.system(size: 11, weight: .bold))
+                .buttonStyle(.plain)
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+                ForEach(options, id: \.key) { option in
+                    let enabled = isEnabled(option.key)
+                    Button {
+                        set(option.key, !enabled)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: enabled ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(enabled ? tint : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(option.label)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(enabled ? tint : .secondary)
+                                    .lineLimit(2)
+                                Text(statusLabel(for: option.key, enabled: enabled, onLabel: onLabel, offLabel: offLabel))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(9)
+                        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+                        .background(enabled ? tint.opacity(0.12) : fieldBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(enabled ? tint.opacity(0.28) : Color.secondary.opacity(0.12), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(10)
+        .background(fieldBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func defaultValue(for key: String) -> Bool {
+        ["assignedProjectsOnly", "manageProjectAssignments"].contains(key) ? false : true
+    }
+
+    private func statusLabel(for key: String, enabled: Bool, onLabel: String, offLabel: String) -> String {
+        if key == "manageProjectAssignments" {
+            return enabled ? "Can assign projects" : "Assign hidden"
+        }
+        return enabled ? onLabel : offLabel
+    }
+
+    private func isEnabled(_ key: String) -> Bool {
+        access[key] ?? defaultValue(for: key)
+    }
+
+    private func set(_ key: String, _ value: Bool) {
+        var next = studioDefaultMemberAccess().merging(access) { _, current in current }
+        next[key] = value
+        access = next
+    }
+
+    private func setAll(_ options: [(key: String, label: String)], _ value: Bool) {
+        var next = studioDefaultMemberAccess().merging(access) { _, current in current }
+        options.forEach { next[$0.key] = value }
+        access = next
+    }
+}
+
+private struct StudioCustomRoleProfileEditor: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    let role: StudioCustomTeamRole
+    @State private var draftName: String
+    @State private var draftBaseRole: String
+    @State private var draftAccess: [String: Bool]
+    @State private var expanded: Bool = false
+    @State private var showDeleteConfirm: Bool = false
+
+    init(role: StudioCustomTeamRole) {
+        self.role = role
+        _draftName = State(initialValue: role.roleLabel)
+        _draftBaseRole = State(initialValue: role.normalizedBaseRole)
+        _draftAccess = State(initialValue: role.access)
+    }
+
+    private var fieldBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.045)
+    }
+
+    private var cleanDraftName: String {
+        draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedStoredAccess: [String: Bool] {
+        studioDefaultMemberAccess().merging(role.access) { _, current in current }
+    }
+
+    private var normalizedDraftAccess: [String: Bool] {
+        studioDefaultMemberAccess().merging(draftAccess) { _, current in current }
+    }
+
+    private var hasNameConflict: Bool {
+        studioCustomRoleNameExists(draftName, roles: authVM.customTeamRoles, exceptId: role.id)
+    }
+
+    private var isDirty: Bool {
+        cleanDraftName != role.name ||
+        draftBaseRole != role.normalizedBaseRole ||
+        studioMemberAccessOptions.contains { option in
+            normalizedDraftAccess[option.key] != normalizedStoredAccess[option.key]
+        }
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("Role name", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .background(fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                StudioStandardRolePicker(title: "Base behavior", role: $draftBaseRole)
+                StudioRoleAccessEditor(access: $draftAccess)
+
+                HStack(spacing: 10) {
+                    Button {
+                        authVM.saveCustomTeamRole(id: role.id, name: cleanDraftName, baseRole: draftBaseRole, access: normalizedDraftAccess)
+                    } label: {
+                        Label("Save role", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(authVM.isProfileLoading || cleanDraftName.isEmpty || hasNameConflict || !isDirty)
+
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(authVM.isProfileLoading)
+
+                    Spacer()
+                }
+
+                if hasNameConflict {
+                    Text("Name already used.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
+            .padding(.top, 10)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .foregroundColor(.blue)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(role.roleLabel)
+                        .font(.system(size: 13, weight: .bold))
+                    Text(roleDescription)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Text(role.id)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .padding(12)
+        .background(fieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .alert("Delete role profile?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) { authVM.deleteCustomTeamRole(role) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Members must be moved away from this role before it can be deleted.")
+        }
+        .onChange(of: role) { _, newRole in
+            draftName = newRole.roleLabel
+            draftBaseRole = newRole.normalizedBaseRole
+            draftAccess = newRole.access
+        }
+    }
+
+    private var roleDescription: String {
+        let access = studioDefaultMemberAccess().merging(role.access) { _, current in current }
+        let hiddenMenus = studioNavigationAccessOptions.filter { access[$0.key] == false }.count
+        let hiddenCards = studioCardAccessOptions.filter { access[$0.key] == false }.count
+        let assigned = access["assignedProjectsOnly"] == true ? " · assigned projects only" : ""
+        let assignmentControl = access["manageProjectAssignments"] == true ? " · can assign projects" : ""
+        let parts = [
+            hiddenMenus > 0 ? "\(hiddenMenus) menu\(hiddenMenus == 1 ? "" : "s") hidden" : "",
+            hiddenCards > 0 ? "\(hiddenCards) card\(hiddenCards == 1 ? "" : "s") hidden" : ""
+        ].filter { !$0.isEmpty }
+
+        if parts.isEmpty {
+            switch role.normalizedBaseRole {
+            case "viewer": return "View Only with read-only behavior\(assigned)\(assignmentControl)"
+            case "workflow": return "Workflow Only with non-finance workflow behavior\(assigned)\(assignmentControl)"
+            default: return "Member with member edit behavior\(assigned)\(assignmentControl)"
+            }
+        }
+        return "\(parts.joined(separator: " · "))\(assigned)\(assignmentControl)"
+    }
+}
+
+
+#if canImport(EventKit)
+enum StudioFlowReminderError: LocalizedError {
+    case accessDenied
+    case calendarMissing
+    case saveFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied:
+            return "Reminders permission is not enabled for this app."
+        case .calendarMissing:
+            return "No default Apple Reminders list was found on this device."
+        case .saveFailed(let message):
+            return message
+        }
+    }
+}
+
+final class AppleReminderManager {
+    static let shared = AppleReminderManager()
+    private let eventStore = EKEventStore()
+
+    private init() {}
+
+    func addOrderReminder(title: String, notes: String, dueDate: Date, useDueDateTime: Bool = false, completion: @escaping (Result<Void, Error>) -> Void) {
+        requestReminderAccess { [weak self] granted, error in
+            guard let self else { return }
+            if let error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+
+            guard granted else {
+                DispatchQueue.main.async { completion(.failure(StudioFlowReminderError.accessDenied)) }
+                return
+            }
+
+            guard let calendar = self.preferredReminderCalendar() else {
+                DispatchQueue.main.async { completion(.failure(StudioFlowReminderError.calendarMissing)) }
+                return
+            }
+
+            let reminder = EKReminder(eventStore: self.eventStore)
+            reminder.calendar = calendar
+            reminder.title = title
+            reminder.notes = notes
+
+            let systemCalendar = Calendar.current
+            var dueComponents: DateComponents
+            if useDueDateTime {
+                dueComponents = systemCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: dueDate)
+            } else {
+                dueComponents = systemCalendar.dateComponents([.year, .month, .day], from: dueDate)
+                dueComponents.hour = 9
+                dueComponents.minute = 0
+                dueComponents.second = 0
+            }
+
+            var alarmDate = systemCalendar.date(from: dueComponents) ?? dueDate
+            if alarmDate < Date() {
+                alarmDate = Date().addingTimeInterval(5 * 60)
+                dueComponents = systemCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: alarmDate)
+            }
+
+            reminder.dueDateComponents = dueComponents
+            reminder.addAlarm(EKAlarm(absoluteDate: alarmDate))
+
+            do {
+                try self.eventStore.save(reminder, commit: true)
+                DispatchQueue.main.async { completion(.success(())) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(StudioFlowReminderError.saveFailed(error.localizedDescription))) }
+            }
+        }
+    }
+
+    private func preferredReminderCalendar() -> EKCalendar? {
+        let defaultCalendar = eventStore.defaultCalendarForNewReminders()
+        if let defaultCalendar,
+           defaultCalendar.allowsContentModifications,
+           (defaultCalendar.source.title.localizedCaseInsensitiveContains("iCloud") || defaultCalendar.source.sourceType == .calDAV) {
+            return defaultCalendar
+        }
+
+        if let iCloudCalendar = eventStore.calendars(for: .reminder).first(where: { calendar in
+            calendar.allowsContentModifications && calendar.source.title.localizedCaseInsensitiveContains("iCloud")
+        }) {
+            return iCloudCalendar
+        }
+
+        if let defaultCalendar, defaultCalendar.allowsContentModifications {
+            return defaultCalendar
+        }
+
+        return eventStore.calendars(for: .reminder).first(where: { $0.allowsContentModifications })
+    }
+
+    private func requestReminderAccess(completion: @escaping (Bool, Error?) -> Void) {
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+
+        if #available(iOS 17.0, macOS 14.0, *) {
+            switch status {
+            case .fullAccess, .authorized:
+                completion(true, nil)
+            case .notDetermined:
+                eventStore.requestFullAccessToReminders { granted, error in
+                    completion(granted, error)
+                }
+            case .denied, .restricted, .writeOnly:
+                completion(false, nil)
+            @unknown default:
+                completion(false, nil)
+            }
+        } else {
+            switch status {
+            case .authorized:
+                completion(true, nil)
+            case .notDetermined:
+                eventStore.requestAccess(to: .reminder) { granted, error in
+                    completion(granted, error)
+                }
+            case .denied, .restricted:
+                completion(false, nil)
+            @unknown default:
+                completion(false, nil)
+            }
+        }
+    }
+}
+
+
+enum StudioFlowCalendarError: LocalizedError {
+    case accessDenied
+    case calendarMissing
+    case eventMissing
+    case saveFailed(String)
+    case removeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied:
+            return "Calendar permission is not enabled for this app."
+        case .calendarMissing:
+            return "No writable Apple Calendar was found on this device."
+        case .eventMissing:
+            return "The Calendar event could not be found."
+        case .saveFailed(let message):
+            return message
+        case .removeFailed(let message):
+            return message
+        }
+    }
+}
+
+final class AppleCalendarManager {
+    static let shared = AppleCalendarManager()
+    private let eventStore = EKEventStore()
+
+    private init() {}
+
+    func saveOrderEvent(eventId: String?, title: String, notes: String, startDate: Date, dueDate: Date, completion: @escaping (Result<String, Error>) -> Void) {
+        requestCalendarAccess { [weak self] granted, error in
+            guard let self else { return }
+            if let error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+
+            guard granted else {
+                DispatchQueue.main.async { completion(.failure(StudioFlowCalendarError.accessDenied)) }
+                return
+            }
+
+            guard let calendar = self.preferredEventCalendar() else {
+                DispatchQueue.main.async { completion(.failure(StudioFlowCalendarError.calendarMissing)) }
+                return
+            }
+
+            let systemCalendar = Calendar.current
+            let startOfStartDate = systemCalendar.startOfDay(for: startDate)
+            let startOfDueDate = systemCalendar.startOfDay(for: dueDate)
+            let safeEndBase = max(startOfStartDate, startOfDueDate)
+            let exclusiveEndDate = systemCalendar.date(byAdding: .day, value: 1, to: safeEndBase) ?? safeEndBase.addingTimeInterval(24 * 60 * 60)
+
+            let event: EKEvent
+            if let eventId,
+               let existingEvent = self.eventStore.event(withIdentifier: eventId) {
+                event = existingEvent
+            } else {
+                event = EKEvent(eventStore: self.eventStore)
+                event.calendar = calendar
+            }
+
+            event.title = title
+            event.notes = notes
+            event.startDate = startOfStartDate
+            event.endDate = exclusiveEndDate
+            event.isAllDay = true
+
+            if event.calendar == nil || !event.calendar.allowsContentModifications {
+                event.calendar = calendar
+            }
+
+            if event.alarms?.isEmpty ?? true {
+                event.addAlarm(EKAlarm(relativeOffset: -24 * 60 * 60))
+            }
+
+            do {
+                try self.eventStore.save(event, span: .thisEvent, commit: true)
+                let savedIdentifier = event.eventIdentifier ?? event.calendarItemIdentifier
+                DispatchQueue.main.async { completion(.success(savedIdentifier)) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(StudioFlowCalendarError.saveFailed(error.localizedDescription))) }
+            }
+        }
+    }
+
+    func removeOrderEvent(eventId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        requestCalendarAccess { [weak self] granted, error in
+            guard let self else { return }
+            if let error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+
+            guard granted else {
+                DispatchQueue.main.async { completion(.failure(StudioFlowCalendarError.accessDenied)) }
+                return
+            }
+
+            guard let event = self.eventStore.event(withIdentifier: eventId) else {
+                DispatchQueue.main.async { completion(.success(())) }
+                return
+            }
+
+            do {
+                try self.eventStore.remove(event, span: .thisEvent, commit: true)
+                DispatchQueue.main.async { completion(.success(())) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(StudioFlowCalendarError.removeFailed(error.localizedDescription))) }
+            }
+        }
+    }
+
+    private func preferredEventCalendar() -> EKCalendar? {
+        let defaultCalendar = eventStore.defaultCalendarForNewEvents
+        if let defaultCalendar,
+           defaultCalendar.allowsContentModifications,
+           (defaultCalendar.source.title.localizedCaseInsensitiveContains("iCloud") || defaultCalendar.source.sourceType == .calDAV) {
+            return defaultCalendar
+        }
+
+        if let iCloudCalendar = eventStore.calendars(for: .event).first(where: { calendar in
+            calendar.allowsContentModifications && calendar.source.title.localizedCaseInsensitiveContains("iCloud")
+        }) {
+            return iCloudCalendar
+        }
+
+        if let defaultCalendar, defaultCalendar.allowsContentModifications {
+            return defaultCalendar
+        }
+
+        return eventStore.calendars(for: .event).first(where: { $0.allowsContentModifications })
+    }
+
+    private func requestCalendarAccess(completion: @escaping (Bool, Error?) -> Void) {
+        let status = EKEventStore.authorizationStatus(for: .event)
+
+        if #available(iOS 17.0, macOS 14.0, *) {
+            switch status {
+            case .fullAccess, .authorized:
+                completion(true, nil)
+            case .notDetermined:
+                eventStore.requestFullAccessToEvents { granted, error in
+                    completion(granted, error)
+                }
+            case .denied, .restricted, .writeOnly:
+                completion(false, nil)
+            @unknown default:
+                completion(false, nil)
+            }
+        } else {
+            switch status {
+            case .authorized:
+                completion(true, nil)
+            case .notDetermined:
+                eventStore.requestAccess(to: .event) { granted, error in
+                    completion(granted, error)
+                }
+            case .denied, .restricted:
+                completion(false, nil)
+            @unknown default:
+                completion(false, nil)
+            }
+        }
+    }
+}
+#endif
+
+
+private enum SchedulePlannerSpan: String, CaseIterable, Identifiable {
+    case weekly = "Weekly"
+    case monthly = "Monthly"
+    case threeMonths = "3 Months"
+    case sixMonths = "6 Months"
+    case yearly = "Yearly"
+
+    var id: String { rawValue }
+}
+
+private enum SchedulePlannerFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case active = "Active"
+    case waitingCustomer = "Waiting Customer"
+    case inProduction = "In Production"
+    case readyToShip = "Ready to Ship"
+    case lateOrders = "Late Orders"
+    case completed = "Completed"
+
+    var id: String { rawValue }
+
+    var iconName: String {
+        switch self {
+        case .all: return "tray.full"
+        case .active: return "bolt.circle"
+        case .waitingCustomer: return "person.crop.circle.badge.clock"
+        case .inProduction: return "paintbrush.pointed"
+        case .readyToShip: return "shippingbox"
+        case .lateOrders: return "exclamationmark.triangle"
+        case .completed: return "checkmark.circle"
+        }
+    }
+}
+
+private enum ScheduleBoardColumnKind: String, CaseIterable, Identifiable {
+    case waitingCustomer
+    case inProduction
+    case readyToShip
+    case lateOrders
+    case completed
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .waitingCustomer: return "Waiting Customer"
+        case .inProduction: return "In Production"
+        case .readyToShip: return "Ready to Ship"
+        case .lateOrders: return "Late Orders"
+        case .completed: return "Completed"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .waitingCustomer: return "person.crop.circle.badge.clock"
+        case .inProduction: return "paintbrush.pointed"
+        case .readyToShip: return "shippingbox"
+        case .lateOrders: return "exclamationmark.triangle"
+        case .completed: return "checkmark.circle"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .waitingCustomer: return .yellow
+        case .inProduction: return .green
+        case .readyToShip: return .blue
+        case .lateOrders: return .red
+        case .completed: return .gray
+        }
+    }
+}
+
+struct SchedulePlannerView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @EnvironmentObject private var firebaseManager: FirebaseManager
+    @EnvironmentObject private var authVM: AuthViewModel
+
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
+    @AppStorage("seciliOndalik") private var seciliOndalik: String = "."
+    @AppStorage("schedulePlannerSpan") private var spanRaw: String = SchedulePlannerSpan.weekly.rawValue
+    @AppStorage("schedulePlannerFilter") private var filterRaw: String = SchedulePlannerFilter.all.rawValue
+    @AppStorage("schedulePlannerTimelineZoom") private var scheduleTimelineZoom: Double = 1.0
+
+    let canEditWorkspace: Bool
+    @Binding var sortMode: SiralamaTuru
+    let selectedOrderKey: String?
+    let onSelectOrder: (Siparis) -> Void
+    let onOpenOrder: (Siparis) -> Void
+
+    @State private var searchText: String = ""
+    @State private var compactSearchVisible: Bool = false
+    @State private var anchorDate: Date = Date()
+    @State private var didChooseInitialAnchor: Bool = false
+    @State private var showReminderAlert: Bool = false
+    @State private var reminderAlertTitle: String = ""
+    @State private var reminderAlertMessage: String = ""
+    @State private var reminderAlertCanOpenSettings: Bool = false
+    @State private var scheduleZoomGestureStart: Double? = nil
+    @FocusState private var compactScheduleSearchFocused: Bool
+
+    private var bgMain: Color { colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.93) }
+    private var bgCard: Color { colorScheme == .dark ? Color(white: 0.12) : .white }
+    private var borderColor: Color { Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08) }
+    private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
+
+
+    private var availableScheduleSpans: [SchedulePlannerSpan] {
+        authVM.currentPlanEntitlements.scheduleLongRangeEnabled ? SchedulePlannerSpan.allCases : [.weekly, .monthly]
+    }
+
+    private var availableScheduleFilters: [SchedulePlannerFilter] {
+        authVM.currentPlanEntitlements.scheduleAdvancedFiltersEnabled ? SchedulePlannerFilter.allCases : [.all, .active, .lateOrders]
+    }
+
+    private var selectedSpan: SchedulePlannerSpan {
+        let candidate = SchedulePlannerSpan(rawValue: spanRaw) ?? .weekly
+        return availableScheduleSpans.contains(candidate) ? candidate : .weekly
+    }
+
+    private var selectedFilter: SchedulePlannerFilter {
+        let candidate = SchedulePlannerFilter(rawValue: filterRaw) ?? .all
+        return availableScheduleFilters.contains(candidate) ? candidate : .all
+    }
+
+    private var selectedSortTitle: String {
+        sortMode == .akilli ? t("Smart", lang: seciliDil) : t("Recent", lang: seciliDil)
+    }
+
+    private var schedulePlanNoticeText: String {
+        switch authVM.currentBillingPlan {
+        case .demo:
+            return t("Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+        case .lifetimeLite:
+            return t("Lite includes personal weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.", lang: seciliDil)
+        case .proMonthly:
+            return t("Pro includes full personal schedule planning with advanced filters and long-range views.", lang: seciliDil)
+        case .teamMonthly:
+            return t("Team includes shared schedule planning for the whole workspace.", lang: seciliDil)
+        }
+    }
+
+    private var calendar: Calendar { Calendar.current }
+
+    private var visibleStartDate: Date {
+        switch selectedSpan {
+        case .weekly:
+            return calendar.sfStartOfWeek(for: anchorDate)
+        case .monthly, .threeMonths, .sixMonths:
+            return calendar.sfStartOfMonth(for: anchorDate)
+        case .yearly:
+            return calendar.sfStartOfYear(for: anchorDate)
+        }
+    }
+
+    private var visibleDays: [Date] {
+        let count: Int
+        switch selectedSpan {
+        case .weekly:
+            count = 7
+        case .monthly:
+            count = calendar.range(of: .day, in: .month, for: visibleStartDate)?.count ?? 30
+        case .threeMonths:
+            count = dayCountFromVisibleStart(addingMonths: 3)
+        case .sixMonths:
+            count = dayCountFromVisibleStart(addingMonths: 6)
+        case .yearly:
+            count = dayCountFromVisibleStart(addingYears: 1)
+        }
+
+        return (0..<count).compactMap { calendar.date(byAdding: .day, value: $0, to: visibleStartDate) }
+    }
+
+    private var visibleEndDate: Date {
+        calendar.date(byAdding: .day, value: visibleDays.count, to: visibleStartDate) ?? visibleStartDate
+    }
+
+    private var minScheduleZoom: Double { 0.45 }
+    private var maxScheduleZoom: Double { 2.20 }
+    private var clampedScheduleZoom: Double { min(max(scheduleTimelineZoom, minScheduleZoom), maxScheduleZoom) }
+
+    private var baseDayWidth: CGFloat {
+        switch selectedSpan {
+        case .weekly: return 168
+        case .monthly: return 118
+        case .threeMonths: return 58
+        case .sixMonths: return 38
+        case .yearly: return 28
+        }
+    }
+
+    private var dayWidth: CGFloat {
+        max(18, baseDayWidth * CGFloat(clampedScheduleZoom))
+    }
+
+    private var dayHeaderTopFontSize: CGFloat {
+        max(7.5, min(12, dayWidth * 0.22))
+    }
+
+    private var dayHeaderBottomFontSize: CGFloat {
+        max(10, min(15, dayWidth * 0.34))
+    }
+
+    private var timelineContentWidth: CGFloat {
+        let minimumWidth: CGFloat
+        switch selectedSpan {
+        case .weekly: minimumWidth = 980
+        case .monthly: minimumWidth = 1300
+        case .threeMonths: minimumWidth = 2100
+        case .sixMonths: minimumWidth = 2600
+        case .yearly: minimumWidth = 3600
+        }
+        return max(CGFloat(visibleDays.count) * dayWidth, minimumWidth * CGFloat(clampedScheduleZoom))
+    }
+
+    private var scheduleVisibleOrders: [Siparis] {
+        guard authVM.currentWorkspaceAccess["assignedProjectsOnly"] == true else {
+            return firebaseManager.siparisler
+        }
+
+        let currentUid = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentEmail = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return firebaseManager.siparisler.filter { siparis in
+            let assignedUid = siparis.assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines)
+            let assignedEmail = siparis.assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return (!currentUid.isEmpty && assignedUid == currentUid) ||
+                (!currentEmail.isEmpty && assignedEmail == currentEmail)
+        }
+    }
+
+    private var allFilteredOrders: [Siparis] {
+        scheduleVisibleOrders
+            .filter { matchesSearch($0) }
+            .filter { matchesFilter($0, selectedFilter) }
+            .sorted { scheduleOrderShouldComeBefore($0, $1) }
+    }
+
+    private var timelineOrders: [Siparis] {
+        allFilteredOrders.filter { orderOverlapsVisibleRange($0) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            scheduleHeader
+            Divider().background(Color.primary.opacity(0.10))
+
+            timelineView
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(bgMain)
+        .alert(reminderAlertTitle, isPresented: $showReminderAlert) {
+            if reminderAlertCanOpenSettings {
+                Button(t("Open Settings", lang: seciliDil)) {
+                    openReminderPrivacySettings()
+                }
+            }
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(reminderAlertMessage)
+        }
+        .onAppear {
+            chooseInitialAnchorIfNeeded()
+            focusSelectedOrderPreparation()
+        }
+        .onChange(of: firebaseManager.siparisler) { _, _ in
+            chooseInitialAnchorIfNeeded()
+            focusSelectedOrderPreparation()
+        }
+        .onChange(of: selectedOrderKey) { _, _ in
+            focusSelectedOrderPreparation()
+        }
+        .onChange(of: authVM.currentBillingPlan) { _, _ in
+            normalizeScheduleControlsForPlan()
+        }
+    }
+
+    private func normalizeScheduleControlsForPlan() {
+        if !availableScheduleSpans.contains(selectedSpan) { spanRaw = SchedulePlannerSpan.weekly.rawValue }
+        if !availableScheduleFilters.contains(selectedFilter) { filterRaw = SchedulePlannerFilter.all.rawValue }
+        setScheduleZoom(scheduleTimelineZoom)
+    }
+
+    private var scheduleHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Schedule", lang: seciliDil))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    Text(t("See who is doing what and when.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 12)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                scheduleControlsWide
+                scheduleControlsCompact
+            }
+
+            if !authVM.currentPlanEntitlements.scheduleAdvancedFiltersEnabled || authVM.currentBillingPlan == .teamMonthly {
+                schedulePlanNotice
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+        .background(colorScheme == .dark ? Color(white: 0.095) : Color.white)
+    }
+
+    private var schedulePlanNotice: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: authVM.currentBillingPlan == .teamMonthly ? "person.3.fill" : "lock.open.fill")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(authVM.currentBillingPlan == .teamMonthly ? .purple : studioWarningOrange)
+                .frame(width: 24, height: 24)
+                .background((authVM.currentBillingPlan == .teamMonthly ? Color.purple : studioWarningOrange).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Text(schedulePlanNoticeText)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+
+    private var scheduleControlsWide: some View {
+        HStack(spacing: 12) {
+            scheduleFilterMenu
+                .frame(width: 180)
+
+            scheduleSortMenu
+                .frame(width: 130)
+
+            scheduleSearchField
+                .frame(maxWidth: 300)
+
+
+            Spacer(minLength: 12)
+
+            scheduleNavigationControls
+
+            scheduleZoomControls
+                .frame(width: 150)
+
+            scheduleSpanMenu
+                .frame(width: 170)
+        }
+    }
+
+    private var scheduleControlsCompact: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                scheduleFilterMenu
+                    .frame(maxWidth: .infinity)
+
+                scheduleSortMenu
+                    .frame(maxWidth: .infinity)
+            }
+
+            HStack(spacing: 10) {
+                scheduleSpanMenu
+                    .frame(maxWidth: .infinity)
+
+                scheduleSearchToggleButton
+            }
+
+            if compactSearchVisible {
+                scheduleSearchField
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+
+            scheduleNavigationControls
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            scheduleZoomControls
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+
+    private var scheduleSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            TextField(t("Search Tasks", lang: seciliDil), text: $searchText)
+                .textFieldStyle(.plain)
+                .focused($compactScheduleSearchFocused)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.065))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+
+    private var scheduleSearchToggleButton: some View {
+        let active = compactSearchVisible || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        return Button {
+            withAnimation(.snappy) {
+                let nextVisible = !compactSearchVisible
+                compactSearchVisible = nextVisible
+                compactScheduleSearchFocused = false
+                if nextVisible {
+                    DispatchQueue.main.async {
+                        compactScheduleSearchFocused = true
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: active ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(active ? .blue : .secondary)
+                .frame(width: 40, height: 40)
+                .background(active ? Color.blue.opacity(0.12) : Color.primary.opacity(0.065))
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(t("Search Tasks", lang: seciliDil))
+    }
+
+    private var scheduleNavigationControls: some View {
+        HStack(spacing: 8) {
+            Button(action: moveToPreviousRange) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 36, height: 36)
+                    .background(Color.primary.opacity(0.065))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Button(action: moveToNextRange) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 36, height: 36)
+                    .background(Color.primary.opacity(0.065))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Text(activeRangeText)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.065))
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
+        }
+    }
+
+
+    private var scheduleZoomControls: some View {
+        HStack(spacing: 6) {
+            scheduleZoomButton(systemImage: "minus.magnifyingglass", helpKey: "Zoom out") {
+                adjustScheduleZoom(by: -0.15)
+            }
+            .disabled(clampedScheduleZoom <= minScheduleZoom + 0.001)
+
+            Text("\(Int((clampedScheduleZoom * 100).rounded()))%")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.primary)
+                .monospacedDigit()
+                .frame(minWidth: 42)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            scheduleZoomButton(systemImage: "plus.magnifyingglass", helpKey: "Zoom in") {
+                adjustScheduleZoom(by: 0.15)
+            }
+            .disabled(clampedScheduleZoom >= maxScheduleZoom - 0.001)
+
+            scheduleZoomButton(systemImage: "arrow.counterclockwise", helpKey: "Reset zoom") {
+                withAnimation(.snappy) { setScheduleZoom(1.0) }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.065))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .help(t("Timeline zoom", lang: seciliDil))
+    }
+
+    private func scheduleZoomButton(systemImage: String, helpKey: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.blue)
+                .frame(width: 28, height: 28)
+                .background(Color.blue.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(t(helpKey, lang: seciliDil))
+    }
+
+    private var scheduleFilterMenu: some View {
+        Menu {
+            ForEach(availableScheduleFilters) { filter in
+                Button {
+                    filterRaw = filter.rawValue
+                } label: {
+                    Label(t(filter.rawValue, lang: seciliDil), systemImage: selectedFilter == filter ? "checkmark.circle.fill" : filter.iconName)
+                }
+            }
+
+            if !authVM.currentPlanEntitlements.scheduleAdvancedFiltersEnabled {
+                Divider()
+                Label(t("Advanced schedule filters are available on Pro and Team.", lang: seciliDil), systemImage: "lock.fill")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .foregroundColor(.blue)
+                Text(t("Filter by Status", lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.065))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var scheduleSortMenu: some View {
+        Menu {
+            Button {
+                sortMode = .akilli
+            } label: {
+                Label(t("Smart", lang: seciliDil), systemImage: sortMode == .akilli ? "checkmark.circle.fill" : "sparkles")
+            }
+
+            Button {
+                sortMode = .sonEklenen
+            } label: {
+                Label(t("Recent", lang: seciliDil), systemImage: sortMode == .sonEklenen ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: sortMode == .akilli ? "sparkles" : "clock.arrow.circlepath")
+                    .foregroundColor(.blue)
+                Text(selectedSortTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.065))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var scheduleSpanMenu: some View {
+        Menu {
+            ForEach(availableScheduleSpans) { span in
+                Button {
+                    spanRaw = span.rawValue
+                } label: {
+                    Label(t(span.rawValue, lang: seciliDil), systemImage: selectedSpan == span ? "checkmark.circle.fill" : "calendar")
+                }
+            }
+
+            if !authVM.currentPlanEntitlements.scheduleLongRangeEnabled {
+                Divider()
+                Label(t("3-month, 6-month and yearly schedule views are available on Pro and Team.", lang: seciliDil), systemImage: "lock.fill")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(t(selectedSpan.rawValue, lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.065))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var timelineView: some View {
+        VStack(spacing: 0) {
+            if timelineOrders.isEmpty {
+                scheduleEmptyState
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        VStack(spacing: 0) {
+                            timelineMonthHeader
+                            timelineDayHeader
+
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(spacing: 0) {
+                                    ForEach(timelineOrders) { order in
+                                        timelineRow(for: order)
+                                    }
+                                }
+                                .padding(.bottom, 20)
+                            }
+                        }
+                        .frame(width: timelineContentWidth, alignment: .leading)
+                        .padding(18)
+                    }
+                    .simultaneousGesture(scheduleZoomGesture)
+                    .onAppear {
+                        scrollToSelectedOrder(using: proxy, animated: false)
+                    }
+                    .onChange(of: selectedOrderKey) { _, _ in
+                        scrollToSelectedOrder(using: proxy, animated: true)
+                    }
+                    .onChange(of: spanRaw) { _, _ in
+                        scrollToSelectedOrder(using: proxy, animated: true)
+                    }
+                    .onChange(of: filterRaw) { _, _ in
+                        scrollToSelectedOrder(using: proxy, animated: true)
+                    }
+                    .onChange(of: scheduleTimelineZoom) { _, _ in
+                        scrollToSelectedOrder(using: proxy, animated: false)
+                    }
+                }
+            }
+
+            scheduleSummaryFooter
+        }
+        .background(bgMain)
+    }
+
+    private var timelineMonthHeader: some View {
+        HStack {
+            Text(activeRangeText)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.primary)
+            Spacer()
+            Text("\(timelineOrders.count) " + t("orders", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(bgCard)
+        .overlay(Rectangle().fill(borderColor).frame(height: 1), alignment: .bottom)
+        .overlay(ScheduleTimelinePanSurface())
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var timelineDayHeader: some View {
+        HStack(spacing: 0) {
+            ForEach(visibleDays, id: \.self) { day in
+                VStack(spacing: 4) {
+                    Text(dayHeaderTopText(for: day))
+                        .font(.system(size: dayHeaderTopFontSize, weight: .semibold))
+                        .foregroundColor(calendar.isDateInToday(day) ? .blue : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                    Text(dayHeaderBottomText(for: day))
+                        .font(.system(size: dayHeaderBottomFontSize, weight: .bold))
+                        .foregroundColor(calendar.isDateInToday(day) ? .blue : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
+                }
+                .frame(width: dayWidth, height: 58)
+                .background(calendar.isDateInToday(day) ? Color.blue.opacity(0.08) : bgCard)
+                .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+            }
+        }
+        .background(bgCard)
+        .overlay(Rectangle().fill(borderColor).frame(height: 1), alignment: .bottom)
+        .overlay(ScheduleTimelinePanSurface())
+    }
+
+    private func timelineRow(for order: Siparis) -> some View {
+        ZStack(alignment: .leading) {
+            HStack(spacing: 0) {
+                ForEach(visibleDays, id: \.self) { day in
+                    Rectangle()
+                        .fill(calendar.isDateInToday(day) ? Color.blue.opacity(0.055) : (colorScheme == .dark ? Color.white.opacity(0.015) : Color.white.opacity(0.35)))
+                        .frame(width: dayWidth)
+                        .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+                }
+            }
+
+            ScheduleTimelinePanSurface()
+                .frame(width: timelineContentWidth, height: 68)
+
+            if let metrics = timelineMetrics(for: order) {
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: metrics.x)
+
+                    TimelineOrderBlock(
+                        order: order,
+                        title: displayTitle(for: order),
+                        designTitle: timelineDesignTitle(for: order),
+                        statusTitle: t(scheduleStatusLabel(for: order), lang: seciliDil),
+                        rangeText: shortRangeText(for: order),
+                        countdownText: timelineCountdownText(for: order),
+                        tint: scheduleColor(for: order),
+                        statusTint: statusColorForScheduleValue(scheduleStatusLabel(for: order)),
+                        canEdit: canEditWorkspace,
+                        isLate: orderIsLate(order),
+                        isSelected: timelineKey(for: order) == selectedOrderKey,
+                        opensOnSingleTap: isPhoneLayout,
+                        onSelect: { onSelectOrder(order) },
+                        onOpen: { onOpenOrder(order) },
+                        onMove: { delta in moveOrder(order, byDays: delta) },
+                        onResizeLeading: { delta in resizeOrderLeading(order, byDays: delta) },
+                        onResizeTrailing: { delta in resizeOrderTrailing(order, byDays: delta) },
+                        dayWidth: dayWidth
+                    )
+                    .id(timelineBlockScrollId(for: order))
+                    .frame(width: metrics.width, height: 52)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        .frame(height: 68)
+        .background(bgCard)
+        .overlay(Rectangle().fill(borderColor).frame(height: 1), alignment: .bottom)
+    }
+
+    private var boardView: some View {
+        ScrollView(.horizontal, showsIndicators: true) {
+            HStack(alignment: .top, spacing: 16) {
+                ForEach(ScheduleBoardColumnKind.allCases) { column in
+                    boardColumn(column)
+                }
+            }
+            .padding(20)
+        }
+        .background(bgMain)
+    }
+
+    private func boardColumn(_ column: ScheduleBoardColumnKind) -> some View {
+        let orders = allFilteredOrders.filter { orderMatchesBoardColumn($0, column) }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: column.iconName)
+                    .foregroundColor(column.color)
+                Text(t(column.titleKey, lang: seciliDil))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("\(orders.count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+
+            if orders.isEmpty {
+                Text(t("No orders", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 90)
+                    .background(Color.primary.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                ForEach(orders) { order in
+                    boardOrderCard(order)
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 300, alignment: .top)
+        .background(bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+
+    private func boardOrderCard(_ order: Siparis) -> some View {
+        HStack(spacing: 10) {
+            orderThumbnail(for: order)
+                .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayTitle(for: order))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                Text(shortRangeText(for: order))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Text(t(scheduleStatusLabel(for: order), lang: seciliDil))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(scheduleColor(for: order))
+                    if order.remainingAmount > 0.009 {
+                        Text("\(seciliParaBirimi)\(formatFiyat(order.remainingAmount, ondalik: seciliOndalik))")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 6)
+        }
+        .padding(10)
+        .background(scheduleColor(for: order).opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(scheduleColor(for: order).opacity(0.24), lineWidth: 1)
+        )
+    }
+
+    private var scheduleEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 38, weight: .semibold))
+                .foregroundColor(.secondary.opacity(0.65))
+            Text(t("No orders in this schedule range.", lang: seciliDil))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.primary)
+            Text(t("Use the arrows, filters or search to find scheduled work.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
+    }
+
+    private var scheduleFooterHint: String {
+        if !canEditWorkspace { return t("Read-only schedule view", lang: seciliDil) }
+        if authVM.currentBillingPlan == .demo { return t("Demo schedule is limited to demo orders. Upgrade for Apple Calendar and Reminders.", lang: seciliDil) }
+        if !authVM.currentPlanEntitlements.scheduleAdvancedFiltersEnabled { return t("Drag blocks to move dates. Pro unlocks advanced filters and long-range planning.", lang: seciliDil) }
+        return t("Drag blocks to move dates. Pull the edges to resize.", lang: seciliDil)
+    }
+
+    private var scheduleSummaryFooter: some View {
+        HStack(spacing: 12) {
+            Label("\(allFilteredOrders.count) " + t("orders", lang: seciliDil), systemImage: "archivebox")
+            Label("\(allFilteredOrders.filter { orderIsLate($0) }.count) " + t("Late", lang: seciliDil), systemImage: "exclamationmark.triangle")
+            Label("\(allFilteredOrders.filter { orderIsReadyToShip($0) }.count) " + t("Ready to Ship", lang: seciliDil), systemImage: "shippingbox")
+            Spacer()
+            Text(scheduleFooterHint)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .background(colorScheme == .dark ? Color(white: 0.095) : Color.white)
+    }
+
+    private func orderThumbnail(for order: Siparis) -> some View {
+        Group {
+            if let url = URL(string: order.designLink.trimmingCharacters(in: .whitespacesAndNewlines)), !order.designLink.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.primary.opacity(0.10))
+                            .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.primary.opacity(0.10))
+                    .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private func timelineMetrics(for order: Siparis) -> (x: CGFloat, width: CGFloat)? {
+        let orderStart = calendar.startOfDay(for: order.paymentDate)
+        let orderEnd = calendar.date(byAdding: .day, value: max(order.deliveryTime, 1), to: orderStart) ?? orderStart
+        guard orderEnd > visibleStartDate, orderStart < visibleEndDate else { return nil }
+
+        let clippedStart = max(orderStart, visibleStartDate)
+        let clippedEnd = min(orderEnd, visibleEndDate)
+        let offsetDays = calendar.dateComponents([.day], from: visibleStartDate, to: clippedStart).day ?? 0
+        let durationDays = max(1, calendar.dateComponents([.day], from: clippedStart, to: clippedEnd).day ?? 1)
+        let x = CGFloat(offsetDays) * dayWidth + 7
+        let width = max(132, CGFloat(durationDays) * dayWidth - 14)
+        return (x, min(width, timelineContentWidth - x - 7))
+    }
+
+    private func orderOverlapsVisibleRange(_ order: Siparis) -> Bool {
+        let start = calendar.startOfDay(for: order.paymentDate)
+        let end = calendar.date(byAdding: .day, value: max(order.deliveryTime, 1), to: start) ?? start
+        return end > visibleStartDate && start < visibleEndDate
+    }
+
+    private func matchesSearch(_ order: Siparis) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return order.customerName.localizedStandardContains(query) ||
+            order.designName.localizedStandardContains(query) ||
+            order.watchRef.localizedStandardContains(query) ||
+            order.status.localizedStandardContains(query) ||
+            order.designStatus.localizedStandardContains(query)
+    }
+
+    private func matchesFilter(_ order: Siparis, _ filter: SchedulePlannerFilter) -> Bool {
+        switch filter {
+        case .all: return true
+        case .active: return !orderIsClosed(order)
+        case .waitingCustomer: return orderNeedsCustomerReply(order)
+        case .inProduction: return orderIsInProduction(order)
+        case .readyToShip: return orderIsReadyToShip(order)
+        case .lateOrders: return orderIsLate(order)
+        case .completed: return orderIsCompleted(order)
+        }
+    }
+
+    private func scheduleOrderShouldComeBefore(_ first: Siparis, _ second: Siparis) -> Bool {
+        switch sortMode {
+        case .akilli:
+            return smartScheduleOrderShouldComeBefore(first, second)
+        case .sonEklenen:
+            return first.paymentDate > second.paymentDate
+        }
+    }
+
+    private func smartScheduleOrderShouldComeBefore(_ first: Siparis, _ second: Siparis) -> Bool {
+        let firstBucket = scheduleSmartSortBucket(first)
+        let secondBucket = scheduleSmartSortBucket(second)
+        if firstBucket != secondBucket { return firstBucket < secondBucket }
+
+        let firstDays = daysRemaining(for: first)
+        let secondDays = daysRemaining(for: second)
+        if firstBucket == 0, firstDays != secondDays { return firstDays < secondDays }
+
+        return first.paymentDate > second.paymentDate
+    }
+
+    private func scheduleSmartSortBucket(_ order: Siparis) -> Int {
+        if !orderIsClosed(order), !order.isDispatched { return 0 }
+        return 1
+    }
+
+    private func orderMatchesBoardColumn(_ order: Siparis, _ column: ScheduleBoardColumnKind) -> Bool {
+        switch column {
+        case .waitingCustomer: return orderNeedsCustomerReply(order)
+        case .inProduction: return orderIsInProduction(order)
+        case .readyToShip: return orderIsReadyToShip(order)
+        case .lateOrders: return orderIsLate(order)
+        case .completed: return orderIsCompleted(order)
+        }
+    }
+
+    private func orderTexts(_ order: Siparis) -> [String] {
+        var values = [
+            order.status,
+            order.designStatus,
+            order.priority,
+            order.risk,
+            order.riskReason,
+            order.notes,
+            order.designName,
+            order.watchRef
+        ]
+
+        if let extras = order.extraStatuses {
+            values.append(contentsOf: extras.keys)
+            values.append(contentsOf: extras.values)
+        }
+
+        if let customFields = order.customFields {
+            values.append(contentsOf: customFields.keys)
+            values.append(contentsOf: customFields.values)
+        }
+
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func schedulePrimaryStatus(for order: Siparis) -> String {
+        order.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func orderIsCancelled(_ order: Siparis) -> Bool {
+        let status = schedulePrimaryStatus(for: order)
+        return status.contains("cancelled") || status.contains("canceled") || status.contains("refunded")
+    }
+
+    private func orderIsClosed(_ order: Siparis) -> Bool {
+        orderIsCompleted(order) || orderIsCancelled(order)
+    }
+
+    private func orderIsCompleted(_ order: Siparis) -> Bool {
+        if order.isDelivered { return true }
+        let status = schedulePrimaryStatus(for: order)
+        return status == "done" || status == "completed" || status == "delivered" || status.contains("complete")
+    }
+
+    private func orderIsLate(_ order: Siparis) -> Bool {
+        !orderIsClosed(order) && !order.isDispatched && dueDate(for: order) < calendar.startOfDay(for: Date())
+    }
+
+    private func orderNeedsCustomerReply(_ order: Siparis) -> Bool {
+        orderTexts(order).contains { text in
+            text.contains("waiting for customer") ||
+            text.contains("needs reply") ||
+            text.contains("reply needed") ||
+            text.contains("waiting for approval") ||
+            text.contains("client approval") ||
+            text.contains("customer approval")
+        }
+    }
+
+    private func orderIsInProduction(_ order: Siparis) -> Bool {
+        guard !orderIsClosed(order), !orderNeedsCustomerReply(order), !orderIsReadyToShip(order) else { return false }
+        let productionTerms = ["in progress", "painting", "production", "making", "sourcing", "quality check", "revision", "draft", "preparation"]
+        return orderTexts(order).contains { text in productionTerms.contains { text.contains($0) } }
+    }
+
+    private func orderIsReadyToShip(_ order: Siparis) -> Bool {
+        guard !orderIsClosed(order), !order.isDispatched else { return false }
+        let readyTerms = ["ready to ship", "ready for shipping", "ready for pickup", "ready for collection", "delivery ready", "packed", "packaging ready"]
+        return orderTexts(order).contains { text in readyTerms.contains { text.contains($0) } }
+    }
+
+    private func dueDate(for order: Siparis) -> Date {
+        let start = calendar.startOfDay(for: order.paymentDate)
+        return calendar.date(byAdding: .day, value: max(order.deliveryTime, 1), to: start) ?? start
+    }
+
+    private func displayTitle(for order: Siparis) -> String {
+        let name = order.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? t("New Project", lang: seciliDil) : name
+    }
+
+    private func timelineDesignTitle(for order: Siparis) -> String {
+        order.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func scheduleStatusLabel(for order: Siparis) -> String {
+        if orderIsCancelled(order) { return "Cancelled" }
+        if orderIsLate(order) { return "Late" }
+        if orderIsCompleted(order) { return "Completed" }
+        if orderNeedsCustomerReply(order) { return "Waiting Customer" }
+        if orderIsReadyToShip(order) { return "Ready to Ship" }
+        if orderIsInProduction(order) { return "In Production" }
+        if order.priority.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().contains("urgent") { return "Urgent" }
+        return order.status.isEmpty ? "Normal" : order.status
+    }
+
+    private func scheduleColor(for order: Siparis) -> Color {
+        deliveryUrgencyColor(for: order)
+    }
+
+    private func timelineKey(for order: Siparis) -> String {
+        order.id ?? "temp-\(order.paymentDate.timeIntervalSince1970)-\(order.customerName)"
+    }
+
+    private func timelineBlockScrollId(for order: Siparis) -> String {
+        "schedule-timeline-block-\(timelineKey(for: order))"
+    }
+
+    private func selectedTimelineOrder() -> Siparis? {
+        guard let selectedOrderKey else { return nil }
+        return firebaseManager.siparisler.first { timelineKey(for: $0) == selectedOrderKey }
+    }
+
+    private func focusSelectedOrderPreparation() {
+        guard let selected = selectedTimelineOrder() else { return }
+
+        if !matchesSearch(selected) {
+            searchText = ""
+        }
+
+        if !matchesFilter(selected, selectedFilter) {
+            filterRaw = SchedulePlannerFilter.all.rawValue
+        }
+
+        if !orderOverlapsVisibleRange(selected) {
+            anchorDate = selected.paymentDate
+        }
+    }
+
+    private func scrollToSelectedOrder(using proxy: ScrollViewProxy, animated: Bool) {
+        focusSelectedOrderPreparation()
+        guard let selected = selectedTimelineOrder() else { return }
+        let targetId = timelineBlockScrollId(for: selected)
+
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    proxy.scrollTo(targetId, anchor: .center)
+                }
+            } else {
+                proxy.scrollTo(targetId, anchor: .center)
+            }
+        }
+    }
+
+    private func daysRemaining(for order: Siparis) -> Int {
+        calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: dueDate(for: order))).day ?? 0
+    }
+
+    private func deliveryUrgencyColor(for order: Siparis) -> Color {
+        let priority = order.priority.lowercased()
+        let risk = order.risk.lowercased()
+
+        if orderIsCancelled(order) {
+            return .gray
+        }
+
+        if orderIsCompleted(order) || order.isDispatched {
+            return .green
+        }
+
+        if priority.contains("urgent") || risk.contains("high") || orderIsLate(order) {
+            return .red
+        }
+
+        let days = daysRemaining(for: order)
+        if days <= 7 { return .red }
+        if days <= 14 { return studioWarningOrange }
+        return .green
+    }
+
+    private func timelineCountdownText(for order: Siparis) -> String {
+        if orderIsCancelled(order) || orderIsCompleted(order) || order.isDispatched { return "" }
+
+        let days = daysRemaining(for: order)
+        if days > 0 { return "\(days)d" }
+        if days == 0 { return t("Today", lang: seciliDil) }
+        return "\(-days)d " + t("late", lang: seciliDil)
+    }
+
+    private func statusColorForScheduleValue(_ value: String) -> Color {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let greens: Set<String> = ["none", "done", "completed", "delivered", "approved", "deposit paid", "shipped", "ready to ship"]
+        let reds: Set<String> = ["not yet", "blocked", "overdue", "urgent", "late"]
+        let grays: Set<String> = ["cancelled", "refunded", "new", "quoted", "low"]
+
+        if greens.contains(normalized) { return .green }
+        if reds.contains(normalized) { return .red }
+        if grays.contains(normalized) { return .gray }
+        return studioWarningOrange
+    }
+
+    private func reminderFailureMessage(for error: Error) -> String {
+#if canImport(EventKit)
+        if let reminderError = error as? StudioFlowReminderError {
+            switch reminderError {
+            case .accessDenied:
+                return t("Reminders permission is not enabled for this app.", lang: seciliDil)
+            case .calendarMissing:
+                return t("No default Apple Reminders list was found on this device.", lang: seciliDil)
+            case .saveFailed(let message):
+                return message
+            }
+        }
+#endif
+        return error.localizedDescription
+    }
+
+    private func openReminderPrivacySettings() {
 #if os(macOS)
-        NavigationSplitView {
-            content()
-        } detail: {
-            Text("Select an item")
+        let urls = [
+            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"),
+            URL(string: "x-apple.systempreferences:com.apple.preference.security")
+        ]
+
+        for url in urls.compactMap({ $0 }) {
+            if NSWorkspace.shared.open(url) { return }
+        }
+#elseif canImport(UIKit)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+#endif
+    }
+
+
+    private func addAppleReminder(for order: Siparis) {
+        guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
+            reminderAlertTitle = t("Plan upgrade needed", lang: seciliDil)
+            reminderAlertMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            reminderAlertCanOpenSettings = false
+            showReminderAlert = true
+            return
+        }
+#if canImport(EventKit)
+        let customer = displayTitle(for: order)
+        let design = timelineDesignTitle(for: order)
+        let due = dueDate(for: order)
+        let titleParts = [customer, design].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let reminderTitle = titleParts.joined(separator: " • ") + " - " + t("Order due", lang: seciliDil)
+        let notes = [
+            "StudioFlow",
+            t("Schedule", lang: seciliDil) + ": " + scheduleRangeText(for: order),
+            t("Status", lang: seciliDil) + ": " + t(scheduleStatusLabel(for: order), lang: seciliDil)
+        ].joined(separator: "\n")
+
+        AppleReminderManager.shared.addOrderReminder(title: reminderTitle, notes: notes, dueDate: due) { result in
+            switch result {
+            case .success:
+                reminderAlertTitle = t("Reminder added", lang: seciliDil)
+                reminderAlertMessage = t("The reminder was added to Apple Reminders. It will sync to your Apple devices if iCloud Reminders is enabled.", lang: seciliDil)
+                reminderAlertCanOpenSettings = false
+            case .failure(let error):
+                reminderAlertTitle = t("Could not add reminder", lang: seciliDil)
+                reminderAlertMessage = reminderFailureMessage(for: error) + "\n\n" + t("Please allow Reminders access in system settings and try again.", lang: seciliDil)
+                reminderAlertCanOpenSettings = true
+            }
+            showReminderAlert = true
         }
 #else
-        content()
+        reminderAlertTitle = t("Could not add reminder", lang: seciliDil)
+        reminderAlertMessage = t("Apple Reminders is not available on this device.", lang: seciliDil)
+        reminderAlertCanOpenSettings = false
+        showReminderAlert = true
 #endif
+    }
+
+    private func moveOrder(_ order: Siparis, byDays delta: Int) {
+        guard canEditWorkspace, delta != 0 else { return }
+        var updated = order
+        let oldRange = scheduleRangeText(for: order)
+        updated.paymentDate = calendar.date(byAdding: .day, value: delta, to: order.paymentDate) ?? order.paymentDate
+        saveScheduleUpdate(updated, oldRange: oldRange)
+    }
+
+    private func resizeOrderLeading(_ order: Siparis, byDays delta: Int) {
+        guard canEditWorkspace, delta != 0 else { return }
+        let originalDuration = max(order.deliveryTime, 1)
+        let clampedDelta = min(max(delta, -365), originalDuration - 1)
+        guard clampedDelta != 0 else { return }
+
+        var updated = order
+        let oldRange = scheduleRangeText(for: order)
+        updated.paymentDate = calendar.date(byAdding: .day, value: clampedDelta, to: order.paymentDate) ?? order.paymentDate
+        updated.deliveryTime = max(1, originalDuration - clampedDelta)
+        saveScheduleUpdate(updated, oldRange: oldRange)
+    }
+
+    private func resizeOrderTrailing(_ order: Siparis, byDays delta: Int) {
+        guard canEditWorkspace, delta != 0 else { return }
+        var updated = order
+        let oldRange = scheduleRangeText(for: order)
+        updated.deliveryTime = min(730, max(1, order.deliveryTime + delta))
+        saveScheduleUpdate(updated, oldRange: oldRange)
+    }
+
+    private func saveScheduleUpdate(_ updatedOrder: Siparis, oldRange: String) {
+        guard oldRange != scheduleRangeText(for: updatedOrder) else { return }
+        var finalOrder = updatedOrder
+        var logs = finalOrder.historyLog ?? []
+        logs.insert(OrderHistoryLogItem(title: "Schedule updated.", oldValue: oldRange, newValue: scheduleRangeText(for: updatedOrder)), at: 0)
+        finalOrder.historyLog = Array(logs.prefix(120))
+        firebaseManager.updateSiparis(finalOrder)
+    }
+
+    private func addOrderFromSchedule() {
+        guard canEditWorkspace else { return }
+        var newOrder = Siparis()
+        newOrder.customerName = t("New Project", lang: seciliDil)
+        newOrder.paymentDate = calendar.startOfDay(for: Date())
+        newOrder.deliveryTime = 14
+        newOrder.status = "Not Yet"
+        newOrder.designStatus = "Not Yet"
+        newOrder.historyLog = [OrderHistoryLogItem(title: "Order created", oldValue: "", newValue: scheduleRangeText(for: newOrder))]
+        firebaseManager.addSiparis(newOrder)
+        anchorDate = newOrder.paymentDate
+    }
+
+    private func chooseInitialAnchorIfNeeded() {
+        guard !didChooseInitialAnchor, !firebaseManager.siparisler.isEmpty else { return }
+        didChooseInitialAnchor = true
+        let activeOrders = firebaseManager.siparisler.filter { !orderIsClosed($0) }.sorted { $0.paymentDate < $1.paymentDate }
+        if let firstActive = activeOrders.first {
+            anchorDate = firstActive.paymentDate
+        } else if let first = firebaseManager.siparisler.sorted(by: { $0.paymentDate < $1.paymentDate }).first {
+            anchorDate = first.paymentDate
+        }
+    }
+
+    private func moveToPreviousRange() {
+        switch selectedSpan {
+        case .weekly:
+            anchorDate = calendar.date(byAdding: .day, value: -7, to: anchorDate) ?? anchorDate
+        case .monthly:
+            anchorDate = calendar.date(byAdding: .month, value: -1, to: anchorDate) ?? anchorDate
+        case .threeMonths:
+            anchorDate = calendar.date(byAdding: .month, value: -3, to: anchorDate) ?? anchorDate
+        case .sixMonths:
+            anchorDate = calendar.date(byAdding: .month, value: -6, to: anchorDate) ?? anchorDate
+        case .yearly:
+            anchorDate = calendar.date(byAdding: .year, value: -1, to: anchorDate) ?? anchorDate
+        }
+    }
+
+    private func moveToNextRange() {
+        switch selectedSpan {
+        case .weekly:
+            anchorDate = calendar.date(byAdding: .day, value: 7, to: anchorDate) ?? anchorDate
+        case .monthly:
+            anchorDate = calendar.date(byAdding: .month, value: 1, to: anchorDate) ?? anchorDate
+        case .threeMonths:
+            anchorDate = calendar.date(byAdding: .month, value: 3, to: anchorDate) ?? anchorDate
+        case .sixMonths:
+            anchorDate = calendar.date(byAdding: .month, value: 6, to: anchorDate) ?? anchorDate
+        case .yearly:
+            anchorDate = calendar.date(byAdding: .year, value: 1, to: anchorDate) ?? anchorDate
+        }
+    }
+
+    private func setScheduleZoom(_ value: Double) {
+        scheduleTimelineZoom = min(max(value, minScheduleZoom), maxScheduleZoom)
+    }
+
+    private func adjustScheduleZoom(by delta: Double) {
+        withAnimation(.snappy) {
+            setScheduleZoom(clampedScheduleZoom + delta)
+        }
+    }
+
+    private var scheduleZoomGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                let startZoom = scheduleZoomGestureStart ?? clampedScheduleZoom
+                if scheduleZoomGestureStart == nil {
+                    scheduleZoomGestureStart = startZoom
+                }
+                setScheduleZoom(startZoom * Double(value))
+            }
+            .onEnded { _ in
+                scheduleZoomGestureStart = nil
+            }
+    }
+
+    private var activeRangeText: String {
+        switch selectedSpan {
+        case .monthly:
+            return monthTitle(for: visibleStartDate)
+        case .yearly:
+            return yearTitle(for: visibleStartDate)
+        default:
+            let lastDay = calendar.date(byAdding: .day, value: max(visibleDays.count - 1, 0), to: visibleStartDate) ?? visibleStartDate
+            return "\(shortDate(for: visibleStartDate)) - \(shortDate(for: lastDay))"
+        }
+    }
+
+    private func dayCountFromVisibleStart(addingMonths months: Int) -> Int {
+        guard let end = calendar.date(byAdding: .month, value: months, to: visibleStartDate) else { return max(30 * months, 1) }
+        return max(calendar.dateComponents([.day], from: visibleStartDate, to: end).day ?? (30 * months), 1)
+    }
+
+    private func dayCountFromVisibleStart(addingYears years: Int) -> Int {
+        guard let end = calendar.date(byAdding: .year, value: years, to: visibleStartDate) else { return 365 }
+        return max(calendar.dateComponents([.day], from: visibleStartDate, to: end).day ?? 365, 1)
+    }
+
+    private func dayHeaderTopText(for date: Date) -> String {
+        dayName(for: date)
+    }
+
+    private func dayHeaderBottomText(for date: Date) -> String {
+        dayNumber(for: date)
+    }
+
+    private func shortRangeText(for order: Siparis) -> String {
+        "\(shortDate(for: order.paymentDate)) → \(shortDate(for: dueDate(for: order)))"
+    }
+
+    private func scheduleRangeText(for order: Siparis) -> String {
+        "\(mediumDate(for: order.paymentDate)) → \(mediumDate(for: dueDate(for: order)))"
+    }
+
+    private func shortDate(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+
+    private func mediumDate(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    private func monthTitle(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter.string(from: date)
+    }
+
+    private func yearTitle(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+        return formatter.string(from: date)
+    }
+
+    private func shortMonthName(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter.string(from: date)
+    }
+
+    private func dayName(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E"
+        return formatter.string(from: date)
+    }
+
+    private func dayNumber(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter.string(from: date)
     }
 }
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+private struct TimelineOrderBlock: View {
+    let order: Siparis
+    let title: String
+    let designTitle: String
+    let statusTitle: String
+    let rangeText: String
+    let countdownText: String
+    let tint: Color
+    let statusTint: Color
+    let canEdit: Bool
+    let isLate: Bool
+    let isSelected: Bool
+    let opensOnSingleTap: Bool
+    let onSelect: () -> Void
+    let onOpen: () -> Void
+    let onMove: (Int) -> Void
+    let onResizeLeading: (Int) -> Void
+    let onResizeTrailing: (Int) -> Void
+    let dayWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if canEdit {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary.opacity(0.75))
+            }
+
+            orderThumbnail
+                .frame(width: 38, height: 38)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    if !designTitle.isEmpty {
+                        Text("• " + designTitle)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Text(statusTitle)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(statusTint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(statusTint.opacity(0.13))
+                        .clipShape(Capsule())
+
+                    Text(rangeText)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            if !countdownText.isEmpty {
+                Text(countdownText)
+                    .font(.system(size: 17, weight: .semibold, design: .default))
+                    .foregroundColor(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.70)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(tint.opacity(0.16))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .padding(.leading, 18)
+            }
+
+
+            Spacer(minLength: 8)
+
+            if canEdit {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary.opacity(0.75))
+            }
+        }
+        .padding(.horizontal, 12)
+        .background(tint.opacity(isLate ? 0.18 : 0.13))
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(isSelected ? Color.blue.opacity(0.85) : tint.opacity(0.46), lineWidth: isSelected ? 2 : 1)
+        )
+        .overlay(resizeHandle(edge: .leading), alignment: .leading)
+        .overlay(resizeHandle(edge: .trailing), alignment: .trailing)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            if !opensOnSingleTap {
+                onOpen()
+            }
+        }
+        .onTapGesture {
+            if opensOnSingleTap {
+                onOpen()
+            } else {
+                onSelect()
+            }
+        }
+        .gesture(moveGesture)
+        .shadow(color: isSelected ? Color.blue.opacity(0.18) : tint.opacity(0.10), radius: isSelected ? 14 : 10, x: 0, y: 4)
+    }
+
+    private var orderThumbnail: some View {
+        Group {
+            if let url = URL(string: order.designLink.trimmingCharacters(in: .whitespacesAndNewlines)), !order.designLink.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.primary.opacity(0.13))
+                            .overlay(Image(systemName: "photo").font(.system(size: 13)).foregroundColor(.secondary))
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(0.13))
+                    .overlay(Image(systemName: "photo").font(.system(size: 13)).foregroundColor(.secondary))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private enum ResizeEdge {
+        case leading
+        case trailing
+    }
+
+    private func resizeHandle(edge: ResizeEdge) -> some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: canEdit ? 18 : 0)
+            .overlay(
+                Capsule()
+                    .fill(tint.opacity(canEdit ? 0.70 : 0.0))
+                    .frame(width: 3, height: 28)
+            )
+            .contentShape(Rectangle())
+            .gesture(resizeGesture(edge: edge))
+    }
+
+    private var moveGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onEnded { value in
+                let delta = Int((value.translation.width / dayWidth).rounded())
+                guard delta != 0 else { return }
+                onMove(delta)
+            }
+    }
+
+    private func resizeGesture(edge: ResizeEdge) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onEnded { value in
+                let delta = Int((value.translation.width / dayWidth).rounded())
+                guard delta != 0 else { return }
+                if edge == .leading {
+                    onResizeLeading(delta)
+                } else {
+                    onResizeTrailing(delta)
+                }
+            }
+    }
+}
+
+#if os(macOS)
+private struct ScheduleTimelinePanSurface: NSViewRepresentable {
+    func makeNSView(context: Context) -> ScheduleTimelinePanNSView {
+        ScheduleTimelinePanNSView()
+    }
+
+    func updateNSView(_ nsView: ScheduleTimelinePanNSView, context: Context) {}
+}
+
+private final class ScheduleTimelinePanNSView: NSView {
+    private var lastDragPoint: NSPoint?
+
+    override var acceptsFirstResponder: Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .openHand)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        lastDragPoint = event.locationInWindow
+        NSCursor.closedHand.set()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let lastDragPoint else { return }
+
+        let currentPoint = event.locationInWindow
+        let deltaX = currentPoint.x - lastDragPoint.x
+        let deltaY = currentPoint.y - lastDragPoint.y
+        self.lastDragPoint = currentPoint
+
+        let horizontalScrollView = scrollableAncestor(axis: .horizontal)
+        let verticalScrollView = scrollableAncestor(axis: .vertical)
+
+        if let horizontalScrollView, horizontalScrollView === verticalScrollView {
+            scroll(horizontalScrollView, deltaX: deltaX, deltaY: deltaY, scrollsX: true, scrollsY: true)
+        } else {
+            if let horizontalScrollView {
+                scroll(horizontalScrollView, deltaX: deltaX, deltaY: 0, scrollsX: true, scrollsY: false)
+            }
+            if let verticalScrollView {
+                scroll(verticalScrollView, deltaX: 0, deltaY: deltaY, scrollsX: false, scrollsY: true)
+            }
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        lastDragPoint = nil
+        NSCursor.arrow.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if lastDragPoint != nil {
+            NSCursor.closedHand.set()
+        }
+    }
+
+    private enum ScrollAxis {
+        case horizontal
+        case vertical
+    }
+
+    private func scrollableAncestor(axis: ScrollAxis) -> NSScrollView? {
+        var view: NSView? = self
+        while let current = view {
+            if let scrollView = current as? NSScrollView, canScroll(scrollView, axis: axis) {
+                return scrollView
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
+    private func canScroll(_ scrollView: NSScrollView, axis: ScrollAxis) -> Bool {
+        let clipView = scrollView.contentView
+        let documentSize = scrollView.documentView?.bounds.size ?? .zero
+        let visibleSize = clipView.bounds.size
+
+        switch axis {
+        case .horizontal:
+            return documentSize.width > visibleSize.width + 1
+        case .vertical:
+            return documentSize.height > visibleSize.height + 1
+        }
+    }
+
+    private func scroll(_ scrollView: NSScrollView, deltaX: CGFloat, deltaY: CGFloat, scrollsX: Bool, scrollsY: Bool) {
+        let clipView = scrollView.contentView
+        let currentOrigin = clipView.bounds.origin
+        let documentSize = scrollView.documentView?.bounds.size ?? .zero
+        let visibleSize = clipView.bounds.size
+
+        let maxX = max(0, documentSize.width - visibleSize.width)
+        let maxY = max(0, documentSize.height - visibleSize.height)
+        let nextX = scrollsX ? min(max(currentOrigin.x - deltaX, 0), maxX) : currentOrigin.x
+        let verticalDelta = (scrollView.documentView?.isFlipped ?? true) ? deltaY : -deltaY
+        let nextY = scrollsY ? min(max(currentOrigin.y + verticalDelta, 0), maxY) : currentOrigin.y
+
+        guard nextX != currentOrigin.x || nextY != currentOrigin.y else { return }
+        clipView.scroll(to: NSPoint(x: nextX, y: nextY))
+        scrollView.reflectScrolledClipView(clipView)
+    }
+}
+#else
+private struct ScheduleTimelinePanSurface: View {
+    var body: some View {
+        Color.clear.allowsHitTesting(false)
+    }
+}
+#endif
+
+private extension Calendar {
+    func sfStartOfWeek(for date: Date) -> Date {
+        let startOfDay = self.startOfDay(for: date)
+        let components = self.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startOfDay)
+        return self.date(from: components) ?? startOfDay
+    }
+
+    func sfStartOfMonth(for date: Date) -> Date {
+        let components = self.dateComponents([.year, .month], from: date)
+        return self.date(from: components) ?? self.startOfDay(for: date)
+    }
+
+    func sfStartOfYear(for date: Date) -> Date {
+        let components = self.dateComponents([.year], from: date)
+        return self.date(from: components) ?? self.startOfDay(for: date)
+    }
 }

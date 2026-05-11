@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.477037475099-23s8q3t5g7uggfs5jvaue0u0l0pdo1mr</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>StudioFlowShareImport</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>studioflow</string>
+			</array>
+		</dict>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>StudioFlow uses Apple Calendar to create and update order timeline events from the created date to the delivery due date.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>StudioFlow uses Apple Calendar to create order timeline events from the created date to the delivery due date.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>StudioFlow uses the camera to attach client photos directly to order Client Files.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>StudioFlow can use the photo library to attach client images directly to order Client Files.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>StudioFlow uses Apple Reminders to create order due-date alerts that can sync across your Apple devices.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>StudioFlow uses Apple Reminders to create order due-date alerts that can sync across your Apple devices.</string>
+</dict>
+</plist>

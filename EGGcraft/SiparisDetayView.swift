@@ -1,0 +1,13015 @@
+import SwiftUI
+import UniformTypeIdentifiers
+import FirebaseFirestore
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
+#if canImport(FirebaseFunctions)
+import FirebaseFunctions
+#endif
+#if canImport(WebKit)
+import WebKit
+#endif
+
+#if os(macOS)
+import AppKit
+typealias PlatformImage = NSImage
+#else
+import UIKit
+import PhotosUI
+typealias PlatformImage = UIImage
+#endif
+
+
+private func safeClientFileDisplayName(_ fileName: String) -> String {
+    let trimmed = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let fallback = trimmed.isEmpty ? "client-file" : trimmed
+    let invalidCharacters = CharacterSet(charactersIn: "/\\:\0")
+    return fallback.components(separatedBy: invalidCharacters).joined(separator: "-")
+}
+
+private func clientFileIsPDF(_ item: ClientFileItem) -> Bool {
+    let lowerName = item.fileName.lowercased()
+    return item.contentType.lowercased().contains("pdf") || lowerName.hasSuffix(".pdf")
+}
+
+private func clientFileIsImage(_ item: ClientFileItem) -> Bool {
+    let lowerName = item.fileName.lowercased()
+    if item.contentType.lowercased().contains("image") { return true }
+    return [".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".gif", ".tiff", ".bmp"].contains { lowerName.hasSuffix($0) }
+}
+
+private func loadClientFilePlatformImage(from url: URL) -> PlatformImage? {
+    #if os(macOS)
+    return PlatformImage(contentsOf: url)
+    #else
+    return PlatformImage(contentsOfFile: url.path)
+    #endif
+}
+
+#if canImport(WebKit)
+#if os(macOS)
+private struct ClientFileWebView: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        webView.allowsMagnification = true
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        if url.isFileURL {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            webView.load(URLRequest(url: url))
+        }
+    }
+}
+#else
+private struct ClientFileWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        WKWebView()
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        if url.isFileURL {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            webView.load(URLRequest(url: url))
+        }
+    }
+}
+#endif
+#endif
+
+private struct ClientFilePreviewContentView: View {
+    let item: ClientFileItem
+    let url: URL?
+    let language: String
+
+    private func lt(_ text: String) -> String { siparisDetayText(text, lang: language) }
+
+    var body: some View {
+        Group {
+            if clientFileIsImage(item), let url {
+                if url.isFileURL, let image = loadClientFilePlatformImage(from: url) {
+                    Image(platformImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        case .failure:
+                            unavailablePreview
+                        @unknown default:
+                            unavailablePreview
+                        }
+                    }
+                }
+            } else if clientFileIsPDF(item), let url {
+                #if canImport(WebKit)
+                ClientFileWebView(url: url)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #else
+                unavailablePreview
+                #endif
+            } else {
+                unavailablePreview
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var unavailablePreview: some View {
+        VStack(spacing: 12) {
+            Image(systemName: clientFileIsPDF(item) ? "doc.richtext.fill" : "doc.fill")
+                .font(.system(size: 46, weight: .semibold))
+                .foregroundColor(.secondary)
+            Text(lt("Preview is not available for this file type."))
+                .font(.system(size: 13, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+            Text(lt("Use Download or Open to view this file in another app."))
+                .font(.system(size: 11))
+                .multilineTextAlignment(.center)
+                .foregroundColor(.gray)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+    }
+}
+
+private struct ClientFilePreviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let items: [ClientFileItem]
+    let language: String
+    let isAvailableOffline: (ClientFileItem) -> Bool
+    let offlineURLProvider: (ClientFileItem) -> URL?
+    let onDownload: (ClientFileItem) -> Void
+    let onMakeOffline: (ClientFileItem) -> Void
+    let onOpenExternal: (ClientFileItem) -> Void
+
+    @State private var selectedItemID: UUID
+
+    init(
+        items: [ClientFileItem],
+        initialItemID: UUID,
+        language: String,
+        isAvailableOffline: @escaping (ClientFileItem) -> Bool,
+        offlineURLProvider: @escaping (ClientFileItem) -> URL?,
+        onDownload: @escaping (ClientFileItem) -> Void,
+        onMakeOffline: @escaping (ClientFileItem) -> Void,
+        onOpenExternal: @escaping (ClientFileItem) -> Void
+    ) {
+        self.items = items
+        self.language = language
+        self.isAvailableOffline = isAvailableOffline
+        self.offlineURLProvider = offlineURLProvider
+        self.onDownload = onDownload
+        self.onMakeOffline = onMakeOffline
+        self.onOpenExternal = onOpenExternal
+        _selectedItemID = State(initialValue: initialItemID)
+    }
+
+    private func lt(_ text: String) -> String { siparisDetayText(text, lang: language) }
+
+    private var currentIndex: Int {
+        items.firstIndex(where: { $0.id == selectedItemID }) ?? 0
+    }
+
+    private var currentItem: ClientFileItem? {
+        guard !items.isEmpty else { return nil }
+        return items[min(max(currentIndex, 0), items.count - 1)]
+    }
+
+    private func previewURL(for item: ClientFileItem) -> URL? {
+        if item.isPendingUpload,
+           !item.localFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: item.localFilePath)
+        }
+        if let offlineURL = offlineURLProvider(item), FileManager.default.fileExists(atPath: offlineURL.path) {
+            return offlineURL
+        }
+        return URL(string: item.downloadURL)
+    }
+
+    private func move(_ delta: Int) {
+        guard !items.isEmpty else { return }
+        let nextIndex = min(max(currentIndex + delta, 0), items.count - 1)
+        selectedItemID = items[nextIndex].id
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(currentItem?.fileName ?? lt("Preview"))
+                        .font(.system(size: 17, weight: .bold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    if let currentItem {
+                        Text("\(currentIndex + 1) / \(items.count) • \(currentItem.fileSize >= 1024 * 1024 ? String(format: "%.1f MB", Double(currentItem.fileSize) / 1024.0 / 1024.0) : String(format: "%.0f KB", Double(max(currentItem.fileSize, 1)) / 1024.0))")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let currentItem {
+                ClientFilePreviewContentView(item: currentItem, url: previewURL(for: currentItem), language: language)
+                    .frame(minHeight: 360)
+
+                HStack(spacing: 8) {
+                    Button {
+                        move(-1)
+                    } label: {
+                        Label(lt("Previous"), systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(currentIndex <= 0)
+
+                    Button {
+                        move(1)
+                    } label: {
+                        Label(lt("Next"), systemImage: "chevron.right")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(currentIndex >= items.count - 1)
+
+                    Spacer(minLength: 0)
+
+                    if !currentItem.isPendingUpload && !isAvailableOffline(currentItem) {
+                        Button {
+                            onMakeOffline(currentItem)
+                        } label: {
+                            Label(lt("Make Offline"), systemImage: "arrow.down.circle")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Button {
+                        onOpenExternal(currentItem)
+                    } label: {
+                        Label(lt("Open"), systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        onDownload(currentItem)
+                    } label: {
+                        Label(lt("Download"), systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else {
+                Spacer()
+                Text(lt("No client files yet."))
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+        }
+        .padding(18)
+        #if os(macOS)
+        .frame(minWidth: 760, minHeight: 560)
+        #else
+        .presentationDetents([.large])
+        #endif
+    }
+}
+
+private struct FittedSheetPresentation: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if #available(iOS 18.0, *) {
+            content.presentationSizing(.fitted)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+extension Image {
+    init(platformImage: PlatformImage) {
+        #if os(macOS)
+        self.init(nsImage: platformImage)
+        #else
+        self.init(uiImage: platformImage)
+        #endif
+    }
+}
+
+struct ShareableFileURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+#if os(iOS)
+struct FileShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+struct ClientFileCameraPicker: UIViewControllerRepresentable {
+    let onImageURL: (URL) -> Void
+    let onError: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ClientFileCameraPicker
+
+        init(parent: ClientFileCameraPicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            defer { parent.dismiss() }
+
+            guard let image = info[.originalImage] as? UIImage,
+                  let data = image.jpegData(compressionQuality: 0.92) else {
+                parent.onError("Could not read camera photo.")
+                return
+            }
+
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("studioflow-client-camera-\(UUID().uuidString).jpg")
+
+            do {
+                try data.write(to: url, options: .atomic)
+                parent.onImageURL(url)
+            } catch {
+                parent.onError(error.localizedDescription)
+            }
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+#endif
+
+enum PlatformCursor {
+    static func arrowSet() {
+        #if os(macOS)
+        NSCursor.arrow.set()
+        #endif
+    }
+
+    static func closedHandSet() {
+        #if os(macOS)
+        NSCursor.closedHand.set()
+        #endif
+    }
+
+    static func openHandSet() {
+        #if os(macOS)
+        NSCursor.openHand.set()
+        #endif
+    }
+
+    static func pointingHandPush() {
+        #if os(macOS)
+        NSCursor.pointingHand.push()
+        #endif
+    }
+
+    static func resizeLeftRightPush() {
+        #if os(macOS)
+        NSCursor.resizeLeftRight.push()
+        #endif
+    }
+
+    static func resizeUpDownPush() {
+        #if os(macOS)
+        NSCursor.resizeUpDown.push()
+        #endif
+    }
+
+    static func crosshairPush() {
+        #if os(macOS)
+        NSCursor.crosshair.push()
+        #endif
+    }
+
+    static func pop() {
+        #if os(macOS)
+        NSCursor.pop()
+        #endif
+    }
+}
+
+enum PlatformHaptics {
+    static func lightSelection() {
+        #if os(iOS)
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.prepare()
+        generator.impactOccurred()
+        #endif
+    }
+}
+
+final class CardDragCoordinator {
+    static let shared = CardDragCoordinator()
+
+    var sessionID = UUID()
+    var reachedDropTarget = false
+
+    private init() {}
+
+    func beginSession() -> UUID {
+        let id = UUID()
+        sessionID = id
+        reachedDropTarget = false
+        return id
+    }
+
+    func markDropTargetReached() {
+        reachedDropTarget = true
+    }
+
+    func endSession() {
+        sessionID = UUID()
+        reachedDropTarget = false
+    }
+}
+
+func privacyCurrency(_ value: Double, symbol: String, ondalik: String, hideNumbers: Bool) -> String {
+    if hideNumbers {
+        return "\(symbol)••••"
+    }
+    return "\(symbol)\(formatFiyat(value, ondalik: ondalik))"
+}
+
+func privacyDate(_ date: Date, hideNumbers: Bool) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "dd/MM/yy"
+    return formatter.string(from: date)
+}
+
+func privacyDigits(_ text: String, hideNumbers: Bool) -> String {
+    return text
+}
+
+struct CustomStepDTO: Codable, Identifiable, Equatable { var id = UUID(); var title: String }
+
+private func statusCustomToggleStorageKey(for toggle: CustomStepDTO) -> String {
+    "statusToggle::\(toggle.id.uuidString.lowercased())"
+}
+
+private func statusCustomToggleValue(from toggles: [String: Bool]?, toggle: CustomStepDTO) -> Bool {
+    let storageKey = statusCustomToggleStorageKey(for: toggle)
+    let legacyUUIDKey = "statusToggle::\(toggle.id.uuidString)"
+    return toggles?[storageKey] ?? toggles?[legacyUUIDKey] ?? toggles?[toggle.title] ?? false
+}
+
+private func statusStepStorageKey(for step: CustomStepDTO) -> String {
+    "statusStep::\(step.id.uuidString.lowercased())"
+}
+
+private func statusStepValue(from statuses: [String: String]?, step: CustomStepDTO) -> String {
+    let storageKey = statusStepStorageKey(for: step)
+    let legacyUUIDKey = "statusStep::\(step.id.uuidString)"
+    return statuses?[storageKey] ?? statuses?[legacyUUIDKey] ?? statuses?[step.title] ?? "Not Yet"
+}
+
+private func studioOrderDetailRoleKey(_ role: String, fallback: String = "member") -> String {
+    let compact = role
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: "[\\s_-]+", with: "", options: .regularExpression)
+
+    switch compact {
+    case "owner": return "owner"
+    case "admin": return "admin"
+    case "member": return "member"
+    case "viewer", "viewonly", "readonly": return "viewer"
+    case "workflow", "workflowonly": return "workflow"
+    case "unknown", "": return fallback
+    default: return fallback
+    }
+}
+
+private func studioOrderDetailRoleCanEdit(_ role: String) -> Bool {
+    ["owner", "admin", "member", "workflow"].contains(studioOrderDetailRoleKey(role))
+}
+
+private struct ToDoAssigneeOption: Identifiable, Equatable {
+    var uid: String
+    var label: String
+    var email: String
+    var id: String { uid.isEmpty ? "unassigned" : uid }
+}
+
+private struct ToDoItemDropDelegate: DropDelegate {
+    let item: OrderToDoItem
+    @Binding var draggingID: UUID?
+    let canEdit: Bool
+    let moveAction: (UUID, UUID) -> Void
+    let dropAction: (UUID?) -> Void
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard canEdit, let draggingID, draggingID != item.id else { return }
+        moveAction(draggingID, item.id)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard canEdit else { return false }
+        dropAction(draggingID)
+        draggingID = nil
+        return true
+    }
+}
+
+extension Notification.Name {
+    static let phoneCardMoveRequested = Notification.Name("phoneCardMoveRequested")
+}
+
+enum KartTipi: String, Codable, Equatable, Identifiable {
+    case preview = "preview", summary = "summary", customer = "customer"
+    case delivery = "delivery", communication = "communication", notes = "notes"
+    case financial = "financial", status = "status", shipping = "shipping"
+    case schedule = "schedule"
+    case historyLog = "historyLog"
+    case clientFiles = "clientFiles"
+    case workTime = "workTime"
+    case todo = "todo"
+    case customerNotes = "customerNotes", materials = "materials", priority = "priority"
+    var id: String { self.rawValue }
+}
+
+private struct WorkspaceCardInsertDropTarget: Equatable {
+    let columnIndex: Int
+    let after: KartTipi
+}
+
+struct IcerikBoyuKey: PreferenceKey {
+    static var defaultValue: Double = 0
+    static func reduce(value: inout Double, nextValue: () -> Double) { value = max(value, nextValue()) }
+}
+
+struct CalismaAlaniBoyutuKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
+}
+
+struct WorkspaceLayoutSnapshot: Codable {
+    var version: Int = 1
+    var sutunGenislikleri: [Double]
+    var kartYerlesimi: [[KartTipi]]
+    var phoneKartSirasi: [KartTipi]?
+    var kartYukseklikleri: [String: Double]
+    var orderKartYukseklikleri: [String: [String: Double]]?
+    var kartRenkleri: [String: String]
+    var visibility: [String: Bool]
+}
+
+struct WorkspaceProfileDTO: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var name: String
+    var snapshotJSON: String
+}
+
+struct WorkspaceUserProfileDTO: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var userId: String
+    var displayName: String
+    var email: String
+    var role: String
+    var snapshotJSON: String
+    var updatedAt: Date?
+    var savedProfiles: [WorkspaceProfileDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case id, userId, displayName, email, role, snapshotJSON, updatedAt, savedProfiles
+    }
+
+    init(
+        id: UUID = UUID(),
+        userId: String,
+        displayName: String,
+        email: String,
+        role: String,
+        snapshotJSON: String,
+        updatedAt: Date?,
+        savedProfiles: [WorkspaceProfileDTO] = []
+    ) {
+        self.id = id
+        self.userId = userId
+        self.displayName = displayName
+        self.email = email
+        self.role = role
+        self.snapshotJSON = snapshotJSON
+        self.updatedAt = updatedAt
+        self.savedProfiles = savedProfiles
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? ""
+        email = try container.decodeIfPresent(String.self, forKey: .email) ?? ""
+        role = try container.decodeIfPresent(String.self, forKey: .role) ?? "member"
+        snapshotJSON = try container.decodeIfPresent(String.self, forKey: .snapshotJSON) ?? ""
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        savedProfiles = try container.decodeIfPresent([WorkspaceProfileDTO].self, forKey: .savedProfiles) ?? []
+    }
+}
+
+private enum NotesTextEditorFocus: Hashable {
+    case specialNotes
+    case customerNotes
+    case specialNote(UUID)
+    case scheduleNote
+    case todo(UUID)
+}
+
+private let primarySpecialNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
+
+private func defaultSpecialNoteSections() -> [CustomStepDTO] {
+    [CustomStepDTO(id: primarySpecialNoteID, title: "Special Notes")]
+}
+
+private func normalizedSpecialNoteSections(_ items: [CustomStepDTO]) -> [CustomStepDTO] {
+    var cleanedItems: [CustomStepDTO] = []
+
+    for item in items {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { continue }
+
+        if !cleanedItems.contains(where: { $0.id == item.id }) {
+            cleanedItems.append(CustomStepDTO(id: item.id, title: title))
+        }
+    }
+
+    if let primaryIndex = cleanedItems.firstIndex(where: { $0.id == primarySpecialNoteID }) {
+        let primary = cleanedItems.remove(at: primaryIndex)
+        cleanedItems.insert(CustomStepDTO(id: primarySpecialNoteID, title: primary.title.isEmpty ? "Special Notes" : primary.title), at: 0)
+    } else {
+        cleanedItems.insert(defaultSpecialNoteSections()[0], at: 0)
+    }
+
+    return cleanedItems
+}
+
+private func normalizedSpecialNoteSections(from json: String) -> [CustomStepDTO] {
+    let trimmedJSON = json.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedJSON.isEmpty,
+          let data = trimmedJSON.data(using: .utf8),
+          let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) else {
+        return defaultSpecialNoteSections()
+    }
+
+    return normalizedSpecialNoteSections(decoded)
+}
+
+private func specialNoteCustomFieldKey(for id: UUID) -> String {
+    "specialNote::\(id.uuidString)"
+}
+
+struct SiparisDetayView: View {
+    @Binding var siparis: Siparis
+    @Binding var seciliMusteri: Musteri?
+    @Binding var aktifSekme: String
+    var hideFinancialForWorkflow: Bool = false
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
+    
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
+    @AppStorage("seciliOndalik") private var seciliOndalik: String = "."
+    @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
+    @AppStorage("orderDetailHeaderShowDeliveryTime") private var orderDetailHeaderShowDeliveryTime: Bool = true
+    @AppStorage("orderDetailHeaderShowUpcomingSchedule") private var orderDetailHeaderShowUpcomingSchedule: Bool = true
+    @AppStorage("orderDetailHeaderShowOrderValue") private var orderDetailHeaderShowOrderValue: Bool = true
+    @AppStorage("workspaceCardsLockedV1") private var workspaceCardsLocked: Bool = false
+
+    private func lt(_ text: String) -> String { siparisDetayText(text, lang: seciliDil) }
+
+    private func workspaceAccessAllows(_ key: String) -> Bool {
+        authVM.currentWorkspaceAccess[key] ?? true
+    }
+
+    private var canAccessFinancialInfo: Bool {
+        !hideFinancialForWorkflow && workspaceAccessAllows("financialInfo")
+    }
+
+    private var canAccessClientFiles: Bool {
+        workspaceAccessAllows("clientFiles")
+    }
+
+    private var canEditOrderDetails: Bool {
+        (authVM.isCompanyOwner || studioOrderDetailRoleCanEdit(authVM.currentWorkspaceRole)) && workspaceAccessAllows("orders")
+    }
+
+    private func cardAccessKey(_ kart: KartTipi) -> String? {
+        switch kart {
+        case .preview: return "cardPreview"
+        case .summary: return "cardSummary"
+        case .customer: return "cardCustomer"
+        case .delivery: return "cardDelivery"
+        case .notes: return "cardNotes"
+        case .financial: return "cardFinancial"
+        case .status: return "cardStatus"
+        case .shipping: return "cardShipping"
+        case .schedule: return "cardSchedule"
+        case .historyLog: return "cardHistoryLog"
+        case .clientFiles: return "cardClientFiles"
+        case .todo: return "cardTodo"
+        case .workTime: return "cardWorkTime"
+        case .materials: return "cardMaterials"
+        case .priority: return "cardPriority"
+        case .communication, .customerNotes: return nil
+        }
+    }
+
+    private func canAccessCard(_ kart: KartTipi) -> Bool {
+        guard let key = cardAccessKey(kart) else { return false }
+        return workspaceAccessAllows(key)
+    }
+    
+    @State private var isLinkEditing = false
+    @State private var previewLinkBeforeEditing = ""
+    @State private var isHoveringLink = false
+    @State private var isImagePickerPresented = false
+    @State private var pdfShareItem: ShareableFileURL?
+    @State private var isHoveringDrop = false
+    @State private var isUploading = false
+    @State private var isClientFileImporterPresented = false
+    #if os(iOS)
+    @State private var showClientFileSourceDialog = false
+    @State private var isClientFilePhotoPickerPresented = false
+    @State private var selectedClientFilePhotoItem: PhotosPickerItem? = nil
+    @State private var isClientFileCameraPresented = false
+    #endif
+    @State private var isClientFileDropTargeted = false
+    @State private var isUploadingClientFile = false
+    @State private var isImportingSharedClientFiles = false
+    @State private var sharedClientFilesInbox: [SharedClientFileInbox.PendingFile] = []
+    @State private var clientFileMessage: String = ""
+    @State private var offlineClientFileRefreshToken = UUID()
+    @State private var clientFilePreviewItem: ClientFileItem? = nil
+    @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
+    @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
+    @State private var pendingUploadSafetyURL: URL? = nil
+    @State private var pendingUploadSafetySource: String = "order_preview"
+    @State private var showUploadSafetyPrompt: Bool = false
+    @State private var showUploadSafetyError: Bool = false
+    @State private var uploadSafetyErrorMessage: String = ""
+    @State private var uiTetikleyici: Bool = false
+    @State private var isHoveringTitle = false
+    @State private var showWidgetMenu = false
+    @State private var headingEditorTarget: KartTipi? = nil
+    @State private var workspaceStatusMessage: String = ""
+    @State private var isApplyingWorkspaceLayout: Bool = false
+
+    @AppStorage("workspaceCustomizationModeV1") private var workspaceCustomizationMode: String = "shared"
+    @AppStorage("workspaceProfile1JSONV1") private var workspaceProfile1JSON: String = ""
+    @AppStorage("workspaceProfile2JSONV1") private var workspaceProfile2JSON: String = ""
+    @AppStorage("workspaceProfile3JSONV1") private var workspaceProfile3JSON: String = ""
+    @AppStorage("workspaceProfilesJSONV2") private var workspaceProfilesJSON: String = ""
+    @AppStorage("workspaceUserProfilesJSONV1") private var workspaceUserProfilesJSON: String = ""
+    @AppStorage("workspaceFollowedTeamProfileUserIdV1") private var workspaceFollowedTeamProfileUserId: String = ""
+    @AppStorage("workspaceOwnerCardSyncDismissedV1") private var workspaceOwnerCardSyncDismissed: Bool = false
+    @AppStorage("sharedWorkspaceSnapshotJSONV1") private var sharedWorkspaceSnapshotJSON: String = ""
+    @State private var workspaceProfiles: [WorkspaceProfileDTO] = []
+    @State private var workspaceUserProfiles: [WorkspaceUserProfileDTO] = []
+    @State private var followedTeamProfileLastSnapshotJSON: String = ""
+    @State private var workspaceProfilesCloudListener: ListenerRegistration?
+    @State private var isApplyingWorkspaceProfilesFromCloud: Bool = false
+    @State private var activeWorkspaceLayoutOrderKey: String = ""
+    @State private var activeWorkspaceLayoutIsIndependent: Bool = false
+    @State private var iPadWorkspaceZoomScale: CGFloat = 1.0
+    @State private var liveTrackingListener: ListenerRegistration?
+    @State private var liveTrackingData: [String: String] = [:]
+    @State private var isLiveTrackingSyncing: Bool = false
+    @State private var trackingAutoSyncWorkItem: DispatchWorkItem?
+    @State private var trackingSyncMessage: String = ""
+    @FocusState private var focusedNotesTextEditor: NotesTextEditorFocus?
+
+    private let orderWorkspaceLayoutKey = "__workspaceLayoutV1"
+
+    @Environment(\.openURL) var openURL
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
+
+    private var isPadLayout: Bool {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        return false
+        #endif
+    }
+
+    private var isCompactPhoneLayout: Bool {
+        isPhoneLayout && !isPadLayout
+    }
+
+    private var shouldKeepStableWorkspaceWidth: Bool {
+        #if os(macOS)
+        // Keep extra empty columns only while a card is actively being dragged.
+        // Once the drag ends, the workspace width should shrink back to the last visible column
+        // so the bottom horizontal scrollbar disappears when there is no hidden column to the right.
+        return draggedKart != nil || showWorkspaceEmptyDropTargets
+        #else
+        return false
+        #endif
+    }
+    
+    @AppStorage("colWLeftV3") private var savedColLeft: Double = 350
+    @AppStorage("colWMidV3") private var savedColMid: Double = 350
+    @AppStorage("colWRightV3") private var savedColRight: Double = 350
+    @AppStorage("sutunGenislikleriJSONV4") private var sutunGenislikleriJSON: String = ""
+    @State private var sutunGenislikleri: [Double] = [350, 350, 350]
+    
+    // 🌟 YENİ: BLOK (KART) RENK HAFIZASI 🌟
+    @AppStorage("kartRenkleriJSONV1") private var kartRenkleriJSON: String = "{}"
+    @State private var kartRenkleri: [String: String] = [:]
+    
+    @AppStorage("kartYerlesimiJSON") private var kartYerlesimiJSON = ""
+    @AppStorage("kartYukseklikleriJSON") private var kartYukseklikleriJSON = "{}"
+    
+    @State private var kartYerlesimi: [[KartTipi]] = [
+        [.preview, .summary],
+        [.customer, .materials, .delivery, .notes, .clientFiles],
+        [.priority, .todo, .workTime, .financial, .status, .shipping, .schedule, .historyLog, .customerNotes]
+    ]
+    @State private var kartYukseklikleri: [String: Double] = [:]
+    @State private var sharedKartYukseklikleri: [String: Double] = [:]
+    @State private var orderKartYukseklikleri: [String: [String: Double]] = [:]
+    @State private var draggedKart: KartTipi? = nil
+    @State private var kartYerlesimiBeforeDrag: [[KartTipi]]? = nil
+    @State private var showWorkspaceEmptyDropTargets: Bool = false
+    @State private var workspaceCardInsertDropTarget: WorkspaceCardInsertDropTarget? = nil
+    // iPhone-only vertical order. This is intentionally separate from the Mac/iPad workspace layout.
+    // Mac/iPad column positions continue to use kartYerlesimi/shared workspace sync.
+    @AppStorage("phoneKartSirasiJSONV1") private var phoneKartSirasiJSON: String = ""
+    @State private var phoneKartSirasi: [KartTipi] = []
+    @State private var macOSHitboxHack: CGFloat = 0
+    @State private var calismaAlaniIcerikBoyutu: CGSize = .zero
+    
+    @AppStorage("showCardPreview") private var showCardPreview = true; @AppStorage("showCardSummary") private var showCardSummary = true; @AppStorage("showCardCustomer") private var showCardCustomer = true; @AppStorage("showCardDelivery") private var showCardDelivery = true; @AppStorage("showCardCommunication") private var showCardCommunication = true; @AppStorage("showCardNotes") private var showCardNotes = true; @AppStorage("showCardFinancial") private var showCardFinancial = true; @AppStorage("showCardStatus") private var showCardStatus = true; @AppStorage("showCardShipping") private var showCardShipping = true
+    @AppStorage("showCardCustomerNotes") private var showCardCustomerNotes = false
+    @AppStorage("showCardMaterials") private var showCardMaterials = true
+    @AppStorage("showCardPriority") private var showCardPriority = true
+    @AppStorage("showCardSchedule") private var showCardSchedule = true
+    @AppStorage("showCardHistoryLog") private var showCardHistoryLog = true
+    @AppStorage("showCardClientFiles") private var showCardClientFiles = true
+    @AppStorage("showCardToDo") private var showCardToDo = true
+    @AppStorage("showCardWorkTime") private var showCardWorkTime = true
+    @AppStorage("scheduleQuickRemindersJSONV2") private var scheduleQuickRemindersJSON: String = ""
+    @AppStorage("communicationShowTelephoneV1") private var communicationShowTelephone: Bool = true
+    @AppStorage("communicationShowEmailV1") private var communicationShowEmail: Bool = true
+    @AppStorage("communicationShowAddressV1") private var communicationShowAddress: Bool = true
+    @AppStorage("communicationShowChannelV1") private var communicationShowChannel: Bool = true
+    @AppStorage("communicationShowCustomerNotesV1") private var communicationShowCustomerNotes: Bool = true
+    @AppStorage("communicationChannelLabelsJSONV1") private var communicationChannelLabelsJSON: String = ""
+    @AppStorage("specialNoteSectionsJSONV1") private var specialNoteSectionsJSON: String = ""
+    @AppStorage("businessType") private var businessType: String = "Custom Art Studio"
+    @AppStorage("businessDescriptionPrompt") private var businessDescriptionPrompt: String = ""
+    @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
+    @State private var showScheduleQuickSettings: Bool = false
+    @State private var showScheduleQuickPicker: Bool = false
+    @State private var editableQuickReminders: [ScheduleQuickReminderItem] = []
+
+    @State private var newScheduleTitle: String = "Follow up customer"
+    @State private var newScheduleNote: String = ""
+    @State private var newScheduleDueAt: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    @State private var newSchedulePriority: String = "Normal"
+    @State private var newScheduleNotify: Bool = true
+    @State private var scheduleMessage: String = ""
+    @State private var calendarMessage: String = ""
+    @State private var isUpdatingCalendarEvent: Bool = false
+    @State private var newToDoTitle: String = ""
+    @State private var newToDoNote: String = ""
+    @State private var newToDoAssignedToUid: String = ""
+    @State private var newToDoPriority: String = "Normal"
+    @State private var newToDoDueAt: Date = Date()
+    @State private var newToDoHasDueDate: Bool = false
+    @State private var toDoFilter: String = "Open"
+    @State private var draggingToDoItemID: UUID? = nil
+    @State private var toDoMessage: String = ""
+    @State private var newWorkSessionTitle: String = ""
+    @State private var workTimeMessage: String = ""
+    @State private var orderDetailAutosaveWorkItem: DispatchWorkItem? = nil
+    @State private var pendingOrderDetailPreviousSiparis: Siparis? = nil
+    
+    @AppStorage("feePercentage") private var feePercentage = 3.0
+    @AppStorage("defaultTaxRate") private var defaultTaxRate = 20.0
+    @AppStorage("taxCalculationType") private var taxCalculationType = "Revenue"
+    @AppStorage("taxMilestoneEnabled") private var taxMilestoneEnabled: Bool = false
+    @AppStorage("taxMilestoneDate") private var taxMilestoneDate: Double = Date().timeIntervalSince1970
+    @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard Tax (Services/New)"
+    @AppStorage("taxRuleNameProfit") private var taxRuleNameProfit: String = "Margin Scheme (2nd Hand)"
+    
+    @AppStorage("invLabel1") private var invLabel1: String = "Dial Sourced"
+    @AppStorage("invLabel2") private var invLabel2: String = "Dial Received"
+    @AppStorage("invLabel3") private var invLabel3: String = "Watch Received"
+    @AppStorage("invLabel4") private var invLabel4: String = "Materials Ready"
+    
+    @AppStorage("activeStatusesJSON") private var activeStatusesJSON: String = "[\"New\",\"Not Yet\",\"In Progress\",\"Done\",\"Cancelled\"]"
+    @AppStorage("customFieldsJSON") private var customFieldsJSON: String = ""
+    @AppStorage("customTogglesJSON") private var customTogglesJSON: String = ""
+    @AppStorage("materialsTogglesJSON") private var materialsTogglesJSON: String = ""
+    @AppStorage("materialsDefaultChecksJSON") private var materialsDefaultChecksJSON: String = ""
+    @AppStorage("showStatusNotesSupplier") private var showStatusNotesSupplier: Bool = false
+    @AppStorage("showMaterialsNotesSupplier") private var showMaterialsNotesSupplier: Bool = true
+    @AppStorage("statusNotesSupplierLabel") private var statusNotesSupplierLabel: String = "Notes / Supplier"
+    @AppStorage("materialsNotesSupplierLabel") private var materialsNotesSupplierLabel: String = "Notes / Supplier"
+    
+    @AppStorage("appLogoUrl") private var appLogoUrl: String = ""
+    @AppStorage("appSubtitle") private var appSubtitle = "Bespoke Hand-Painted Dials"
+    @AppStorage("customStepsJSON") private var customStepsJSON = ""
+    @AppStorage("financialExpenseItemsJSON") private var financialExpenseItemsJSON: String = ""
+    @AppStorage("financialRemainingItemsJSON") private var financialRemainingItemsJSON: String = ""
+    @AppStorage("financialShowBaseCost") private var financialShowBaseCost: Bool = true
+    @AppStorage("financialBaseCostLabel") private var financialBaseCostLabel: String = "Cost (Base)"
+    @AppStorage("summaryStep1") private var summaryStep1 = "Design"
+    @AppStorage("summaryStep2") private var summaryStep2 = "Painting"
+    
+        @AppStorage("orderListStep1") private var orderListStep1 = "Design"
+    @AppStorage("orderListStep2") private var orderListStep2 = "Painting"
+    
+@AppStorage("pdfShowCustomer") private var pdfShowCustomer = true; @AppStorage("pdfShowContact") private var pdfShowContact = true; @AppStorage("pdfShowPreview") private var pdfShowPreview = true; @AppStorage("pdfShowFinCustomer") private var pdfShowFinCustomer = true; @AppStorage("pdfShowPaymentMethod") private var pdfShowPaymentMethod = true; @AppStorage("pdfShowFinInternal") private var pdfShowFinInternal = false; @AppStorage("pdfShowStatus") private var pdfShowStatus = true; @AppStorage("pdfShowShipping") private var pdfShowShipping = true
+    @AppStorage("pdfShowMaterials") private var pdfShowMaterials = true
+    @AppStorage("pdfShowPriority") private var pdfShowPriority: Bool = true
+    
+    var decodedSteps: [CustomStepDTO] { if let data = customStepsJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data), !dec.isEmpty { return dec }; return [CustomStepDTO(title: "Design"), CustomStepDTO(title: "Painting")] }
+
+    private var activeProductionStepTitles: [String] {
+        decodedSteps
+            .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func resolvedProductionStepName(_ storedValue: String, fallbackIndex: Int) -> String {
+        let cleaned = storedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titles = activeProductionStepTitles
+
+        if !cleaned.isEmpty, titles.contains(cleaned) {
+            return cleaned
+        }
+
+        if titles.indices.contains(fallbackIndex) {
+            return titles[fallbackIndex]
+        }
+
+        return fallbackIndex == 0 ? "Design" : "Painting"
+    }
+
+    private var resolvedSummaryStep1: String {
+        resolvedProductionStepName(summaryStep1, fallbackIndex: 0)
+    }
+
+    private var resolvedSummaryStep2: String {
+        resolvedProductionStepName(summaryStep2, fallbackIndex: 1)
+    }
+    var userStatuses: [String] { if let data = activeStatusesJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([String].self, from: data), !dec.isEmpty { return dec }; return ["New", "Not Yet", "In Progress", "Done", "Cancelled"] }
+    var customFieldsList: [CustomStepDTO] {
+        let trimmedJSON = customFieldsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedJSON.isEmpty else { return [] }
+        if let data = trimmedJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) {
+            return decoded.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+        return []
+    }
+    var communicationChannelLabels: [String] { normalizedCommunicationChannelLabels(from: communicationChannelLabelsJSON) }
+    var specialNoteSections: [CustomStepDTO] { normalizedSpecialNoteSections(from: specialNoteSectionsJSON) }
+    var customTogglesList: [CustomStepDTO] { if let data = customTogglesJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec }; return [] }
+    var materialsTogglesList: [CustomStepDTO] { if let data = materialsTogglesJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec }; return [] }
+    var materialsDefaultCheckLabels: [String] {
+        let trimmed = materialsDefaultChecksJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty,
+           let data = trimmed.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) {
+            let labels = decoded.map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if !labels.isEmpty { return labels }
+        }
+        return [invLabel1, invLabel2, invLabel3, invLabel4]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+    var financialExpenseItems: [CustomStepDTO] { if let data = financialExpenseItemsJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec.filter { isUsableFinancialExpenseTitle($0.title) } }; return [] }
+    var financialRemainingItems: [CustomStepDTO] { if let data = financialRemainingItemsJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec.filter { isUsableFinancialRemainingTitle($0.title) } }; return [] }
+
+    @ViewBuilder
+    private var orderDetailHeader: some View {
+        #if os(iOS)
+        orderDetailHeaderContent
+            .sheet(isPresented: $showWidgetMenu) {
+                GeometryReader { geo in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack {
+                                Text(t("Customize", lang: seciliDil))
+                                    .font(.system(size: isCompactPhoneLayout ? 18 : 20, weight: .bold))
+                                    .foregroundColor(.primary)
+
+                                Spacer()
+
+                                Button(t("Done", lang: seciliDil)) {
+                                    showWidgetMenu = false
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(isCompactPhoneLayout ? .small : .regular)
+                            }
+                            .padding(.bottom, 2)
+
+                            customizePopoverContent
+                        }
+                        .padding(.horizontal, isCompactPhoneLayout ? 14 : 24)
+                        .padding(.vertical, isCompactPhoneLayout ? 14 : 22)
+                        .frame(
+                            maxWidth: isCompactPhoneLayout ? max(0, geo.size.width - 20) : min(540, max(0, geo.size.width - 80)),
+                            alignment: .leading
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .background(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.96))
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+        #else
+        orderDetailHeaderContent
+            .popover(isPresented: $showWidgetMenu, arrowEdge: .bottom) {
+                customizePopoverContent
+            }
+        #endif
+    }
+
+    private var orderDetailHeaderContent: some View {
+        HStack(spacing: isPhoneLayout ? 8 : 12) {
+            orderDetailTitle
+
+            #if os(macOS)
+            if !isPhoneLayout {
+                orderDetailHeaderMeta
+            }
+            #endif
+
+            Spacer(minLength: 8)
+
+            cardLayoutLockButton
+            orderDetailActionsMenu
+        }
+        .padding(.horizontal, isPhoneLayout ? 12 : 20)
+        .padding(.vertical, isPhoneLayout ? 7 : 14)
+        .background(colorScheme == .dark ? Color(white: 0.08) : Color.white.opacity(0.92))
+        #if os(macOS)
+        .contextMenu {
+            orderDetailHeaderDetailsMenu
+        }
+        #endif
+    }
+
+    private var orderDetailDisplayName: String {
+        let cleaned = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || cleaned == "New Order" || cleaned == "New Project" || cleaned == "Yeni Sipariş" || cleaned == "Yeni Proje" {
+            return t("New Project", lang: seciliDil)
+        }
+        return cleaned
+    }
+
+    private var orderDetailTitle: some View {
+        Text(orderDetailDisplayName)
+            .font(.system(size: isPhoneLayout ? 16 : 22, weight: .bold))
+            .foregroundColor(isHoveringTitle ? .blue : .primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .minimumScaleFactor(isPhoneLayout ? 0.82 : 0.90)
+            .contentShape(Rectangle())
+            .onHover { hover in
+                if !siparis.customerName.isEmpty {
+                    isHoveringTitle = hover
+                    if hover {
+                        PlatformCursor.pointingHandPush()
+                    } else {
+                        PlatformCursor.pop()
+                    }
+                }
+            }
+            .onTapGesture {
+                if !siparis.customerName.isEmpty,
+                   let m = firebaseManager.musteriler.first(where: { $0.name.lowercased() == siparis.customerName.lowercased() }) {
+                    seciliMusteri = m
+                    withAnimation { aktifSekme = "Customers" }
+                }
+            }
+            .frame(maxWidth: isPhoneLayout ? .infinity : 420, alignment: .leading)
+    }
+
+    private var orderDetailNextScheduleItem: ScheduleAlertItem? {
+        let now = Date()
+        return activeScheduleItems.sorted { first, second in
+            let firstOverdue = first.dueAt < now
+            let secondOverdue = second.dueAt < now
+            if firstOverdue != secondOverdue { return firstOverdue }
+            return first.dueAt < second.dueAt
+        }.first
+    }
+
+    private var orderDetailHeaderMeta: some View {
+        HStack(spacing: 10) {
+            if orderDetailHeaderShowUpcomingSchedule, let schedule = orderDetailNextScheduleItem {
+                orderDetailHeaderChip(
+                    icon: "bell.badge.fill",
+                    text: "\(schedule.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? lt("Reminder") : schedule.title) · \(scheduleRelativeText(schedule))",
+                    color: scheduleStatusColor(schedule)
+                )
+            }
+
+            if orderDetailHeaderShowDeliveryTime {
+                orderDetailHeaderChip(
+                    icon: "calendar.badge.clock",
+                    text: privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers),
+                    color: kalanGunRengi(siparis: siparis)
+                )
+            }
+
+            if orderDetailHeaderShowOrderValue && canAccessFinancialInfo {
+                orderDetailHeaderChip(
+                    icon: "sterlingsign.circle.fill",
+                    text: privacyCurrency(siparis.paidAmount + siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers),
+                    color: .green
+                )
+            }
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func orderDetailHeaderChip(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+            Text(text)
+                .font(.system(size: 13.5, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .truncationMode(.tail)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(color.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(color.opacity(0.28), lineWidth: 1)
+        )
+        .frame(maxWidth: 230, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var orderDetailHeaderDetailsMenu: some View {
+        Menu {
+            Button { orderDetailHeaderShowDeliveryTime.toggle() } label: {
+                Label(t("Delivery Time", lang: seciliDil), systemImage: orderDetailHeaderShowDeliveryTime ? "checkmark.circle.fill" : "circle")
+            }
+            Button { orderDetailHeaderShowUpcomingSchedule.toggle() } label: {
+                Label(t("Upcoming Schedule", lang: seciliDil), systemImage: orderDetailHeaderShowUpcomingSchedule ? "checkmark.circle.fill" : "circle")
+            }
+            if canAccessFinancialInfo {
+                Button { orderDetailHeaderShowOrderValue.toggle() } label: {
+                    Label(t("Order Value", lang: seciliDil), systemImage: orderDetailHeaderShowOrderValue ? "checkmark.circle.fill" : "circle")
+                }
+            }
+        } label: {
+            Label(t("Order Header Details", lang: seciliDil), systemImage: "rectangle.topthird.inset.filled")
+        }
+    }
+
+    private var cardLayoutLockButton: some View {
+        Button {
+            withAnimation(.snappy) {
+                workspaceCardsLocked.toggle()
+                draggedKart = nil
+            }
+            CardDragCoordinator.shared.endSession()
+            PlatformCursor.arrowSet()
+        } label: {
+            if isPhoneLayout {
+                Image(systemName: workspaceCardsLocked ? "lock.fill" : "lock.open.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 34, height: 34)
+                    .background(Color.primary.opacity(0.055))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.primary.opacity(workspaceCardsLocked ? 0.14 : 0.08), lineWidth: 1)
+                    )
+            } else {
+                HStack(spacing: 7) {
+                    Image(systemName: workspaceCardsLocked ? "lock.fill" : "lock.open.fill")
+                    Text(t(workspaceCardsLocked ? "Cards Locked" : "Cards Unlocked", lang: seciliDil))
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.055))
+                .foregroundColor(.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.primary.opacity(workspaceCardsLocked ? 0.14 : 0.08), lineWidth: 1)
+                )
+            }
+        }
+        .buttonStyle(.plain)
+        .help(t(workspaceCardsLocked ? "Unlock cards" : "Lock cards", lang: seciliDil))
+        .accessibilityLabel(t(workspaceCardsLocked ? "Unlock cards" : "Lock cards", lang: seciliDil))
+    }
+
+    private var orderDetailActionsMenu: some View {
+        Menu {
+            Button {
+                showWidgetMenu = true
+            } label: {
+                Label(t("Customize", lang: seciliDil), systemImage: "slider.horizontal.3")
+            }
+
+            Button {
+                exportToPDF()
+            } label: {
+                Label(t("Export PDF", lang: seciliDil), systemImage: "doc.badge.plus")
+            }
+        } label: {
+            if isPhoneLayout {
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.blue.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                HStack(spacing: 7) {
+                    Image(systemName: "ellipsis.circle")
+                    Text(t("Actions", lang: seciliDil))
+                }
+                .font(.system(size: 13, weight: .bold))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.1))
+                .foregroundColor(.blue)
+                .cornerRadius(8)
+            }
+        }
+        .menuStyle(.borderlessButton)
+    }
+
+    private func previousOrderSnapshot(_ applyOldValue: (inout Siparis) -> Void) -> Siparis {
+        var previous = siparis
+        applyOldValue(&previous)
+        return previous
+    }
+
+    private func saveOrderDetailChange(previousSiparis: Siparis) {
+        if pendingOrderDetailPreviousSiparis == nil {
+            pendingOrderDetailPreviousSiparis = previousSiparis
+        }
+        orderDetailAutosaveWorkItem?.cancel()
+
+        let orderToSave = siparis
+        let previous = pendingOrderDetailPreviousSiparis ?? previousSiparis
+        let manager = firebaseManager
+        let workItem = DispatchWorkItem {
+            manager.updateSiparis(orderToSave, previousSiparis: previous)
+            DispatchQueue.main.async {
+                pendingOrderDetailPreviousSiparis = nil
+                orderDetailAutosaveWorkItem = nil
+            }
+        }
+        orderDetailAutosaveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: workItem)
+    }
+
+    private func flushOrderDetailAutosave() {
+        orderDetailAutosaveWorkItem?.cancel()
+        if let previous = pendingOrderDetailPreviousSiparis {
+            firebaseManager.updateSiparis(siparis, previousSiparis: previous)
+        }
+        pendingOrderDetailPreviousSiparis = nil
+        orderDetailAutosaveWorkItem = nil
+    }
+
+    private func isCustomerCustomFieldKey(_ key: String) -> Bool {
+        if key == "communicationAddress" || key == "Address" || key == "communicationCustomerNotes" {
+            return true
+        }
+        if key.hasPrefix("communicationChannel::") {
+            return true
+        }
+        let customCustomerFields = Set(customFieldsList.map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) })
+        return customCustomerFields.contains(key.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private func isSpecialNoteCustomFieldKey(_ key: String) -> Bool {
+        key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().hasPrefix("specialnote::")
+    }
+
+    private func shouldAutosaveInlineCustomFields(previous: [String: String], next: [String: String]) -> Bool {
+        let changedKeys = Set(previous.keys).union(Set(next.keys)).filter { previous[$0] != next[$0] }
+        return changedKeys.contains { isCustomerCustomFieldKey($0) || isSpecialNoteCustomFieldKey($0) }
+    }
+
+    private var orderDetailAutosaveObservers: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: siparis.customerName) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.customerName = oldValue }) }
+            .onChange(of: siparis.designName) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.designName = oldValue }) }
+            .onChange(of: siparis.emailAddress) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.emailAddress = oldValue }) }
+            .onChange(of: siparis.whatsappNumber) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.whatsappNumber = oldValue }) }
+            .onChange(of: siparis.instagramUsername) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.instagramUsername = oldValue }) }
+            .onChange(of: siparis.communication) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.communication = oldValue }) }
+            .onChange(of: siparis.paymentDate) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.paymentDate = oldValue }) }
+            .onChange(of: siparis.notes) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.notes = oldValue }) }
+            .onChange(of: siparis.customFields ?? [:]) { oldValue, newValue in
+                if shouldAutosaveInlineCustomFields(previous: oldValue, next: newValue) {
+                    saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.customFields = oldValue })
+                }
+            }
+    }
+
+    private func handleOrderDetailDisappear() {
+        liveTrackingListener?.remove()
+        liveTrackingListener = nil
+        trackingAutoSyncWorkItem?.cancel()
+        workspaceProfilesCloudListener?.remove()
+        workspaceProfilesCloudListener = nil
+        flushOrderDetailAutosave()
+        if firebaseManager.siparisler.contains(where: { $0.id == siparis.id }) {
+            firebaseManager.updateSiparis(siparis)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            orderDetailHeader
+            Divider().background(Color.primary.opacity(0.1))
+            
+            if isPhoneLayout {
+                phoneCalismaAlani
+            } else {
+                calismaAlani
+            }
+        }
+        .background(orderDetailAutosaveObservers)
+        .onAppear { yukleSutunGenislikleri(); yukleHafiza(); ensureSharedWorkspaceSnapshot(); loadWorkspaceProfiles(); loadWorkspaceUserProfiles(); migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded(); startWorkspaceProfilesCloudListener(); startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); refreshSharedClientFilesInbox(); if siparis.taxRate == 0 { siparis.taxRate = defaultTaxRate }; otomatikKesintiHesapla() }
+        .onOpenURL { url in
+            if url.scheme?.lowercased() == "studioflow" {
+                refreshSharedClientFilesInbox()
+                if !sharedClientFilesInbox.isEmpty {
+                    clientFileMessage = t("Shared file is ready. Open the correct order and tap Add here.", lang: seciliDil)
+                }
+            }
+        }
+        .onChange(of: siparis.id) { _, _ in startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); otomatikKesintiHesapla() }
+        .onChange(of: siparis.customFields?[orderWorkspaceLayoutKey]) { _, _ in loadWorkspaceForCurrentOrderIfNeeded() }
+        .onChange(of: siparis.paymentDate) { _, yeniTarih in if taxMilestoneEnabled { let milat = Date(timeIntervalSince1970: taxMilestoneDate); let yeniTip = yeniTarih >= milat ? "Revenue" : "Profit"; if siparis.taxType != yeniTip { siparis.taxType = yeniTip; otomatikKesintiHesapla() } } }
+        .onChange(of: siparis.status) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Order Status", oldValue: oldValue, newValue: newValue) }
+        .onChange(of: siparis.designStatus) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Design Status", oldValue: oldValue, newValue: newValue) }
+        .onChange(of: siparis.priority) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Priority", oldValue: oldValue, newValue: newValue) }
+        .onChange(of: siparis.risk) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Risk", oldValue: oldValue, newValue: newValue) }
+        .onChange(of: siparis.riskReason) { _, _ in firebaseManager.updateSiparis(siparis) }
+        .onChange(of: siparis.notes) { oldValue, newValue in if oldValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { recordOrderHistoryEvent(title: "Note added", value: "Special Notes"); firebaseManager.updateSiparis(siparis) } }
+        .onChange(of: sutunGenislikleri) { _, _ in yenileCalismaAlaniHitbox(delay: 0.01) }
+        .onDisappear(perform: handleOrderDetailDisappear)
+        .alert(t("Upload Policy", lang: seciliDil), isPresented: $showUploadSafetyPrompt) {
+            Button(t("Cancel", lang: seciliDil), role: .cancel) {
+                pendingUploadSafetyURL = nil
+                pendingUploadSafetySource = "order_preview"
+            }
+            Button(t("I Agree and Upload", lang: seciliDil)) {
+                uploadSafetyPolicyAccepted = true
+                if let url = pendingUploadSafetyURL {
+                    if pendingUploadSafetySource == "client_file" {
+                        clientFileBulutaYukle(url: url)
+                    } else {
+                        goruntuBulutaYukle(url: url)
+                    }
+                }
+                pendingUploadSafetyURL = nil
+                pendingUploadSafetySource = "order_preview"
+            }
+        } message: {
+            Text(t("Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.", lang: seciliDil))
+        }
+        .alert(t("Upload blocked", lang: seciliDil), isPresented: $showUploadSafetyError) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(uploadSafetyErrorMessage)
+        }
+        .sheet(item: $pdfShareItem) { item in
+            #if os(iOS)
+            FileShareSheet(url: item.url)
+            #else
+            EmptyView()
+            #endif
+        }
+        .sheet(item: $clientFilePreviewItem) { item in
+            ClientFilePreviewSheet(
+                items: clientFileItems,
+                initialItemID: item.id,
+                language: seciliDil,
+                isAvailableOffline: { firebaseManager.isClientFileAvailableOffline($0) },
+                offlineURLProvider: { firebaseManager.offlineClientFileURL(for: $0) },
+                onDownload: { downloadClientFileToUserLocation($0) },
+                onMakeOffline: { makeClientFileAvailableOffline($0) },
+                onOpenExternal: { openClientFileExternally($0) }
+            )
+        }
+        .sheet(item: $headingEditorTarget) { kart in
+            BlockHeadingsEditorSheet(
+                kartTipi: kart,
+                customStepsJSON: $customStepsJSON,
+                customFieldsJSON: $customFieldsJSON,
+                financialExpenseItemsJSON: $financialExpenseItemsJSON,
+                financialRemainingItemsJSON: $financialRemainingItemsJSON,
+                financialShowBaseCost: $financialShowBaseCost,
+                financialBaseCostLabel: $financialBaseCostLabel,
+                summaryStep1: $summaryStep1,
+                summaryStep2: $summaryStep2,
+                orderListStep1: $orderListStep1,
+                orderListStep2: $orderListStep2,
+                invLabel1: $invLabel1,
+                invLabel2: $invLabel2,
+                invLabel3: $invLabel3,
+                invLabel4: $invLabel4,
+                materialsTogglesJSON: $materialsTogglesJSON,
+                materialsDefaultChecksJSON: $materialsDefaultChecksJSON,
+                communicationShowTelephone: $communicationShowTelephone,
+                communicationShowEmail: $communicationShowEmail,
+                communicationShowAddress: $communicationShowAddress,
+                communicationShowChannel: $communicationShowChannel,
+                communicationShowCustomerNotes: $communicationShowCustomerNotes,
+                communicationChannelLabelsJSON: $communicationChannelLabelsJSON,
+                specialNoteSectionsJSON: $specialNoteSectionsJSON
+            )
+        }
+    }
+    
+
+    @ViewBuilder
+    private var workspaceLayoutModeButtons: some View {
+        if isCurrentOrderIndependent {
+            Button {
+                saveCurrentLayoutForOrder(showMessage: true)
+            } label: {
+                Label(t("Save this order", lang: seciliDil), systemImage: "tray.and.arrow.down")
+            }
+
+            Button {
+                resetCurrentOrderLayoutToShared()
+            } label: {
+                Label(t("Rejoin shared", lang: seciliDil), systemImage: "arrow.triangle.2.circlepath")
+            }
+        } else {
+            Button {
+                detachCurrentOrderFromShared()
+            } label: {
+                Label(t("Make this order independent", lang: seciliDil), systemImage: "square.on.square.dashed")
+            }
+
+            Button {
+                saveSharedLayout(showMessage: true)
+            } label: {
+                Label(t("Save shared", lang: seciliDil), systemImage: "tray.and.arrow.down")
+            }
+        }
+    }
+
+    private func workspaceProfileNameField(index: Int) -> some View {
+        TextField(
+            t("Profile name", lang: seciliDil),
+            text: Binding(
+                get: {
+                    workspaceProfiles.indices.contains(index) ? workspaceProfiles[index].name : ""
+                },
+                set: { newName in
+                    guard workspaceProfiles.indices.contains(index) else { return }
+                    workspaceProfiles[index].name = newName
+                    saveWorkspaceProfilesToStorage()
+                }
+            )
+        )
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 12, weight: .semibold))
+        .frame(minWidth: isCompactPhoneLayout ? 0 : 120)
+    }
+
+    @ViewBuilder
+    private func workspaceProfileActionButtons(index: Int) -> some View {
+        Button(t("Save", lang: seciliDil)) {
+            saveWorkspaceProfile(at: index)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+
+        Button(t("Load", lang: seciliDil)) {
+            loadWorkspaceProfile(at: index)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(!workspaceProfiles.indices.contains(index) || workspaceProfiles[index].snapshotJSON.isEmpty)
+
+        Button(role: .destructive) {
+            deleteWorkspaceProfile(at: index)
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .disabled(workspaceProfiles.count <= 1)
+    }
+
+    @ViewBuilder
+    private func workspaceUserProfileRow(index: Int) -> some View {
+        if workspaceUserProfiles.indices.contains(index) {
+            let profile = workspaceUserProfiles[index]
+            let isMine = profile.userId == currentWorkspaceProfileUserId
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    workspaceUserProfileLabel(profile, isMine: isMine)
+                    Spacer(minLength: 4)
+                    workspaceUserProfileButtons(index: index, isMine: isMine)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    workspaceUserProfileLabel(profile, isMine: isMine)
+                    workspaceUserProfileButtons(index: index, isMine: isMine)
+                }
+            }
+            .padding(8)
+            .background(isMine ? Color.blue.opacity(0.08) : Color.gray.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    private func workspaceUserProfileLabel(_ profile: WorkspaceUserProfileDTO, isMine: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(workspaceUserProfileDisplayName(profile))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                if isMine {
+                    Text(t("Mine", lang: seciliDil))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            Text(workspaceUserProfileSubtitle(profile))
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func workspaceUserProfileButtons(index: Int, isMine: Bool) -> some View {
+        HStack(spacing: 8) {
+            let isFollowingThisProfile = workspaceUserProfiles.indices.contains(index) && workspaceUserProfiles[index].userId == workspaceFollowedTeamProfileUserId
+
+            Button(isMine ? t("Load", lang: seciliDil) : (isFollowingThisProfile ? t("Synced", lang: seciliDil) : t("Sync", lang: seciliDil))) {
+                loadWorkspaceUserProfile(at: index)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!workspaceUserProfiles.indices.contains(index) || workspaceUserProfiles[index].snapshotJSON.isEmpty)
+        }
+    }
+
+    private func teamWorkspaceUserProfileIndicesForDisplay() -> [Int] {
+        workspaceUserProfiles.indices.filter { index in
+            workspaceUserProfiles[index].userId != currentWorkspaceProfileUserId
+        }
+    }
+
+    private var customizePopoverContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t("Workspace Customization", lang: seciliDil))
+                    .font(.system(size: isCompactPhoneLayout ? 18 : 20, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Text(t("Choose which blocks are visible and manage the layout for this order.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            customizeSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill((isCurrentOrderIndependent ? studioWarningOrange : Color.blue).opacity(0.14))
+                                .frame(width: 38, height: 38)
+
+                            Image(systemName: isCurrentOrderIndependent ? "lock.open.fill" : "square.stack.3d.up")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(isCurrentOrderIndependent ? studioWarningOrange : .blue)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(t("Workspace Customization", lang: seciliDil))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.primary)
+
+                            Text(isCurrentOrderIndependent
+                                 ? t("This order has its own layout", lang: seciliDil)
+                                 : t("This order uses the shared layout", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+
+                    Text(isCurrentOrderIndependent
+                         ? t("Changes you make here will affect only this order. Other orders continue using the shared layout.", lang: seciliDil)
+                         : t("Changes you make here update the shared layout for all normal orders. You can separate only this order whenever needed.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            workspaceLayoutModeButtons
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            workspaceLayoutModeButtons
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            customizeSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(t("Layout Profiles", lang: seciliDil))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.primary)
+
+                            Text(t("Save and load different card layout presets for this order area.", lang: seciliDil))
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            addWorkspaceProfile()
+                        } label: {
+                            Label(t("Add", lang: seciliDil), systemImage: "plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    ForEach(workspaceProfiles.indices, id: \.self) { index in
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) {
+                                workspaceProfileNameField(index: index)
+                                workspaceProfileActionButtons(index: index)
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                workspaceProfileNameField(index: index)
+
+                                HStack(spacing: 8) {
+                                    workspaceProfileActionButtons(index: index)
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                }
+            }
+
+            if !workspaceStatusMessage.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text(workspaceStatusMessage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.green)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.green.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Workspace Blocks", lang: seciliDil))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.primary)
+
+                    Text(t("Show or hide the cards you want to see in the order detail workspace.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: 10) {
+                    workspaceBlockToggleRow(kart: .preview)
+                    workspaceBlockToggleRow(kart: .summary)
+                    workspaceBlockToggleRow(kart: .customer)
+                    workspaceBlockToggleRow(kart: .materials)
+                    workspaceBlockToggleRow(kart: .priority)
+                    workspaceBlockToggleRow(kart: .delivery)
+                    workspaceBlockToggleRow(kart: .notes)
+                    if canAccessClientFiles {
+                        workspaceBlockToggleRow(kart: .clientFiles)
+                    }
+                    workspaceBlockToggleRow(kart: .todo)
+                    workspaceBlockToggleRow(kart: .workTime)
+                    if canAccessFinancialInfo {
+                        workspaceBlockToggleRow(kart: .financial)
+                    }
+                    workspaceBlockToggleRow(kart: .status)
+                    workspaceBlockToggleRow(kart: .shipping)
+                    if workspaceAccessAllows("schedule") {
+                        workspaceBlockToggleRow(kart: .schedule)
+                    }
+                    workspaceBlockToggleRow(kart: .historyLog)
+                }
+            }
+        }
+        .padding(isCompactPhoneLayout ? 14 : 18)
+        .frame(maxWidth: isCompactPhoneLayout ? .infinity : 500, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func customizeSectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(14)
+            .background(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.06), lineWidth: 1)
+            )
+    }
+
+    private func workspaceBlockTitle(for kart: KartTipi) -> String {
+        switch kart {
+        case .preview: return t("Preview", lang: seciliDil)
+        case .summary: return t("Order Summary", lang: seciliDil)
+        case .customer: return t("Customer & Communication", lang: seciliDil)
+        case .delivery: return t("Delivery", lang: seciliDil)
+        case .communication: return t("Communication", lang: seciliDil)
+        case .notes: return t("Notes", lang: seciliDil)
+        case .financial: return t("Financial Info", lang: seciliDil)
+        case .status: return t("Production Status", lang: seciliDil)
+        case .shipping: return t("Shipping & Tracking", lang: seciliDil)
+        case .schedule: return lt("Schedule & Alerts")
+        case .historyLog: return lt("History / Log")
+        case .clientFiles: return t("Client Files", lang: seciliDil)
+        case .todo: return t("To Do", lang: seciliDil)
+        case .workTime: return t("Work Time", lang: seciliDil)
+        case .customerNotes: return t("Customer Notes", lang: seciliDil)
+        case .materials: return t("Materials & Inventory", lang: seciliDil)
+        case .priority: return t("Priority / Risk", lang: seciliDil)
+        }
+    }
+
+    private func cardHeaderIcon(for kart: KartTipi) -> String {
+        switch kart {
+        case .preview: return "photo"
+        case .summary: return "doc.text"
+        case .customer: return "person.crop.circle"
+        case .delivery: return "calendar.badge.clock"
+        case .communication: return "bubble.left.and.bubble.right"
+        case .notes: return "note.text"
+        case .financial: return getCurrencyIcon()
+        case .status: return "paintbrush.pointed"
+        case .shipping: return "airplane.departure"
+        case .schedule: return "bell.badge.fill"
+        case .historyLog: return "clock.arrow.circlepath"
+        case .clientFiles: return "folder.badge.person.crop"
+        case .todo: return "checklist"
+        case .workTime: return "timer"
+        case .customerNotes: return "person.text.rectangle"
+        case .materials: return "shippingbox.circle.fill"
+        case .priority: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func workspaceBlockIcon(for kart: KartTipi) -> String {
+        cardHeaderIcon(for: kart)
+    }
+
+    private func workspaceBlockAccent(for kart: KartTipi) -> Color {
+        switch kart {
+        case .preview: return .blue
+        case .summary: return .indigo
+        case .customer: return .teal
+        case .delivery: return studioWarningOrange
+        case .communication: return .mint
+        case .notes: return .purple
+        case .financial: return .green
+        case .status: return .pink
+        case .shipping: return .brown
+        case .schedule: return studioWarningOrange
+        case .historyLog: return .gray
+        case .clientFiles: return .blue
+        case .todo: return .purple
+        case .workTime: return .blue
+        case .customerNotes: return .cyan
+        case .materials: return studioWarningOrange
+        case .priority: return .red
+        }
+    }
+
+    private func requiredPlanForCard(_ kart: KartTipi) -> StudioBillingPlan? {
+        switch kart {
+        case .materials, .historyLog:
+            return .lifetimeLite
+        case .clientFiles:
+            return .proMonthly
+        default:
+            return nil
+        }
+    }
+
+    private func isCardAllowedByPlan(_ kart: KartTipi) -> Bool {
+        switch kart {
+        case .financial:
+            return authVM.currentPlanEntitlements.financialCardsEnabled
+        case .materials:
+            return authVM.currentPlanEntitlements.materialsInventoryCardsEnabled
+        case .historyLog:
+            return authVM.currentPlanEntitlements.historyLogEnabled
+        case .clientFiles:
+            return authVM.currentPlanEntitlements.clientFilesEnabled
+        default:
+            return true
+        }
+    }
+
+    private func openPlanAccessFromLockedFeature() {
+        settingsStartSection = "Plan & Access"
+        withAnimation {
+            aktifSekme = "Settings"
+        }
+    }
+
+    private func requiredPlanLabel(for kart: KartTipi) -> String {
+        t(requiredPlanForCard(kart)?.displayName ?? "", lang: seciliDil)
+    }
+
+    private func workspaceBlockToggleRow(kart: KartTipi) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: cardHeaderIcon(for: kart))
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workspaceBlockTitle(for: kart))
+                    .font(.system(size: isCompactPhoneLayout ? 15 : 16, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !isCardAllowedByPlan(kart), !requiredPlanLabel(for: kart).isEmpty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(t("Available from", lang: seciliDil) + " " + requiredPlanLabel(for: kart))
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(studioWarningOrange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(studioWarningOrange.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: visibilityBinding(for: kart))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(.blue)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05), lineWidth: 1)
+        )
+    }
+
+    private var allCardsFlatUnique: [KartTipi] {
+        var seen: Set<KartTipi> = []
+        var result: [KartTipi] = []
+
+        for column in kartYerlesimi {
+            for kart in column where !seen.contains(kart) {
+                seen.insert(kart)
+                result.append(kart)
+            }
+        }
+
+        return result
+    }
+
+    private var normalizedPhoneKartSirasiValue: [KartTipi] {
+        let allCards = allCardsFlatUnique
+        var seen: Set<KartTipi> = []
+        var result: [KartTipi] = []
+
+        let storedCards = phoneKartSirasi.isEmpty ? decodedPhoneKartSirasi() : phoneKartSirasi
+
+        for kart in storedCards where allCards.contains(kart) && !seen.contains(kart) {
+            seen.insert(kart)
+            result.append(kart)
+        }
+
+        for kart in allCards where !seen.contains(kart) {
+            seen.insert(kart)
+            result.append(kart)
+        }
+
+        return result
+    }
+
+    private var visiblePhoneCards: [KartTipi] {
+        normalizedPhoneKartSirasiValue.filter { isCardVisible($0) }
+    }
+
+    private var phoneCalismaAlani: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(spacing: 14) {
+                ForEach(visiblePhoneCards) { kart in
+                    kartGosterici(icin: kart, colIndex: 0)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .background(bgMainForPhone)
+        .onAppear {
+            normalizePhoneKartSirasi()
+        }
+        .onChange(of: kartYerlesimi) { _, _ in
+            normalizePhoneKartSirasi()
+        }
+        .onChange(of: phoneKartSirasiJSON) { _, _ in
+            if let decoded = try? JSONDecoder().decode([KartTipi].self, from: Data(phoneKartSirasiJSON.utf8)) {
+                phoneKartSirasi = decoded
+                normalizePhoneKartSirasi()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .phoneCardMoveRequested)) { notification in
+            handlePhoneCardMoveRequest(notification)
+        }
+    }
+
+    private var bgMainForPhone: Color {
+        colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.93)
+    }
+
+    private func decodedPhoneKartSirasi() -> [KartTipi] {
+        guard let data = phoneKartSirasiJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([KartTipi].self, from: data) else {
+            return []
+        }
+
+        return decoded
+    }
+
+    private func normalizePhoneKartSirasi() {
+        let normalized = normalizedPhoneKartSirasiValue
+        if phoneKartSirasi != normalized {
+            phoneKartSirasi = normalized
+            savePhoneKartSirasi()
+        }
+    }
+
+    private func savePhoneKartSirasi() {
+        if let data = try? JSONEncoder().encode(phoneKartSirasi),
+           let str = String(data: data, encoding: .utf8) {
+            phoneKartSirasiJSON = str
+        }
+    }
+
+    private func handlePhoneCardMoveRequest(_ notification: Notification) {
+        guard isPhoneLayout,
+              let rawCard = notification.userInfo?["card"] as? String,
+              let kart = KartTipi(rawValue: rawCard),
+              let action = notification.userInfo?["action"] as? String else { return }
+
+        movePhoneCard(kart, action: action)
+    }
+
+    private func movePhoneCard(_ kart: KartTipi, action: String) {
+        normalizePhoneKartSirasi()
+
+        let visible = phoneKartSirasi.filter { isCardVisible($0) }
+        guard let visibleIndex = visible.firstIndex(of: kart) else { return }
+
+        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.08)) {
+            switch action {
+            case "up":
+                guard visibleIndex > 0 else { return }
+                movePhoneCard(kart, before: visible[visibleIndex - 1])
+
+            case "down":
+                guard visibleIndex < visible.count - 1 else { return }
+                movePhoneCard(kart, after: visible[visibleIndex + 1])
+
+            case "top":
+                guard let firstVisible = visible.first, firstVisible != kart else { return }
+                movePhoneCard(kart, before: firstVisible)
+
+            case "bottom":
+                guard let lastVisible = visible.last, lastVisible != kart else { return }
+                movePhoneCard(kart, after: lastVisible)
+
+            default:
+                return
+            }
+        }
+
+        savePhoneKartSirasi()
+        persistWorkspaceCustomizationChange()
+    }
+
+    private func movePhoneCard(_ kart: KartTipi, before target: KartTipi) {
+        phoneKartSirasi.removeAll { $0 == kart }
+
+        if let targetIndex = phoneKartSirasi.firstIndex(of: target) {
+            phoneKartSirasi.insert(kart, at: targetIndex)
+        } else {
+            phoneKartSirasi.insert(kart, at: 0)
+        }
+    }
+
+    private func movePhoneCard(_ kart: KartTipi, after target: KartTipi) {
+        phoneKartSirasi.removeAll { $0 == kart }
+
+        if let targetIndex = phoneKartSirasi.firstIndex(of: target) {
+            phoneKartSirasi.insert(kart, at: min(targetIndex + 1, phoneKartSirasi.count))
+        } else {
+            phoneKartSirasi.append(kart)
+        }
+    }
+
+    private func bitirTelefonSuruklemeyiVeKaydet() {
+        showWorkspaceEmptyDropTargets = false
+        workspaceCardInsertDropTarget = nil
+        CardDragCoordinator.shared.endSession()
+        draggedKart = nil
+        PlatformCursor.arrowSet()
+        normalizePhoneKartSirasi()
+        savePhoneKartSirasi()
+        persistWorkspaceCustomizationChange()
+    }
+
+    private var calismaAlani: some View {
+        GeometryReader { geo in
+            SoftStyledWorkspaceScrollView(colorScheme: colorScheme, expectedContentSize: calismaAlaniGercekIcerikBoyutu(viewport: geo.size), enablePinchZoom: isPadLayout, zoomScale: $iPadWorkspaceZoomScale) {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(workspaceColumnIndicesForDisplay(), id: \.self) { colIndex in
+                        workspaceColumnView(colIndex: colIndex, viewportHeight: geo.size.height)
+
+                        if colIndex < workspaceLastVisibleColumnIndexForDisplay() {
+                            SutunAyirici(width: getBinding(for: colIndex)) {
+                                saveWidths()
+                            }
+                        }
+                    }
+                }
+                .padding(30)
+                .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
+                .background(WorkspacePanSurface())
+                .background(uiTetikleyici ? Color.clear.opacity(0.001) : Color.clear)
+            }
+            .padding(.bottom, macOSHitboxHack)
+            .onAppear {
+                guncelleSutunSayisi(viewport: geo.size)
+            }
+            .onChange(of: geo.size) { _, yeniBoyut in
+                guncelleSutunSayisi(viewport: yeniBoyut)
+            }
+            .onChange(of: draggedKart) { _, yeniKart in
+                if let yeniKart {
+                    if kartYerlesimiBeforeDrag == nil {
+                        kartYerlesimiBeforeDrag = kartYerlesimi
+                    }
+                    prepareWorkspaceEmptyDropTargetsForDrag()
+                    showWorkspaceEmptyDropTargets = true
+
+                    // If iPad/iPhone/macOS cancels the drop callback after a real reorder,
+                    // avoid leaving the right-side empty target flickering open.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                        if draggedKart == yeniKart,
+                           CardDragCoordinator.shared.reachedDropTarget {
+                            showWorkspaceEmptyDropTargets = false
+                        }
+                    }
+                } else {
+                    showWorkspaceEmptyDropTargets = false
+                    workspaceCardInsertDropTarget = nil
+                }
+            }
+        }
+    }
+
+    private func lastColumnWithVisibleCard() -> Int {
+        kartYerlesimi.indices.last { index in
+            kartYerlesimi[index].contains { isCardVisible($0) }
+        } ?? 0
+    }
+
+    private func workspaceLastVisibleColumnIndexForDisplay() -> Int {
+        guard !kartYerlesimi.isEmpty else { return 0 }
+
+        // Mac: keep the workspace width stable after drag/drop.
+        // Without this, hiding the temporary empty columns can make all cards visually slide sideways.
+        if shouldKeepStableWorkspaceWidth {
+            return max(0, kartYerlesimi.count - 1)
+        }
+
+        if showWorkspaceEmptyDropTargets && draggedKart != nil {
+            return max(0, kartYerlesimi.count - 1)
+        }
+
+        return min(max(0, lastColumnWithVisibleCard()), max(0, kartYerlesimi.count - 1))
+    }
+
+    private func workspaceColumnIndicesForDisplay() -> [Int] {
+        guard !kartYerlesimi.isEmpty else { return [] }
+        return Array(0...workspaceLastVisibleColumnIndexForDisplay())
+    }
+
+    private func prepareWorkspaceEmptyDropTargetsForDrag() {
+        guard !kartYerlesimi.isEmpty else { return }
+
+        // If all currently available columns are occupied, create one temporary empty column
+        // so users can drag from the 4th column into a 5th one.
+        let lastFilledIndex = lastColumnWithVisibleCard()
+        let neededCount = min(8, max(kartYerlesimi.count, lastFilledIndex + 2))
+
+        while kartYerlesimi.count < neededCount {
+            kartYerlesimi.append([])
+        }
+
+        while sutunGenislikleri.count < kartYerlesimi.count {
+            sutunGenislikleri.append(350)
+        }
+    }
+
+    private func visibleCards(in colIndex: Int) -> [KartTipi] {
+        guard kartYerlesimi.indices.contains(colIndex) else { return [] }
+        return kartYerlesimi[colIndex].filter { isCardVisible($0) }
+    }
+
+    @ViewBuilder
+    private func workspaceColumnView(colIndex: Int, viewportHeight: CGFloat) -> some View {
+        let cards = visibleCards(in: colIndex)
+        let isEmptyDropTarget = showWorkspaceEmptyDropTargets && draggedKart != nil && cards.isEmpty
+        let minColumnHeight = max(viewportHeight - 60, 520)
+        let visibleCardHeights = cards.reduce(CGFloat(0)) { total, kart in
+            total + CGFloat(kartYukseklikleri[kart.rawValue] ?? varsayilanKartYuksekligi(for: kart))
+        }
+        let visibleGapHeights = CGFloat(max(cards.count - 1, 0)) * 20
+        let bottomPanHeight = max(80, minColumnHeight - visibleCardHeights - visibleGapHeights)
+
+        if draggedKart == nil {
+            workspaceColumnContent(cards: cards, colIndex: colIndex, bottomPanHeight: bottomPanHeight)
+                .frame(width: getWidth(for: colIndex), alignment: .top)
+                .frame(minHeight: minColumnHeight, alignment: .top)
+                .background(WorkspacePanSurface())
+        } else {
+            workspaceColumnContent(cards: cards, colIndex: colIndex, bottomPanHeight: bottomPanHeight)
+                .frame(width: getWidth(for: colIndex), alignment: .top)
+                .frame(minHeight: minColumnHeight, alignment: .top)
+                .contentShape(Rectangle())
+                .background(WorkspacePanSurface())
+                .overlay {
+                    if isEmptyDropTarget {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(
+                                Color.blue.opacity(0.22),
+                                style: StrokeStyle(lineWidth: 1.2, dash: [7, 7])
+                            )
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.blue.opacity(0.035))
+                            )
+                            .allowsHitTesting(false)
+                    }
+                }
+                .onDrop(
+                    of: [.plainText, .text],
+                    delegate: BosKolonDropDelegate(
+                        columnIndex: colIndex,
+                        layout: $kartYerlesimi,
+                        draggedItem: $draggedKart,
+                        onDropEnd: bitirSuruklemeyiVeKaydet
+                    )
+                )
+            }
+        }
+
+    private func workspaceColumnContent(cards: [KartTipi], colIndex: Int, bottomPanHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(cards.enumerated()), id: \.element.id) { index, kart in
+                kartGosterici(icin: kart, colIndex: colIndex)
+                    .onDrop(
+                        of: [.plainText, .text],
+                        delegate: KartDropDelegate(
+                            item: kart,
+                            columnIndex: colIndex,
+                            layout: $kartYerlesimi,
+                            draggedItem: $draggedKart,
+                            onDropEnd: bitirSuruklemeyiVeKaydet
+                        )
+                    )
+
+                if index < cards.count - 1 {
+                    workspaceCardInsertGap(after: kart, colIndex: colIndex, height: 20)
+                }
+            }
+
+            if let lastCard = cards.last, draggedKart != nil {
+                workspaceCardInsertGap(after: lastCard, colIndex: colIndex, height: 54)
+                workspaceColumnPanGap(height: max(0, bottomPanHeight - 54))
+            } else {
+                workspaceColumnPanGap(height: bottomPanHeight)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func workspaceCardInsertGap(after kart: KartTipi, colIndex: Int, height: CGFloat) -> some View {
+        if draggedKart == nil {
+            WorkspacePanSurface()
+                .frame(maxWidth: .infinity)
+                .frame(height: max(0, height))
+        } else {
+            let isActive = workspaceCardInsertDropTarget == WorkspaceCardInsertDropTarget(columnIndex: colIndex, after: kart)
+            ZStack {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            Color.blue.opacity(0.28),
+                            style: StrokeStyle(lineWidth: 1.2, dash: [7, 7])
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.blue.opacity(0.045))
+                        )
+
+                    Text("Drop card here")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color.blue.opacity(0.76))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.10))
+                        .clipShape(Capsule())
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: isActive ? max(54, height) : max(26, height))
+            .contentShape(Rectangle())
+            .onDrop(
+                of: [.plainText, .text],
+                delegate: KartAralikDropDelegate(
+                    after: kart,
+                    columnIndex: colIndex,
+                    layout: $kartYerlesimi,
+                    draggedItem: $draggedKart,
+                    activeTarget: $workspaceCardInsertDropTarget,
+                    onDropEnd: bitirSuruklemeyiVeKaydet
+                )
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func workspaceColumnPanGap(height: CGFloat) -> some View {
+        if draggedKart == nil {
+            WorkspacePanSurface()
+                .frame(maxWidth: .infinity)
+                .frame(height: max(0, height))
+        } else {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: max(0, height))
+        }
+    }
+
+    private func calismaAlaniGercekIcerikBoyutu(viewport: CGSize) -> CGSize {
+        let padding: CGFloat = 60
+        let ayiriciGenisligi: CGFloat = 14
+
+        let sonDoluKolonIndex = lastColumnWithVisibleCard()
+
+        let hesaplanacakKolonSayisi: Int
+        if shouldKeepStableWorkspaceWidth {
+            hesaplanacakKolonSayisi = kartYerlesimi.count
+        } else if showWorkspaceEmptyDropTargets && draggedKart != nil {
+            hesaplanacakKolonSayisi = kartYerlesimi.count
+        } else {
+            hesaplanacakKolonSayisi = min(kartYerlesimi.count, max(1, sonDoluKolonIndex + 1))
+        }
+
+        let aktifKolonIndexleri = Array(0..<hesaplanacakKolonSayisi)
+
+        let toplamKolonGenisligi = aktifKolonIndexleri.reduce(CGFloat(0)) { toplam, index in
+            toplam + CGFloat(getWidth(for: index))
+        }
+
+        let toplamGenislik =
+            toplamKolonGenisligi +
+            CGFloat(max(0, hesaplanacakKolonSayisi - 1)) * ayiriciGenisligi +
+            padding
+
+        let kolonYukseklikleri = aktifKolonIndexleri.map { index -> CGFloat in
+            let gorunurKartlar = kartYerlesimi[index].filter { isCardVisible($0) }
+
+            let kartToplami = gorunurKartlar.reduce(CGFloat(0)) { toplam, kart in
+                toplam + CGFloat(kartYukseklikleri[kart.rawValue] ?? varsayilanKartYuksekligi(for: kart))
+            }
+
+            let kartAraliklari = CGFloat(max(0, gorunurKartlar.count - 1)) * 20
+            let altBosluk: CGFloat = 80
+
+            return padding + kartToplami + kartAraliklari + altBosluk
+        }
+
+        let toplamYukseklik = kolonYukseklikleri.max() ?? viewport.height
+        return CGSize(width: toplamGenislik, height: toplamYukseklik)
+    }
+
+    private func varsayilanKartYuksekligi(for kart: KartTipi) -> Double {
+        switch kart {
+        case .preview: return 250
+        case .financial: return 430
+        case .status: return 260
+        case .shipping: return 260
+        case .schedule: return 390
+        case .clientFiles: return 360
+        case .todo: return 360
+        case .workTime: return 380
+        case .historyLog: return historyLogPreferredCardHeight
+        case .notes, .customerNotes: return 220
+        case .summary: return 210
+        default: return 200
+        }
+    }
+
+    private func isCardVisible(_ kart: KartTipi) -> Bool {
+        guard canAccessCard(kart) else { return false }
+        switch kart {
+        case .preview: return showCardPreview
+        case .summary: return showCardSummary
+        case .customer: return showCardCustomer
+        case .delivery: return showCardDelivery
+        case .communication: return false
+        case .notes: return showCardNotes
+        case .financial: return canAccessFinancialInfo && showCardFinancial
+        case .status: return showCardStatus
+        case .shipping: return showCardShipping
+        case .schedule: return workspaceAccessAllows("schedule") && showCardSchedule
+        case .historyLog: return showCardHistoryLog
+        case .clientFiles: return canAccessClientFiles && showCardClientFiles
+        case .todo: return showCardToDo
+        case .workTime: return showCardWorkTime
+        case .customerNotes: return false
+        case .materials: return showCardMaterials
+        case .priority: return showCardPriority
+        }
+    }
+
+    private func setCardVisible(_ kart: KartTipi, _ visible: Bool, animated: Bool = true) {
+        let update = {
+            switch kart {
+            case .preview: showCardPreview = visible
+            case .summary: showCardSummary = visible
+            case .customer: showCardCustomer = visible
+            case .delivery: showCardDelivery = visible
+            case .communication: showCardCommunication = visible
+            case .notes: showCardNotes = visible
+            case .financial: showCardFinancial = visible
+            case .status: showCardStatus = visible
+            case .shipping: showCardShipping = visible
+            case .schedule: showCardSchedule = visible
+            case .historyLog: showCardHistoryLog = visible
+            case .clientFiles: showCardClientFiles = visible
+            case .todo: showCardToDo = visible
+            case .workTime: showCardWorkTime = visible
+            case .customerNotes: showCardCustomerNotes = visible
+            case .materials: showCardMaterials = visible
+            case .priority: showCardPriority = visible
+            }
+            yenileCalismaAlaniHitbox(delay: 0.01)
+            persistWorkspaceCustomizationChange()
+        }
+
+        if animated {
+            withAnimation(.snappy) { update() }
+        } else {
+            update()
+        }
+    }
+
+    private func setCardVisibleWithUndo(_ kart: KartTipi, _ visible: Bool) {
+        let oldValue = isCardVisible(kart)
+        guard oldValue != visible else { return }
+
+        setCardVisible(kart, visible)
+
+        firebaseManager.registerUIChange(
+            title: visible ? "Show Block" : "Hide Block",
+            undo: { setCardVisible(kart, oldValue) },
+            redo: { setCardVisible(kart, visible) }
+        )
+    }
+
+    private func visibilityBinding(for kart: KartTipi) -> Binding<Bool> {
+        Binding(
+            get: { isCardVisible(kart) },
+            set: { newValue in setCardVisible(kart, newValue) }
+        )
+    }
+
+    private var isCurrentOrderIndependent: Bool {
+        guard let json = siparis.customFields?[orderWorkspaceLayoutKey] else { return false }
+        return !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func ensureSharedWorkspaceSnapshot() {
+        if sharedWorkspaceSnapshotJSON.isEmpty {
+            if isCurrentOrderIndependent {
+                if let ownProfile = currentWorkspaceUserProfile(),
+                   !ownProfile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    sharedWorkspaceSnapshotJSON = ownProfile.snapshotJSON
+                }
+                return
+            }
+
+            sharedWorkspaceSnapshotJSON = encodedWorkspaceSnapshot(captureWorkspaceLayout()) ?? ""
+        }
+    }
+
+    private var currentOrderCardHeightKey: String? {
+        let cleanId = (siparis.id ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleanId.isEmpty ? nil : cleanId
+    }
+
+    private func activeCardHeights(from snapshot: WorkspaceLayoutSnapshot) -> [String: Double] {
+        guard let orderKey = currentOrderCardHeightKey,
+              let orderHeights = snapshot.orderKartYukseklikleri?[orderKey],
+              !orderHeights.isEmpty else {
+            return snapshot.kartYukseklikleri
+        }
+
+        return orderHeights
+    }
+
+    private func markWorkspaceLayoutApplied(isIndependent: Bool) {
+        activeWorkspaceLayoutOrderKey = currentOrderCardHeightKey ?? ""
+        activeWorkspaceLayoutIsIndependent = isIndependent
+    }
+
+    private func orderCardHeightsForSnapshot() -> [String: [String: Double]]? {
+        orderKartYukseklikleri.isEmpty ? nil : orderKartYukseklikleri
+    }
+
+    private func saveActiveCardHeightsLocally() {
+        if let data = try? JSONEncoder().encode(kartYukseklikleri), let str = String(data: data, encoding: .utf8) {
+            kartYukseklikleriJSON = str
+        }
+    }
+
+    private func rememberCurrentOrderCardHeights() {
+        if let orderKey = currentOrderCardHeightKey {
+            orderKartYukseklikleri[orderKey] = kartYukseklikleri
+        } else {
+            sharedKartYukseklikleri = kartYukseklikleri
+        }
+    }
+
+    private func captureWorkspaceLayout(includeCurrentOrderHeightsAsShared: Bool = false) -> WorkspaceLayoutSnapshot {
+        let sharedHeights = includeCurrentOrderHeightsAsShared
+            ? kartYukseklikleri
+            : (sharedKartYukseklikleri.isEmpty ? kartYukseklikleri : sharedKartYukseklikleri)
+
+        return WorkspaceLayoutSnapshot(
+            sutunGenislikleri: sutunGenislikleri,
+            kartYerlesimi: kartYerlesimi,
+            phoneKartSirasi: normalizedPhoneKartSirasiValue,
+            kartYukseklikleri: sharedHeights,
+            orderKartYukseklikleri: orderCardHeightsForSnapshot(),
+            kartRenkleri: kartRenkleri,
+            visibility: [
+                KartTipi.preview.rawValue: showCardPreview,
+                KartTipi.summary.rawValue: showCardSummary,
+                KartTipi.customer.rawValue: showCardCustomer,
+                KartTipi.delivery.rawValue: showCardDelivery,
+                KartTipi.communication.rawValue: showCardCommunication,
+                KartTipi.notes.rawValue: showCardNotes,
+                KartTipi.financial.rawValue: showCardFinancial,
+                KartTipi.status.rawValue: showCardStatus,
+                KartTipi.shipping.rawValue: showCardShipping,
+                KartTipi.schedule.rawValue: showCardSchedule,
+                KartTipi.historyLog.rawValue: showCardHistoryLog,
+                KartTipi.clientFiles.rawValue: showCardClientFiles,
+                KartTipi.todo.rawValue: showCardToDo,
+                KartTipi.workTime.rawValue: showCardWorkTime,
+                KartTipi.customerNotes.rawValue: showCardCustomerNotes,
+                KartTipi.materials.rawValue: showCardMaterials,
+                KartTipi.priority.rawValue: showCardPriority
+            ]
+        )
+    }
+
+    private func encodedWorkspaceSnapshot(_ snapshot: WorkspaceLayoutSnapshot) -> String? {
+        guard let data = try? JSONEncoder().encode(snapshot) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func decodedWorkspaceSnapshot(_ json: String) -> WorkspaceLayoutSnapshot? {
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(WorkspaceLayoutSnapshot.self, from: data)
+    }
+
+    private func ensureHistoryLogCardInCurrentLayout() {
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        let allCards = kartYerlesimi.flatMap { $0 }
+        guard !allCards.contains(.historyLog) else { return }
+
+        let targetColumn = min(2, kartYerlesimi.count - 1)
+        if let scheduleIndex = kartYerlesimi[targetColumn].firstIndex(of: .schedule) {
+            kartYerlesimi[targetColumn].insert(.historyLog, at: min(scheduleIndex + 1, kartYerlesimi[targetColumn].count))
+        } else {
+            kartYerlesimi[targetColumn].append(.historyLog)
+        }
+    }
+
+    private func ensureClientFilesCardInCurrentLayout() {
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        let allCards = kartYerlesimi.flatMap { $0 }
+        guard !allCards.contains(.clientFiles) else { return }
+
+        let targetColumn = min(1, kartYerlesimi.count - 1)
+        if let notesIndex = kartYerlesimi[targetColumn].firstIndex(of: .notes) {
+            kartYerlesimi[targetColumn].insert(.clientFiles, at: min(notesIndex + 1, kartYerlesimi[targetColumn].count))
+        } else {
+            kartYerlesimi[targetColumn].append(.clientFiles)
+        }
+    }
+
+
+
+    private func ensureToDoCardInCurrentLayout() {
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        let allCards = kartYerlesimi.flatMap { $0 }
+        guard !allCards.contains(.todo) else { return }
+
+        let targetColumn = min(2, kartYerlesimi.count - 1)
+        if let priorityIndex = kartYerlesimi[targetColumn].firstIndex(of: .priority) {
+            kartYerlesimi[targetColumn].insert(.todo, at: min(priorityIndex + 1, kartYerlesimi[targetColumn].count))
+        } else if let scheduleIndex = kartYerlesimi[targetColumn].firstIndex(of: .schedule) {
+            kartYerlesimi[targetColumn].insert(.todo, at: scheduleIndex)
+        } else {
+            kartYerlesimi[targetColumn].append(.todo)
+        }
+    }
+
+    private func ensureWorkTimeCardInCurrentLayout() {
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        let allCards = kartYerlesimi.flatMap { $0 }
+        guard !allCards.contains(.workTime) else { return }
+
+        let targetColumn = min(2, kartYerlesimi.count - 1)
+        if let todoIndex = kartYerlesimi[targetColumn].firstIndex(of: .todo) {
+            kartYerlesimi[targetColumn].insert(.workTime, at: min(todoIndex + 1, kartYerlesimi[targetColumn].count))
+        } else if let priorityIndex = kartYerlesimi[targetColumn].firstIndex(of: .priority) {
+            kartYerlesimi[targetColumn].insert(.workTime, at: min(priorityIndex + 1, kartYerlesimi[targetColumn].count))
+        } else {
+            kartYerlesimi[targetColumn].append(.workTime)
+        }
+    }
+
+    private func ensureRequiredCardsInCurrentLayout() {
+        ensureClientFilesCardInCurrentLayout()
+        ensureToDoCardInCurrentLayout()
+        ensureWorkTimeCardInCurrentLayout()
+        ensureHistoryLogCardInCurrentLayout()
+    }
+
+    private func applyWorkspaceLayout(_ snapshot: WorkspaceLayoutSnapshot) {
+        isApplyingWorkspaceLayout = true
+
+        showCardPreview = snapshot.visibility[KartTipi.preview.rawValue] ?? true
+        showCardSummary = snapshot.visibility[KartTipi.summary.rawValue] ?? true
+        showCardCustomer = snapshot.visibility[KartTipi.customer.rawValue] ?? true
+        showCardDelivery = snapshot.visibility[KartTipi.delivery.rawValue] ?? true
+        showCardCommunication = snapshot.visibility[KartTipi.communication.rawValue] ?? true
+        showCardNotes = snapshot.visibility[KartTipi.notes.rawValue] ?? true
+        showCardFinancial = snapshot.visibility[KartTipi.financial.rawValue] ?? true
+        showCardStatus = snapshot.visibility[KartTipi.status.rawValue] ?? true
+        showCardShipping = snapshot.visibility[KartTipi.shipping.rawValue] ?? true
+        showCardSchedule = snapshot.visibility[KartTipi.schedule.rawValue] ?? true
+        showCardHistoryLog = snapshot.visibility[KartTipi.historyLog.rawValue] ?? true
+        showCardClientFiles = snapshot.visibility[KartTipi.clientFiles.rawValue] ?? true
+        showCardToDo = snapshot.visibility[KartTipi.todo.rawValue] ?? true
+        showCardWorkTime = snapshot.visibility[KartTipi.workTime.rawValue] ?? true
+        showCardCustomerNotes = snapshot.visibility[KartTipi.customerNotes.rawValue] ?? false
+        showCardMaterials = snapshot.visibility[KartTipi.materials.rawValue] ?? true
+        showCardPriority = snapshot.visibility[KartTipi.priority.rawValue] ?? true
+
+        kartYerlesimi = snapshot.kartYerlesimi.isEmpty ? kartYerlesimi : snapshot.kartYerlesimi
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+        ensureRequiredCardsInCurrentLayout()
+
+        if let phoneOrder = snapshot.phoneKartSirasi, !phoneOrder.isEmpty {
+            phoneKartSirasi = phoneOrder
+            savePhoneKartSirasi()
+        } else {
+            normalizePhoneKartSirasi()
+        }
+
+        sharedKartYukseklikleri = snapshot.kartYukseklikleri
+        orderKartYukseklikleri = snapshot.orderKartYukseklikleri ?? [:]
+        kartYukseklikleri = activeCardHeights(from: snapshot)
+        normalizeClientFilesCardHeightIfNeeded()
+        kartRenkleri = snapshot.kartRenkleri
+        sutunGenislikleri = snapshot.sutunGenislikleri.isEmpty ? [350, 350, 350] : snapshot.sutunGenislikleri.map { min(max($0, 260), 800) }
+        while sutunGenislikleri.count < kartYerlesimi.count { sutunGenislikleri.append(350) }
+
+        kaydetSutunGenislikleri()
+        kaydetKartYerlesimi()
+        saveActiveCardHeightsLocally()
+
+        if let data = try? JSONEncoder().encode(kartRenkleri),
+           let str = String(data: data, encoding: .utf8) {
+            kartRenkleriJSON = str
+        }
+
+        if sutunGenislikleri.indices.contains(0) { savedColLeft = sutunGenislikleri[0] }
+        if sutunGenislikleri.indices.contains(1) { savedColMid = sutunGenislikleri[1] }
+        if sutunGenislikleri.indices.contains(2) { savedColRight = sutunGenislikleri[2] }
+
+        isApplyingWorkspaceLayout = false
+        yenileCalismaAlaniHitbox(delay: 0.02)
+    }
+
+    private func startWorkspaceProfilesCloudListener() {
+        workspaceProfilesCloudListener?.remove()
+        workspaceProfilesCloudListener = Firestore.firestore()
+            .collection("companySettings")
+            .document(firebaseManager.currentCompanyId)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Workspace profiles listener error: \(error)")
+                    return
+                }
+
+                guard let data = snapshot?.data() else {
+                    if !workspaceProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        !workspaceUserProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        saveWorkspaceSettingsToCloud(
+                            workspaceProfilesJSON: workspaceProfilesJSON,
+                            workspaceUserProfilesJSON: workspaceUserProfilesJSON,
+                            sharedWorkspaceSnapshotJSON: sharedWorkspaceSnapshotJSON
+                        )
+                    }
+                    return
+                }
+
+                isApplyingWorkspaceProfilesFromCloud = true
+
+                if let cloudProfilesJSON = data["workspaceProfilesJSON"] as? String,
+                   !cloudProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   cloudProfilesJSON != workspaceProfilesJSON {
+                    workspaceProfilesJSON = cloudProfilesJSON
+                    loadWorkspaceProfiles()
+                } else if (data["workspaceProfilesJSON"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+                          !workspaceProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    saveWorkspaceSettingsToCloud(workspaceProfilesJSON: workspaceProfilesJSON)
+                }
+
+                let previousOwnSnapshotJSON = currentWorkspaceUserProfile()?.snapshotJSON
+
+                if let cloudUserProfilesJSON = data["workspaceUserProfilesJSON"] as? String,
+                   !cloudUserProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   cloudUserProfilesJSON != workspaceUserProfilesJSON {
+                    workspaceUserProfilesJSON = cloudUserProfilesJSON
+                    loadWorkspaceUserProfiles()
+
+                    if isCurrentOrderIndependent {
+                        loadWorkspaceForCurrentOrderIfNeeded()
+                    } else if !workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        applyFollowedTeamWorkspaceProfileIfNeeded(force: false)
+                    } else if startDefaultOwnerCardSyncIfNeeded(applyImmediately: true) {
+                        // New team members start by following the owner's card layout live.
+                    } else if let ownProfile = currentWorkspaceUserProfile(),
+                              ownProfile.snapshotJSON != previousOwnSnapshotJSON,
+                              let snapshot = decodedWorkspaceSnapshot(ownProfile.snapshotJSON) {
+                        applyWorkspaceLayout(snapshot)
+                        workspaceStatusMessage = t("Using your card profile", lang: seciliDil)
+                    }
+                } else if (data["workspaceUserProfilesJSON"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+                          !workspaceUserProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    saveWorkspaceSettingsToCloud(workspaceUserProfilesJSON: workspaceUserProfilesJSON)
+                }
+
+                if let cloudSharedLayoutJSON = data["sharedWorkspaceSnapshotJSON"] as? String,
+                   !cloudSharedLayoutJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   cloudSharedLayoutJSON != sharedWorkspaceSnapshotJSON {
+                    sharedWorkspaceSnapshotJSON = cloudSharedLayoutJSON
+
+                    if currentWorkspaceUserProfile() == nil,
+                       !isCurrentOrderIndependent,
+                       let snapshot = decodedWorkspaceSnapshot(cloudSharedLayoutJSON) {
+                        applyWorkspaceLayout(snapshot)
+                    }
+                } else if (data["sharedWorkspaceSnapshotJSON"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+                          !sharedWorkspaceSnapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    saveWorkspaceSettingsToCloud(sharedWorkspaceSnapshotJSON: sharedWorkspaceSnapshotJSON)
+                }
+
+                isApplyingWorkspaceProfilesFromCloud = false
+            }
+    }
+
+    private func saveWorkspaceSettingsToCloud(workspaceProfilesJSON profilesJSON: String? = nil, workspaceUserProfilesJSON userProfilesJSON: String? = nil, sharedWorkspaceSnapshotJSON sharedJSON: String? = nil) {
+        guard !isApplyingWorkspaceProfilesFromCloud else { return }
+
+        var data: [String: Any] = [:]
+
+        if let profilesJSON {
+            data["workspaceProfilesJSON"] = profilesJSON
+        }
+
+        if let userProfilesJSON {
+            data["workspaceUserProfilesJSON"] = userProfilesJSON
+        }
+
+        if let sharedJSON {
+            data["sharedWorkspaceSnapshotJSON"] = sharedJSON
+        }
+
+        guard !data.isEmpty else { return }
+
+        if userProfilesJSON != nil {
+            saveCurrentWorkspaceUserProfileToCloud()
+
+            if profilesJSON == nil && sharedJSON == nil {
+                return
+            }
+        }
+
+        guard canWriteWorkspaceSettingsDirectly else { return }
+
+        writeWorkspaceSettingsDirectlyToCloud(data)
+    }
+
+    private var canWriteWorkspaceSettingsDirectly: Bool {
+        ["owner", "admin"].contains(studioOrderDetailRoleKey(currentWorkspaceProfileRole, fallback: "unknown"))
+    }
+
+    private func writeWorkspaceSettingsDirectlyToCloud(_ data: [String: Any]) {
+        guard !data.isEmpty else { return }
+
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(firebaseManager.currentCompanyId)
+            .setData(data, merge: true)
+    }
+
+    private func workspaceUserProfilePayload(_ profile: WorkspaceUserProfileDTO) -> [String: Any]? {
+        guard let data = try? JSONEncoder().encode(profile),
+              let object = try? JSONSerialization.jsonObject(with: data, options: []),
+              let payload = object as? [String: Any] else {
+            return nil
+        }
+
+        return payload
+    }
+
+    private func saveCurrentWorkspaceUserProfileToCloud() {
+        #if canImport(FirebaseFunctions)
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty,
+              let profile = currentWorkspaceUserProfile(),
+              let profilePayload = workspaceUserProfilePayload(profile) else { return }
+
+        let payload: [String: Any] = [
+            "companyId": companyId,
+            "profile": profilePayload
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("saveSwiftWorkspaceCardProfile")
+            .call(payload) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        workspaceStatusMessage = t("Card profile could not be saved", lang: seciliDil) + ": " + error.localizedDescription
+                    }
+                }
+            }
+        #endif
+    }
+
+    private func saveOrderWorkspaceLayoutSnapshotToCloud(snapshotJSON: String) {
+        #if canImport(FirebaseFunctions)
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty,
+              let orderId = siparis.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !orderId.isEmpty else { return }
+
+        let payload: [String: Any] = [
+            "companyId": companyId,
+            "orderId": orderId,
+            "snapshotJSON": snapshotJSON
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("saveSwiftWorkspaceCardProfile")
+            .call(payload) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        workspaceStatusMessage = t("This order layout could not be saved", lang: seciliDil) + ": " + error.localizedDescription
+                    }
+                }
+            }
+        #endif
+    }
+
+    private func resetOrderWorkspaceLayoutOnServer() {
+        #if canImport(FirebaseFunctions)
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty,
+              let orderId = siparis.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !orderId.isEmpty else { return }
+
+        let payload: [String: Any] = [
+            "companyId": companyId,
+            "orderId": orderId
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("resetOrderWorkspaceCardLayout")
+            .call(payload) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        workspaceStatusMessage = t("This order layout could not rejoin shared layout", lang: seciliDil) + ": " + error.localizedDescription
+                    }
+                }
+            }
+        #endif
+    }
+
+    private var currentWorkspaceProfileUserId: String {
+        let userId = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !userId.isEmpty { return userId }
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return companyId.isEmpty ? "local-user" : companyId
+    }
+
+    private var currentWorkspaceProfileEmail: String {
+        let email = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return email.isEmpty ? currentWorkspaceProfileUserId : email
+    }
+
+    private var currentWorkspaceProfileDisplayName: String {
+        let displayName = authVM.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayName.isEmpty { return displayName }
+        return currentWorkspaceProfileEmail
+    }
+
+    private var currentWorkspaceProfileRole: String {
+        let role = authVM.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines)
+        return role.isEmpty ? "member" : role
+    }
+
+    private func normalizedPersonalCardProfiles(_ profiles: [WorkspaceProfileDTO], fallbackSnapshotJSON: String = "") -> [WorkspaceProfileDTO] {
+        var cleaned: [WorkspaceProfileDTO] = []
+        var seenIDs: Set<UUID> = []
+
+        for (index, profile) in profiles.enumerated() {
+            guard !seenIDs.contains(profile.id) else { continue }
+            seenIDs.insert(profile.id)
+
+            let cleanName = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            cleaned.append(
+                WorkspaceProfileDTO(
+                    id: profile.id,
+                    name: cleanName.isEmpty ? "Profile \(index + 1)" : cleanName,
+                    snapshotJSON: profile.snapshotJSON
+                )
+            )
+        }
+
+        if cleaned.isEmpty,
+           !fallbackSnapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cleaned.append(WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: fallbackSnapshotJSON))
+        }
+
+        return cleaned
+    }
+
+    private func normalizedWorkspaceUserProfiles(_ profiles: [WorkspaceUserProfileDTO]) -> [WorkspaceUserProfileDTO] {
+        var seen: Set<String> = []
+        var cleaned: [WorkspaceUserProfileDTO] = []
+
+        for profile in profiles {
+            let cleanUserId = profile.userId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleanUserId.isEmpty, !seen.contains(cleanUserId) else { continue }
+            seen.insert(cleanUserId)
+
+            cleaned.append(
+                WorkspaceUserProfileDTO(
+                    id: profile.id,
+                    userId: cleanUserId,
+                    displayName: profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    email: profile.email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    role: profile.role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "member" : profile.role,
+                    snapshotJSON: profile.snapshotJSON,
+                    updatedAt: profile.updatedAt,
+                    savedProfiles: normalizedPersonalCardProfiles(profile.savedProfiles, fallbackSnapshotJSON: profile.snapshotJSON)
+                )
+            )
+        }
+
+        return cleaned.sorted { lhs, rhs in
+            if lhs.userId == currentWorkspaceProfileUserId { return true }
+            if rhs.userId == currentWorkspaceProfileUserId { return false }
+            let lhsName = workspaceUserProfileDisplayName(lhs)
+            let rhsName = workspaceUserProfileDisplayName(rhs)
+            return lhsName.localizedCaseInsensitiveCompare(rhsName) == .orderedAscending
+        }
+    }
+
+    private func loadWorkspaceUserProfiles() {
+        guard let data = workspaceUserProfilesJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([WorkspaceUserProfileDTO].self, from: data) else {
+            workspaceUserProfiles = []
+            return
+        }
+
+        workspaceUserProfiles = normalizedWorkspaceUserProfiles(decoded)
+    }
+
+    private func saveWorkspaceUserProfilesToStorage(syncCloud: Bool) {
+        workspaceUserProfiles = normalizedWorkspaceUserProfiles(workspaceUserProfiles)
+
+        if let data = try? JSONEncoder().encode(workspaceUserProfiles),
+           let str = String(data: data, encoding: .utf8) {
+            workspaceUserProfilesJSON = str
+
+            if syncCloud, !isApplyingWorkspaceProfilesFromCloud {
+                saveCurrentWorkspaceUserProfileToCloud()
+            }
+        }
+    }
+
+    private func currentWorkspaceUserProfileIndex() -> Int? {
+        workspaceUserProfiles.firstIndex { $0.userId == currentWorkspaceProfileUserId }
+    }
+
+    private func currentWorkspaceUserProfile() -> WorkspaceUserProfileDTO? {
+        guard let index = currentWorkspaceUserProfileIndex(), workspaceUserProfiles.indices.contains(index) else { return nil }
+        return workspaceUserProfiles[index]
+    }
+
+    private func workspaceUserProfileDisplayName(_ profile: WorkspaceUserProfileDTO) -> String {
+        let name = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let email = profile.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !email.isEmpty { return email }
+        return profile.userId
+    }
+
+    private func workspaceUserProfileSubtitle(_ profile: WorkspaceUserProfileDTO) -> String {
+        let email = profile.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let role = profile.role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "member" : profile.role
+        if email.isEmpty { return role.capitalized }
+        return "\(email) • \(role.capitalized)"
+    }
+
+    private var isCurrentWorkspaceOwnerProfile: Bool {
+        currentWorkspaceProfileRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+    }
+
+    private func ownerWorkspaceUserProfileForDefaultSync() -> WorkspaceUserProfileDTO? {
+        workspaceUserProfiles.first { profile in
+            profile.userId != currentWorkspaceProfileUserId &&
+            profile.role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner" &&
+            !profile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    @discardableResult
+    private func startDefaultOwnerCardSyncIfNeeded(applyImmediately: Bool) -> Bool {
+        guard !isCurrentWorkspaceOwnerProfile,
+              !workspaceOwnerCardSyncDismissed,
+              workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              currentWorkspaceUserProfile() == nil,
+              let ownerProfile = ownerWorkspaceUserProfileForDefaultSync() else { return false }
+
+        workspaceFollowedTeamProfileUserId = ownerProfile.userId
+        followedTeamProfileLastSnapshotJSON = ""
+
+        if applyImmediately {
+            applyFollowedTeamWorkspaceProfileIfNeeded(force: true)
+        } else {
+            workspaceStatusMessage = t("Synced with team card profile", lang: seciliDil) + ": " + workspaceUserProfileDisplayName(ownerProfile)
+        }
+
+        return true
+    }
+
+    private func followedTeamWorkspaceUserProfile() -> WorkspaceUserProfileDTO? {
+        let cleanFollowedId = workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanFollowedId.isEmpty, cleanFollowedId != currentWorkspaceProfileUserId else { return nil }
+        return workspaceUserProfiles.first { $0.userId == cleanFollowedId }
+    }
+
+    private func clearFollowedTeamCardProfile() {
+        workspaceFollowedTeamProfileUserId = ""
+        followedTeamProfileLastSnapshotJSON = ""
+    }
+
+    private func stopFollowingTeamCardProfile(loadOwnProfile: Bool = false, showMessage: Bool = true) {
+        workspaceOwnerCardSyncDismissed = true
+        clearFollowedTeamCardProfile()
+
+        if loadOwnProfile {
+            if let ownProfile = currentWorkspaceUserProfile(),
+               let snapshot = decodedWorkspaceSnapshot(ownProfile.snapshotJSON) {
+                applyWorkspaceLayout(snapshot)
+            } else {
+                saveCurrentUserWorkspaceProfile(showMessage: false)
+            }
+        }
+
+        if showMessage {
+            workspaceStatusMessage = t("Team card sync stopped", lang: seciliDil)
+        }
+    }
+
+    private func applyFollowedTeamWorkspaceProfileIfNeeded(force: Bool) {
+        let cleanFollowedId = workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanFollowedId.isEmpty else { return }
+
+        guard let profile = followedTeamWorkspaceUserProfile() else {
+            clearFollowedTeamCardProfile()
+            workspaceStatusMessage = t("Team profile is no longer available", lang: seciliDil)
+            return
+        }
+
+        let snapshotJSON = profile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !snapshotJSON.isEmpty,
+              let snapshot = decodedWorkspaceSnapshot(snapshotJSON) else { return }
+
+        guard force || snapshotJSON != followedTeamProfileLastSnapshotJSON else { return }
+
+        markWorkspaceLayoutApplied(isIndependent: false)
+        applyWorkspaceLayout(snapshot)
+        followedTeamProfileLastSnapshotJSON = snapshotJSON
+        workspaceStatusMessage = t("Synced with team card profile", lang: seciliDil) + ": " + workspaceUserProfileDisplayName(profile)
+    }
+
+    private func baseCurrentUserWorkspaceProfile(snapshotJSON: String = "") -> WorkspaceUserProfileDTO {
+        WorkspaceUserProfileDTO(
+            userId: currentWorkspaceProfileUserId,
+            displayName: currentWorkspaceProfileDisplayName,
+            email: currentWorkspaceProfileEmail,
+            role: currentWorkspaceProfileRole,
+            snapshotJSON: snapshotJSON,
+            updatedAt: Date(),
+            savedProfiles: normalizedPersonalCardProfiles([], fallbackSnapshotJSON: snapshotJSON)
+        )
+    }
+
+    private func updateCurrentUserWorkspaceProfile(syncCloud: Bool, _ update: (inout WorkspaceUserProfileDTO) -> Void) {
+        var profile = currentWorkspaceUserProfile() ?? baseCurrentUserWorkspaceProfile()
+        profile.displayName = currentWorkspaceProfileDisplayName
+        profile.email = currentWorkspaceProfileEmail
+        profile.role = currentWorkspaceProfileRole
+        profile.savedProfiles = normalizedPersonalCardProfiles(profile.savedProfiles, fallbackSnapshotJSON: profile.snapshotJSON)
+        update(&profile)
+        profile.savedProfiles = normalizedPersonalCardProfiles(profile.savedProfiles, fallbackSnapshotJSON: profile.snapshotJSON)
+        profile.updatedAt = Date()
+
+        if let index = currentWorkspaceUserProfileIndex(), workspaceUserProfiles.indices.contains(index) {
+            workspaceUserProfiles[index] = profile
+        } else {
+            workspaceUserProfiles.append(profile)
+        }
+
+        saveWorkspaceUserProfilesToStorage(syncCloud: syncCloud)
+    }
+
+    private func upsertCurrentUserWorkspaceProfile(snapshotJSON: String, syncCloud: Bool) {
+        guard !snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        updateCurrentUserWorkspaceProfile(syncCloud: syncCloud) { profile in
+            profile.snapshotJSON = snapshotJSON
+
+            if profile.savedProfiles.isEmpty {
+                profile.savedProfiles = [WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: snapshotJSON)]
+            }
+        }
+    }
+
+    private func saveCurrentUserWorkspaceProfile(showMessage: Bool) {
+        guard !isApplyingWorkspaceLayout,
+              let json = encodedWorkspaceSnapshot(captureWorkspaceLayout()) else { return }
+
+        if isCurrentOrderIndependent {
+            saveCurrentLayoutForOrder(showMessage: showMessage)
+            return
+        }
+
+        let currentKey = currentOrderCardHeightKey ?? ""
+        guard activeWorkspaceLayoutOrderKey == currentKey,
+              !activeWorkspaceLayoutIsIndependent else { return }
+
+        upsertCurrentUserWorkspaceProfile(snapshotJSON: json, syncCloud: true)
+
+        if showMessage {
+            workspaceStatusMessage = t("Your card profile was saved", lang: seciliDil)
+        }
+    }
+
+    private func loadCurrentUserWorkspaceProfile() {
+        workspaceOwnerCardSyncDismissed = true
+        guard let ownProfile = currentWorkspaceUserProfile(),
+              let snapshot = decodedWorkspaceSnapshot(ownProfile.snapshotJSON) else { return }
+
+        clearFollowedTeamCardProfile()
+        applyWorkspaceLayout(snapshot)
+        workspaceStatusMessage = t("Using your card profile", lang: seciliDil)
+    }
+
+    private func loadWorkspaceUserProfile(at index: Int) {
+        guard workspaceUserProfiles.indices.contains(index),
+              let snapshot = decodedWorkspaceSnapshot(workspaceUserProfiles[index].snapshotJSON) else { return }
+
+        let profile = workspaceUserProfiles[index]
+        applyWorkspaceLayout(snapshot)
+
+        if profile.userId == currentWorkspaceProfileUserId {
+            workspaceOwnerCardSyncDismissed = true
+            clearFollowedTeamCardProfile()
+            workspaceStatusMessage = t("Using your card profile", lang: seciliDil)
+        } else {
+            workspaceOwnerCardSyncDismissed = false
+            workspaceFollowedTeamProfileUserId = profile.userId
+            followedTeamProfileLastSnapshotJSON = profile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+            workspaceStatusMessage = t("Synced with team card profile", lang: seciliDil) + ": " + workspaceUserProfileDisplayName(profile)
+        }
+    }
+
+    private func currentUserCardProfilesForDisplay() -> [WorkspaceProfileDTO] {
+        currentWorkspaceUserProfile()?.savedProfiles ?? []
+    }
+
+    private func currentUserCardProfileName(at index: Int) -> String {
+        let profiles = currentUserCardProfilesForDisplay()
+        guard profiles.indices.contains(index) else { return "" }
+        return profiles[index].name
+    }
+
+    private func updateCurrentUserCardProfileName(at index: Int, name: String) {
+        updateCurrentUserWorkspaceProfile(syncCloud: true) { profile in
+            guard profile.savedProfiles.indices.contains(index) else { return }
+            profile.savedProfiles[index].name = name
+        }
+    }
+
+    private func addCurrentUserCardProfile() {
+        workspaceOwnerCardSyncDismissed = true
+        clearFollowedTeamCardProfile()
+        let json = encodedWorkspaceSnapshot(captureWorkspaceLayout()) ?? ""
+        updateCurrentUserWorkspaceProfile(syncCloud: true) { profile in
+            let nextNumber = profile.savedProfiles.count + 1
+            profile.savedProfiles.append(WorkspaceProfileDTO(name: "Profile \(nextNumber)", snapshotJSON: json))
+            if !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                profile.snapshotJSON = json
+            }
+        }
+        workspaceStatusMessage = t("Card profile added", lang: seciliDil)
+    }
+
+    private func saveCurrentUserCardProfile(at index: Int) {
+        workspaceOwnerCardSyncDismissed = true
+        clearFollowedTeamCardProfile()
+        guard let json = encodedWorkspaceSnapshot(captureWorkspaceLayout()) else { return }
+
+        updateCurrentUserWorkspaceProfile(syncCloud: true) { profile in
+            if profile.savedProfiles.isEmpty {
+                profile.savedProfiles = [WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: json)]
+            }
+
+            guard profile.savedProfiles.indices.contains(index) else { return }
+
+            if profile.savedProfiles[index].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                profile.savedProfiles[index].name = "Profile \(index + 1)"
+            }
+
+            profile.savedProfiles[index].snapshotJSON = json
+            profile.snapshotJSON = json
+        }
+
+        let profileName = currentUserCardProfileName(at: index).trimmingCharacters(in: .whitespacesAndNewlines)
+        workspaceStatusMessage = (profileName.isEmpty ? "Profile \(index + 1)" : profileName) + " " + t("saved", lang: seciliDil)
+    }
+
+    private func loadCurrentUserCardProfile(at index: Int) {
+        workspaceOwnerCardSyncDismissed = true
+        clearFollowedTeamCardProfile()
+        let profiles = currentUserCardProfilesForDisplay()
+        guard profiles.indices.contains(index),
+              let snapshot = decodedWorkspaceSnapshot(profiles[index].snapshotJSON) else { return }
+
+        let profileName = profiles[index].name
+        applyWorkspaceLayout(snapshot)
+
+        updateCurrentUserWorkspaceProfile(syncCloud: true) { profile in
+            guard profile.savedProfiles.indices.contains(index) else { return }
+            profile.snapshotJSON = profile.savedProfiles[index].snapshotJSON
+        }
+
+        workspaceStatusMessage = profileName + " " + t("loaded", lang: seciliDil)
+    }
+
+    private func deleteCurrentUserCardProfile(at index: Int) {
+        workspaceOwnerCardSyncDismissed = true
+        clearFollowedTeamCardProfile()
+        updateCurrentUserWorkspaceProfile(syncCloud: true) { profile in
+            guard profile.savedProfiles.count > 1, profile.savedProfiles.indices.contains(index) else { return }
+            let removed = profile.savedProfiles.remove(at: index)
+
+            if profile.snapshotJSON == removed.snapshotJSON {
+                profile.snapshotJSON = profile.savedProfiles.first?.snapshotJSON ?? ""
+            }
+        }
+        workspaceStatusMessage = t("Card profile deleted", lang: seciliDil)
+    }
+
+    private func currentUserCardProfileNameField(index: Int) -> some View {
+        TextField(
+            t("Profile name", lang: seciliDil),
+            text: Binding(
+                get: { currentUserCardProfileName(at: index) },
+                set: { updateCurrentUserCardProfileName(at: index, name: $0) }
+            )
+        )
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 12, weight: .semibold))
+        .frame(minWidth: isCompactPhoneLayout ? 0 : 120)
+    }
+
+    @ViewBuilder
+    private func currentUserCardProfileActionButtons(index: Int) -> some View {
+        let profiles = currentUserCardProfilesForDisplay()
+
+        Button(t("Save", lang: seciliDil)) {
+            saveCurrentUserCardProfile(at: index)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+
+        Button(t("Load", lang: seciliDil)) {
+            loadCurrentUserCardProfile(at: index)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(!profiles.indices.contains(index) || profiles[index].snapshotJSON.isEmpty)
+
+        Button(role: .destructive) {
+            deleteCurrentUserCardProfile(at: index)
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .disabled(profiles.count <= 1)
+    }
+
+    private func currentUserCardProfileRow(index: Int) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                currentUserCardProfileNameField(index: index)
+                currentUserCardProfileActionButtons(index: index)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                currentUserCardProfileNameField(index: index)
+                HStack(spacing: 8) {
+                    currentUserCardProfileActionButtons(index: index)
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded() {
+        let legacyProfiles = workspaceProfiles.filter { !$0.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !legacyProfiles.isEmpty else { return }
+
+        let currentSavedProfiles = currentWorkspaceUserProfile()?.savedProfiles ?? []
+        guard currentSavedProfiles.count <= 1 else { return }
+
+        updateCurrentUserWorkspaceProfile(syncCloud: true) { profile in
+            var migrated = legacyProfiles
+
+            if !profile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !migrated.contains(where: { $0.snapshotJSON == profile.snapshotJSON }) {
+                migrated.insert(WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: profile.snapshotJSON), at: 0)
+            }
+
+            profile.savedProfiles = normalizedPersonalCardProfiles(migrated, fallbackSnapshotJSON: profile.snapshotJSON)
+
+            if profile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                profile.snapshotJSON = profile.savedProfiles.first?.snapshotJSON ?? ""
+            }
+        }
+    }
+
+    private func loadWorkspaceProfiles() {
+        if let data = workspaceProfilesJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([WorkspaceProfileDTO].self, from: data),
+           !decoded.isEmpty {
+            workspaceProfiles = decoded
+            return
+        }
+
+        // Eski Profile 1/2/3 sisteminden yeni sınırsız profile sistemine yumuşak geçiş.
+        var migrated: [WorkspaceProfileDTO] = []
+        if !workspaceProfile1JSON.isEmpty {
+            migrated.append(WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: workspaceProfile1JSON))
+        }
+        if !workspaceProfile2JSON.isEmpty {
+            migrated.append(WorkspaceProfileDTO(name: "Profile 2", snapshotJSON: workspaceProfile2JSON))
+        }
+        if !workspaceProfile3JSON.isEmpty {
+            migrated.append(WorkspaceProfileDTO(name: "Profile 3", snapshotJSON: workspaceProfile3JSON))
+        }
+
+        if migrated.isEmpty {
+            migrated = [WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: "")]
+        }
+
+        workspaceProfiles = migrated
+        saveWorkspaceProfilesToStorage()
+    }
+
+    private func saveWorkspaceProfilesToStorage() {
+        let cleaned = workspaceProfiles.map { profile in
+            WorkspaceProfileDTO(
+                id: profile.id,
+                name: profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Profile" : profile.name,
+                snapshotJSON: profile.snapshotJSON
+            )
+        }
+
+        if let data = try? JSONEncoder().encode(cleaned),
+           let str = String(data: data, encoding: .utf8) {
+            workspaceProfilesJSON = str
+
+            if !isApplyingWorkspaceProfilesFromCloud {
+                saveWorkspaceSettingsToCloud(workspaceProfilesJSON: str)
+            }
+        }
+    }
+
+    private func addWorkspaceProfile() {
+        let nextNumber = workspaceProfiles.count + 1
+        workspaceProfiles.append(WorkspaceProfileDTO(name: "Profile \(nextNumber)", snapshotJSON: ""))
+        saveWorkspaceProfilesToStorage()
+        workspaceStatusMessage = t("Profile added", lang: seciliDil)
+    }
+
+    private func deleteWorkspaceProfile(at index: Int) {
+        guard workspaceProfiles.count > 1, workspaceProfiles.indices.contains(index) else { return }
+        workspaceProfiles.remove(at: index)
+        saveWorkspaceProfilesToStorage()
+        workspaceStatusMessage = t("Profile deleted", lang: seciliDil)
+    }
+
+    private func saveWorkspaceProfile(at index: Int) {
+        guard workspaceProfiles.indices.contains(index),
+              let json = encodedWorkspaceSnapshot(captureWorkspaceLayout()) else { return }
+
+        if workspaceProfiles[index].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            workspaceProfiles[index].name = "Profile \(index + 1)"
+        }
+
+        workspaceProfiles[index].snapshotJSON = json
+        saveWorkspaceProfilesToStorage()
+        persistWorkspaceCustomizationChange()
+        workspaceStatusMessage = workspaceProfiles[index].name + " " + t("saved", lang: seciliDil)
+    }
+
+    private func loadWorkspaceProfile(at index: Int) {
+        guard workspaceProfiles.indices.contains(index),
+              let snapshot = decodedWorkspaceSnapshot(workspaceProfiles[index].snapshotJSON) else { return }
+
+        let profileName = workspaceProfiles[index].name
+        applyWorkspaceLayout(snapshot)
+        persistWorkspaceCustomizationChange()
+        workspaceStatusMessage = profileName + " " + t("loaded", lang: seciliDil)
+    }
+
+    private func switchWorkspaceMode(to newMode: String) {
+        // Kept for compatibility with older saved settings.
+        // New behavior is shared-by-default, with optional independent layouts per order.
+        workspaceCustomizationMode = "shared"
+        if newMode == "perOrder" {
+            detachCurrentOrderFromShared()
+        } else {
+            resetCurrentOrderLayoutToShared()
+        }
+    }
+
+    private func loadWorkspaceForCurrentOrderIfNeeded() {
+        activeWorkspaceLayoutOrderKey = "__loading__\(currentOrderCardHeightKey ?? "")"
+        activeWorkspaceLayoutIsIndependent = false
+        ensureSharedWorkspaceSnapshot()
+
+        if let json = siparis.customFields?[orderWorkspaceLayoutKey],
+           let snapshot = decodedWorkspaceSnapshot(json) {
+            markWorkspaceLayoutApplied(isIndependent: true)
+            applyWorkspaceLayout(snapshot)
+            workspaceStatusMessage = t("Loaded this order layout", lang: seciliDil)
+            return
+        }
+
+        if !workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           followedTeamWorkspaceUserProfile() != nil {
+            markWorkspaceLayoutApplied(isIndependent: false)
+            applyFollowedTeamWorkspaceProfileIfNeeded(force: true)
+            return
+        }
+
+        if startDefaultOwnerCardSyncIfNeeded(applyImmediately: true) {
+            return
+        }
+
+        if let ownProfile = currentWorkspaceUserProfile(),
+           let snapshot = decodedWorkspaceSnapshot(ownProfile.snapshotJSON) {
+            markWorkspaceLayoutApplied(isIndependent: false)
+            applyWorkspaceLayout(snapshot)
+            workspaceStatusMessage = t("Using your card profile", lang: seciliDil)
+            return
+        }
+
+        if let shared = decodedWorkspaceSnapshot(sharedWorkspaceSnapshotJSON) {
+            markWorkspaceLayoutApplied(isIndependent: false)
+            applyWorkspaceLayout(shared)
+
+            if isCurrentWorkspaceOwnerProfile || workspaceOwnerCardSyncDismissed {
+                saveCurrentUserWorkspaceProfile(showMessage: false)
+                workspaceStatusMessage = t("Using your card profile", lang: seciliDil)
+            } else {
+                workspaceStatusMessage = t("Synced with team card profile", lang: seciliDil)
+            }
+        }
+    }
+
+    private func saveSharedLayout(showMessage: Bool) {
+        guard !isApplyingWorkspaceLayout else { return }
+        sharedWorkspaceSnapshotJSON = encodedWorkspaceSnapshot(captureWorkspaceLayout()) ?? sharedWorkspaceSnapshotJSON
+        workspaceCustomizationMode = "shared"
+        saveWorkspaceSettingsToCloud(sharedWorkspaceSnapshotJSON: sharedWorkspaceSnapshotJSON)
+
+        if showMessage {
+            workspaceStatusMessage = t("Shared layout saved", lang: seciliDil)
+        }
+    }
+
+    private func detachCurrentOrderFromShared() {
+        ensureSharedWorkspaceSnapshot()
+        saveCurrentLayoutForOrder(showMessage: false)
+        workspaceStatusMessage = t("This order is now independent", lang: seciliDil)
+    }
+
+    private func saveCurrentLayoutForOrder(showMessage: Bool) {
+        guard let json = encodedWorkspaceSnapshot(captureWorkspaceLayout(includeCurrentOrderHeightsAsShared: true)) else { return }
+
+        markWorkspaceLayoutApplied(isIndependent: true)
+        var fields = siparis.customFields ?? [:]
+        fields[orderWorkspaceLayoutKey] = json
+        siparis.customFields = fields
+        saveOrderWorkspaceLayoutSnapshotToCloud(snapshotJSON: json)
+
+        if showMessage {
+            workspaceStatusMessage = t("Saved layout for this order", lang: seciliDil)
+        }
+    }
+
+    private func resetCurrentOrderLayoutToShared() {
+        var fields = siparis.customFields ?? [:]
+        fields.removeValue(forKey: orderWorkspaceLayoutKey)
+        siparis.customFields = fields
+        resetOrderWorkspaceLayoutOnServer()
+
+        if let snapshot = decodedWorkspaceSnapshot(sharedWorkspaceSnapshotJSON) {
+            applyWorkspaceLayout(snapshot)
+            saveCurrentUserWorkspaceProfile(showMessage: false)
+        }
+        workspaceStatusMessage = t("This order now uses the shared layout", lang: seciliDil)
+    }
+
+    private func persistWorkspaceCustomizationChange() {
+        guard !isApplyingWorkspaceLayout else { return }
+
+        let currentKey = currentOrderCardHeightKey ?? ""
+        guard activeWorkspaceLayoutOrderKey == currentKey else { return }
+        guard !(activeWorkspaceLayoutIsIndependent && !isCurrentOrderIndependent) else { return }
+
+        if isCurrentOrderIndependent {
+            saveCurrentLayoutForOrder(showMessage: false)
+            return
+        }
+
+        if !workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            workspaceOwnerCardSyncDismissed = true
+            clearFollowedTeamCardProfile()
+            workspaceStatusMessage = t("Team card sync stopped", lang: seciliDil)
+        }
+
+        saveCurrentUserWorkspaceProfile(showMessage: false)
+    }
+
+    private func getWidth(for index: Int) -> Double {
+        if sutunGenislikleri.indices.contains(index) {
+            return min(max(sutunGenislikleri[index], 260), 800)
+        }
+        return 350
+    }
+
+    private func getBinding(for index: Int) -> Binding<Double> {
+        Binding(
+            get: { getWidth(for: index) },
+            set: { yeniDeger in
+                var guncel = sutunGenislikleri
+                while guncel.count <= index { guncel.append(350) }
+                guncel[index] = min(max(yeniDeger, 260), 800)
+                sutunGenislikleri = guncel
+            }
+        )
+    }
+
+    private func saveWidths() {
+        while sutunGenislikleri.count < kartYerlesimi.count {
+            sutunGenislikleri.append(350)
+        }
+
+        if sutunGenislikleri.indices.contains(0) { savedColLeft = sutunGenislikleri[0] }
+        if sutunGenislikleri.indices.contains(1) { savedColMid = sutunGenislikleri[1] }
+        if sutunGenislikleri.indices.contains(2) { savedColRight = sutunGenislikleri[2] }
+
+        kaydetSutunGenislikleri()
+        yenileCalismaAlaniHitbox()
+        persistWorkspaceCustomizationChange()
+    }
+
+    private func yukleSutunGenislikleri() {
+        if let data = sutunGenislikleriJSON.data(using: .utf8),
+           let dec = try? JSONDecoder().decode([Double].self, from: data),
+           !dec.isEmpty {
+            sutunGenislikleri = dec.map { min(max($0, 260), 800) }
+        } else {
+            sutunGenislikleri = [savedColLeft, savedColMid, savedColRight].map { min(max($0, 260), 800) }
+        }
+
+        while sutunGenislikleri.count < 3 {
+            sutunGenislikleri.append(350)
+        }
+    }
+
+    private func kaydetSutunGenislikleri() {
+        if let data = try? JSONEncoder().encode(sutunGenislikleri),
+           let str = String(data: data, encoding: .utf8) {
+            sutunGenislikleriJSON = str
+        }
+    }
+
+    private func guncelleSutunSayisi(viewport: CGSize) {
+        let temelSutunAlani: CGFloat = 390
+        let hedef = min(8, max(3, Int((viewport.width + 40) / temelSutunAlani)))
+        guard hedef > kartYerlesimi.count else { return }
+
+        while kartYerlesimi.count < hedef {
+            kartYerlesimi.append([])
+        }
+
+        while sutunGenislikleri.count < hedef {
+            sutunGenislikleri.append(350)
+        }
+
+        kaydetKartYerlesimi()
+        kaydetSutunGenislikleri()
+        yenileCalismaAlaniHitbox(delay: 0.05)
+    }
+
+    private func bindingYukseklik(for tip: KartTipi) -> Binding<Double?> { Binding(get: { kartYukseklikleri[tip.rawValue] }, set: { kartYukseklikleri[tip.rawValue] = $0 }) }
+
+    private func yukleHafiza() {
+        if let data = kartYerlesimiJSON.data(using: .utf8),
+           let dec = try? JSONDecoder().decode([[KartTipi]].self, from: data),
+           !dec.isEmpty {
+            kartYerlesimi = dec
+        }
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        if let data = kartYukseklikleriJSON.data(using: .utf8),
+           let dict = try? JSONDecoder().decode([String: Double].self, from: data) {
+            kartYukseklikleri = dict
+            sharedKartYukseklikleri = dict
+        }
+
+        if let historyHeight = kartYukseklikleri[KartTipi.historyLog.rawValue],
+           historyHeight > 900 {
+            kartYukseklikleri[KartTipi.historyLog.rawValue] = historyLogCompactCardHeight
+            sharedKartYukseklikleri[KartTipi.historyLog.rawValue] = historyLogCompactCardHeight
+        }
+        normalizeClientFilesCardHeightIfNeeded()
+        if sharedKartYukseklikleri.isEmpty {
+            sharedKartYukseklikleri = kartYukseklikleri
+        }
+        
+        // 🌟 KART RENKLERİ YÜKLENİYOR 🌟
+        if let data = kartRenkleriJSON.data(using: .utf8),
+           let dict = try? JSONDecoder().decode([String: String].self, from: data) {
+            kartRenkleri = dict
+        }
+
+        let tumKartlar = kartYerlesimi.flatMap { $0 }
+
+        if !tumKartlar.contains(.customerNotes) {
+            let hedef = min(1, kartYerlesimi.count - 1)
+            kartYerlesimi[hedef].append(.customerNotes)
+            kaydetKartYerlesimi()
+        }
+
+        if !tumKartlar.contains(.materials) {
+            let hedef = min(1, kartYerlesimi.count - 1)
+            kartYerlesimi[hedef].append(.materials)
+            kaydetKartYerlesimi()
+        }
+
+        if !tumKartlar.contains(.priority) {
+            let hedef = min(2, kartYerlesimi.count - 1)
+            kartYerlesimi[hedef].insert(.priority, at: 0)
+            kaydetKartYerlesimi()
+        }
+
+        if !tumKartlar.contains(.schedule) {
+            let hedef = min(2, kartYerlesimi.count - 1)
+            if let shippingIndex = kartYerlesimi[hedef].firstIndex(of: .shipping) {
+                kartYerlesimi[hedef].insert(.schedule, at: min(shippingIndex + 1, kartYerlesimi[hedef].count))
+            } else {
+                kartYerlesimi[hedef].append(.schedule)
+            }
+            kaydetKartYerlesimi()
+        }
+
+        if !kartYerlesimi.flatMap({ $0 }).contains(.historyLog) {
+            let hedef = min(2, kartYerlesimi.count - 1)
+            if let scheduleIndex = kartYerlesimi[hedef].firstIndex(of: .schedule) {
+                kartYerlesimi[hedef].insert(.historyLog, at: min(scheduleIndex + 1, kartYerlesimi[hedef].count))
+            } else {
+                kartYerlesimi[hedef].append(.historyLog)
+            }
+            kaydetKartYerlesimi()
+        }
+
+
+        if !kartYerlesimi.flatMap({ $0 }).contains(.clientFiles) {
+            let hedef = min(1, kartYerlesimi.count - 1)
+            if let notesIndex = kartYerlesimi[hedef].firstIndex(of: .notes) {
+                kartYerlesimi[hedef].insert(.clientFiles, at: min(notesIndex + 1, kartYerlesimi[hedef].count))
+            } else {
+                kartYerlesimi[hedef].append(.clientFiles)
+            }
+            kaydetKartYerlesimi()
+        }
+
+        if !kartYerlesimi.flatMap({ $0 }).contains(.workTime) {
+            let hedef = min(2, kartYerlesimi.count - 1)
+            if let todoIndex = kartYerlesimi[hedef].firstIndex(of: .todo) {
+                kartYerlesimi[hedef].insert(.workTime, at: min(todoIndex + 1, kartYerlesimi[hedef].count))
+            } else if let priorityIndex = kartYerlesimi[hedef].firstIndex(of: .priority) {
+                kartYerlesimi[hedef].insert(.workTime, at: min(priorityIndex + 1, kartYerlesimi[hedef].count))
+            } else {
+                kartYerlesimi[hedef].append(.workTime)
+            }
+            kaydetKartYerlesimi()
+        }
+
+        while sutunGenislikleri.count < kartYerlesimi.count {
+            sutunGenislikleri.append(350)
+        }
+    }
+    
+    // 🌟 KART RENK KAYDETME VE OKUMA MOTORU 🌟
+    private func setKartColor(kart: KartTipi, color: String) {
+        // Dictionary subscript mutation can redraw late on iPad/macOS.
+        // Reassigning a fresh dictionary makes SwiftUI refresh the selected block immediately.
+        var guncelRenkler = kartRenkleri
+        guncelRenkler[kart.rawValue] = color
+        kartRenkleri = guncelRenkler
+
+        if let data = try? JSONEncoder().encode(guncelRenkler),
+           let str = String(data: data, encoding: .utf8) {
+            kartRenkleriJSON = str
+        }
+
+        // Save the color into the active workspace layout too.
+        // Without this, switching orders reloads the old shared/independent layout and the color disappears.
+        persistWorkspaceCustomizationChange()
+
+        // Force a lightweight refresh so the block color does not stay dim/stale until another block changes.
+        withAnimation(.snappy) {
+            uiTetikleyici.toggle()
+        }
+        yenileCalismaAlaniHitbox(delay: 0.01)
+    }
+
+    private func getKartColor(kart: KartTipi) -> String {
+        return kartRenkleri[kart.rawValue] ?? "Default"
+    }
+
+    private func kaydetKartYerlesimi() {
+        if let data = try? JSONEncoder().encode(kartYerlesimi),
+           let str = String(data: data, encoding: .utf8) {
+            kartYerlesimiJSON = str
+        }
+        persistWorkspaceCustomizationChange()
+    }
+    private func applyKartYerlesimiForHistory(_ layout: [[KartTipi]]) {
+        var cleanedLayout = layout
+        while cleanedLayout.count < 3 {
+            cleanedLayout.append([])
+        }
+
+        kartYerlesimi = cleanedLayout
+        ensureRequiredCardsInCurrentLayout()
+
+        while sutunGenislikleri.count < kartYerlesimi.count {
+            sutunGenislikleri.append(350)
+        }
+
+        kaydetKartYerlesimi()
+        yenileCalismaAlaniHitbox(delay: 0.01)
+    }
+
+    private func bitirSuruklemeyiVeKaydet() {
+        let eskiYerlesim = kartYerlesimiBeforeDrag
+        let yeniYerlesim = kartYerlesimi
+        kartYerlesimiBeforeDrag = nil
+
+        showWorkspaceEmptyDropTargets = false
+        workspaceCardInsertDropTarget = nil
+        CardDragCoordinator.shared.endSession()
+        draggedKart = nil
+        PlatformCursor.arrowSet()
+        kaydetKartYerlesimi()
+
+        if let eskiYerlesim, eskiYerlesim != yeniYerlesim {
+            firebaseManager.registerUIChange(
+                title: "Move Block",
+                undo: { applyKartYerlesimiForHistory(eskiYerlesim) },
+                redo: { applyKartYerlesimiForHistory(yeniYerlesim) }
+            )
+        }
+
+        yenileCalismaAlaniHitbox(delay: 0.05)
+    }
+
+    private func kaydetKartYukseklikleri() {
+        rememberCurrentOrderCardHeights()
+        saveActiveCardHeightsLocally()
+        yenileCalismaAlaniHitbox()
+        persistWorkspaceCustomizationChange()
+    }
+
+    private func yenileCalismaAlaniHitbox(delay: Double = 0.02) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.macOSHitboxHack = self.macOSHitboxHack == 0 ? 0.1 : 0
+            self.uiTetikleyici.toggle()
+            #if os(macOS)
+            for window in NSApplication.shared.windows {
+                if let view = window.contentView {
+                    window.invalidateCursorRects(for: view)
+                    view.needsLayout = true
+                    view.needsDisplay = true
+                }
+            }
+            #endif
+        }
+    }
+    
+    // 🌟 TÜM KARTLARA RENK ÖZELLİĞİ AKTARILIYOR 🌟
+    @ViewBuilder
+    private func kartGosterici(icin kart: KartTipi, colIndex: Int) -> some View {
+        if !isCardAllowedByPlan(kart) {
+            planLockedKarti(for: kart, colIndex: colIndex)
+        } else {
+            switch kart {
+            case .preview: previewKarti(colIndex: colIndex)
+            case .summary: summaryKarti(colIndex: colIndex)
+            case .customer: customerKarti(colIndex: colIndex)
+            case .delivery: deliveryKarti(colIndex: colIndex)
+            case .communication: communicationKarti(colIndex: colIndex)
+            case .notes: notesKarti(colIndex: colIndex)
+            case .financial: financialKarti(colIndex: colIndex)
+            case .status: statusKarti(colIndex: colIndex)
+            case .shipping: shippingKarti(colIndex: colIndex)
+            case .schedule: scheduleKarti(colIndex: colIndex)
+            case .historyLog: historyLogKarti(colIndex: colIndex)
+            case .clientFiles: clientFilesKarti(colIndex: colIndex)
+            case .todo: toDoKarti(colIndex: colIndex)
+            case .workTime: workTimeKarti(colIndex: colIndex)
+            case .customerNotes: customerNotesKarti(colIndex: colIndex)
+            case .materials: materialsKarti(colIndex: colIndex)
+            case .priority: priorityKarti(colIndex: colIndex)
+            }
+        }
+    }
+
+    private func planLockedKarti(for kart: KartTipi, colIndex: Int) -> some View {
+        return DetayKarti(
+            title: workspaceBlockTitle(for: kart),
+            iconName: cardHeaderIcon(for: kart),
+            kartTipi: kart,
+            yukseklik: bindingYukseklik(for: kart),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: kart),
+            minimumHeightOverride: max(240, varsayilanKartYuksekligi(for: kart)),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(kart, false) },
+            onColorChange: { setKartColor(kart: kart, color: $0) }
+        ) {
+            lockedFeatureUpsellCard(
+                title: workspaceBlockTitle(for: kart),
+                requiredPlan: requiredPlanLabel(for: kart),
+                message: t("This card is locked on your current plan.", lang: seciliDil),
+                footer: t("You can keep the card visible as a reminder, or hide it from Workspace Blocks.", lang: seciliDil),
+                iconName: cardHeaderIcon(for: kart),
+                compact: false
+            )
+        }
+    }
+
+    private func lockedFeatureUpsellCard(
+        title: String,
+        requiredPlan: String,
+        message: String,
+        footer: String? = nil,
+        iconName: String = "lock.fill",
+        compact: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 10 : 14) {
+            HStack(alignment: .top, spacing: compact ? 10 : 12) {
+                ZStack(alignment: .bottomTrailing) {
+                    Image(systemName: iconName)
+                        .font(.system(size: compact ? 17 : 22, weight: .semibold))
+                        .foregroundColor(studioWarningOrange)
+                        .frame(width: compact ? 36 : 46, height: compact ? 36 : 46)
+                        .background(
+                            RoundedRectangle(cornerRadius: compact ? 11 : 14, style: .continuous)
+                                .fill(studioWarningOrange.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                        )
+
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: compact ? 8 : 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: compact ? 16 : 18, height: compact ? 16 : 18)
+                        .background(Circle().fill(studioWarningOrange))
+                        .offset(x: 3, y: 3)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: compact ? 13 : 15, weight: .bold))
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(message)
+                        .font(.system(size: compact ? 11 : 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !requiredPlan.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10, weight: .bold))
+                            Text(t("Available from", lang: seciliDil) + " " + requiredPlan)
+                                .font(.system(size: compact ? 10 : 11, weight: .bold))
+                        }
+                        .foregroundColor(studioWarningOrange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(studioWarningOrange.opacity(colorScheme == .dark ? 0.18 : 0.12)))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let footer, !footer.isEmpty {
+                Text(footer)
+                    .font(.system(size: compact ? 10 : 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, compact ? 0 : 2)
+            }
+
+            Button {
+                openPlanAccessFromLockedFeature()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.stack.badge.person.crop")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(t("Plan & Access", lang: seciliDil))
+                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.06))
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(compact ? 12 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: compact ? 14 : 18, style: .continuous)
+                .fill(studioWarningOrange.opacity(colorScheme == .dark ? 0.10 : 0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: compact ? 14 : 18, style: .continuous)
+                .stroke(studioWarningOrange.opacity(colorScheme == .dark ? 0.28 : 0.20), lineWidth: 1)
+        )
+    }
+    
+    private let historyLogEmptyCardHeight: Double = 210
+    private let historyLogCompactCardHeight: Double = 360
+    private let historyLogRowHeight: CGFloat = 70
+    private let historyLogRowSpacing: CGFloat = 8
+    private let historyLogCardChromeHeight: CGFloat = 132
+    private let clientFilesVisibleRowLimit = 3
+    private let clientFilesRowHeight: CGFloat = 64
+    private let clientFilesRowSpacing: CGFloat = 8
+    private let clientFilesCardChromeHeight: CGFloat = 256
+    private let clientFilesEmptyCardHeight: Double = 360
+    private let clientFilesMinimumCardHeightWithFiles: Double = 310
+    private let clientFilesMaximumStableCardHeight: Double = 900
+    private let workTimeVisibleSessionLimit = 3
+    private let workTimeSessionRowHeight: CGFloat = 64
+    private let workTimeSessionRowSpacing: CGFloat = 8
+    private let workTimeGroupHeaderHeight: CGFloat = 18
+    private let workTimeDefaultCardHeight: Double = 380
+    private let workTimeCardChromeHeight: CGFloat = 116
+    private let workTimeTotalBlockHeight: CGFloat = 64
+    private let workTimeActiveBlockHeight: CGFloat = 54
+    private let workTimeControlsBlockHeight: CGFloat = 40
+    private let workTimeLockedBlockHeight: CGFloat = 50
+    private let workTimeMessageBlockHeight: CGFloat = 24
+    private let workTimeEmptyBlockHeight: CGFloat = 78
+    private let workTimeContentSpacing: CGFloat = 12
+
+    private var historyLogPreferredCardHeight: Double {
+        guard !orderHistoryItems.isEmpty else { return historyLogEmptyCardHeight }
+        let visibleCount = min(max(orderHistoryItems.count, 1), 3)
+        let rowsHeight = historyLogRowsHeightForVisibleCount(visibleCount)
+        return max(historyLogEmptyCardHeight, min(historyLogCompactCardHeight, Double(historyLogCardChromeHeight + rowsHeight)))
+    }
+
+    private func historyLogRowsHeightForVisibleCount(_ count: Int) -> CGFloat {
+        let visibleCount = max(count, 1)
+        return CGFloat(visibleCount) * historyLogRowHeight + CGFloat(max(visibleCount - 1, 0)) * historyLogRowSpacing
+    }
+
+    private func historyLogRowsHeight(for cardHeight: Double?) -> CGFloat {
+        let visibleCount = min(max(orderHistoryItems.count, 1), 3)
+        let defaultRowsHeight = historyLogRowsHeightForVisibleCount(visibleCount)
+        let effectiveCardHeight = CGFloat(cardHeight ?? historyLogPreferredCardHeight)
+        let availableRowsHeight = effectiveCardHeight - historyLogCardChromeHeight
+        return max(defaultRowsHeight, availableRowsHeight)
+    }
+
+    private var clientFilesPreferredCardHeight: Double {
+        guard !clientFileItems.isEmpty else { return clientFilesEmptyCardHeight }
+        let rowCount = min(max(clientFileItems.count, 1), clientFilesVisibleRowLimit)
+        let rowsHeight = clientFilesRowsHeightForVisibleCount(rowCount)
+        return max(clientFilesMinimumCardHeightWithFiles, Double(clientFilesCardChromeHeight + rowsHeight))
+    }
+
+    private func clientFilesRowsHeightForVisibleCount(_ count: Int) -> CGFloat {
+        let visibleCount = max(count, 1)
+        return CGFloat(visibleCount) * clientFilesRowHeight + CGFloat(max(visibleCount - 1, 0)) * clientFilesRowSpacing
+    }
+
+    private func clientFilesRowsHeight(for cardHeight: Double?, fileCount: Int) -> CGFloat {
+        let visibleCount = min(max(fileCount, 1), clientFilesVisibleRowLimit)
+        let defaultRowsHeight = clientFilesRowsHeightForVisibleCount(visibleCount)
+        let effectiveCardHeight = CGFloat(cardHeight ?? clientFilesPreferredCardHeight)
+        let availableRowsHeight = effectiveCardHeight - clientFilesCardChromeHeight
+        return max(defaultRowsHeight, availableRowsHeight)
+    }
+
+    private func normalizeClientFilesCardHeightIfNeeded() {
+        let key = KartTipi.clientFiles.rawValue
+        guard let currentHeight = kartYukseklikleri[key],
+              currentHeight > clientFilesMaximumStableCardHeight else { return }
+        kartYukseklikleri[key] = varsayilanKartYuksekligi(for: .clientFiles)
+        if let orderKey = currentOrderCardHeightKey,
+           orderKartYukseklikleri[orderKey] != nil {
+            orderKartYukseklikleri[orderKey] = kartYukseklikleri
+        } else {
+            sharedKartYukseklikleri = kartYukseklikleri
+        }
+    }
+
+    private func clientFileMergeKey(_ item: ClientFileItem) -> String {
+        let storagePath = item.storagePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storagePath.isEmpty { return "storage:\(storagePath)" }
+
+        let downloadURL = item.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !downloadURL.isEmpty { return "url:\(downloadURL)" }
+
+        let pendingQueueId = item.pendingQueueId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !pendingQueueId.isEmpty { return "pending:\(pendingQueueId)" }
+
+        return "id:\(item.id.uuidString)"
+    }
+
+    private func sortedClientFiles(_ files: [ClientFileItem]) -> [ClientFileItem] {
+        files.sorted { first, second in
+            if first.isPendingUpload != second.isPendingUpload {
+                return first.isPendingUpload
+            }
+            return first.uploadedAt > second.uploadedAt
+        }
+    }
+
+    private func mergedClientFilesFromCloud(_ cloudFiles: [ClientFileItem]) -> [ClientFileItem] {
+        var merged = cloudFiles
+        var knownKeys = Set(cloudFiles.map(clientFileMergeKey))
+
+        for localFile in siparis.clientFiles ?? [] {
+            let key = clientFileMergeKey(localFile)
+            guard !knownKeys.contains(key) else { continue }
+
+            // Keep local pending/current upload rows while the server snapshot is catching up.
+            if localFile.isPendingUpload || isUploadingClientFile || isImportingSharedClientFiles {
+                merged.append(localFile)
+                knownKeys.insert(key)
+            }
+        }
+
+        return sortedClientFiles(merged)
+    }
+
+    private func historyLogMergeKey(_ item: OrderHistoryLogItem) -> String {
+        "id:\(item.id.uuidString)"
+    }
+
+    private func mergedHistoryLogFromCloud(_ cloudItems: [OrderHistoryLogItem]) -> [OrderHistoryLogItem] {
+        var merged = cloudItems
+        var knownKeys = Set(cloudItems.map(historyLogMergeKey))
+
+        for localItem in siparis.historyLog ?? [] {
+            let key = historyLogMergeKey(localItem)
+            guard !knownKeys.contains(key) else { continue }
+            merged.append(localItem)
+            knownKeys.insert(key)
+        }
+
+        return Array(merged.sorted { $0.createdAt > $1.createdAt }.prefix(120))
+    }
+
+    private func syncOrderCollectionsFromCloud(_ orders: [Siparis]) {
+        guard let orderId = siparis.id,
+              let cloudOrder = orders.first(where: { $0.id == orderId }) else { return }
+
+        let nextClientFiles = mergedClientFilesFromCloud(cloudOrder.clientFiles ?? [])
+        if sortedClientFiles(siparis.clientFiles ?? []) != nextClientFiles {
+            siparis.clientFiles = nextClientFiles
+        }
+
+        let nextHistoryLog = mergedHistoryLogFromCloud(cloudOrder.historyLog ?? [])
+        if (siparis.historyLog ?? []) != nextHistoryLog {
+            siparis.historyLog = nextHistoryLog
+        }
+    }
+
+    private var orderHistoryItems: [OrderHistoryLogItem] {
+        (siparis.historyLog ?? []).sorted { first, second in
+            first.createdAt > second.createdAt
+        }
+    }
+
+    private func orderHistoryDateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func cleanHistoryValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "-" : trimmed
+    }
+
+    private func amountHistoryValue(_ value: Double) -> String {
+        "\(seciliParaBirimi)\(formatFiyat(value, ondalik: seciliOndalik))"
+    }
+
+    private func boolHistoryValue(_ value: Bool) -> String {
+        lt(value ? "Yes" : "No")
+    }
+
+    private func recordOrderHistoryEvent(title: String, value: String = "") {
+        let cleanedValue = cleanHistoryValue(value)
+        var logs = siparis.historyLog ?? []
+        logs.insert(OrderHistoryLogItem(id: UUID(), createdAt: Date(), title: title, oldValue: "-", newValue: cleanedValue), at: 0)
+        if logs.count > 120 {
+            logs = Array(logs.prefix(120))
+        }
+        siparis.historyLog = logs
+    }
+
+    private func recordSemanticOrderHistoryIfNeeded(title: String, oldValue: String, newValue: String) {
+        let cleanedOld = cleanHistoryValue(oldValue)
+        let cleanedNew = cleanHistoryValue(newValue)
+        guard cleanedOld != cleanedNew else { return }
+
+        let titleLower = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let newLower = cleanedNew.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let oldWasEmpty = cleanedOld == "-"
+        let newHasValue = cleanedNew != "-"
+
+        if titleLower == "tracking number", oldWasEmpty, newHasValue {
+            recordOrderHistoryEvent(title: "Tracking number added", value: cleanedNew)
+        }
+
+        if titleLower == "design status" || titleLower.contains("design") || titleLower.contains("approval") || titleLower.contains("mockup") {
+            if newLower.contains("approved") || newLower.contains("approval") || newLower == "done" || newLower == "complete" || newLower == "completed" {
+                recordOrderHistoryEvent(title: "Customer approved design", value: cleanedNew)
+            }
+
+            if newLower.contains("mockup") || newLower.contains("sent") || newLower.contains("draft sent") {
+                recordOrderHistoryEvent(title: "Design mockup sent", value: cleanedNew)
+            }
+        }
+
+        if titleLower == "order status" || titleLower.contains("painting") || titleLower.contains("production") {
+            if newLower.contains("progress") || newLower.contains("painting") || newLower.contains("production") || newLower.contains("started") {
+                recordOrderHistoryEvent(title: "Painting started", value: cleanedNew)
+            }
+
+            if newLower == "done" || newLower == "complete" || newLower == "completed" {
+                recordOrderHistoryEvent(title: "Order completed", value: cleanedNew)
+            }
+        }
+    }
+
+    private func recordSemanticOrderHistoryForToggle(title: String, newValue: Bool) {
+        guard newValue else { return }
+        let titleLower = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if titleLower.contains("deposit paid") || titleLower.contains("payment received") {
+            recordOrderHistoryEvent(title: "Deposit marked as paid", value: lt("Yes"))
+        }
+
+        if titleLower.contains("mockup approved") || titleLower.contains("design approved") || titleLower.contains("client approved") || titleLower.contains("customer approved") {
+            recordOrderHistoryEvent(title: "Customer approved design", value: lt("Yes"))
+        }
+
+        if titleLower.contains("draft sent") || titleLower.contains("mockup sent") || titleLower.contains("final photos sent") {
+            recordOrderHistoryEvent(title: "Design mockup sent", value: lt("Yes"))
+        }
+    }
+
+    private func recordOrderHistoryChange(title: String, oldValue: String, newValue: String) {
+        let cleanedOld = cleanHistoryValue(oldValue)
+        let cleanedNew = cleanHistoryValue(newValue)
+        guard cleanedOld != cleanedNew else { return }
+
+        var logs = siparis.historyLog ?? []
+        logs.insert(OrderHistoryLogItem(id: UUID(), createdAt: Date(), title: title, oldValue: cleanedOld, newValue: cleanedNew), at: 0)
+        if logs.count > 120 {
+            logs = Array(logs.prefix(120))
+        }
+        siparis.historyLog = logs
+    }
+
+    private func recordOrderChangeAndUpdate(title: String, oldValue: String, newValue: String) {
+        recordOrderHistoryChange(title: title, oldValue: oldValue, newValue: newValue)
+        recordSemanticOrderHistoryIfNeeded(title: title, oldValue: oldValue, newValue: newValue)
+        firebaseManager.updateSiparis(siparis)
+    }
+
+
+    private var canEditToDoItems: Bool {
+        canEditOrderDetails
+    }
+
+    private var canUseToDoAssignment: Bool {
+        authVM.currentPlanEntitlements.teamAccessEnabled
+    }
+
+    private var toDoFilters: [String] {
+        canUseToDoAssignment ? ["Open", "All", "Mine", "Overdue", "Done"] : ["Open", "All", "Overdue", "Done"]
+    }
+
+    private var toDoAssigneeOptions: [ToDoAssigneeOption] {
+        var options: [ToDoAssigneeOption] = [ToDoAssigneeOption(uid: "", label: t("Unassigned", lang: seciliDil), email: "")]
+        var seen: Set<String> = [""]
+
+        let currentUid = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentEmail = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentName = authVM.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !currentUid.isEmpty {
+            let label = currentName.isEmpty ? (currentEmail.isEmpty ? t("Me", lang: seciliDil) : currentEmail) : currentName
+            options.append(ToDoAssigneeOption(uid: currentUid, label: label, email: currentEmail))
+            seen.insert(currentUid)
+        }
+
+        for member in authVM.teamMembers.sorted(by: { first, second in
+            let firstLabel = first.displayName.isEmpty ? first.email : first.displayName
+            let secondLabel = second.displayName.isEmpty ? second.email : second.displayName
+            return firstLabel.localizedCaseInsensitiveCompare(secondLabel) == .orderedAscending
+        }) {
+            let uid = member.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !uid.isEmpty, !seen.contains(uid) else { continue }
+            let label = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? member.email : member.displayName
+            options.append(ToDoAssigneeOption(uid: uid, label: label.isEmpty ? member.id : label, email: member.email))
+            seen.insert(uid)
+        }
+
+        return options
+    }
+
+    private var toDoItemsSorted: [OrderToDoItem] {
+        // Keep the saved array order so users can manually arrange tasks.
+        // Filters below preserve this same order inside each filtered view.
+        siparis.todoItems ?? []
+    }
+
+    private var toDoFilteredItems: [OrderToDoItem] {
+        let currentUid = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentEmail = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filter = toDoFilter.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return toDoItemsSorted.filter { item in
+            switch filter {
+            case "all":
+                return true
+            case "done":
+                return item.isDone
+            case "mine":
+                return (!currentUid.isEmpty && item.assignedToUid == currentUid) || (!currentEmail.isEmpty && item.assignedToEmail.lowercased() == currentEmail)
+            case "overdue":
+                return toDoIsOverdue(item)
+            default:
+                return !item.isDone
+            }
+        }
+    }
+
+    private var openToDoCount: Int { (siparis.todoItems ?? []).filter { !$0.isDone }.count }
+    private var doneToDoCount: Int { (siparis.todoItems ?? []).filter { $0.isDone }.count }
+    private var overdueToDoCount: Int { (siparis.todoItems ?? []).filter { toDoIsOverdue($0) }.count }
+    private var toDoPlanLimitReached: Bool {
+        guard let limit = authVM.currentPlanEntitlements.taskLimitPerOrder else { return false }
+        return (siparis.todoItems ?? []).count >= limit
+    }
+
+    private var toDoPlanLimitMessage: String {
+        guard let limit = authVM.currentPlanEntitlements.taskLimitPerOrder else { return "" }
+        return String(format: t("Demo allows up to %d tasks per order. Upgrade to Lite, Pro or Team for unlimited tasks.", lang: seciliDil), limit)
+    }
+
+    private func toDoPriorityRank(_ priority: String) -> Int {
+        switch priority.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "urgent": return 0
+        case "high": return 1
+        case "normal": return 2
+        case "low": return 3
+        default: return 4
+        }
+    }
+
+    private func toDoPriorityColor(_ priority: String) -> Color {
+        switch priority.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "urgent": return .red
+        case "high": return studioWarningOrange
+        case "low": return .gray
+        default: return .blue
+        }
+    }
+
+    private func toDoIsOverdue(_ item: OrderToDoItem) -> Bool {
+        guard !item.isDone, let dueAt = item.dueAt else { return false }
+        return dueAt < Calendar.current.startOfDay(for: Date())
+    }
+
+    private func toDoDateLabel(_ date: Date?) -> String {
+        guard let date else { return t("No due date", lang: seciliDil) }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    private func toDoAssigneeEmail(for uid: String) -> String {
+        guard !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
+        if uid == (authVM.currentUserId ?? "") { return authVM.accountEmail }
+        return authVM.teamMembers.first(where: { $0.id == uid })?.email ?? ""
+    }
+
+    private func toDoAssigneeLabel(uid: String, email: String) -> String {
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanUid.isEmpty && cleanEmail.isEmpty { return t("Unassigned", lang: seciliDil) }
+        if cleanUid == (authVM.currentUserId ?? "") {
+            let name = authVM.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? (cleanEmail.isEmpty ? t("Me", lang: seciliDil) : cleanEmail) : name
+        }
+        if let member = authVM.teamMembers.first(where: { $0.id == cleanUid }) {
+            let name = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? (member.email.isEmpty ? cleanUid : member.email) : name
+        }
+        return cleanEmail.isEmpty ? cleanUid : cleanEmail
+    }
+
+    private func saveToDoItems(_ items: [OrderToDoItem], historyTitle: String? = nil, historyValue: String = "") {
+        siparis.todoItems = items
+        if let historyTitle {
+            recordOrderHistoryEvent(title: historyTitle, value: historyValue)
+        }
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func addToDoItem() {
+        guard canEditToDoItems else { return }
+        let title = newToDoTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        if toDoPlanLimitReached {
+            toDoMessage = toDoPlanLimitMessage
+            return
+        }
+
+        let assignedUid = canUseToDoAssignment ? newToDoAssignedToUid : ""
+        let email = canUseToDoAssignment ? toDoAssigneeEmail(for: assignedUid) : ""
+        var items = siparis.todoItems ?? []
+        items.insert(
+            OrderToDoItem(
+                id: UUID(),
+                title: title,
+                note: "",
+                assignedToUid: assignedUid,
+                assignedToEmail: email,
+                dueAt: newToDoHasDueDate ? newToDoDueAt : nil,
+                priority: newToDoPriority,
+                isDone: false,
+                createdAt: Date(),
+                createdByUid: authVM.currentUserId ?? "",
+                createdByEmail: authVM.accountEmail,
+                completedAt: nil,
+                completedByUid: "",
+                completedByEmail: ""
+            ),
+            at: 0
+        )
+
+        newToDoTitle = ""
+        newToDoPriority = "Normal"
+        newToDoHasDueDate = false
+        saveToDoItems(items, historyTitle: "Task added", historyValue: title)
+    }
+
+    private func updateToDoItem(_ updatedItem: OrderToDoItem, historyTitle: String? = nil, historyValue: String = "") {
+        guard canEditToDoItems else { return }
+        var items = siparis.todoItems ?? []
+        guard let index = items.firstIndex(where: { $0.id == updatedItem.id }) else { return }
+        items[index] = updatedItem
+        saveToDoItems(items, historyTitle: historyTitle, historyValue: historyValue)
+    }
+
+    private func toggleToDoItem(_ item: OrderToDoItem) {
+        guard canEditToDoItems else { return }
+        var updated = item
+        updated.isDone.toggle()
+        if updated.isDone {
+            updated.completedAt = Date()
+            updated.completedByUid = authVM.currentUserId ?? ""
+            updated.completedByEmail = authVM.accountEmail
+            updateToDoItem(updated, historyTitle: "Task completed", historyValue: updated.title)
+        } else {
+            updated.completedAt = nil
+            updated.completedByUid = ""
+            updated.completedByEmail = ""
+            updateToDoItem(updated, historyTitle: "Task reopened", historyValue: updated.title)
+        }
+    }
+
+    private func deleteToDoItem(_ item: OrderToDoItem) {
+        guard canEditToDoItems else { return }
+        let items = (siparis.todoItems ?? []).filter { $0.id != item.id }
+        saveToDoItems(items, historyTitle: "Task deleted", historyValue: item.title)
+    }
+
+    private func moveToDoItem(_ item: OrderToDoItem, direction: Int) {
+        guard canEditToDoItems else { return }
+        var items = siparis.todoItems ?? []
+        guard let currentIndex = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        let targetIndex = currentIndex + direction
+        guard items.indices.contains(targetIndex) else { return }
+
+        withAnimation(.snappy) {
+            let movedItem = items.remove(at: currentIndex)
+            items.insert(movedItem, at: targetIndex)
+        }
+
+        saveToDoItems(items, historyTitle: "Task order updated", historyValue: item.title)
+    }
+
+    private func moveToDoItemToTop(_ item: OrderToDoItem) {
+        guard canEditToDoItems else { return }
+        var items = siparis.todoItems ?? []
+        guard let currentIndex = items.firstIndex(where: { $0.id == item.id }), currentIndex > 0 else { return }
+
+        withAnimation(.snappy) {
+            let movedItem = items.remove(at: currentIndex)
+            items.insert(movedItem, at: 0)
+        }
+
+        saveToDoItems(items, historyTitle: "Task order updated", historyValue: item.title)
+    }
+
+    private func moveToDoItemToBottom(_ item: OrderToDoItem) {
+        guard canEditToDoItems else { return }
+        var items = siparis.todoItems ?? []
+        guard let currentIndex = items.firstIndex(where: { $0.id == item.id }), currentIndex < items.count - 1 else { return }
+
+        withAnimation(.snappy) {
+            let movedItem = items.remove(at: currentIndex)
+            items.append(movedItem)
+        }
+
+        saveToDoItems(items, historyTitle: "Task order updated", historyValue: item.title)
+    }
+
+    private func reorderToDoItem(draggedID: UUID, targetID: UUID) {
+        guard canEditToDoItems, draggedID != targetID else { return }
+        var items = siparis.todoItems ?? []
+        guard let fromIndex = items.firstIndex(where: { $0.id == draggedID }),
+              let toIndex = items.firstIndex(where: { $0.id == targetID }) else { return }
+
+        withAnimation(.easeInOut(duration: 0.12)) {
+            let movedItem = items.remove(at: fromIndex)
+            items.insert(movedItem, at: toIndex)
+            siparis.todoItems = items
+        }
+    }
+
+    private func finishToDoDrag(_ draggedID: UUID?) {
+        guard canEditToDoItems else { return }
+        let title = (siparis.todoItems ?? []).first(where: { $0.id == draggedID })?.title ?? ""
+        recordOrderHistoryEvent(title: "Task order updated", value: title)
+        firebaseManager.updateSiparis(siparis)
+        #if os(macOS)
+        NSCursor.openHand.set()
+        #endif
+    }
+
+    private func toDoReminderTitle(for item: OrderToDoItem) -> String {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? t("To Do", lang: seciliDil) : title
+    }
+
+    private func toDoReminderNotes(for item: OrderToDoItem) -> String {
+        var lines: [String] = []
+        let customer = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignee = toDoAssigneeLabel(uid: item.assignedToUid, email: item.assignedToEmail).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !customer.isEmpty { lines.append("Customer: \(customer)") }
+        if !design.isEmpty { lines.append("Design: \(design)") }
+        if !assignee.isEmpty { lines.append("Assigned to: \(assignee)") }
+        if !item.priority.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.append("Priority: \(item.priority)") }
+        return lines.joined(separator: "\n")
+    }
+
+    private func addAppleReminder(for item: OrderToDoItem) {
+        guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
+            toDoMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            return
+        }
+        #if canImport(EventKit)
+        let dueDate = item.dueAt ?? Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        toDoMessage = t("Adding Apple Reminder...", lang: seciliDil)
+        AppleReminderManager.shared.addOrderReminder(
+            title: toDoReminderTitle(for: item),
+            notes: toDoReminderNotes(for: item),
+            dueDate: dueDate,
+            useDueDateTime: false
+        ) { result in
+            switch result {
+            case .success:
+                self.toDoMessage = t("Apple Reminder added.", lang: self.seciliDil)
+                self.recordOrderHistoryEvent(title: "Task reminder added", value: item.title)
+                self.firebaseManager.updateSiparis(self.siparis)
+            case .failure(let error):
+                let baseMessage: String
+                if let reminderError = error as? StudioFlowReminderError {
+                    baseMessage = reminderError.errorDescription ?? error.localizedDescription
+                } else {
+                    baseMessage = error.localizedDescription
+                }
+                self.toDoMessage = t("Apple Reminder could not be added.", lang: self.seciliDil) + " " + baseMessage
+            }
+        }
+        #else
+        toDoMessage = t("Apple Reminders is not available on this device.", lang: seciliDil)
+        #endif
+    }
+
+    private func setToDoDue(_ item: OrderToDoItem, daysFromToday: Int?) {
+        var updated = item
+        if let daysFromToday {
+            let start = Calendar.current.startOfDay(for: Date())
+            updated.dueAt = Calendar.current.date(byAdding: .day, value: daysFromToday, to: start) ?? Date()
+        } else {
+            updated.dueAt = nil
+        }
+        updateToDoItem(updated, historyTitle: "Task due date updated", historyValue: updated.title)
+    }
+
+    private func setToDoAssignee(_ item: OrderToDoItem, uid: String, email: String) {
+        guard canUseToDoAssignment else { return }
+        var updated = item
+        updated.assignedToUid = uid
+        updated.assignedToEmail = email
+        updateToDoItem(updated, historyTitle: "Task assigned", historyValue: updated.title)
+    }
+
+    private func setToDoPriority(_ item: OrderToDoItem, priority: String) {
+        var updated = item
+        updated.priority = priority
+        updateToDoItem(updated, historyTitle: "Task priority updated", historyValue: updated.title)
+    }
+
+    private func toDoFilterButton(_ filter: String) -> some View {
+        Button {
+            toDoFilter = filter
+        } label: {
+            Text(t(filter, lang: seciliDil))
+                .font(.system(size: 11, weight: .bold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(toDoFilter == filter ? Color.blue.opacity(0.18) : Color.primary.opacity(0.06))
+                .foregroundColor(toDoFilter == filter ? .blue : .secondary)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toDoKarti(colIndex: Int) -> some View {
+        return DetayKarti(
+            title: t("To Do", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .todo),
+            kartTipi: .todo,
+            yukseklik: bindingYukseklik(for: .todo),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .todo),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.todo, false) },
+            onColorChange: { setKartColor(kart: .todo, color: $0) },
+            onExport: exportToDoPDF
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    toDoSummaryPill(title: t("Open", lang: seciliDil), value: openToDoCount, color: .blue)
+                    toDoSummaryPill(title: t("Overdue", lang: seciliDil), value: overdueToDoCount, color: overdueToDoCount > 0 ? .red : .secondary)
+                    toDoSummaryPill(title: t("Done", lang: seciliDil), value: doneToDoCount, color: .green)
+                }
+
+                if toDoPlanLimitReached {
+                    Label(toDoPlanLimitMessage, systemImage: "lock.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(studioWarningOrange)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(studioWarningOrange.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                if canEditToDoItems {
+                    toDoAddForm
+                } else {
+                    Text(t("You can view tasks, but your role cannot edit them.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.primary.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                if !toDoMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(toDoMessage)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(toDoMessage.localizedCaseInsensitiveContains("could not") ? .red : .green)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.primary.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                if !(siparis.todoItems ?? []).isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(toDoFilters, id: \.self) { filter in
+                                toDoFilterButton(filter)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                if toDoFilteredItems.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(.green.opacity(0.75))
+                        Text(t("No tasks here", lang: seciliDil))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(toDoFilteredItems) { item in
+                            draggableToDoRow(item)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func toDoSummaryPill(title: String, value: Int, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            Text("\(value)")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(color.opacity(0.18), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var toDoAddForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                TextField(t("Add a task...", lang: seciliDil), text: $newToDoTitle, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2, reservesSpace: true)
+                    .onSubmit {
+                        addToDoItem()
+                    }
+
+                Button {
+                    addToDoItem()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(newToDoTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || toDoPlanLimitReached)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    toDoAddOptions
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    toDoAddOptions
+                }
+            }
+
+            if newToDoHasDueDate {
+                HStack(spacing: 8) {
+                    Text(t("Due date", lang: seciliDil))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    DatePicker("", selection: $newToDoDueAt, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .font(.system(size: 12))
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var toDoAddOptions: some View {
+        if canUseToDoAssignment {
+            HStack(spacing: 6) {
+                Text(t("Assign", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                Picker(t("Assign", lang: seciliDil), selection: $newToDoAssignedToUid) {
+                    ForEach(toDoAssigneeOptions) { option in
+                        Text(option.label).tag(option.uid)
+                    }
+                }
+                .pickerStyle(.menu)
+                .controlSize(.small)
+            }
+        }
+
+        HStack(spacing: 6) {
+            Text(t("Priority", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            Picker(t("Priority", lang: seciliDil), selection: $newToDoPriority) {
+                ForEach(["Low", "Normal", "High", "Urgent"], id: \.self) { priority in
+                    Text(t(priority, lang: seciliDil)).tag(priority)
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.small)
+        }
+
+        Toggle(t("Due", lang: seciliDil), isOn: $newToDoHasDueDate)
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    @ViewBuilder
+    private func draggableToDoRow(_ item: OrderToDoItem) -> some View {
+        if canEditToDoItems {
+            toDoRow(item)
+                .opacity(draggingToDoItemID == item.id ? 0.55 : 1)
+                .onHover { hovering in
+                    #if os(macOS)
+                    if hovering {
+                        NSCursor.openHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                    #endif
+                }
+                .onDrag {
+                    draggingToDoItemID = item.id
+                    #if os(macOS)
+                    NSCursor.closedHand.set()
+                    #endif
+                    return NSItemProvider(object: item.id.uuidString as NSString)
+                }
+                .onDrop(
+                    of: [UTType.plainText],
+                    delegate: ToDoItemDropDelegate(
+                        item: item,
+                        draggingID: $draggingToDoItemID,
+                        canEdit: canEditToDoItems,
+                        moveAction: { draggedID, targetID in
+                            reorderToDoItem(draggedID: draggedID, targetID: targetID)
+                        },
+                        dropAction: { draggedID in
+                            finishToDoDrag(draggedID)
+                        }
+                    )
+                )
+        } else {
+            toDoRow(item)
+        }
+    }
+
+    private func toDoRow(_ item: OrderToDoItem) -> some View {
+        let priorityColor = toDoPriorityColor(item.priority)
+        let dueColor: Color = toDoIsOverdue(item) ? .red : (item.dueAt == nil ? .secondary : studioWarningOrange)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Button {
+                    toggleToDoItem(item)
+                } label: {
+                    Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundColor(item.isDone ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canEditToDoItems)
+
+                Text(item.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(item.isDone ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if canEditToDoItems {
+                    Menu {
+                        Button {
+                            toggleToDoItem(item)
+                        } label: {
+                            Label(
+                                t(item.isDone ? "Reopen" : "Mark Done", lang: seciliDil),
+                                systemImage: item.isDone ? "arrow.uturn.left.circle" : "checkmark.circle"
+                            )
+                        }
+
+                        Button {
+                            addAppleReminder(for: item)
+                        } label: {
+                            Label(t("Add Reminder", lang: seciliDil), systemImage: "bell.badge")
+                        }
+
+                        Menu(t("Move", lang: seciliDil)) {
+                            Button {
+                                moveToDoItem(item, direction: -1)
+                            } label: {
+                                Label(t("Move Up", lang: seciliDil), systemImage: "arrow.up")
+                            }
+
+                            Button {
+                                moveToDoItem(item, direction: 1)
+                            } label: {
+                                Label(t("Move Down", lang: seciliDil), systemImage: "arrow.down")
+                            }
+
+                            Divider()
+
+                            Button {
+                                moveToDoItemToTop(item)
+                            } label: {
+                                Label(t("Move to Top", lang: seciliDil), systemImage: "arrow.up.to.line")
+                            }
+
+                            Button {
+                                moveToDoItemToBottom(item)
+                            } label: {
+                                Label(t("Move to Bottom", lang: seciliDil), systemImage: "arrow.down.to.line")
+                            }
+                        }
+
+                        if canUseToDoAssignment {
+                            Menu(t("Assign", lang: seciliDil)) {
+                                ForEach(toDoAssigneeOptions) { option in
+                                    Button(option.label) {
+                                        setToDoAssignee(item, uid: option.uid, email: option.email)
+                                    }
+                                }
+                            }
+                        }
+
+                        Menu(t("Due date", lang: seciliDil)) {
+                            Button(t("No due date", lang: seciliDil)) {
+                                setToDoDue(item, daysFromToday: nil)
+                            }
+
+                            Button(t("Today", lang: seciliDil)) {
+                                setToDoDue(item, daysFromToday: 0)
+                            }
+
+                            Button(t("Tomorrow", lang: seciliDil)) {
+                                setToDoDue(item, daysFromToday: 1)
+                            }
+
+                            Button(t("In 3 days", lang: seciliDil)) {
+                                setToDoDue(item, daysFromToday: 3)
+                            }
+
+                            Button(t("In 7 days", lang: seciliDil)) {
+                                setToDoDue(item, daysFromToday: 7)
+                            }
+                        }
+
+                        Menu(t("Priority", lang: seciliDil)) {
+                            ForEach(["Low", "Normal", "High", "Urgent"], id: \.self) { priority in
+                                Button(t(priority, lang: seciliDil)) {
+                                    setToDoPriority(item, priority: priority)
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            deleteToDoItem(item)
+                        } label: {
+                            Label(t("Delete", lang: seciliDil), systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                }
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    toDoMetadataRow(item: item, priorityColor: priorityColor, dueColor: dueColor)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    toDoMetadataRow(item: item, priorityColor: priorityColor, dueColor: dueColor)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(item.isDone ? 0.03 : 0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(toDoIsOverdue(item) ? Color.red.opacity(0.24) : Color.primary.opacity(0.04), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func toDoMetadataRow(item: OrderToDoItem, priorityColor: Color, dueColor: Color) -> some View {
+        if canUseToDoAssignment || !item.assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !item.assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Label(toDoAssigneeLabel(uid: item.assignedToUid, email: item.assignedToEmail), systemImage: "person.crop.circle")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+
+        Label(t(item.priority, lang: seciliDil), systemImage: "flag.fill")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundColor(priorityColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(priorityColor.opacity(0.12))
+            .clipShape(Capsule())
+
+        Label(toDoDateLabel(item.dueAt), systemImage: "calendar")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(dueColor)
+            .lineLimit(1)
+    }
+
+    private var canEditWorkTime: Bool {
+        canEditOrderDetails
+    }
+
+    private var workSessionItems: [OrderWorkSessionItem] {
+        (siparis.workSessions ?? []).sorted { first, second in
+            if first.endedAt == nil && second.endedAt != nil { return true }
+            if first.endedAt != nil && second.endedAt == nil { return false }
+            return first.startedAt > second.startedAt
+        }
+    }
+
+    private var activeWorkSession: OrderWorkSessionItem? {
+        workSessionItems.first { $0.endedAt == nil }
+    }
+
+    private func workSessionDurationSeconds(_ item: OrderWorkSessionItem, now: Date = Date()) -> Int {
+        if let endedAt = item.endedAt {
+            return max(item.durationSeconds, Int(endedAt.timeIntervalSince(item.startedAt)))
+        }
+        return max(0, Int(now.timeIntervalSince(item.startedAt)))
+    }
+
+    private func totalWorkSessionSeconds(now: Date = Date()) -> Int {
+        workSessionItems.reduce(0) { total, item in
+            total + workSessionDurationSeconds(item, now: now)
+        }
+    }
+
+    private func formatWorkDuration(_ seconds: Int) -> String {
+        let safeSeconds = max(seconds, 0)
+        let hours = safeSeconds / 3600
+        let minutes = (safeSeconds % 3600) / 60
+        let remainder = safeSeconds % 60
+
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        if minutes > 0 { return "\(minutes)m \(remainder)s" }
+        return "\(remainder)s"
+    }
+
+    private func workSessionDateText(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
+    private func workSessionTimeText(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func workSessionGroups() -> [(date: Date, items: [OrderWorkSessionItem])] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: workSessionItems) { item in
+            calendar.startOfDay(for: item.startedAt)
+        }
+
+        return grouped.keys.sorted(by: >).map { date in
+            let items = grouped[date]?.sorted { $0.startedAt > $1.startedAt } ?? []
+            return (date, items)
+        }
+    }
+
+    private func workTimeRowsHeightForVisibleGroups(
+        _ groups: [(date: Date, items: [OrderWorkSessionItem])],
+        limit: Int? = nil
+    ) -> CGFloat {
+        var remaining = limit ?? Int.max
+        var visibleSessionCount = 0
+        var visibleGroupCount = 0
+
+        for group in groups where remaining > 0 {
+            let itemCount = min(group.items.count, remaining)
+            guard itemCount > 0 else { continue }
+            visibleGroupCount += 1
+            visibleSessionCount += itemCount
+            remaining -= itemCount
+        }
+
+        guard visibleSessionCount > 0 else {
+            return workTimeGroupHeaderHeight + workTimeSessionRowHeight
+        }
+
+        return CGFloat(visibleGroupCount) * workTimeGroupHeaderHeight
+            + CGFloat(visibleSessionCount) * workTimeSessionRowHeight
+            + CGFloat(visibleSessionCount) * workTimeSessionRowSpacing
+            + CGFloat(max(visibleGroupCount - 1, 0)) * 10
+    }
+
+    private func workTimePreferredCardHeight(
+        groups: [(date: Date, items: [OrderWorkSessionItem])],
+        hasActiveSession: Bool,
+        hasMessage: Bool
+    ) -> Double {
+        var blockHeights: [CGFloat] = [workTimeTotalBlockHeight]
+
+        if hasActiveSession {
+            blockHeights.append(workTimeActiveBlockHeight)
+        }
+
+        blockHeights.append(canEditWorkTime ? workTimeControlsBlockHeight : workTimeLockedBlockHeight)
+
+        if hasMessage {
+            blockHeights.append(workTimeMessageBlockHeight)
+        }
+
+        blockHeights.append(
+            groups.isEmpty
+                ? workTimeEmptyBlockHeight
+                : workTimeRowsHeightForVisibleGroups(groups, limit: workTimeVisibleSessionLimit)
+        )
+
+        let spacing = CGFloat(max(blockHeights.count - 1, 0)) * workTimeContentSpacing
+        let contentHeight = blockHeights.reduce(0, +) + spacing
+        return max(workTimeDefaultCardHeight, Double(contentHeight + workTimeCardChromeHeight))
+    }
+
+    private func workTimeRowsHeight(
+        for cardHeight: Double?,
+        preferredCardHeight: Double,
+        groups: [(date: Date, items: [OrderWorkSessionItem])],
+        hasActiveSession: Bool,
+        hasMessage: Bool
+    ) -> CGFloat {
+        let effectiveHeight = CGFloat(cardHeight ?? preferredCardHeight)
+        let defaultRowsHeight = workTimeRowsHeightForVisibleGroups(groups, limit: workTimeVisibleSessionLimit)
+        let extraHeight = max(0, effectiveHeight - CGFloat(preferredCardHeight))
+        return max(defaultRowsHeight, defaultRowsHeight + extraHeight)
+    }
+
+    private func saveWorkSessions(_ sessions: [OrderWorkSessionItem], historyTitle: String? = nil, historyValue: String = "") {
+        siparis.workSessions = sessions.sorted { $0.startedAt > $1.startedAt }
+        if let historyTitle {
+            recordOrderHistoryEvent(title: historyTitle, value: historyValue)
+        }
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func startWorkSession() {
+        guard canEditWorkTime else { return }
+        guard activeWorkSession == nil else {
+            workTimeMessage = t("A work timer is already running.", lang: seciliDil)
+            return
+        }
+
+        let title = newWorkSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.isEmpty ? t("Work session", lang: seciliDil) : title
+        let now = Date()
+        var sessions = siparis.workSessions ?? []
+        sessions.insert(
+            OrderWorkSessionItem(
+                id: UUID(),
+                title: cleanTitle,
+                startedAt: now,
+                endedAt: nil,
+                durationSeconds: 0,
+                createdAt: now,
+                createdByUid: authVM.currentUserId ?? "",
+                createdByEmail: authVM.accountEmail,
+                source: "app"
+            ),
+            at: 0
+        )
+
+        newWorkSessionTitle = ""
+        workTimeMessage = t("Work timer started.", lang: seciliDil)
+        saveWorkSessions(sessions, historyTitle: "Work timer started", historyValue: cleanTitle)
+    }
+
+    private func stopActiveWorkSession() {
+        guard canEditWorkTime, let active = activeWorkSession else { return }
+        stopWorkSession(active)
+    }
+
+    private func stopWorkSession(_ item: OrderWorkSessionItem) {
+        guard canEditWorkTime, item.endedAt == nil else { return }
+        var sessions = siparis.workSessions ?? []
+        guard let index = sessions.firstIndex(where: { $0.id == item.id }) else { return }
+
+        let now = Date()
+        var stopped = sessions[index]
+        stopped.endedAt = now
+        stopped.durationSeconds = workSessionDurationSeconds(stopped, now: now)
+        sessions[index] = stopped
+
+        workTimeMessage = t("Work timer stopped.", lang: seciliDil)
+        saveWorkSessions(
+            sessions,
+            historyTitle: "Work timer stopped",
+            historyValue: "\(stopped.title) · \(formatWorkDuration(stopped.durationSeconds))"
+        )
+    }
+
+    private func continueWorkSession(_ item: OrderWorkSessionItem) {
+        guard canEditWorkTime else { return }
+        guard activeWorkSession == nil else {
+            workTimeMessage = t("A work timer is already running.", lang: seciliDil)
+            return
+        }
+
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? t("Work session", lang: seciliDil)
+            : item.title
+        let now = Date()
+        var sessions = siparis.workSessions ?? []
+        sessions.insert(
+            OrderWorkSessionItem(
+                id: UUID(),
+                title: title,
+                startedAt: now,
+                endedAt: nil,
+                durationSeconds: 0,
+                createdAt: now,
+                createdByUid: authVM.currentUserId ?? "",
+                createdByEmail: authVM.accountEmail,
+                source: "app"
+            ),
+            at: 0
+        )
+
+        workTimeMessage = t("Work timer continued.", lang: seciliDil)
+        saveWorkSessions(sessions, historyTitle: "Work timer continued", historyValue: title)
+    }
+
+    private func deleteWorkSession(_ item: OrderWorkSessionItem) {
+        guard canEditWorkTime else { return }
+        var sessions = siparis.workSessions ?? []
+        let previousCount = sessions.count
+        sessions.removeAll { $0.id == item.id }
+        guard sessions.count != previousCount else { return }
+
+        workTimeMessage = t("Work session deleted.", lang: seciliDil)
+        saveWorkSessions(sessions, historyTitle: "Work timer deleted", historyValue: item.title)
+    }
+
+    private func workSessionRow(_ item: OrderWorkSessionItem, now: Date) -> some View {
+        let isActive = item.endedAt == nil
+        let duration = workSessionDurationSeconds(item, now: now)
+
+        return HStack(alignment: .center, spacing: 10) {
+            Image(systemName: isActive ? "play.fill" : "checkmark")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(isActive ? .green : .blue)
+                .frame(width: 22, height: 22)
+                .background((isActive ? Color.green : Color.blue).opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("Work session", lang: seciliDil) : item.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                let endText = item.endedAt.map { workSessionTimeText($0) } ?? t("Running", lang: seciliDil)
+                Text("\(workSessionTimeText(item.startedAt)) → \(endText)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(formatWorkDuration(duration))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(isActive ? .green : .primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background((isActive ? Color.green : Color.primary).opacity(isActive ? 0.12 : 0.06))
+                .clipShape(Capsule())
+
+            if canEditWorkTime {
+                if isActive {
+                    Button {
+                        stopWorkSession(item)
+                    } label: {
+                        Image(systemName: "stop.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.red)
+                    .help(t("Stop", lang: seciliDil))
+                } else {
+                    Button {
+                        continueWorkSession(item)
+                    } label: {
+                        Image(systemName: "play.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.green)
+                    .disabled(activeWorkSession != nil)
+                    .help(t("Continue", lang: seciliDil))
+                }
+
+                Button(role: .destructive) {
+                    deleteWorkSession(item)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .foregroundColor(.red.opacity(0.85))
+                .help(t("Delete", lang: seciliDil))
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.035))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func workTimeKarti(colIndex: Int) -> some View {
+        let workTimeHeightBinding = bindingYukseklik(for: .workTime)
+        let hasMessage = !workTimeMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let groups = workSessionGroups()
+        let preferredCardHeight = workTimePreferredCardHeight(
+            groups: groups,
+            hasActiveSession: activeWorkSession != nil,
+            hasMessage: hasMessage
+        )
+
+        return DetayKarti(
+            title: t("Work Time", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .workTime),
+            kartTipi: .workTime,
+            yukseklik: workTimeHeightBinding,
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .workTime),
+            minimumHeightOverride: preferredCardHeight,
+            autoAdjustHeightOnContentChange: false,
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.workTime, false) },
+            onColorChange: { setKartColor(kart: .workTime, color: $0) }
+        ) {
+            TimelineView(.periodic(from: Date(), by: 1)) { context in
+                let now = context.date
+                let totalSeconds = totalWorkSessionSeconds(now: now)
+                let active = activeWorkSession
+                let hasMessage = !workTimeMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                let groups = workSessionGroups()
+                let preferredCardHeight = workTimePreferredCardHeight(
+                    groups: groups,
+                    hasActiveSession: active != nil,
+                    hasMessage: hasMessage
+                )
+                let rowsHeight = workTimeRowsHeight(
+                    for: workTimeHeightBinding.wrappedValue,
+                    preferredCardHeight: preferredCardHeight,
+                    groups: groups,
+                    hasActiveSession: active != nil,
+                    hasMessage: hasMessage
+                )
+                let canShowAllWorkSessionsWithoutScroll = workSessionItems.count <= workTimeVisibleSessionLimit
+
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(t("Total Work Time", lang: seciliDil))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        Text(formatWorkDuration(totalSeconds))
+                            .font(.system(size: 26, weight: .bold))
+                            .foregroundColor(.blue)
+                            .lineLimit(1)
+                            .monospacedDigit()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.blue.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    if let active {
+                        HStack(spacing: 8) {
+                            Image(systemName: "timer")
+                                .foregroundColor(.green)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(active.title)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .lineLimit(1)
+                                Text("\(t("Started", lang: seciliDil)) \(workSessionTimeText(active.startedAt))")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(formatWorkDuration(workSessionDurationSeconds(active, now: now)))
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.green)
+                                .monospacedDigit()
+                        }
+                        .padding(10)
+                        .background(Color.green.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+
+                    if canEditWorkTime {
+                        HStack(spacing: 8) {
+                            TextField(t("Work title...", lang: seciliDil), text: $newWorkSessionTitle)
+                                .textFieldStyle(.roundedBorder)
+                                .disabled(active != nil)
+                                .onSubmit {
+                                    startWorkSession()
+                                }
+
+                            Button {
+                                if active == nil {
+                                    startWorkSession()
+                                } else {
+                                    stopActiveWorkSession()
+                                }
+                            } label: {
+                                Label(
+                                    active == nil ? t("Start", lang: seciliDil) : t("Stop", lang: seciliDil),
+                                    systemImage: active == nil ? "play.fill" : "stop.fill"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(active == nil ? .green : .red)
+                        }
+                    } else {
+                        Text(t("You can view work time, but your role cannot edit it.", lang: seciliDil))
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+
+                    if !workTimeMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(workTimeMessage)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.green)
+                            .lineLimit(2)
+                    }
+
+                    if groups.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "timer")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(.secondary)
+                            Text(t("No work sessions yet.", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.primary.opacity(0.035))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    } else if canShowAllWorkSessionsWithoutScroll {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(groups, id: \.date) { group in
+                                VStack(alignment: .leading, spacing: 7) {
+                                    HStack {
+                                        Text(workSessionDateText(group.date))
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(.secondary)
+                                        Spacer()
+                                        Text(formatWorkDuration(group.items.reduce(0) { $0 + workSessionDurationSeconds($1, now: now) }))
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(.blue)
+                                    }
+
+                                    ForEach(group.items) { item in
+                                        workSessionRow(item, now: now)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.trailing, 4)
+                        .frame(height: workTimeRowsHeightForVisibleGroups(groups))
+                        .clipped()
+                    } else {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            LazyVStack(alignment: .leading, spacing: 10) {
+                                ForEach(groups, id: \.date) { group in
+                                    VStack(alignment: .leading, spacing: 7) {
+                                        HStack {
+                                            Text(workSessionDateText(group.date))
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(.secondary)
+                                            Spacer()
+                                            Text(formatWorkDuration(group.items.reduce(0) { $0 + workSessionDurationSeconds($1, now: now) }))
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(.blue)
+                                        }
+
+                                        ForEach(group.items) { item in
+                                            workSessionRow(item, now: now)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.trailing, 4)
+                        }
+                        .frame(height: rowsHeight)
+                        .clipped()
+                    }
+                }
+            }
+        }
+    }
+
+    private func historyLogKarti(colIndex: Int) -> some View {
+        let historyHeightBinding = bindingYukseklik(for: .historyLog)
+        let visibleRowsHeight = historyLogRowsHeight(for: historyHeightBinding.wrappedValue)
+
+        return DetayKarti(
+            title: lt("History / Log"),
+            iconName: cardHeaderIcon(for: .historyLog),
+            kartTipi: .historyLog,
+            yukseklik: historyHeightBinding,
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .historyLog),
+            minimumHeightOverride: historyLogPreferredCardHeight,
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.historyLog, false) },
+            onColorChange: { setKartColor(kart: .historyLog, color: $0) },
+            onExport: exportHistoryLogPDF
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(lt("Recent important changes"))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Text("\(orderHistoryItems.count)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+
+                if orderHistoryItems.isEmpty {
+                    Text(lt("No history yet. Important changes will appear here."))
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.primary.opacity(0.035))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                } else {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(alignment: .leading, spacing: 8) {
+                            ForEach(orderHistoryItems) { item in
+                                historyLogRow(item)
+                            }
+                        }
+                        .padding(.trailing, 4)
+                    }
+                    .frame(height: visibleRowsHeight)
+                    .clipped()
+                }
+            }
+        }
+    }
+
+    private func historyLogRow(_ item: OrderHistoryLogItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.blue)
+                .frame(width: 18, height: 18)
+                .background(Color.blue.opacity(0.12))
+                .clipShape(Circle())
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(lt(item.title))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                Text(orderHistoryDateText(item.createdAt))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 6) {
+                    Text(cleanHistoryValue(item.oldValue))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.gray)
+                    Text(cleanHistoryValue(item.newValue))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color.blue.opacity(0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.blue.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+
+    private let scheduleItemsCustomKey = "__scheduleAlertItemsV1"
+
+    private var scheduleItems: [ScheduleAlertItem] {
+        decodedScheduleItems().sorted { first, second in
+            if first.status != second.status {
+                return first.status == "Pending"
+            }
+            return first.dueAt < second.dueAt
+        }
+    }
+
+    private var activeScheduleItems: [ScheduleAlertItem] {
+        scheduleItems.filter { $0.status != "Done" }
+    }
+
+    private var completedScheduleItems: [ScheduleAlertItem] {
+        scheduleItems.filter { $0.status == "Done" }
+    }
+
+    private func decodedScheduleItems() -> [ScheduleAlertItem] {
+        guard let json = siparis.customFields?[scheduleItemsCustomKey],
+              let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([ScheduleAlertItem].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    private func saveScheduleItems(_ items: [ScheduleAlertItem]) {
+        var current = siparis.customFields ?? [:]
+        if let data = try? JSONEncoder().encode(items),
+           let json = String(data: data, encoding: .utf8) {
+            current[scheduleItemsCustomKey] = json
+            current["language"] = seciliDil
+        }
+        siparis.customFields = current
+        firebaseManager.updateSiparis(siparis)
+        scheduleMessage = "Schedule updated."
+    }
+
+    private func addScheduleItem() {
+        let cleanedTitle = newScheduleTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedTitle.isEmpty else {
+            scheduleMessage = "Please add a reminder title."
+            return
+        }
+
+        var items = decodedScheduleItems()
+        let item = ScheduleAlertItem(
+            title: cleanedTitle,
+            note: newScheduleNote.trimmingCharacters(in: .whitespacesAndNewlines),
+            dueAt: newScheduleDueAt,
+            priority: newSchedulePriority,
+            notify: newScheduleNotify
+        )
+        items.append(item)
+        saveScheduleItems(items)
+        scheduleSystemNotification(for: item)
+        if item.notify {
+            scheduleMessage = "Reminder saved. Adding Apple Reminder..."
+            addAppleReminder(for: item)
+        } else {
+            scheduleMessage = "Reminder saved."
+        }
+
+        newScheduleTitle = "Follow up customer"
+        newScheduleNote = ""
+        newScheduleDueAt = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        newSchedulePriority = "Normal"
+        newScheduleNotify = true
+    }
+
+    private func updateScheduleItem(_ item: ScheduleAlertItem) {
+        var items = decodedScheduleItems()
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index] = item
+        saveScheduleItems(items)
+    }
+
+    private func completeScheduleItem(_ item: ScheduleAlertItem) {
+        var updated = item
+        updated.status = "Done"
+        updated.completedAt = Date()
+        updateScheduleItem(updated)
+        cancelScheduleNotification(for: item.id)
+        scheduleMessage = "Reminder completed."
+    }
+
+    private func snoozeScheduleItem(_ item: ScheduleAlertItem, hours: Int) {
+        var updated = item
+        updated.dueAt = Calendar.current.date(byAdding: .hour, value: hours, to: Date()) ?? Date()
+        updated.status = "Pending"
+        updateScheduleItem(updated)
+        cancelScheduleNotification(for: item.id)
+        scheduleSystemNotification(for: updated)
+        scheduleMessage = "Reminder snoozed."
+    }
+
+    private func deleteScheduleItem(_ item: ScheduleAlertItem) {
+        let remaining = decodedScheduleItems().filter { $0.id != item.id }
+        saveScheduleItems(remaining)
+        cancelScheduleNotification(for: item.id)
+        scheduleMessage = "Reminder deleted."
+    }
+
+    private func scheduleNotificationIdentifier(_ id: UUID) -> String {
+        "eggcraft.schedule.\(siparis.id ?? "draft").\(id.uuidString)"
+    }
+
+    private func scheduleSystemNotification(for item: ScheduleAlertItem) {
+        guard item.notify, item.dueAt > Date() else { return }
+        #if canImport(UserNotifications)
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error {
+                DispatchQueue.main.async {
+                    self.scheduleMessage = "Notification permission error: \(error.localizedDescription)"
+                }
+                return
+            }
+
+            guard granted else {
+                DispatchQueue.main.async {
+                    self.scheduleMessage = "Reminder saved, but notification permission was not granted."
+                }
+                return
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = self.lt("EGGcraft reminder")
+            let customer = self.siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let localizedItemTitle = self.lt(item.title)
+            content.body = customer.isEmpty ? localizedItemTitle : "\(customer): \(localizedItemTitle)"
+            if !item.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                content.subtitle = item.note
+            }
+            content.sound = .default
+            content.userInfo = [
+                "orderId": self.siparis.id ?? "",
+                "scheduleId": item.id.uuidString,
+                "title": item.title
+            ]
+
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: item.dueAt)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(identifier: self.scheduleNotificationIdentifier(item.id), content: content, trigger: trigger)
+
+            center.removePendingNotificationRequests(withIdentifiers: [self.scheduleNotificationIdentifier(item.id)])
+            center.add(request) { error in
+                if let error {
+                    DispatchQueue.main.async {
+                        self.scheduleMessage = "Notification schedule error: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+        #endif
+    }
+
+    private func appleReminderTitle(for item: ScheduleAlertItem) -> String {
+        let customer = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reminderTitle = lt(item.title).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var parts: [String] = []
+        if !customer.isEmpty { parts.append(customer) }
+        if !design.isEmpty { parts.append(design) }
+        if !reminderTitle.isEmpty { parts.append(reminderTitle) }
+
+        return parts.isEmpty ? lt("Reminder") : parts.joined(separator: " - ")
+    }
+
+    private func appleReminderNotes(for item: ScheduleAlertItem) -> String {
+        var lines: [String] = []
+        let orderId = siparis.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customer = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !customer.isEmpty { lines.append("Customer: \(customer)") }
+        if !design.isEmpty { lines.append("Design: \(design)") }
+        if !orderId.isEmpty { lines.append("Order ID: \(orderId)") }
+        if !note.isEmpty { lines.append(note) }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func addAppleReminder(for item: ScheduleAlertItem) {
+        guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
+            scheduleMessage = lt("Reminder saved, but Apple Reminder could not be added.") + " " + t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            return
+        }
+        #if canImport(EventKit)
+        AppleReminderManager.shared.addOrderReminder(
+            title: appleReminderTitle(for: item),
+            notes: appleReminderNotes(for: item),
+            dueDate: item.dueAt,
+            useDueDateTime: true
+        ) { result in
+            switch result {
+            case .success:
+                self.scheduleMessage = "Reminder saved and Apple Reminder added."
+            case .failure(let error):
+                let baseMessage: String
+                if let reminderError = error as? StudioFlowReminderError {
+                    baseMessage = reminderError.errorDescription ?? error.localizedDescription
+                } else {
+                    baseMessage = error.localizedDescription
+                }
+                self.scheduleMessage = self.lt("Reminder saved, but Apple Reminder could not be added.") + " " + baseMessage + " " + self.lt("Please allow Reminders access in system settings and try again.")
+            }
+        }
+        #else
+        scheduleMessage = lt("Reminder saved, but Apple Reminder could not be added.") + " " + lt("Apple Reminders is not available on this device.")
+        #endif
+    }
+
+    private func cancelScheduleNotification(for id: UUID) {
+        #if canImport(UserNotifications)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [scheduleNotificationIdentifier(id)])
+        #endif
+    }
+
+    private var quickReminderTemplates: [ScheduleQuickReminderItem] {
+        let saved = decodedQuickReminderItems()
+        return saved.isEmpty ? businessQuickReminderSuggestions() : saved
+    }
+
+    private func decodedQuickReminderItems() -> [ScheduleQuickReminderItem] {
+        guard let data = scheduleQuickRemindersJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([ScheduleQuickReminderItem].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    private func saveQuickReminderItems(_ items: [ScheduleQuickReminderItem], message: String = "Quick reminder settings saved.") {
+        if let data = try? JSONEncoder().encode(items), let json = String(data: data, encoding: .utf8) {
+            scheduleQuickRemindersJSON = json
+            scheduleMessage = message
+        }
+    }
+
+    private func loadEditableQuickReminders() {
+        editableQuickReminders = quickReminderTemplates
+        if editableQuickReminders.isEmpty {
+            editableQuickReminders = businessQuickReminderSuggestions()
+        }
+    }
+
+    private func addEditableQuickReminder() {
+        editableQuickReminders.append(ScheduleQuickReminderItem(title: lt("Custom reminder"), days: 1, hours: 0, priority: "Normal", notify: true))
+    }
+
+    private func applyBusinessQuickReminderSuggestions() {
+        editableQuickReminders = businessQuickReminderSuggestions()
+        saveQuickReminderItems(editableQuickReminders, message: "Business-based quick reminders applied.")
+    }
+
+    private func resetQuickReminderDefaults() {
+        scheduleQuickRemindersJSON = ""
+        editableQuickReminders = businessQuickReminderSuggestions()
+        scheduleMessage = "Business-based quick reminders applied."
+    }
+
+    private func quickItem(_ title: String, days: Int = 1, hours: Int = 0, priority: String = "Normal", notify: Bool = true) -> ScheduleQuickReminderItem {
+        ScheduleQuickReminderItem(title: lt(title), days: days, hours: hours, priority: priority, notify: notify)
+    }
+
+    private func businessQuickReminderSuggestions() -> [ScheduleQuickReminderItem] {
+        let text = (businessType + " " + businessDescriptionPrompt).lowercased()
+        var items: [ScheduleQuickReminderItem]
+
+        if text.contains("photography") || text.contains("photo") || text.contains("foto") || text.contains("shoot") {
+            items = [quickItem("Confirm appointment", days: 1), quickItem("Send client update", days: 1), quickItem("Quality check", days: 2), quickItem("Send invoice", days: 2), quickItem("Check payment", days: 3), quickItem("Follow up customer", days: 5)]
+        } else if text.contains("repair") || text.contains("service") || text.contains("maintenance") || text.contains("tamir") {
+            items = [quickItem("Send client update", days: 1), quickItem("Check materials", days: 2), quickItem("Quality check", days: 3), quickItem("Check payment", days: 3), quickItem("Prepare shipment", days: 4), quickItem("Check delivery status", hours: 12)]
+        } else if text.contains("beauty") || text.contains("clinic") || text.contains("wellness") || text.contains("appointment") || text.contains("randevu") {
+            items = [quickItem("Confirm appointment", days: 1), quickItem("Send client update", days: 1), quickItem("Check payment", days: 1), quickItem("Follow up customer", days: 3), quickItem("Custom reminder", days: 7)]
+        } else if text.contains("food") || text.contains("bakery") || text.contains("catering") || text.contains("cake") || text.contains("pasta") {
+            items = [quickItem("Confirm appointment", days: 1), quickItem("Check materials", days: 1), quickItem("Quality check", hours: 12), quickItem("Prepare shipment", hours: 6), quickItem("Check delivery status", hours: 12), quickItem("Follow up customer", days: 2)]
+        } else if text.contains("consult") || text.contains("agency") || text.contains("professional") || text.contains("freelancer") || text.contains("designer") {
+            items = [quickItem("Follow up customer", days: 1), quickItem("Send client update", days: 2), quickItem("Ask for approval", days: 2), quickItem("Send invoice", days: 3), quickItem("Check payment", days: 5), quickItem("Custom reminder", days: 7)]
+        } else {
+            items = [quickItem("Follow up customer", days: 1), quickItem("Send design update", days: 1), quickItem("Ask for approval", days: 2), quickItem("Check payment", days: 2), quickItem("Check materials", days: 3), quickItem("Quality check", days: 4), quickItem("Prepare shipment", days: 5), quickItem("Check delivery status", hours: 12)]
+        }
+
+        if text.contains("approval") || text.contains("approve") || text.contains("onay") { items.insert(quickItem("Ask for approval", days: 1, priority: "High"), at: 0) }
+        if text.contains("deposit") || text.contains("payment") || text.contains("invoice") || text.contains("ödeme") { items.insert(quickItem("Check payment", days: 1, priority: "High"), at: 0) }
+        if text.contains("shipping") || text.contains("delivery") || text.contains("shipment") || text.contains("kargo") || text.contains("teslim") { items.append(quickItem("Check delivery status", hours: 12)) }
+        if text.contains("material") || text.contains("dial") || text.contains("stock") || text.contains("malzeme") || text.contains("kadran") { items.append(quickItem("Check materials", days: 2)) }
+        if text.contains("appointment") || text.contains("booking") || text.contains("randevu") { items.insert(quickItem("Confirm appointment", days: 1, priority: "High"), at: 0) }
+
+        var seen = Set<String>()
+        return Array(items.filter { item in
+            let key = item.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }.prefix(8))
+    }
+
+    private func quickSchedule(_ item: ScheduleQuickReminderItem) {
+        newScheduleTitle = lt(item.title)
+    }
+
+    private func quickSchedule(_ title: String, days: Int = 0, hours: Int = 0) {
+        quickSchedule(ScheduleQuickReminderItem(title: title, days: days, hours: hours, priority: "Normal", notify: true))
+    }
+
+    private func scheduleDateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func scheduleRelativeText(_ item: ScheduleAlertItem) -> String {
+        if item.status == "Done" { return lt("Done") }
+        let now = Date()
+        let seconds = item.dueAt.timeIntervalSince(now)
+        if seconds < 0 {
+            let hours = Int(abs(seconds) / 3600)
+            if hours < 1 { return lt("Due now") }
+            if hours < 24 { return "\(lt("Overdue")) \(hours)h" }
+            return "\(lt("Overdue")) \(max(1, hours / 24))d"
+        }
+        let hours = Int(seconds / 3600)
+        if hours < 1 { return lt("Due soon") }
+        if hours < 24 { return "\(lt("In")) \(hours)h" }
+        return "\(lt("In")) \(max(1, hours / 24))d"
+    }
+
+    private func scheduleStatusColor(_ item: ScheduleAlertItem) -> Color {
+        if item.status == "Done" { return .green }
+        if item.dueAt < Date() { return .red }
+        let hours = item.dueAt.timeIntervalSinceNow / 3600
+        if hours <= 24 { return studioWarningOrange }
+        return .blue
+    }
+
+    private func schedulePriorityColor(_ priority: String) -> Color {
+        switch priority {
+        case "Urgent": return .red
+        case "High": return studioWarningOrange
+        case "Low": return .gray
+        default: return .blue
+        }
+    }
+
+    private func scheduleKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: lt("Schedule & Alerts"),
+            iconName: cardHeaderIcon(for: .schedule),
+            kartTipi: .schedule,
+            yukseklik: bindingYukseklik(for: .schedule),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .schedule),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.schedule, false) },
+            onColorChange: { setKartColor(kart: .schedule, color: $0) },
+            onEditHeadings: { headingEditorTarget = .schedule }
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Text(lt("Quick Reminder"))
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                        .frame(width: 110, alignment: .leading)
+
+                    Spacer()
+
+                    Menu {
+                        ForEach(quickReminderTemplates) { item in
+                            Button(lt(item.title)) {
+                                quickSchedule(item)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(lt("Select reminder"))
+                                .font(.system(size: 12, weight: .bold))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.12))
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField(lt("Reminder title"), text: $newScheduleTitle)
+                        .textFieldStyle(.roundedBorder)
+
+                    DatePicker(lt("Date & Time"), selection: $newScheduleDueAt, displayedComponents: [.date, .hourAndMinute])
+                        .font(.system(size: 12))
+
+                    HStack(spacing: 10) {
+                        Picker(lt("Priority"), selection: $newSchedulePriority) {
+                            Text(lt("Low")).tag("Low")
+                            Text(lt("Normal")).tag("Normal")
+                            Text(lt("High")).tag("High")
+                            Text(lt("Urgent")).tag("Urgent")
+                        }
+                        .pickerStyle(.menu)
+
+                        Toggle(lt("Notify"), isOn: $newScheduleNotify)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+
+                    alignedNotesEditor(
+                        text: $newScheduleNote,
+                        placeholder: lt("Optional note..."),
+                        textColor: .primary,
+                        placeholderColor: .gray.opacity(0.55),
+                        backgroundColor: Color.primary.opacity(0.035),
+                        focusTarget: .scheduleNote,
+                        minHeight: 58
+                    )
+
+                    Button {
+                        addScheduleItem()
+                    } label: {
+                        Label(lt("Add Reminder"), systemImage: "plus.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
+                if !scheduleMessage.isEmpty {
+                    Text(lt(scheduleMessage))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(scheduleMessage.lowercased().contains("error") ? .red : .green)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(lt("Upcoming"))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Text("\(activeScheduleItems.count)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if activeScheduleItems.isEmpty {
+                        Text(lt("No active reminders yet."))
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(Color.primary.opacity(0.035))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    } else {
+                        ForEach(activeScheduleItems.prefix(6)) { item in
+                            scheduleItemRow(item)
+                        }
+                    }
+                }
+
+                if !completedScheduleItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(lt("Recently completed"))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.gray)
+
+                        ForEach(completedScheduleItems.prefix(3)) { item in
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(lt(item.title))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .strikethrough()
+                                    Text(scheduleDateText(item.completedAt ?? item.dueAt))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.gray)
+                                }
+                                Spacer()
+                                Button(role: .destructive) { deleteScheduleItem(item) } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(8)
+                            .background(Color.green.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var scheduleQuickReminderSettingsView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(lt("Quick reminder settings"))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.gray)
+                Spacer()
+                Button {
+                    resetQuickReminderDefaults()
+                    showScheduleQuickSettings = false
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .buttonStyle(.borderless)
+                .help(lt("Reset defaults"))
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(editableQuickReminders.indices, id: \.self) { index in
+                    HStack(spacing: 8) {
+                        TextField(lt("Button text"), text: $editableQuickReminders[index].title)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12))
+
+                        Button(role: .destructive) {
+                            editableQuickReminders.remove(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    addEditableQuickReminder()
+                } label: {
+                    Label(lt("Add quick button"), systemImage: "plus.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+
+                Button {
+                    let cleaned = editableQuickReminders
+                        .map { item -> ScheduleQuickReminderItem in
+                            var updated = item
+                            updated.title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                            return updated
+                        }
+                        .filter { !$0.title.isEmpty }
+                    saveQuickReminderItems(cleaned)
+                    editableQuickReminders = cleaned
+                    showScheduleQuickSettings = false
+                } label: {
+                    Label(lt("Save quick buttons"), systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    private func scheduleItemRow(_ item: ScheduleAlertItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Circle()
+                    .fill(scheduleStatusColor(item))
+                    .frame(width: 9, height: 9)
+                    .padding(.top, 5)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(lt(item.title))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                        Text(lt(item.priority))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(schedulePriorityColor(item.priority))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(schedulePriorityColor(item.priority).opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    Text("\(scheduleDateText(item.dueAt)) · \(scheduleRelativeText(item))")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(scheduleStatusColor(item))
+
+                    if !item.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(item.note)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Menu {
+                    Button { completeScheduleItem(item) } label: { Label(lt("Mark Done"), systemImage: "checkmark.circle") }
+                    Button { snoozeScheduleItem(item, hours: 1) } label: { Label(lt("Snooze 1 hour"), systemImage: "clock.arrow.circlepath") }
+                    Button { snoozeScheduleItem(item, hours: 24) } label: { Label(lt("Snooze 1 day"), systemImage: "calendar.badge.clock") }
+                    Button(role: .destructive) { deleteScheduleItem(item) } label: { Label(lt("Delete"), systemImage: "trash") }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundColor(.gray)
+                        .padding(4)
+                }
+                .menuStyle(.borderlessButton)
+            }
+        }
+        .padding(10)
+        .background(scheduleStatusColor(item).opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(scheduleStatusColor(item).opacity(0.16), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func priorityKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Priority / Risk", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .priority),
+            kartTipi: .priority,
+            yukseklik: bindingYukseklik(for: .priority),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .priority),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.priority, false) },
+            onColorChange: { setKartColor(kart: .priority, color: $0) }
+        ) {
+            PriorityMenuField(
+                label: lt("Priority"),
+                value: $siparis.priority,
+                options: ["Low", "Normal", "High", "Urgent"]
+            )
+
+            StatusMenuField(
+                label: t("Risk", lang: seciliDil),
+                value: $siparis.risk,
+                options: ["None", "Waiting", "Blocked", "Overdue"]
+            )
+
+            if siparis.risk != "None" {
+                Divider().background(Color.primary.opacity(0.1))
+
+                PickerField(
+                    label: t("Reason", lang: seciliDil),
+                    value: $siparis.riskReason,
+                    options: ["-", "Waiting for customer", "Waiting for payment", "Waiting for material", "Other"]
+                )
+
+                if siparis.riskReason == "Other" {
+                    NoteSupplierField(
+                        label: t("Other Note", lang: seciliDil),
+                        value: Binding(
+                            get: { siparis.customFields?["riskOtherNote"] ?? "" },
+                            set: { newValue in
+                                var current = siparis.customFields ?? [:]
+                                current["riskOtherNote"] = newValue
+                                siparis.customFields = current
+                            }
+                        )
+                    )
+                }
+            }
+        }
+    }
+    private func materialDefaultCheckBinding(index: Int, title: String) -> Binding<Bool> {
+        switch index {
+        case 0:
+            return $siparis.invBool1
+        case 1:
+            return $siparis.invBool2
+        case 2:
+            return $siparis.invBool3
+        case 3:
+            return $siparis.invBool4
+        default:
+            return Binding(
+                get: { siparis.customToggles?["materialsDefault::\(title)"] ?? false },
+                set: { newValue in
+                    var current = siparis.customToggles ?? [:]
+                    current["materialsDefault::\(title)"] = newValue
+                    siparis.customToggles = current
+                }
+            )
+        }
+    }
+
+    private func materialsKarti(colIndex: Int) -> some View {
+        DetayKarti(title: t("Materials & Inventory", lang: seciliDil), iconName: cardHeaderIcon(for: .materials), kartTipi: .materials, yukseklik: bindingYukseklik(for: .materials), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .materials), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.materials, false) }, onColorChange: { setKartColor(kart: .materials, color: $0) }, onEditHeadings: { headingEditorTarget = .materials }) {
+            ForEach(Array(materialsDefaultCheckLabels.enumerated()), id: \.offset) { index, label in
+                YesNoField(
+                    label: t(label, lang: seciliDil),
+                    value: materialDefaultCheckBinding(index: index, title: label)
+                )
+            }
+            if !materialsTogglesList.isEmpty {
+                Divider().background(Color.primary.opacity(0.1))
+                ForEach(materialsTogglesList, id: \.id) { toggle in
+                    YesNoField(
+                        label: t(toggle.title, lang: seciliDil),
+                        value: Binding(
+                            get: { siparis.customToggles?["materials::\(toggle.title)"] ?? false },
+                            set: { newValue in
+                                var current = siparis.customToggles ?? [:]
+                                current["materials::\(toggle.title)"] = newValue
+                                siparis.customToggles = current
+                            }
+                        )
+                    )
+                }
+            }
+            if showMaterialsNotesSupplier {
+                Divider().background(Color.primary.opacity(0.1))
+                NoteSupplierField(label: t(materialsNotesSupplierLabel, lang: seciliDil), value: $siparis.invNotes)
+            }
+        }
+    }
+    private func previewKarti(colIndex: Int) -> some View {
+        let mevcutYukseklik = max(kartYukseklikleri[KartTipi.preview.rawValue] ?? 250.0, 220.0)
+        let resimYuksekligi = max(120.0, mevcutYukseklik - 85.0)
+
+        return DetayKarti(
+            title: t("Preview", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .preview),
+            kartTipi: .preview,
+            yukseklik: bindingYukseklik(for: .preview),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .preview),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.preview, false) },
+            onColorChange: { setKartColor(kart: .preview, color: $0) }
+        ) {
+            ZStack(alignment: .bottomLeading) {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: resimYuksekligi)
+                    .overlay(
+                        Group {
+                            if siparis.designLink.isEmpty {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.secondary.opacity(0.7))
+                                    Text(t("No preview image provided.", lang: seciliDil))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Color.primary.opacity(isHoveringDrop ? 0.15 : 0.05))
+                            } else {
+                                AsyncImage(url: URL(string: siparis.designLink)) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                } placeholder: {
+                                    ProgressView().controlSize(.regular)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                        }
+                    )
+                    .overlay(alignment: .bottomLeading) {
+                        if isLinkEditing {
+                            HStack(spacing: 8) {
+                                Image(systemName: "link")
+                                    .foregroundColor(.gray)
+                                    .font(.system(size: 14))
+                                TextField(t("Paste photo link...", lang: seciliDil), text: $siparis.designLink)
+                                    .textFieldStyle(.plain)
+                                    .foregroundColor(.primary)
+                                    .font(.system(size: 12))
+                                    .onSubmit { commitPreviewLinkEditing() }
+                                Button { commitPreviewLinkEditing() } label: {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                        .font(.system(size: 18))
+                                }
+                                .buttonStyle(.plain)
+                                Button {
+                                    siparis.designLink = previewLinkBeforeEditing
+                                    withAnimation { isLinkEditing = false }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 18))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(colorScheme == .dark ? Color.black.opacity(0.85) : Color.white.opacity(0.95))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 3)
+                            .padding(10)
+                        }
+                    }
+                    .cornerRadius(10)
+                    .clipped()
+                    .onDrop(of: [.fileURL], isTargeted: $isHoveringDrop) { providers in
+                        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) else { return false }
+                        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { (item, error) in
+                            guard let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                            DispatchQueue.main.async { requestSafeImageUpload(url: url) }
+                        }
+                        return true
+                    }
+
+                if !isLinkEditing {
+                    Menu {
+                        Button {
+                            isImagePickerPresented = true
+                        } label: {
+                            Label(t(siparis.designLink.isEmpty ? "Upload Image" : "Replace Image", lang: seciliDil), systemImage: "square.and.arrow.up")
+                        }
+
+                        Button {
+                            startPreviewLinkEditing()
+                        } label: {
+                            Label(t(siparis.designLink.isEmpty ? "Paste photo link..." : "Edit photo link", lang: seciliDil), systemImage: "link")
+                        }
+
+                        if let url = URL(string: siparis.designLink), !siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Button {
+                                openURL(url)
+                            } label: {
+                                Label(t("Open", lang: seciliDil), systemImage: "arrow.up.right.square")
+                            }
+
+                            Divider()
+
+                            Button(role: .destructive) {
+                                removePreviewImage()
+                            } label: {
+                                Label(t("Remove Preview Image", lang: seciliDil), systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(colorScheme == .dark ? Color.black.opacity(0.34) : Color.white.opacity(0.42))
+                                .frame(width: 36, height: 36)
+                                .shadow(color: Color.black.opacity(0.08), radius: 5, x: 0, y: 2)
+                            if isUploading {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "ellipsis.circle.fill")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundColor(.primary.opacity(0.56))
+                            }
+                        }
+                        .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(10)
+                }
+            }
+            .fileImporter(isPresented: $isImagePickerPresented, allowedContentTypes: [.image]) { result in
+                switch result {
+                case .success(let url):
+                    requestSafeImageUpload(url: url)
+                case .failure(let error):
+                    print("Dosya seçim hatası: \(error)")
+                }
+            }
+        }
+    }
+
+    private func startPreviewLinkEditing() {
+        previewLinkBeforeEditing = siparis.designLink
+        withAnimation { isLinkEditing = true }
+    }
+
+    private func commitPreviewLinkEditing() {
+        let oldLink = previewLinkBeforeEditing.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newLink = siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        withAnimation { isLinkEditing = false }
+        guard oldLink != newLink else { return }
+
+        if oldLink.isEmpty && !newLink.isEmpty {
+            recordOrderHistoryEvent(title: "Design mockup sent", value: "Image link added")
+        } else {
+            recordOrderHistoryChange(
+                title: "Preview Image",
+                oldValue: oldLink.isEmpty ? "No image" : "Previous image",
+                newValue: newLink.isEmpty ? "Removed" : "Updated image"
+            )
+        }
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func removePreviewImage() {
+        let oldLink = siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !oldLink.isEmpty else { return }
+        previewLinkBeforeEditing = oldLink
+        withAnimation {
+            siparis.designLink = ""
+            isLinkEditing = false
+        }
+        recordOrderHistoryChange(title: "Preview Image", oldValue: "Image", newValue: "Removed")
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func requestSafeImageUpload(url: URL) {
+        if uploadSafetyRequirePolicyAcceptance && !uploadSafetyPolicyAccepted {
+            pendingUploadSafetyURL = url
+            pendingUploadSafetySource = "order_preview"
+            showUploadSafetyPrompt = true
+            return
+        }
+        goruntuBulutaYukle(url: url)
+    }
+
+    private func goruntuBulutaYukle(url: URL) {
+        isUploading = true
+        firebaseManager.uploadDesignImage(fileURL: url, orderId: siparis.id, source: "order_preview") { downloadURL in
+            DispatchQueue.main.async {
+                isUploading = false
+                if let downloadURL = downloadURL {
+                    let oldLink = siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines)
+                    withAnimation { siparis.designLink = downloadURL }
+                    if oldLink.isEmpty {
+                        recordOrderHistoryEvent(title: "Design mockup sent", value: "Image uploaded")
+                    } else {
+                        recordOrderHistoryChange(title: "Design Mockup", oldValue: "Previous image", newValue: "Updated image")
+                    }
+                    firebaseManager.updateSiparis(siparis)
+                } else {
+                    uploadSafetyErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Upload blocked. Please check Upload Safety settings and try again.", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
+                    showUploadSafetyError = true
+                }
+            }
+        }
+    }
+
+
+    private func refreshSharedClientFilesInbox() {
+        sharedClientFilesInbox = SharedClientFileInbox.pendingFiles()
+    }
+
+    private func importSharedClientFilesIntoCurrentOrder() {
+        guard canEditClientFiles else { return }
+        refreshSharedClientFilesInbox()
+        let pendingFiles = sharedClientFilesInbox
+        guard !pendingFiles.isEmpty else { return }
+
+        if uploadSafetyRequirePolicyAcceptance && !uploadSafetyPolicyAccepted {
+            uploadSafetyErrorMessage = t("Please accept the Upload Policy before importing shared files.", lang: seciliDil)
+            showUploadSafetyError = true
+            return
+        }
+
+        isImportingSharedClientFiles = true
+        clientFileMessage = t("Importing shared files...", lang: seciliDil)
+        importSharedClientFile(at: 0, from: pendingFiles, importedCount: 0)
+    }
+
+    private func importSharedClientFile(at index: Int, from pendingFiles: [SharedClientFileInbox.PendingFile], importedCount: Int) {
+        guard index < pendingFiles.count else {
+            isImportingSharedClientFiles = false
+            refreshSharedClientFilesInbox()
+            if importedCount > 0 {
+                recordOrderHistoryEvent(title: "Shared client files imported", value: "\(importedCount) file(s)")
+                firebaseManager.updateSiparis(siparis)
+                clientFileMessage = String(format: t("%d shared file(s) added to this order.", lang: seciliDil), importedCount)
+            } else {
+                clientFileMessage = t("No shared files were imported.", lang: seciliDil)
+            }
+            return
+        }
+
+        let pending = pendingFiles[index]
+        guard let fileURL = SharedClientFileInbox.fileURL(for: pending) else {
+            SharedClientFileInbox.remove(pending)
+            importSharedClientFile(at: index + 1, from: pendingFiles, importedCount: importedCount)
+            return
+        }
+
+        firebaseManager.uploadClientFile(fileURL: fileURL, orderId: siparis.id, source: "client_file_share_sheet") { item in
+            DispatchQueue.main.async {
+                if let item {
+                    var files = siparis.clientFiles ?? []
+                    files.insert(item, at: 0)
+                    siparis.clientFiles = files
+                    SharedClientFileInbox.remove(pending)
+                    importSharedClientFile(at: index + 1, from: pendingFiles, importedCount: importedCount + 1)
+                } else {
+                    uploadSafetyErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Upload blocked. Please check Upload Safety settings and try again.", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
+                    showUploadSafetyError = true
+                    importSharedClientFile(at: index + 1, from: pendingFiles, importedCount: importedCount)
+                }
+            }
+        }
+    }
+
+    private func discardSharedClientFilesInbox() {
+        SharedClientFileInbox.clearAll()
+        refreshSharedClientFilesInbox()
+        clientFileMessage = t("Shared files cleared.", lang: seciliDil)
+    }
+
+    private var clientFileItems: [ClientFileItem] {
+        sortedClientFiles(siparis.clientFiles ?? [])
+    }
+
+    private var canEditClientFiles: Bool {
+        let roleCanEdit = canEditOrderDetails
+        return canAccessClientFiles && roleCanEdit && authVM.currentPlanEntitlements.clientFilesEnabled
+    }
+
+    private func canDeleteClientFile(_ item: ClientFileItem) -> Bool {
+        let currentUid = authVM.currentUserId ?? ""
+        return canAccessClientFiles && (canEditOrderDetails || item.uploadedByUid == currentUid)
+    }
+
+    private var allowedClientFileContentTypes: [UTType] {
+        var types: [UTType] = [.pdf, .image]
+        if let psd = UTType(filenameExtension: "psd") { types.append(psd) }
+        if let psb = UTType(filenameExtension: "psb") { types.append(psb) }
+        // Some systems do not advertise PSD/PSB as a specific UTType.
+        // Allow generic file selection here, then enforce the real allow-list in FirebaseManager.
+        types.append(.data)
+        return types
+    }
+
+    private func presentClientFilePicker() {
+        guard canEditClientFiles else { return }
+        #if os(macOS)
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = allowedClientFileContentTypes
+        panel.message = t("Choose a PDF, image, PSD or PSB file for this order.", lang: seciliDil)
+        if panel.runModal() == .OK {
+            uploadClientFilesSequentially(panel.urls)
+        }
+        #else
+        showClientFileSourceDialog = true
+        #endif
+    }
+
+    #if os(iOS)
+    private func importClientFilePhotoPickerItem(_ item: PhotosPickerItem?) {
+        guard canEditClientFiles, let item else { return }
+
+        clientFileMessage = t("Preparing photo...", lang: seciliDil)
+        let preferredType = item.supportedContentTypes.first(where: { $0.conforms(to: .image) }) ?? .jpeg
+        let fileExtension = preferredType.preferredFilenameExtension ?? "jpg"
+
+        item.loadTransferable(type: Data.self) { result in
+            switch result {
+            case .success(let data):
+                guard let data else {
+                    DispatchQueue.main.async {
+                        uploadSafetyErrorMessage = t("Could not read selected photo.", lang: seciliDil)
+                        showUploadSafetyError = true
+                        clientFileMessage = ""
+                        selectedClientFilePhotoItem = nil
+                    }
+                    return
+                }
+
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("studioflow-client-photo-\(UUID().uuidString).\(fileExtension)")
+
+                do {
+                    try data.write(to: url, options: .atomic)
+                    DispatchQueue.main.async {
+                        selectedClientFilePhotoItem = nil
+                        requestSafeClientFileUpload(url: url)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        uploadSafetyErrorMessage = error.localizedDescription
+                        showUploadSafetyError = true
+                        clientFileMessage = ""
+                        selectedClientFilePhotoItem = nil
+                    }
+                }
+
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    uploadSafetyErrorMessage = error.localizedDescription
+                    showUploadSafetyError = true
+                    clientFileMessage = ""
+                    selectedClientFilePhotoItem = nil
+                }
+            }
+        }
+    }
+    #endif
+
+    private func uploadClientFilesSequentially(_ urls: [URL], index: Int = 0) {
+        guard index < urls.count else { return }
+        requestSafeClientFileUpload(url: urls[index]) {
+            uploadClientFilesSequentially(urls, index: index + 1)
+        }
+    }
+
+    private func requestSafeClientFileUpload(url: URL, completion: (() -> Void)? = nil) {
+        guard canEditClientFiles else { return }
+        if uploadSafetyRequirePolicyAcceptance && !uploadSafetyPolicyAccepted {
+            pendingUploadSafetyURL = url
+            pendingUploadSafetySource = "client_file"
+            showUploadSafetyPrompt = true
+            return
+        }
+        clientFileBulutaYukle(url: url, completion: completion)
+    }
+
+    private func clientFileBulutaYukle(url: URL, completion: (() -> Void)? = nil) {
+        guard canEditClientFiles else { return }
+        isUploadingClientFile = true
+        clientFileMessage = ""
+        firebaseManager.uploadClientFile(fileURL: url, orderId: siparis.id) { item in
+            DispatchQueue.main.async {
+                defer { completion?() }
+                isUploadingClientFile = false
+                if let item {
+                    var files = siparis.clientFiles ?? []
+                    files.insert(item, at: 0)
+                    siparis.clientFiles = files
+                    let historyEntry = OrderHistoryLogItem(
+                        id: UUID(),
+                        createdAt: Date(),
+                        title: item.isPendingUpload ? "Client file queued" : "Client file uploaded",
+                        oldValue: "-",
+                        newValue: cleanHistoryValue(item.fileName)
+                    )
+                    var logs = siparis.historyLog ?? []
+                    logs.insert(historyEntry, at: 0)
+                    siparis.historyLog = Array(logs.prefix(120))
+                    firebaseManager.appendClientFile(item, historyEntry: historyEntry, to: siparis)
+                    clientFileMessage = item.isPendingUpload
+                        ? t("Offline. File saved locally and will upload when online.", lang: seciliDil)
+                        : t("File uploaded", lang: seciliDil)
+                } else {
+                    uploadSafetyErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Upload blocked. Please check Upload Safety settings and try again.", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
+                    showUploadSafetyError = true
+                }
+            }
+        }
+    }
+
+    private func deleteClientFile(_ item: ClientFileItem) {
+        guard canDeleteClientFile(item) else { return }
+
+        if item.isPendingUpload {
+            firebaseManager.cancelPendingClientFileUpload(pendingQueueId: item.pendingQueueId)
+            if !item.localFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try? FileManager.default.removeItem(atPath: item.localFilePath)
+            }
+            var files = siparis.clientFiles ?? []
+            files.removeAll { $0.id == item.id }
+            siparis.clientFiles = files
+            recordOrderHistoryEvent(title: "Pending client file removed", value: item.fileName)
+            firebaseManager.updateSiparis(siparis)
+            clientFileMessage = t("Pending upload removed", lang: seciliDil)
+            return
+        }
+
+        firebaseManager.deleteUploadedFile(downloadURLString: item.downloadURL, source: "client_file_delete") { success in
+            DispatchQueue.main.async {
+                if success {
+                    var files = siparis.clientFiles ?? []
+                    files.removeAll { $0.id == item.id }
+                    siparis.clientFiles = files
+                    recordOrderHistoryEvent(title: "Client file deleted", value: item.fileName)
+                    firebaseManager.updateSiparis(siparis)
+                    clientFileMessage = t("File deleted", lang: seciliDil)
+                } else {
+                    uploadSafetyErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Delete failed", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
+                    showUploadSafetyError = true
+                }
+            }
+        }
+    }
+
+    private func makeClientFileAvailableOffline(_ item: ClientFileItem) {
+        guard !item.isPendingUpload else {
+            clientFileMessage = t("Pending files are already saved locally until upload completes.", lang: seciliDil)
+            return
+        }
+
+        clientFileMessage = t("Downloading file for offline use...", lang: seciliDil)
+        firebaseManager.downloadClientFileForOffline(item) { success, message in
+            offlineClientFileRefreshToken = UUID()
+            clientFileMessage = t(message, lang: seciliDil)
+            if !success {
+                uploadSafetyErrorMessage = t(message, lang: seciliDil)
+                showUploadSafetyError = true
+            }
+        }
+    }
+
+    private func makeAllClientFilesAvailableOffline() {
+        let downloadableFiles = clientFileItems.filter { !$0.isPendingUpload }
+        guard !downloadableFiles.isEmpty else {
+            clientFileMessage = t("No uploaded client files to download for offline use.", lang: seciliDil)
+            return
+        }
+        downloadClientFilesForOffline(downloadableFiles, index: 0, completed: 0)
+    }
+
+    private func downloadClientFilesForOffline(_ files: [ClientFileItem], index: Int, completed: Int) {
+        guard index < files.count else {
+            offlineClientFileRefreshToken = UUID()
+            clientFileMessage = String(format: t("%d file(s) saved for offline use.", lang: seciliDil), completed)
+            return
+        }
+
+        let item = files[index]
+        clientFileMessage = String(format: t("Downloading %d of %d file(s)...", lang: seciliDil), index + 1, files.count)
+        firebaseManager.downloadClientFileForOffline(item) { success, _ in
+            offlineClientFileRefreshToken = UUID()
+            downloadClientFilesForOffline(files, index: index + 1, completed: completed + (success ? 1 : 0))
+        }
+    }
+
+    private func openClientFilePreview(_ item: ClientFileItem) {
+        clientFilePreviewItem = item
+    }
+
+    private func openClientFileExternally(_ item: ClientFileItem) {
+        if item.isPendingUpload,
+           !item.localFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            openURL(URL(fileURLWithPath: item.localFilePath))
+            return
+        }
+        if let offlineURL = firebaseManager.offlineClientFileURL(for: item),
+           FileManager.default.fileExists(atPath: offlineURL.path) {
+            openURL(offlineURL)
+            return
+        }
+        if let url = URL(string: item.downloadURL) {
+            openURL(url)
+        } else {
+            uploadSafetyErrorMessage = t("Download failed: file URL is missing.", lang: seciliDil)
+            showUploadSafetyError = true
+        }
+    }
+
+    private func temporaryDownloadCopyURL(from sourceURL: URL, suggestedFileName: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("StudioFlowClientFileDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destinationURL = directory.appendingPathComponent(safeClientFileDisplayName(suggestedFileName))
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
+
+    private func presentClientFileDownload(from sourceURL: URL, suggestedFileName: String) {
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = safeClientFileDisplayName(suggestedFileName)
+        let fileExtension = sourceURL.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !fileExtension.isEmpty, let type = UTType(filenameExtension: fileExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        if panel.runModal() == .OK, let targetURL = panel.url {
+            do {
+                if FileManager.default.fileExists(atPath: targetURL.path) {
+                    try FileManager.default.removeItem(at: targetURL)
+                }
+                try FileManager.default.copyItem(at: sourceURL, to: targetURL)
+                clientFileMessage = t("File downloaded", lang: seciliDil)
+                NSWorkspace.shared.activateFileViewerSelecting([targetURL])
+            } catch {
+                uploadSafetyErrorMessage = error.localizedDescription
+                showUploadSafetyError = true
+            }
+        }
+        #else
+        pdfShareItem = ShareableFileURL(url: sourceURL)
+        clientFileMessage = t("Use the share sheet to save or send this file.", lang: seciliDil)
+        #endif
+    }
+
+    private func downloadClientFileToUserLocation(_ item: ClientFileItem) {
+        if item.isPendingUpload,
+           !item.localFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let localURL = URL(fileURLWithPath: item.localFilePath)
+            presentClientFileDownload(from: localURL, suggestedFileName: item.fileName)
+            return
+        }
+
+        if let offlineURL = firebaseManager.offlineClientFileURL(for: item),
+           FileManager.default.fileExists(atPath: offlineURL.path) {
+            presentClientFileDownload(from: offlineURL, suggestedFileName: item.fileName)
+            return
+        }
+
+        guard let remoteURL = URL(string: item.downloadURL) else {
+            uploadSafetyErrorMessage = t("Download failed: file URL is missing.", lang: seciliDil)
+            showUploadSafetyError = true
+            return
+        }
+
+        clientFileMessage = t("Preparing download...", lang: seciliDil)
+        URLSession.shared.downloadTask(with: remoteURL) { temporaryURL, _, error in
+            if let error {
+                DispatchQueue.main.async {
+                    uploadSafetyErrorMessage = error.localizedDescription
+                    showUploadSafetyError = true
+                    clientFileMessage = ""
+                }
+                return
+            }
+
+            guard let temporaryURL else {
+                DispatchQueue.main.async {
+                    uploadSafetyErrorMessage = t("Download failed: temporary file was not created.", lang: seciliDil)
+                    showUploadSafetyError = true
+                    clientFileMessage = ""
+                }
+                return
+            }
+
+            do {
+                let preparedURL = try temporaryDownloadCopyURL(from: temporaryURL, suggestedFileName: item.fileName)
+                DispatchQueue.main.async {
+                    clientFileMessage = ""
+                    presentClientFileDownload(from: preparedURL, suggestedFileName: item.fileName)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    uploadSafetyErrorMessage = error.localizedDescription
+                    showUploadSafetyError = true
+                    clientFileMessage = ""
+                }
+            }
+        }.resume()
+    }
+
+
+    private var canSetClientFileAsPreview: Bool {
+        canEditOrderDetails
+    }
+
+    private func canUseClientFileAsPreview(_ item: ClientFileItem) -> Bool {
+        let link = item.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return canSetClientFileAsPreview && clientFileIsImage(item) && !item.isPendingUpload && !link.isEmpty
+    }
+
+    private func useClientFileAsPreview(_ item: ClientFileItem) {
+        guard canUseClientFileAsPreview(item) else { return }
+        let newLink = item.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let oldLink = siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard oldLink != newLink else { return }
+
+        withAnimation {
+            siparis.designLink = newLink
+        }
+        setCardVisibleWithUndo(.preview, true)
+        recordOrderHistoryChange(
+            title: "Preview Image",
+            oldValue: oldLink.isEmpty ? "-" : "Previous image",
+            newValue: safeClientFileDisplayName(item.fileName)
+        )
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func clientFileIcon(for item: ClientFileItem) -> String {
+        if item.isPendingUpload {
+            return "clock.arrow.circlepath"
+        }
+        let lowerName = item.fileName.lowercased()
+        if item.contentType.lowercased().contains("pdf") || lowerName.hasSuffix(".pdf") {
+            return "doc.richtext.fill"
+        }
+        if lowerName.hasSuffix(".psd") || lowerName.hasSuffix(".psb") {
+            return "doc.fill"
+        }
+        return "photo.fill"
+    }
+
+    private func clientFileTint(for item: ClientFileItem) -> Color {
+        if item.isPendingUpload {
+            return studioWarningOrange
+        }
+        let lowerName = item.fileName.lowercased()
+        if item.contentType.lowercased().contains("pdf") || lowerName.hasSuffix(".pdf") {
+            return .red
+        }
+        if lowerName.hasSuffix(".psd") || lowerName.hasSuffix(".psb") {
+            return .purple
+        }
+        return .blue
+    }
+
+    private func formatClientFileSize(_ bytes: Int64) -> String {
+        let value = Double(max(bytes, 0))
+        if value >= 1024.0 * 1024.0 {
+            return String(format: "%.1f MB", value / (1024.0 * 1024.0))
+        }
+        if value >= 1024.0 {
+            return String(format: "%.0f KB", value / 1024.0)
+        }
+        return "\(Int(value)) B"
+    }
+
+
+
+    private func clientFilesPlanLockedNotice() -> some View {
+        lockedFeatureUpsellCard(
+            title: t("Client Files are locked", lang: seciliDil),
+            requiredPlan: t(StudioBillingPlan.proMonthly.displayName, lang: seciliDil),
+            message: t("Cloud file upload, Share Sheet import and offline file queue are available on Monthly Pro and Team plans.", lang: seciliDil),
+            footer: t("Existing files remain visible, but new uploads are disabled for this plan.", lang: seciliDil),
+            iconName: "folder.badge.plus",
+            compact: true
+        )
+    }
+
+    private func clientFileDateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func clientFilesKarti(colIndex: Int) -> some View {
+        let clientFilesHeightBinding = bindingYukseklik(for: .clientFiles)
+        let visibleRowsHeight = clientFilesRowsHeight(for: clientFilesHeightBinding.wrappedValue, fileCount: clientFileItems.count)
+        let canShowAllClientFilesWithoutScroll = clientFileItems.count <= clientFilesVisibleRowLimit
+
+        return DetayKarti(
+            title: t("Client Files", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .clientFiles),
+            kartTipi: .clientFiles,
+            yukseklik: clientFilesHeightBinding,
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .clientFiles),
+            minimumHeightOverride: clientFilesPreferredCardHeight,
+            autoAdjustHeightOnContentChange: false,
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.clientFiles, false) },
+            onColorChange: { setKartColor(kart: .clientFiles, color: $0) }
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                if !authVM.currentPlanEntitlements.clientFilesEnabled {
+                    clientFilesPlanLockedNotice()
+                }
+
+                clientFilesTopBar
+
+                if !sharedClientFilesInbox.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .center, spacing: 10) {
+                            Image(systemName: "square.and.arrow.down.on.square.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.blue)
+                                .frame(width: 30, height: 30)
+                                .background(Color.blue.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(format: t("%d shared file(s) waiting", lang: seciliDil), sharedClientFilesInbox.count))
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(t("Add these shared files to this order, or clear them.", lang: seciliDil))
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.gray)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+
+                        HStack(spacing: 8) {
+                            Button {
+                                importSharedClientFilesIntoCurrentOrder()
+                            } label: {
+                                if isImportingSharedClientFiles {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Label(t("Add here", lang: seciliDil), systemImage: "plus.circle.fill")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(!canEditClientFiles || isImportingSharedClientFiles || isUploadingClientFile)
+
+                            Button {
+                                discardSharedClientFilesInbox()
+                            } label: {
+                                Label(t("Clear", lang: seciliDil), systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(isImportingSharedClientFiles)
+
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.blue.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.blue.opacity(0.14), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                if !clientFileMessage.isEmpty {
+                    Text(clientFileMessage)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.green)
+                        .lineLimit(1)
+                }
+
+                if clientFileItems.isEmpty {
+                    clientFilesEmptyState
+                } else if canShowAllClientFilesWithoutScroll {
+                    LazyVStack(alignment: .leading, spacing: clientFilesRowSpacing) {
+                        ForEach(clientFileItems) { item in
+                            clientFileRow(item)
+                        }
+                    }
+                    .padding(.trailing, 4)
+                    .frame(height: clientFilesRowsHeightForVisibleCount(clientFileItems.count))
+                    .clipped()
+                } else {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(alignment: .leading, spacing: clientFilesRowSpacing) {
+                            ForEach(clientFileItems) { item in
+                                clientFileRow(item)
+                            }
+                        }
+                        .padding(.trailing, 4)
+                    }
+                    .frame(height: visibleRowsHeight)
+                    .clipped()
+                }
+
+                Text(t("Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. The size limit follows Settings > Safety & Uploads.", lang: seciliDil))
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isClientFileDropTargeted) { providers in
+            let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+            guard canEditClientFiles, !fileProviders.isEmpty else { return false }
+            let group = DispatchGroup()
+            let lock = NSLock()
+            var urls: [URL] = []
+
+            fileProviders.forEach { provider in
+                group.enter()
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                    defer { group.leave() }
+                    if let url = item as? URL {
+                        lock.lock()
+                        urls.append(url)
+                        lock.unlock()
+                        return
+                    }
+                    guard let data = item as? Data,
+                          let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                    lock.lock()
+                    urls.append(url)
+                    lock.unlock()
+                }
+            }
+            group.notify(queue: .main) {
+                uploadClientFilesSequentially(urls)
+            }
+            return true
+        }
+        .fileImporter(isPresented: $isClientFileImporterPresented, allowedContentTypes: allowedClientFileContentTypes, allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls):
+                uploadClientFilesSequentially(urls)
+            case .failure(let error):
+                uploadSafetyErrorMessage = error.localizedDescription
+                showUploadSafetyError = true
+            }
+        }
+        #if os(iOS)
+        .confirmationDialog(t("Upload File", lang: seciliDil), isPresented: $showClientFileSourceDialog, titleVisibility: .visible) {
+            Button(t("Photo Library", lang: seciliDil)) {
+                isClientFilePhotoPickerPresented = true
+            }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button(t("Camera", lang: seciliDil)) {
+                    isClientFileCameraPresented = true
+                }
+            }
+            Button(t("Files", lang: seciliDil)) {
+                isClientFileImporterPresented = true
+            }
+            Button(t("Cancel", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(t("Choose where to add the client file from.", lang: seciliDil))
+        }
+        .photosPicker(isPresented: $isClientFilePhotoPickerPresented, selection: $selectedClientFilePhotoItem, matching: .images)
+        .onChange(of: selectedClientFilePhotoItem) { _, newItem in
+            importClientFilePhotoPickerItem(newItem)
+        }
+        .sheet(isPresented: $isClientFileCameraPresented) {
+            ClientFileCameraPicker { url in
+                requestSafeClientFileUpload(url: url)
+            } onError: { message in
+                uploadSafetyErrorMessage = t(message, lang: seciliDil)
+                showUploadSafetyError = true
+            }
+        }
+        #endif
+    }
+
+    private var clientFilesIntroText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(t("PDF, image, PSD and PSB files for this order.", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(t("Visible to workspace members who can open this order.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.gray)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var clientFilesTopBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                clientFilesIntroText
+                    .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
+
+                clientFilesActionButtons
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                clientFilesIntroText
+                    .frame(maxWidth: 300, alignment: .leading)
+                clientFilesActionButtons
+            }
+        }
+    }
+
+    private var clientFilesActionButtons: some View {
+        HStack(spacing: 8) {
+            if canEditClientFiles {
+                Button {
+                    presentClientFilePicker()
+                } label: {
+                    if isUploadingClientFile {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label(t("Upload File", lang: seciliDil), systemImage: "square.and.arrow.up")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isUploadingClientFile)
+            }
+
+            if !clientFileItems.filter({ !$0.isPendingUpload }).isEmpty {
+                Button {
+                    makeAllClientFilesAvailableOffline()
+                } label: {
+                    Label(t("Make Offline", lang: seciliDil), systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isUploadingClientFile)
+            }
+        }
+        .lineLimit(1)
+    }
+
+    private var clientFilesEmptyState: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: "tray")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.secondary)
+            Text(t("No client files yet.", lang: seciliDil))
+                .font(.system(size: 12, weight: .bold))
+            Text(t("Upload PDFs, images, PSD or PSB files that belong to this client order.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.gray)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(isClientFileDropTargeted ? 0.09 : 0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func clientFileThumbnailURL(for item: ClientFileItem) -> URL? {
+        if item.isPendingUpload,
+           !item.localFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: item.localFilePath)
+        }
+
+        if let offlineURL = firebaseManager.offlineClientFileURL(for: item),
+           FileManager.default.fileExists(atPath: offlineURL.path) {
+            return offlineURL
+        }
+
+        return URL(string: item.downloadURL)
+    }
+
+    @ViewBuilder
+    private func clientFileThumbnail(for item: ClientFileItem) -> some View {
+        let tint = clientFileTint(for: item)
+
+        if clientFileIsImage(item), let url = clientFileThumbnailURL(for: item) {
+            if url.isFileURL, let image = loadClientFilePlatformImage(from: url) {
+                Image(platformImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            } else {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Image(systemName: clientFileIcon(for: item))
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(tint)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(tint.opacity(0.12))
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+        } else {
+            Image(systemName: clientFileIcon(for: item))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(tint)
+                .frame(width: 32, height: 32)
+                .background(tint.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+    }
+
+    private func clientFileRow(_ item: ClientFileItem) -> some View {
+        let isAvailableOffline = firebaseManager.isClientFileAvailableOffline(item)
+
+        return HStack(alignment: .center, spacing: 10) {
+            clientFileThumbnail(for: item)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.fileName)
+                    .font(.system(size: 12, weight: .bold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(item.isPendingUpload
+                     ? "\(t("Waiting to upload", lang: seciliDil)) • \(formatClientFileSize(item.fileSize))"
+                     : "\(formatClientFileSize(item.fileSize)) • \(clientFileDateText(item.uploadedAt))\(isAvailableOffline ? " • \(t("Available offline", lang: seciliDil))" : "")")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(item.isPendingUpload ? studioWarningOrange : (isAvailableOffline ? .green : .secondary))
+                    .lineLimit(1)
+
+                if item.isPendingUpload {
+                    Text(t("This file is saved on this device and will upload automatically when online.", lang: seciliDil))
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !item.uploadedByEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(item.uploadedByEmail)
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if !item.isPendingUpload {
+                Button {
+                    makeClientFileAvailableOffline(item)
+                } label: {
+                    Image(systemName: isAvailableOffline ? "checkmark.circle.fill" : "arrow.down.circle")
+                }
+                .buttonStyle(.borderless)
+                .foregroundColor(isAvailableOffline ? .green : .blue)
+                .help(isAvailableOffline ? t("Available offline", lang: seciliDil) : t("Make Offline", lang: seciliDil))
+            }
+
+            Button {
+                downloadClientFileToUserLocation(item)
+            } label: {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .buttonStyle(.borderless)
+            .help(t("Download", lang: seciliDil))
+
+            Button {
+                openClientFileExternally(item)
+            } label: {
+                Image(systemName: item.isPendingUpload ? "doc.badge.clock" : "arrow.up.right.square")
+            }
+            .buttonStyle(.borderless)
+            .help(item.isPendingUpload ? t("Open local file", lang: seciliDil) : t("Open", lang: seciliDil))
+
+            if canDeleteClientFile(item) {
+                Button(role: .destructive) {
+                    deleteClientFile(item)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help(t("Delete", lang: seciliDil))
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .onTapGesture {
+            openClientFilePreview(item)
+        }
+        .contextMenu {
+            if canUseClientFileAsPreview(item) {
+                Button {
+                    useClientFileAsPreview(item)
+                } label: {
+                    Label(lt("Use in Preview Card"), systemImage: "photo.on.rectangle.angled")
+                }
+            } else if clientFileIsImage(item) {
+                Label(lt("Upload must finish before this image can be used in Preview."), systemImage: "clock.badge.exclamationmark")
+            } else {
+                Label(lt("Only image files can be used in Preview."), systemImage: "info.circle")
+            }
+        }
+        .id("\(item.id.uuidString)-\(offlineClientFileRefreshToken.uuidString)")
+        .padding(10)
+        .frame(minHeight: clientFilesRowHeight)
+        .background(Color.primary.opacity(0.035))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func summaryKarti(colIndex: Int) -> some View { DetayKarti(title: t("Order Summary", lang: seciliDil), iconName: cardHeaderIcon(for: .summary), kartTipi: .summary, yukseklik: bindingYukseklik(for: .summary), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .summary), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.summary, false) }, onColorChange: { setKartColor(kart: .summary, color: $0) }, onEditHeadings: { headingEditorTarget = .summary }) { VStack(spacing: 20) { HStack { VStack(alignment: .leading, spacing: 8) { Text(t(hideFinancialForWorkflow ? "Customer" : "Order Value", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); Text(hideFinancialForWorkflow ? (siparis.customerName.isEmpty ? "-" : siparis.customerName) : privacyCurrency(siparis.paidAmount + siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)).font(.system(size: 15, weight: .bold)).foregroundColor(hideFinancialForWorkflow ? .primary : .green) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 6) { HStack { Text(resolvedSummaryStep1).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val1 = getStepValue(for: resolvedSummaryStep1); Text(t(val1, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val1)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val1).opacity(0.2)).cornerRadius(6) }; HStack { Text(resolvedSummaryStep2).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val2 = getStepValue(for: resolvedSummaryStep2); Text(t(val2, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val2)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val2).opacity(0.2)).cornerRadius(6) } }.frame(maxWidth: .infinity, alignment: .leading) }; Divider().background(Color.primary.opacity(0.1)); HStack { VStack(alignment: .leading, spacing: 8) { Text(t("Placed On", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "calendar").foregroundColor(.gray); Text(privacyDate(siparis.paymentDate, hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13)).foregroundColor(.primary) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 8) { Text(t("Delivery In", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "clock").foregroundColor(kalanGunRengi(siparis: siparis)); Text(privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13, weight: .bold)).foregroundColor(kalanGunRengi(siparis: siparis)) }.frame(maxWidth: .infinity, alignment: .leading) } } } }
+
+    private func deliveryKarti(colIndex: Int) -> some View {
+        let dueDate = deliveryDueDate(for: siparis)
+        let statusColor = kalanGunRengi(siparis: siparis)
+        let timelineColumns = [GridItem(.adaptive(minimum: 135), spacing: 10)]
+
+        return DetayKarti(
+            title: t("Timeline & Delivery", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .delivery),
+            kartTipi: .delivery,
+            yukseklik: bindingYukseklik(for: .delivery),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .delivery),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.delivery, false) },
+            onColorChange: { setKartColor(kart: .delivery, color: $0) }
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                LazyVGrid(columns: timelineColumns, alignment: .leading, spacing: 10) {
+                    deliveryTimelineBox(
+                        title: t("Created Date", lang: seciliDil),
+                        value: privacyDate(siparis.paymentDate, hideNumbers: hideSensitiveNumbers),
+                        iconName: "calendar",
+                        color: .blue
+                    )
+
+                    deliveryTimelineBox(
+                        title: t("Delivery Due", lang: seciliDil),
+                        value: privacyDate(dueDate, hideNumbers: hideSensitiveNumbers),
+                        iconName: "flag.checkered",
+                        color: statusColor
+                    )
+                }
+
+                HStack(spacing: 10) {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(statusColor)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t("Time Remaining", lang: seciliDil))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        Text(privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers))
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(statusColor)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(statusColor.opacity(0.10))
+                .cornerRadius(12)
+
+                calendarIntegrationControls(statusColor: statusColor)
+
+                Divider().background(Color.primary.opacity(0.08))
+
+                StepperField(
+                    label: t("Delivery Time", lang: seciliDil),
+                    value: $siparis.deliveryTime,
+                    lblGun: t("days", lang: seciliDil),
+                    color: statusColor
+                )
+
+                DatePickerField(
+                    label: t("Created Date", lang: seciliDil),
+                    date: $siparis.paymentDate
+                )
+            }
+        }
+    }
+
+    private func deliveryDueDate(for order: Siparis) -> Date {
+        Calendar.current.date(byAdding: .day, value: order.deliveryTime, to: order.paymentDate) ?? order.paymentDate
+    }
+
+    private let appleCalendarEventIdCustomKey = "__appleCalendarEventIdV1"
+
+    private var appleCalendarEventId: String? {
+        let value = siparis.customFields?[appleCalendarEventIdCustomKey]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
+    private func setAppleCalendarEventId(_ eventId: String?) {
+        var current = siparis.customFields ?? [:]
+        if let eventId, !eventId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            current[appleCalendarEventIdCustomKey] = eventId
+        } else {
+            current.removeValue(forKey: appleCalendarEventIdCustomKey)
+        }
+        current["language"] = seciliDil
+        siparis.customFields = current
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func appleCalendarEventTitle() -> String {
+        let customer = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var parts: [String] = []
+        if !customer.isEmpty { parts.append(customer) }
+        if !design.isEmpty { parts.append(design) }
+        return parts.isEmpty ? lt("Order") : parts.joined(separator: " - ")
+    }
+
+    private func appleCalendarEventNotes() -> String {
+        var lines: [String] = []
+        let orderId = siparis.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customer = siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !customer.isEmpty { lines.append("Customer: \(customer)") }
+        if !design.isEmpty { lines.append("Design: \(design)") }
+        if !orderId.isEmpty { lines.append("Order ID: \(orderId)") }
+        lines.append("Created: \(privacyDate(siparis.paymentDate, hideNumbers: false))")
+        lines.append("Delivery Due: \(privacyDate(deliveryDueDate(for: siparis), hideNumbers: false))")
+        return lines.joined(separator: "\n")
+    }
+
+    private func saveAppleCalendarEvent() {
+        guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
+            calendarMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            return
+        }
+        calendarMessage = "Updating Apple Calendar..."
+        isUpdatingCalendarEvent = true
+        #if canImport(EventKit)
+        AppleCalendarManager.shared.saveOrderEvent(
+            eventId: appleCalendarEventId,
+            title: appleCalendarEventTitle(),
+            notes: appleCalendarEventNotes(),
+            startDate: siparis.paymentDate,
+            dueDate: deliveryDueDate(for: siparis)
+        ) { result in
+            isUpdatingCalendarEvent = false
+            switch result {
+            case .success(let eventId):
+                setAppleCalendarEventId(eventId)
+                calendarMessage = "Calendar event saved."
+            case .failure(let error):
+                let baseMessage: String
+                if let calendarError = error as? StudioFlowCalendarError {
+                    baseMessage = calendarError.errorDescription ?? error.localizedDescription
+                } else {
+                    baseMessage = error.localizedDescription
+                }
+                calendarMessage = lt("Calendar event could not be saved.") + " " + baseMessage + " " + lt("Please allow Calendar access in system settings and try again.")
+            }
+        }
+        #else
+        isUpdatingCalendarEvent = false
+        calendarMessage = lt("Apple Calendar is not available on this device.")
+        #endif
+    }
+
+    private func removeAppleCalendarEvent() {
+        guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
+            calendarMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            return
+        }
+        guard let eventId = appleCalendarEventId else { return }
+        calendarMessage = "Removing Apple Calendar event..."
+        isUpdatingCalendarEvent = true
+        #if canImport(EventKit)
+        AppleCalendarManager.shared.removeOrderEvent(eventId: eventId) { result in
+            isUpdatingCalendarEvent = false
+            switch result {
+            case .success:
+                setAppleCalendarEventId(nil)
+                calendarMessage = "Calendar event removed."
+            case .failure(let error):
+                let baseMessage: String
+                if let calendarError = error as? StudioFlowCalendarError {
+                    baseMessage = calendarError.errorDescription ?? error.localizedDescription
+                } else {
+                    baseMessage = error.localizedDescription
+                }
+                calendarMessage = lt("Calendar event could not be removed.") + " " + baseMessage
+            }
+        }
+        #else
+        isUpdatingCalendarEvent = false
+        calendarMessage = lt("Apple Calendar is not available on this device.")
+        #endif
+    }
+
+    private func calendarIntegrationControls(statusColor: Color) -> some View {
+        let hasCalendarEvent = appleCalendarEventId != nil
+        let columns = [GridItem(.adaptive(minimum: 135), spacing: 8)]
+
+        return VStack(alignment: .leading, spacing: 8) {
+            if !authVM.currentPlanEntitlements.calendarRemindersEnabled {
+                Label(t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil), systemImage: "lock.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(studioWarningOrange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                calendarActionButton(
+                    title: hasCalendarEvent ? t("Update Calendar", lang: seciliDil) : t("Add to Calendar", lang: seciliDil),
+                    iconName: hasCalendarEvent ? "arrow.triangle.2.circlepath" : "calendar.badge.plus",
+                    color: statusColor,
+                    isDisabled: isUpdatingCalendarEvent,
+                    action: saveAppleCalendarEvent
+                )
+
+                if hasCalendarEvent {
+                    calendarActionButton(
+                        title: t("Remove Calendar", lang: seciliDil),
+                        iconName: "calendar.badge.minus",
+                        color: .red,
+                        isDisabled: isUpdatingCalendarEvent,
+                        action: removeAppleCalendarEvent
+                    )
+                }
+                }
+            }
+
+            Text(t("Creates an all-day Apple Calendar event from the created date to the delivery due date.", lang: seciliDil))
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !calendarMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Label(t(calendarMessage, lang: seciliDil), systemImage: "info.circle.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func calendarActionButton(title: String, iconName: String, color: Color, isDisabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .bold))
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.55 : 1.0)
+    }
+
+    private func deliveryTimelineBox(title: String, value: String, iconName: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(color)
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Text(value)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045))
+        .cornerRadius(12)
+    }
+
+    private func customerKarti(colIndex: Int) -> some View {
+        let matchingMusteri = firebaseManager.musteriler.first(where: { $0.name.lowercased() == siparis.customerName.lowercased() })
+
+        return DetayKarti(
+            title: t("Customer & Communication", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .customer),
+            kartTipi: .customer,
+            yukseklik: bindingYukseklik(for: .customer),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .customer),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.customer, false) },
+            onColorChange: { setKartColor(kart: .customer, color: $0) },
+            onEditHeadings: { headingEditorTarget = .customer }
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                CommitDetailField(label: t("Customer Name", lang: seciliDil), value: $siparis.customerName, emptyFallback: "New Project")
+                DetailField(label: t("Design Name", lang: seciliDil), value: $siparis.designName)
+
+                ForEach(customFieldsList, id: \.id) { field in
+                    DetailField(
+                        label: t(field.title, lang: seciliDil),
+                        value: Binding(
+                            get: { siparis.customFields?[field.title] ?? "" },
+                            set: { newValue in
+                                var current = siparis.customFields ?? [:]
+                                current[field.title] = newValue
+                                siparis.customFields = current
+                            }
+                        )
+                    )
+                }
+
+                if communicationShowTelephone || communicationShowEmail || communicationShowAddress || communicationShowChannel || communicationShowCustomerNotes {
+                    Divider().background(Color.primary.opacity(0.1))
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .foregroundColor(.blue.opacity(0.85))
+                        Text(t("Communication", lang: seciliDil))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.top, 2)
+                }
+
+                if communicationShowTelephone {
+                    DetailField(label: t("Telephone", lang: seciliDil), value: $siparis.whatsappNumber)
+                }
+
+                if communicationShowEmail {
+                    DetailField(label: t("Email", lang: seciliDil), value: $siparis.emailAddress)
+                }
+
+                if communicationShowAddress {
+                    DetailField(label: t("Address", lang: seciliDil), value: communicationAddressBinding)
+                }
+
+                if communicationShowChannel {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center, spacing: isPhoneLayout ? 6 : 10) {
+                            Text(t("Channel", lang: seciliDil))
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+                                .frame(width: isPhoneLayout ? 82 : 96, alignment: .leading)
+
+                            HStack(spacing: isPhoneLayout ? 5 : 8) {
+                                ForEach(Array(communicationChannelLabels.enumerated()), id: \.offset) { _, channel in
+                                    let isSelected = siparis.communication.contains(channel)
+
+                                    Button(action: {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            if isSelected {
+                                                siparis.communication.removeAll { $0 == channel }
+                                            } else {
+                                                siparis.communication.append(channel)
+                                            }
+                                        }
+                                    }) {
+                                        Text(t(channel, lang: seciliDil))
+                                            .font(.system(size: isPhoneLayout ? 10 : 11, weight: .bold))
+                                            .foregroundColor(isSelected ? .white : .gray)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                            .minimumScaleFactor(0.78)
+                                            .allowsTightening(true)
+                                            .padding(.horizontal, isPhoneLayout ? 8 : 12)
+                                            .padding(.vertical, 6)
+                                            .frame(maxWidth: .infinity)
+                                            .background(isSelected ? Color.blue : Color.primary.opacity(0.05))
+                                            .cornerRadius(15)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity)
+                                    .help(t(channel, lang: seciliDil))
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        .padding(.bottom, 2)
+
+                        ForEach(communicationChannelLabels.filter { siparis.communication.contains($0) }, id: \.self) { channel in
+                            DetailField(
+                                label: t(channel, lang: seciliDil),
+                                value: communicationValueBinding(for: channel)
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+
+                if communicationShowCustomerNotes {
+                    VStack(alignment: .leading, spacing: 8) {
+                        notesSectionHeading(t("Customer Notes", lang: seciliDil))
+
+                        if let musteri = matchingMusteri {
+                            alignedNotesEditor(
+                                text: Binding(
+                                    get: { musteri.notes },
+                                    set: { newValue in
+                                        var updatedCustomer = musteri
+                                        updatedCustomer.notes = newValue
+                                        firebaseManager.updateMusteri(updatedCustomer)
+                                    }
+                                ),
+                                placeholder: t("Add customer note...", lang: seciliDil),
+                                textColor: .primary,
+                                placeholderColor: .gray.opacity(0.55),
+                                backgroundColor: Color.primary.opacity(0.03),
+                                focusTarget: .customerNotes
+                            )
+                        } else {
+                            Text(t("Customer profile not found to show notes.", lang: seciliDil))
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.primary.opacity(0.03))
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func communicationKarti(colIndex: Int) -> some View {
+        EmptyView()
+    }
+
+    private func normalizedChannelName(_ channel: String) -> String {
+        channel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func communicationCustomFieldKey(for channel: String) -> String {
+        "communicationChannel::\(channel.trimmingCharacters(in: .whitespacesAndNewlines))"
+    }
+
+    private var communicationAddressBinding: Binding<String> {
+        Binding(
+            get: { siparis.customFields?["communicationAddress"] ?? siparis.customFields?["Address"] ?? "" },
+            set: { newValue in
+                var current = siparis.customFields ?? [:]
+                current["communicationAddress"] = newValue
+                siparis.customFields = current
+            }
+        )
+    }
+
+    private func communicationValueBinding(for channel: String) -> Binding<String> {
+        let normalized = normalizedChannelName(channel)
+
+        if normalized == "instagram" || normalized == "instagram username" {
+            return $siparis.instagramUsername
+        }
+
+        if normalized == "whatsapp" || normalized == "whats app" || normalized == "telephone" || normalized == "phone" {
+            return $siparis.whatsappNumber
+        }
+
+        if normalized == "email" || normalized == "e-mail" {
+            return $siparis.emailAddress
+        }
+
+        if normalized == "address" || normalized == "adres" || normalized == "shipping address" {
+            return communicationAddressBinding
+        }
+
+        let key = communicationCustomFieldKey(for: channel)
+        return Binding(
+            get: { siparis.customFields?[key] ?? "" },
+            set: { newValue in
+                var current = siparis.customFields ?? [:]
+                current[key] = newValue
+                siparis.customFields = current
+            }
+        )
+    }
+    private func notesKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Notes", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .notes),
+            kartTipi: .notes,
+            yukseklik: bindingYukseklik(for: .notes),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .notes),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.notes, false) },
+            onColorChange: { setKartColor(kart: .notes, color: $0) },
+            onEditHeadings: { headingEditorTarget = .notes }
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(specialNoteSections) { section in
+                    VStack(alignment: .leading, spacing: 8) {
+                        notesSectionHeading(t(section.title, lang: seciliDil))
+
+                        alignedNotesEditor(
+                            text: specialNoteBinding(for: section),
+                            placeholder: t("Add note here...", lang: seciliDil),
+                            textColor: .primary,
+                            placeholderColor: .gray,
+                            backgroundColor: Color.primary.opacity(0.03),
+                            focusTarget: specialNoteFocusTarget(for: section)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func notesSectionHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func specialNoteFocusTarget(for section: CustomStepDTO) -> NotesTextEditorFocus {
+        section.id == primarySpecialNoteID ? .specialNotes : .specialNote(section.id)
+    }
+
+    private func specialNoteBinding(for section: CustomStepDTO) -> Binding<String> {
+        if section.id == primarySpecialNoteID {
+            return $siparis.notes
+        }
+
+        let key = specialNoteCustomFieldKey(for: section.id)
+        return Binding(
+            get: { siparis.customFields?[key] ?? "" },
+            set: { newValue in
+                var current = siparis.customFields ?? [:]
+                current[key] = newValue
+                siparis.customFields = current
+            }
+        )
+    }
+
+    private func customerNotesKarti(colIndex: Int) -> some View {
+        let matchingMusteri = firebaseManager.musteriler.first(where: { $0.name.lowercased() == siparis.customerName.lowercased() })
+
+        return DetayKarti(
+            title: t("Customer Notes", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .customerNotes),
+            kartTipi: .customerNotes,
+            yukseklik: bindingYukseklik(for: .customerNotes),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .customerNotes),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.customerNotes, false) },
+            onColorChange: { setKartColor(kart: .customerNotes, color: $0) }
+        ) {
+            if let musteri = matchingMusteri {
+                alignedNotesEditor(
+                    text: Binding(
+                        get: { musteri.notes },
+                        set: { newValue in
+                            var updatedCustomer = musteri
+                            updatedCustomer.notes = newValue
+                            firebaseManager.updateMusteri(updatedCustomer)
+                        }
+                    ),
+                    placeholder: t("Add customer note...", lang: seciliDil),
+                    textColor: .primary,
+                    placeholderColor: .gray.opacity(0.55),
+                    backgroundColor: Color.primary.opacity(0.03),
+                    focusTarget: .customerNotes
+                )
+            } else {
+                Text(t("Customer profile not found to show notes.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .padding()
+            }
+        }
+    }
+
+    private func alignedNotesEditor(
+        text: Binding<String>,
+        placeholder: String,
+        textColor: Color,
+        placeholderColor: Color,
+        backgroundColor: Color,
+        focusTarget: NotesTextEditorFocus,
+        minHeight: CGFloat = 80
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: text)
+                .font(.system(size: 13))
+                .foregroundColor(textColor)
+                .frame(minHeight: minHeight, maxHeight: .infinity)
+                .padding(8)
+                .scrollContentBackground(.hidden)
+                .background(backgroundColor)
+                .cornerRadius(8)
+                .focused($focusedNotesTextEditor, equals: focusTarget)
+
+            if text.wrappedValue.isEmpty && focusedNotesTextEditor != focusTarget {
+                Text(placeholder)
+                    .foregroundColor(placeholderColor)
+                    .font(.system(size: 13))
+                    .padding(.top, 16)
+                    .padding(.leading, 12)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+
+    private func normalizedCommunicationChannelLabels(from json: String) -> [String] {
+        let defaults = ["Instagram", "WhatsApp", "TikTok"]
+        let trimmedJSON = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedJSON.isEmpty,
+              let data = trimmedJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return defaults
+        }
+
+        var labels: [String] = []
+        for rawLabel in decoded {
+            let value = rawLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { continue }
+            if !labels.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
+                labels.append(value)
+            }
+        }
+        return labels
+    }
+
+    private func financialCustomKey(prefix: String, title: String) -> String {
+        prefix + title
+    }
+
+    private func isAutoFinancialPlaceholder(_ title: String, prefix: String) -> Bool {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedTitle.hasPrefix(prefix + " ") else { return false }
+        let numberPart = cleanedTitle.dropFirst(prefix.count + 1)
+        return !numberPart.isEmpty && numberPart.allSatisfy { $0.isNumber }
+    }
+
+    private func isUsableFinancialExpenseTitle(_ title: String) -> Bool {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !cleanedTitle.isEmpty && !isAutoFinancialPlaceholder(cleanedTitle, prefix: "Cost")
+    }
+
+    private func isUsableFinancialRemainingTitle(_ title: String) -> Bool {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !cleanedTitle.isEmpty && !isAutoFinancialPlaceholder(cleanedTitle, prefix: "Pending")
+    }
+
+    private func customCurrencyValue(prefix: String, title: String) -> Double {
+        let key = financialCustomKey(prefix: prefix, title: title)
+        let raw = siparis.customFields?[key] ?? ""
+        let cleaned = raw
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: seciliParaBirimi, with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return Double(cleaned) ?? 0
+    }
+
+    private func customCurrencyBinding(prefix: String, title: String) -> Binding<Double> {
+        Binding<Double>(
+            get: {
+                customCurrencyValue(prefix: prefix, title: title)
+            },
+            set: { newValue in
+                let key = financialCustomKey(prefix: prefix, title: title)
+                var current = siparis.customFields ?? [:]
+                current[key] = String(newValue)
+                siparis.customFields = current
+                otomatikKesintiHesapla()
+                firebaseManager.updateSiparis(siparis)
+            }
+        )
+    }
+
+    private func customFinancialTotal(prefix: String, items: [CustomStepDTO]) -> Double {
+        items.reduce(0) { total, item in
+            total + customCurrencyValue(prefix: prefix, title: item.title)
+        }
+    }
+
+    private var customExpenseTotal: Double {
+        customFinancialTotal(prefix: "financialExpense::", items: financialExpenseItems)
+    }
+
+    private var customRemainingTotal: Double {
+        customFinancialTotal(prefix: "financialRemaining::", items: financialRemainingItems)
+    }
+
+    private var outstandingPaymentTotal: Double {
+        max(0, siparis.remainingAmount) + max(0, customRemainingTotal)
+    }
+
+    private var isFullPaymentReceived: Bool {
+        outstandingPaymentTotal <= 0.005
+    }
+
+    private func markFullPaymentReceived() {
+        let outstandingTotal = outstandingPaymentTotal
+        guard outstandingTotal > 0.005 else { return }
+
+        let oldPaidAmount = siparis.paidAmount
+        var updatedOrder = siparis
+        updatedOrder.paidAmount += outstandingTotal
+        updatedOrder.remainingAmount = 0
+
+        var currentFields = updatedOrder.customFields ?? [:]
+        for item in financialRemainingItems {
+            let key = financialCustomKey(prefix: "financialRemaining::", title: item.title)
+            if currentFields[key] != nil {
+                currentFields[key] = "0"
+            }
+        }
+        updatedOrder.customFields = currentFields
+
+        let cleanedOld = cleanHistoryValue(amountHistoryValue(oldPaidAmount))
+        let cleanedNew = cleanHistoryValue(amountHistoryValue(updatedOrder.paidAmount))
+        if cleanedOld != cleanedNew {
+            var logs = updatedOrder.historyLog ?? []
+            logs.insert(
+                OrderHistoryLogItem(
+                    id: UUID(),
+                    createdAt: Date(),
+                    title: "Full payment received",
+                    oldValue: cleanedOld,
+                    newValue: cleanedNew
+                ),
+                at: 0
+            )
+            if logs.count > 120 {
+                logs = Array(logs.prefix(120))
+            }
+            updatedOrder.historyLog = logs
+        }
+
+        // Apply the payment completion as one atomic order update.
+        // This keeps Cmd+Z clean: one shortcut press restores Paid, Remaining,
+        // extra Remaining headings and the History / Log entry together.
+        siparis = updatedOrder
+        otomatikKesintiHesapla()
+        firebaseManager.updateSiparis(updatedOrder)
+    }
+
+    private var baseCostTotal: Double {
+        financialShowBaseCost ? siparis.watchPurchasePrice : 0
+    }
+
+    private var financialFinalProfit: Double {
+        let salesTotal = siparis.paidAmount + siparis.remainingAmount
+        return salesTotal - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee - siparis.taxAmount
+    }
+
+    private var isDemoFinancialLimited: Bool {
+        authVM.currentBillingPlan == .demo
+    }
+
+    private var financialLitePlanLabel: String {
+        t(StudioBillingPlan.lifetimeLite.displayName, lang: seciliDil)
+    }
+
+    private var demoFinancialLockedFieldTitles: [String] {
+        var titles = [
+            "Remaining",
+            "Full Payment Received?",
+            "Payment Method"
+        ]
+
+        titles.append(contentsOf: financialRemainingItems.map { $0.title })
+        titles.append(contentsOf: financialExpenseItems.map { $0.title })
+        titles.append(contentsOf: [
+            "Platform Fee",
+            "Shipping Cost",
+            "Tax Rule",
+            "Tax Rate (%)",
+            "Tax Amount",
+            "Final Profit"
+        ])
+
+        var seen = Set<String>()
+        return titles.filter { title in
+            let key = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }
+    }
+
+    private func demoFinancialLockedSummary(_ titles: [String]) -> some View {
+        Button {
+            openPlanAccessFromLockedFeature()
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(studioWarningOrange)
+                        .frame(width: 34, height: 34)
+                        .background(studioWarningOrange.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t("Available from", lang: seciliDil) + " " + financialLitePlanLabel)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(studioWarningOrange)
+                        Text(t("Financial Info", lang: seciliDil))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    HStack(spacing: 5) {
+                        Text(t("Plan & Access", lang: seciliDil))
+                            .font(.system(size: 10, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundColor(studioWarningOrange)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(titles, id: \.self) { title in
+                        HStack(spacing: 5) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 8, weight: .bold))
+                            Text(t(title, lang: seciliDil))
+                                .font(.system(size: 10, weight: .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                        .foregroundColor(.primary.opacity(0.68))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            Capsule()
+                                .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.045))
+                        )
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(studioWarningOrange.opacity(colorScheme == .dark ? 0.08 : 0.045))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(studioWarningOrange.opacity(colorScheme == .dark ? 0.26 : 0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("Plan & Access", lang: seciliDil))
+    }
+
+    private func financialKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Financial Info", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .financial),
+            kartTipi: .financial,
+            yukseklik: bindingYukseklik(for: .financial),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .financial),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.financial, false) },
+            onColorChange: { setKartColor(kart: .financial, color: $0) },
+            onEditHeadings: { headingEditorTarget = .financial }
+        ) {
+            CurrencyField(label: t("Paid", lang: seciliDil), value: $siparis.paidAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+                .onChange(of: siparis.paidAmount) { _, _ in otomatikKesintiHesapla() }
+
+            if !isDemoFinancialLimited {
+                CurrencyField(label: t("Remaining", lang: seciliDil), value: $siparis.remainingAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+                    .onChange(of: siparis.remainingAmount) { _, _ in otomatikKesintiHesapla() }
+
+                if !financialRemainingItems.isEmpty {
+                    ForEach(financialRemainingItems, id: \.id) { item in
+                        CurrencyField(
+                            label: t(item.title, lang: seciliDil),
+                            value: customCurrencyBinding(prefix: "financialRemaining::", title: item.title),
+                            sembol: seciliParaBirimi,
+                            ondalik: seciliOndalik
+                        )
+                    }
+                }
+
+                YesNoField(label: t("Full Payment Received?", lang: seciliDil), value: Binding(
+                    get: { isFullPaymentReceived },
+                    set: { newValue in
+                        if newValue {
+                            markFullPaymentReceived()
+                        }
+                    }
+                ))
+
+                PickerField(label: t("Payment Method", lang: seciliDil), value: Binding(get: { siparis.paymentMethod }, set: { siparis.paymentMethod = $0 }), options: ["Card", "Apple Pay", "PayPal", "Direct Transfer"])
+            }
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            if financialShowBaseCost || isDemoFinancialLimited {
+                CurrencyField(label: t(financialBaseCostLabel, lang: seciliDil), value: $siparis.watchPurchasePrice, isCost: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+                    .onChange(of: siparis.watchPurchasePrice) { _, _ in otomatikKesintiHesapla() }
+            }
+
+            if isDemoFinancialLimited {
+                demoFinancialLockedSummary(demoFinancialLockedFieldTitles)
+            } else {
+                if !financialExpenseItems.isEmpty {
+                    ForEach(financialExpenseItems, id: \.id) { item in
+                        CurrencyField(
+                            label: t(item.title, lang: seciliDil),
+                            value: customCurrencyBinding(prefix: "financialExpense::", title: item.title),
+                            isCost: true,
+                            sembol: seciliParaBirimi,
+                            ondalik: seciliOndalik
+                        )
+                    }
+                }
+
+                CurrencyField(label: t("Platform Fee", lang: seciliDil), value: $siparis.paymentFee, isCost: true, isReadOnly: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+
+                CurrencyField(label: t("Shipping Cost", lang: seciliDil), value: $siparis.deliveryCost, isCost: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+                    .onChange(of: siparis.deliveryCost) { _, _ in otomatikKesintiHesapla() }
+
+                Divider().background(Color.primary.opacity(0.1))
+
+                HStack(spacing: 10) {
+                    Text(t("Tax Rule", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                        .frame(width: 110, alignment: .leading)
+
+                    Spacer(minLength: 8)
+
+                    Menu {
+                        Button(taxRuleNameRevenue) {
+                            siparis.taxType = "Revenue"
+                            otomatikKesintiHesapla()
+                        }
+                        Button(taxRuleNameProfit) {
+                            siparis.taxType = "Profit"
+                            otomatikKesintiHesapla()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(siparis.taxType == "Revenue" ? taxRuleNameRevenue : taxRuleNameProfit)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .minimumScaleFactor(0.78)
+
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: 220, alignment: .trailing)
+                        .background(colorSchemeFieldSurface())
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack(spacing: 10) {
+                    Text(t("Tax Rate (%)", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                        .frame(width: 110, alignment: .leading)
+
+                    TextField("0.0", value: $siparis.taxRate, format: .number)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.red)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background(Color.red.opacity(0.05))
+                        .cornerRadius(6)
+                        .onChange(of: siparis.taxRate) { _, _ in otomatikKesintiHesapla() }
+                }
+
+                CurrencyField(label: t("Tax Amount", lang: seciliDil), value: $siparis.taxAmount, isCost: true, isReadOnly: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+
+                Divider().background(Color.primary.opacity(0.1))
+
+                HStack {
+                    Text(t("Final Profit", lang: seciliDil))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Text(privacyCurrency(financialFinalProfit, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(Color.green)
+                }
+            }
+        }
+    }
+    private func getCurrencyIcon() -> String { switch seciliParaBirimi { case "£": return "sterlingsign.circle.fill"; case "$", "A$", "C$": return "dollarsign.circle.fill"; case "€": return "eurosign.circle.fill"; case "₺": return "turkishlirasign.circle.fill"; case "¥": return "yensign.circle.fill"; case "CHF": return "francsign.circle.fill"; default: return "banknote.fill" } }
+    private func statusKarti(colIndex: Int) -> some View {
+    DetayKarti(title: t("Production Status", lang: seciliDil), iconName: cardHeaderIcon(for: .status), kartTipi: .status, yukseklik: bindingYukseklik(for: .status), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .status), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.status, false) }, onColorChange: { setKartColor(kart: .status, color: $0) }, onEditHeadings: { headingEditorTarget = .status }) {
+        ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in
+            if index == 0 {
+                StatusMenuField(label: step.title, value: $siparis.designStatus, options: userStatuses)
+                    .onChange(of: siparis.designStatus) { _, islem in
+                        if islem == "Cancelled" { withAnimation { siparis.status = "Cancelled" } }
+                    }
+            } else if index == 1 {
+                StatusMenuField(label: step.title, value: $siparis.status, options: userStatuses)
+                    .onChange(of: siparis.status) { _, boyaDurumu in
+                        if boyaDurumu == "In Progress" || boyaDurumu == "Done" { withAnimation { siparis.designStatus = "Done" } }
+                    }
+            } else {
+                StatusMenuField(label: step.title, value: Binding(
+                    get: { statusStepValue(from: siparis.extraStatuses, step: step) },
+                    set: { newValue in
+                        var current = siparis.extraStatuses ?? [:]
+                        current[statusStepStorageKey(for: step)] = newValue
+                        siparis.extraStatuses = current
+                    }
+                ), options: userStatuses)
+            }
+        }
+        if !customTogglesList.isEmpty {
+            Divider().background(Color.primary.opacity(0.1))
+            ForEach(customTogglesList, id: \.id) { toggle in
+                YesNoField(label: t(toggle.title, lang: seciliDil), value: Binding(
+                    get: { statusCustomToggleValue(from: siparis.customToggles, toggle: toggle) },
+                    set: { newValue in
+                        var current = siparis.customToggles ?? [:]
+                        current[statusCustomToggleStorageKey(for: toggle)] = newValue
+                        siparis.customToggles = current
+                    }
+                ))
+            }
+        }
+        if showStatusNotesSupplier {
+            Divider().background(Color.primary.opacity(0.1))
+            NoteSupplierField(label: t(statusNotesSupplierLabel, lang: seciliDil), value: Binding(
+                get: { siparis.customFields?["status::notesSupplier"] ?? "" },
+                set: { newValue in
+                    var current = siparis.customFields ?? [:]
+                    current["status::notesSupplier"] = newValue
+                    siparis.customFields = current
+                }
+            ))
+        }
+    }
+}
+    private func trackingCustomKey(_ key: String) -> String {
+        "tracking::\(key)"
+    }
+
+    private func trackingValue(_ key: String) -> String {
+        let currentNumber = cleanedCurrentTrackingNumber
+
+        if key != "trackingNumber" {
+            let liveNumber = liveTrackingData["trackingNumber"] ?? ""
+            if !liveNumber.isEmpty && liveNumber != currentNumber {
+                return ""
+            }
+
+            let storedNumber = siparis.customFields?[trackingCustomKey("trackingNumber")] ?? ""
+            if !storedNumber.isEmpty && storedNumber != currentNumber {
+                return ""
+            }
+        }
+
+        if let liveValue = liveTrackingData[key],
+           !liveValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return liveValue
+        }
+
+        return siparis.customFields?[trackingCustomKey(key)] ?? ""
+    }
+
+    private func setTrackingCustomValue(_ key: String, _ value: String) {
+        var fields = siparis.customFields ?? [:]
+        fields[trackingCustomKey(key)] = value
+        siparis.customFields = fields
+    }
+
+    private var trackingStorageKeys: [String] {
+        [
+            "trackingNumber",
+            "status",
+            "statusText",
+            "subStatus",
+            "carrier",
+            "checkpoint",
+            "location",
+            "eta",
+            "lastUpdate",
+            "lastCheckedAt",
+            "trackingUrl",
+            "provider",
+            "carrierCode",
+            "trackingSupportStatus",
+            "supportMessage",
+            "supportMessageKey",
+            "error"
+        ]
+    }
+
+    private var cleanedCurrentTrackingNumber: String {
+        siparis.trackingNumber
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
+    }
+
+    private func clearTrackingDisplayForCurrentNumber() {
+        let number = cleanedCurrentTrackingNumber
+
+        var fields = siparis.customFields ?? [:]
+
+        for key in trackingStorageKeys {
+            fields[trackingCustomKey(key)] = ""
+        }
+
+        fields[trackingCustomKey("trackingNumber")] = number
+        fields[trackingCustomKey("provider")] = "17TRACK"
+        fields[trackingCustomKey("status")] = "Not Registered"
+        fields[trackingCustomKey("trackingSupportStatus")] = "waiting"
+        fields[trackingCustomKey("supportMessage")] = ""
+        fields[trackingCustomKey("error")] = ""
+
+        siparis.customFields = fields
+
+        liveTrackingData = [
+            "trackingNumber": number,
+            "provider": "17TRACK",
+            "status": "Not Registered",
+            "trackingSupportStatus": "waiting",
+            "supportMessage": "",
+            "supportMessageKey": "",
+            "error": ""
+        ]
+
+        trackingSyncMessage = ""
+    }
+
+    private func prepareTrackingRequestState(trackingNumber: String) {
+        let nowText = Date().formatted(date: .abbreviated, time: .shortened)
+
+        var fields = siparis.customFields ?? [:]
+
+        for key in trackingStorageKeys {
+            fields[trackingCustomKey(key)] = ""
+        }
+
+        fields[trackingCustomKey("trackingNumber")] = trackingNumber
+        fields[trackingCustomKey("provider")] = "17TRACK"
+        fields[trackingCustomKey("status")] = "Registering"
+        fields[trackingCustomKey("trackingSupportStatus")] = "waiting"
+        fields[trackingCustomKey("supportMessage")] = "Checking 17TRACK support for this tracking number."
+        fields[trackingCustomKey("supportMessageKey")] = "checking_support"
+        fields[trackingCustomKey("lastCheckedAt")] = nowText
+        fields[trackingCustomKey("error")] = ""
+
+        siparis.customFields = fields
+
+        liveTrackingData = [
+            "trackingNumber": trackingNumber,
+            "provider": "17TRACK",
+            "status": "Registering",
+            "trackingSupportStatus": "waiting",
+            "supportMessage": "Checking 17TRACK support for this tracking number.",
+            "supportMessageKey": "checking_support",
+            "lastCheckedAt": nowText,
+            "error": ""
+        ]
+    }
+
+    private func formattedTrackingTimestamp(_ value: Any?) -> String {
+        if let timestamp = value as? Timestamp {
+            return timestamp.dateValue().formatted(date: .abbreviated, time: .shortened)
+        }
+
+        if let date = value as? Date {
+            return date.formatted(date: .abbreviated, time: .shortened)
+        }
+
+        if let seconds = value as? TimeInterval, seconds > 0 {
+            return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .shortened)
+        }
+
+        if let string = value as? String {
+            return string
+        }
+
+        return ""
+    }
+
+    private func stringFromTrackingValue(_ value: Any?) -> String {
+        if let value = value as? String { return value }
+        if let value = value as? NSNumber { return value.stringValue }
+        if let value = value as? Bool { return value ? "true" : "false" }
+        if value is Timestamp || value is Date { return formattedTrackingTimestamp(value) }
+        return ""
+    }
+
+    private func startLiveTrackingListener() {
+        liveTrackingListener?.remove()
+        liveTrackingData = [:]
+
+        guard let orderId = siparis.id, !orderId.isEmpty else { return }
+
+        liveTrackingListener = Firestore.firestore()
+            .collection("companies")
+            .document(firebaseManager.currentCompanyId)
+            .collection("trackingResults")
+            .document(orderId)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    trackingSyncMessage = error.localizedDescription
+                    return
+                }
+
+                guard let data = snapshot?.data() else { return }
+
+                var incoming: [String: String] = [:]
+                for (key, value) in data {
+                    incoming[key] = stringFromTrackingValue(value)
+                }
+
+                let incomingTrackingNumber = incoming["trackingNumber"] ?? ""
+                let currentTrackingNumber = cleanedCurrentTrackingNumber
+
+                if !incomingTrackingNumber.isEmpty && incomingTrackingNumber != currentTrackingNumber {
+                    return
+                }
+
+                liveTrackingData = incoming
+
+                var fields = siparis.customFields ?? [:]
+                for key in trackingStorageKeys {
+                    if let value = incoming[key], !value.isEmpty {
+                        fields[trackingCustomKey(key)] = value
+                    }
+                }
+
+                siparis.customFields = fields
+            }
+    }
+
+    private func scheduleLiveTrackingRegistration() {
+        trackingAutoSyncWorkItem?.cancel()
+
+        let trimmed = siparis.trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let workItem = DispatchWorkItem {
+            requestLiveTrackingSync(isManual: false)
+        }
+
+        trackingAutoSyncWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: workItem)
+    }
+
+    private func requestLiveTrackingSync(isManual: Bool = true) {
+        let trackingNumber = cleanedCurrentTrackingNumber
+        guard !trackingNumber.isEmpty else { return }
+
+        guard let orderId = siparis.id, !orderId.isEmpty else {
+            trackingSyncMessage = lt("save_order_first")
+            return
+        }
+
+        isLiveTrackingSyncing = true
+        trackingSyncMessage = isManual ? lt("checking_tracking") : ""
+
+        prepareTrackingRequestState(trackingNumber: trackingNumber)
+        firebaseManager.updateSiparis(siparis)
+
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = [
+            "companyId": firebaseManager.currentCompanyId,
+            "orderId": orderId,
+            "trackingNumber": trackingNumber,
+            "courier": siparis.courier,
+            "language": seciliDil
+        ]
+
+        Functions.functions(region: "europe-west2").httpsCallable("registerTracking").call(payload) { result, error in
+            DispatchQueue.main.async {
+                isLiveTrackingSyncing = false
+
+                if let error = error {
+                    setTrackingCustomValue("status", "Error")
+                    setTrackingCustomValue("error", error.localizedDescription)
+                    setTrackingCustomValue("lastCheckedAt", Date().formatted(date: .abbreviated, time: .shortened))
+                    trackingSyncMessage = error.localizedDescription
+                    firebaseManager.updateSiparis(siparis)
+                    return
+                }
+
+                if let dict = result?.data as? [String: Any] {
+                    applyLiveTrackingResult(dict)
+                    trackingSyncMessage = lt("tracking_updated")
+                } else {
+                    trackingSyncMessage = lt("tracking_request_sent")
+                }
+            }
+        }
+        #else
+        isLiveTrackingSyncing = false
+        setTrackingCustomValue("status", "Setup Needed")
+        setTrackingCustomValue("error", lt("firebase_functions_missing"))
+        firebaseManager.updateSiparis(siparis)
+        trackingSyncMessage = lt("firebase_functions_missing")
+        #endif
+    }
+
+    private func applyLiveTrackingResult(_ dict: [String: Any]) {
+        var fields = siparis.customFields ?? [:]
+        var live: [String: String] = liveTrackingData
+
+        for key in trackingStorageKeys {
+            let value = stringFromTrackingValue(dict[key])
+            if !value.isEmpty {
+                fields[trackingCustomKey(key)] = value
+                live[key] = value
+            }
+        }
+
+        if live["provider"] == nil {
+            live["provider"] = "17TRACK"
+            fields[trackingCustomKey("provider")] = "17TRACK"
+        }
+
+        siparis.customFields = fields
+        liveTrackingData = live
+
+        if let status = live["status"]?.lowercased(), status.contains("delivered") {
+            siparis.isDelivered = true
+            siparis.isDispatched = true
+        }
+
+        firebaseManager.updateSiparis(siparis)
+    }
+
+    private func trackingStatusColor(_ status: String) -> Color {
+        let lowered = status.lowercased()
+
+        if lowered.contains("delivered") { return .green }
+        if lowered.contains("exception") || lowered.contains("failed") || lowered.contains("expired") || lowered.contains("error") { return .red }
+        if lowered.contains("out for delivery") || lowered.contains("pickup") { return studioWarningOrange }
+        if lowered.contains("transit") || lowered.contains("inforeceived") || lowered.contains("register") { return .blue }
+        if lowered.contains("not found") || lowered.contains("pending") { return .gray }
+
+        return .blue
+    }
+
+    private func trackingSupportColor(_ supportStatus: String, fallback: Color) -> Color {
+        let lowered = supportStatus.lowercased()
+
+        if lowered == "active" { return fallback }
+        if lowered == "waiting" { return .blue }
+        if lowered == "limited" { return studioWarningOrange }
+        if lowered == "carrier_required" { return studioWarningOrange }
+        if lowered == "unsupported" { return studioWarningOrange }
+        if lowered == "error" { return .red }
+
+        return fallback
+    }
+
+    private func formattedTrackingDisplayDate(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var parsedDate = isoFormatter.date(from: trimmed)
+        if parsedDate == nil {
+            isoFormatter.formatOptions = [.withInternetDateTime]
+            parsedDate = isoFormatter.date(from: trimmed)
+        }
+
+        guard let date = parsedDate else { return trimmed }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private var trackingDisplayStatus: String {
+        let statusText = trackingValue("statusText")
+        if !statusText.isEmpty { return lt(statusText) }
+
+        let status = trackingValue("status")
+        return status.isEmpty ? lt("Not Registered") : lt(status)
+    }
+
+    private func localizedTrackingSupportStatus(_ value: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return "" }
+        return lt(normalized)
+    }
+
+    private func localizedTrackingSupportMessage(message: String, key: String) -> String {
+        if !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return lt(key)
+        }
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let lower = trimmed.lowercased()
+        if lower.contains("could not auto-detect") || lower.contains("carrier cannot") || lower.contains("carrier can not") {
+            return lt("carrier_required_message")
+        }
+        if lower.contains("registered - waiting") {
+            return lt("registered_waiting")
+        }
+        if lower.contains("royal mail") && lower.contains("limited") {
+            return lt("royal_mail_limited")
+        }
+        if lower.contains("fedex") && lower.contains("extra") {
+            return lt("fedex_limited")
+        }
+        return trimmed
+    }
+
+    private func trackingInfoRow(label: String, value: String, systemImage: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Text(value.isEmpty ? "—" : value)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var liveTrackingPanel: some View {
+        let status = trackingDisplayStatus
+        let baseStatusColor = trackingStatusColor(status)
+        let supportStatus = trackingValue("trackingSupportStatus")
+        let statusColor = trackingSupportColor(supportStatus, fallback: baseStatusColor)
+        let supportMessage = localizedTrackingSupportMessage(message: trackingValue("supportMessage"), key: trackingValue("supportMessageKey"))
+        let error = trackingValue("error")
+        let rawCarrier = trackingValue("carrier")
+        let carrier = rawCarrier.isEmpty || rawCarrier == "Auto Detect" ? "" : rawCarrier
+        let checkpoint = trackingValue("checkpoint")
+        let location = trackingValue("location")
+        let lastUpdate = formattedTrackingDisplayDate(trackingValue("lastUpdate"))
+        let lastChecked = trackingValue("lastCheckedAt")
+        let eta = trackingValue("eta")
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 9, height: 9)
+
+                Text(status)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(statusColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Spacer()
+
+                if isLiveTrackingSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text("17TRACK")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+            }
+
+            Divider().background(Color.primary.opacity(0.08))
+
+            if !supportStatus.isEmpty && supportStatus.lowercased() != "active" {
+                trackingInfoRow(label: lt("Tracking Support"), value: localizedTrackingSupportStatus(supportStatus), systemImage: "bell.badge")
+            }
+
+            trackingInfoRow(label: t("Carrier", lang: seciliDil), value: carrier, systemImage: "shippingbox")
+            trackingInfoRow(label: t("Last Update", lang: seciliDil), value: lastUpdate, systemImage: "clock.arrow.circlepath")
+            trackingInfoRow(label: t("Estimated Delivery", lang: seciliDil), value: eta, systemImage: "calendar")
+            trackingInfoRow(label: t("Latest Checkpoint", lang: seciliDil), value: [checkpoint, location].filter { !$0.isEmpty }.joined(separator: " · "), systemImage: "mappin.and.ellipse")
+
+            if !lastChecked.isEmpty {
+                Text("\(t("Last checked by system", lang: seciliDil)): \(lastChecked)")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+
+            if !supportMessage.isEmpty {
+                Text(supportMessage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(statusColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !error.isEmpty {
+                Text(error)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !trackingSyncMessage.isEmpty {
+                Text(trackingSyncMessage)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(statusColor.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(statusColor.opacity(0.20), lineWidth: 1)
+        )
+    }
+
+    private func shippingKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Shipping & Tracking", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .shipping),
+            kartTipi: .shipping,
+            yukseklik: bindingYukseklik(for: .shipping),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .shipping),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.shipping, false) },
+            onColorChange: { setKartColor(kart: .shipping, color: $0) }
+        ) {
+            YesNoField(label: t("Dispatched", lang: seciliDil), value: $siparis.isDispatched)
+                .onChange(of: siparis.isDispatched) { _, isDispatched in
+                    if isDispatched && siparis.status != "Cancelled" {
+                        withAnimation {
+                            siparis.designStatus = "Done"
+                            siparis.status = "Done"
+                        }
+                    }
+                }
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            PickerField(
+                label: t("Courier", lang: seciliDil),
+                value: $siparis.courier,
+                options: ["Auto Detect", "Royal Mail", "DHL", "FedEx", "UPS"]
+            )
+            .onChange(of: siparis.courier) { _, _ in
+                clearTrackingDisplayForCurrentNumber()
+                firebaseManager.updateSiparis(siparis)
+                scheduleLiveTrackingRegistration()
+            }
+
+            DetailField(label: t("Tracking No.", lang: seciliDil), value: $siparis.trackingNumber)
+                .onChange(of: siparis.trackingNumber) { _, _ in
+                    clearTrackingDisplayForCurrentNumber()
+                    firebaseManager.updateSiparis(siparis)
+                    scheduleLiveTrackingRegistration()
+                }
+
+            if !siparis.trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                liveTrackingPanel
+
+                HStack(spacing: 10) {
+                    Button(action: { requestLiveTrackingSync(isManual: true) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text(isLiveTrackingSyncing ? t("Checking...", lang: seciliDil) : t("Refresh Live Status", lang: seciliDil))
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(isLiveTrackingSyncing ? Color.gray : Color.blue)
+                        .cornerRadius(6)
+                    }
+                    .disabled(isLiveTrackingSyncing)
+                    .buttonStyle(.plain)
+
+                    Button(action: {
+                        let url = trackingValue("trackingUrl")
+                        if !url.isEmpty, let u = URL(string: url) {
+                            openURL(u)
+                        } else {
+                            kargoSayfasiniAc(firma: siparis.courier, kod: siparis.trackingNumber)
+                        }
+                    }) {
+                        Image(systemName: "safari")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.blue)
+                            .frame(width: 34, height: 34)
+                            .background(Color.blue.opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
+            }
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            YesNoField(label: t("Delivered?", lang: seciliDil), value: $siparis.isDelivered)
+        }
+    }
+
+    private func getStepValue(for stepName: String) -> String {
+        if let index = decodedSteps.firstIndex(where: { $0.title == stepName }) {
+            if index == 0 { return siparis.designStatus }
+            if index == 1 { return siparis.status }
+            return statusStepValue(from: siparis.extraStatuses, step: decodedSteps[index])
+        }
+        return siparis.extraStatuses?[stepName] ?? "Not Yet"
+    }
+
+    @MainActor private func exportToPDF() {
+        var loadedImage: PlatformImage? = nil
+        if !siparis.designLink.isEmpty,
+           let imgUrl = URL(string: siparis.designLink),
+           let data = try? Data(contentsOf: imgUrl) {
+            loadedImage = PlatformImage(data: data)
+        }
+
+        var logoImage: PlatformImage? = nil
+        if !appLogoUrl.isEmpty,
+           let lUrl = URL(string: appLogoUrl),
+           let lData = try? Data(contentsOf: lUrl) {
+            logoImage = PlatformImage(data: lData)
+        }
+
+        let pdfView = OrderPDFView(
+            siparis: siparis,
+            previewImage: loadedImage,
+            logoImage: logoImage,
+            appSubtitle: appSubtitle,
+            decodedSteps: decodedSteps,
+            sembol: seciliParaBirimi,
+            ondalik: seciliOndalik,
+            showCustomer: pdfShowCustomer,
+            showContact: pdfShowContact,
+            showPreview: pdfShowPreview,
+            showFinCustomer: pdfShowFinCustomer,
+            showFinInternal: pdfShowFinInternal,
+            showStatus: pdfShowStatus,
+            showShipping: pdfShowShipping,
+            showPaymentMethod: pdfShowPaymentMethod,
+            showMaterials: pdfShowMaterials,
+            showPriority: pdfShowPriority,
+            seciliDil: seciliDil,
+            taxNameRev: taxRuleNameRevenue,
+            taxNamePro: taxRuleNameProfit,
+            invLbl1: invLabel1,
+            invLbl2: invLabel2,
+            invLbl3: invLabel3,
+            invLbl4: invLabel4,
+            customFieldsList: customFieldsList,
+            customTogglesList: customTogglesList
+        )
+
+        let safeName = safePDFFileName("Order_\(siparis.customerName.isEmpty ? siparis.designName : siparis.customerName)")
+        let renderer = ImageRenderer(content: pdfView)
+
+        #if os(macOS)
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.isExtensionHidden = false
+        savePanel.title = t("Save Order PDF", lang: seciliDil)
+        savePanel.nameFieldStringValue = safeName
+
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                renderPDF(renderer: renderer, to: url)
+            }
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(safeName)
+            .appendingPathExtension("pdf")
+
+        renderPDF(renderer: renderer, to: url)
+
+        DispatchQueue.main.async {
+            self.pdfShareItem = ShareableFileURL(url: url)
+        }
+        #endif
+    }
+
+    @MainActor private func exportHistoryLogPDF() {
+        var logoImage: PlatformImage? = nil
+        if !appLogoUrl.isEmpty,
+           let lUrl = URL(string: appLogoUrl),
+           let lData = try? Data(contentsOf: lUrl) {
+            logoImage = PlatformImage(data: lData)
+        }
+
+        let displayName = siparis.customerName.isEmpty ? (siparis.designName.isEmpty ? "Order" : siparis.designName) : siparis.customerName
+        let safeName = safePDFFileName("History_Log_\(displayName)")
+        let logs = orderHistoryItems
+
+        #if os(macOS)
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.isExtensionHidden = false
+        savePanel.title = t("Save History Log PDF", lang: seciliDil)
+        savePanel.nameFieldStringValue = safeName
+
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                Task { @MainActor in
+                    renderHistoryLogPDF(items: logs, logoImage: logoImage, to: url)
+                }
+            }
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(safeName)
+            .appendingPathExtension("pdf")
+
+        renderHistoryLogPDF(items: logs, logoImage: logoImage, to: url)
+
+        DispatchQueue.main.async {
+            self.pdfShareItem = ShareableFileURL(url: url)
+        }
+        #endif
+    }
+
+
+
+    @MainActor private func exportToDoPDF() {
+        var logoImage: PlatformImage? = nil
+        if !appLogoUrl.isEmpty,
+           let lUrl = URL(string: appLogoUrl),
+           let lData = try? Data(contentsOf: lUrl) {
+            logoImage = PlatformImage(data: lData)
+        }
+
+        let displayName = siparis.customerName.isEmpty ? (siparis.designName.isEmpty ? "Order" : siparis.designName) : siparis.customerName
+        let safeName = safePDFFileName("To_Do_\(displayName)")
+        let items = toDoItemsSorted
+
+        #if os(macOS)
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.isExtensionHidden = false
+        savePanel.title = t("Save To Do PDF", lang: seciliDil)
+        savePanel.nameFieldStringValue = safeName
+
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                Task { @MainActor in
+                    renderToDoPDF(items: items, logoImage: logoImage, to: url)
+                }
+            }
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(safeName)
+            .appendingPathExtension("pdf")
+
+        renderToDoPDF(items: items, logoImage: logoImage, to: url)
+
+        DispatchQueue.main.async {
+            self.pdfShareItem = ShareableFileURL(url: url)
+        }
+        #endif
+    }
+
+
+    private func safePDFFileName(_ raw: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
+        let cleaned = raw
+            .replacingOccurrences(of: " ", with: "_")
+            .unicodeScalars
+            .map { allowed.contains($0) ? Character($0) : "_" }
+        let name = String(cleaned).trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return name.isEmpty ? "Order_Export" : name
+    }
+
+    private func renderPDF(renderer: ImageRenderer<OrderPDFView>, to url: URL) {
+        renderer.render { size, context in
+            var box = CGRect(origin: .zero, size: size)
+            guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
+            pdfContext.beginPDFPage(nil)
+            context(pdfContext)
+            pdfContext.endPDFPage()
+            pdfContext.closePDF()
+        }
+    }
+
+    @MainActor private func renderHistoryLogPDF(items: [OrderHistoryLogItem], logoImage: PlatformImage?, to url: URL) {
+        let pageSize = CGSize(width: 595, height: 842)
+        var box = CGRect(origin: .zero, size: pageSize)
+        guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
+
+        let pageItems: [[OrderHistoryLogItem]] = items.isEmpty ? [[]] : stride(from: 0, to: items.count, by: 15).map { startIndex in
+            Array(items[startIndex..<min(startIndex + 15, items.count)])
+        }
+
+        for (pageIndex, pageLogs) in pageItems.enumerated() {
+            let pdfPage = HistoryLogPDFPageView(
+                siparis: siparis,
+                items: pageLogs,
+                logoImage: logoImage,
+                appSubtitle: appSubtitle,
+                seciliDil: seciliDil,
+                pageNumber: pageIndex + 1,
+                totalPages: pageItems.count
+            )
+            let renderer = ImageRenderer(content: pdfPage)
+            renderer.proposedSize = ProposedViewSize(width: pageSize.width, height: pageSize.height)
+            renderer.render { _, context in
+                pdfContext.beginPDFPage(nil)
+                context(pdfContext)
+                pdfContext.endPDFPage()
+            }
+        }
+
+        pdfContext.closePDF()
+    }
+
+
+
+    @MainActor private func renderToDoPDF(items: [OrderToDoItem], logoImage: PlatformImage?, to url: URL) {
+        let pageSize = CGSize(width: 595, height: 842)
+        var box = CGRect(origin: .zero, size: pageSize)
+        guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
+
+        let pageItems: [[OrderToDoItem]] = items.isEmpty ? [[]] : stride(from: 0, to: items.count, by: 12).map { startIndex in
+            Array(items[startIndex..<min(startIndex + 12, items.count)])
+        }
+
+        for (pageIndex, pageTasks) in pageItems.enumerated() {
+            let pdfPage = ToDoPDFPageView(
+                siparis: siparis,
+                items: pageTasks,
+                allItems: items,
+                logoImage: logoImage,
+                appSubtitle: appSubtitle,
+                seciliDil: seciliDil,
+                pageNumber: pageIndex + 1,
+                totalPages: pageItems.count
+            )
+            let renderer = ImageRenderer(content: pdfPage)
+            renderer.proposedSize = ProposedViewSize(width: pageSize.width, height: pageSize.height)
+            renderer.render { _, context in
+                pdfContext.beginPDFPage(nil)
+                context(pdfContext)
+                pdfContext.endPDFPage()
+            }
+        }
+
+        pdfContext.closePDF()
+    }
+
+
+    private func otomatikKesintiHesapla() {
+        if siparis.taxType.isEmpty {
+            if taxMilestoneEnabled {
+                let milat = Date(timeIntervalSince1970: taxMilestoneDate)
+                siparis.taxType = siparis.paymentDate >= milat ? "Revenue" : "Profit"
+            } else {
+                siparis.taxType = taxCalculationType
+            }
+        }
+
+        let toplamSatis = siparis.paidAmount + siparis.remainingAmount
+
+        if toplamSatis >= 0 {
+            siparis.paymentFee = (toplamSatis * feePercentage) / 100.0
+        }
+
+        if siparis.taxType == "Revenue" {
+            siparis.taxAmount = (toplamSatis * siparis.taxRate) / 100.0
+        } else {
+            let brutKar = toplamSatis - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee
+            siparis.taxAmount = brutKar > 0 ? (brutKar * siparis.taxRate) / 100.0 : 0
+        }
+    }
+    private func kargoSayfasiniAc(firma: String, kod: String) { let tKod = kod.trimmingCharacters(in: .whitespacesAndNewlines); var url = ""; switch firma { case "DHL": url = "https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id=\(tKod)"; case "Royal Mail": url = "https://www.royalmail.com/track-your-item#/tracking-results/\(tKod)"; case "FedEx": url = "https://www.fedex.com/fedextrack/?trknbr=\(tKod)"; case "UPS": url = "https://www.ups.com/track?tracknum=\(tKod)"; default: url = "https://www.17track.net/en/track-details?nums=\(tKod)" }; if let u = URL(string: url) { openURL(u) } }
+    private func kalanGunSayisi(siparis: Siparis) -> Int { let cal = Calendar.current; guard let t = cal.date(byAdding: .day, value: siparis.deliveryTime, to: siparis.paymentDate) else { return 0 }; return cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: t)).day ?? 0 }
+    private func kalanGunRengi(siparis: Siparis) -> Color {
+        if siparis.status == "Cancelled" || siparis.isDispatched { return .gray }
+        let gun = kalanGunSayisi(siparis: siparis)
+        if gun <= 7 { return .red }
+        if gun <= 14 {
+            return colorScheme == .dark
+                ? Color(red: 0.96, green: 0.64, blue: 0.18)
+                : Color(red: 0.70, green: 0.32, blue: 0.04)
+        }
+        return .green
+    }
+    private func kalanGunMetni(siparis: Siparis) -> String { if siparis.status == "Cancelled" { return "❌" }; if siparis.isDispatched { return "✅" }; let gun = kalanGunSayisi(siparis: siparis); return gun > 0 ? "\(gun) \(t("days", lang: seciliDil))" : (gun == 0 ? t("Today", lang: seciliDil) : "\(t("Late", lang: seciliDil)) (\(-gun) \(t("days", lang: seciliDil)))") }
+}
+
+struct SutunAyirici: View {
+    @Binding var width: Double
+    var onDragEnd: () -> Void
+    @State private var initialWidth: Double = 0
+    @AppStorage("workspaceCardsLockedV1") private var workspaceCardsLocked: Bool = false
+
+    var body: some View {
+        if workspaceCardsLocked {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: 14)
+        } else {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: 14)
+                .onHover { hover in
+                    if hover { PlatformCursor.resizeLeftRightPush() } else { PlatformCursor.pop() }
+                }
+                .gesture(
+                    DragGesture(coordinateSpace: .global)
+                        .onChanged { value in
+                            if initialWidth == 0 { initialWidth = width }
+                            let hedefGenislik = min(max(initialWidth + Double(value.translation.width), 260), 800)
+                            withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.9, blendDuration: 0.05)) {
+                                width = hedefGenislik
+                            }
+                        }
+                        .onEnded { _ in
+                            initialWidth = 0
+                            onDragEnd()
+                        }
+                )
+        }
+    }
+}
+struct KartDropDelegate: DropDelegate {
+    let item: KartTipi
+    let columnIndex: Int
+    @Binding var layout: [[KartTipi]]
+    @Binding var draggedItem: KartTipi?
+    var onDropEnd: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedItem = draggedItem, draggedItem != item else { return }
+        CardDragCoordinator.shared.markDropTargetReached()
+        PlatformCursor.closedHandSet()
+
+        var sourceColumn = -1
+        var sourceRow = -1
+
+        for column in 0..<layout.count {
+            if let row = layout[column].firstIndex(of: draggedItem) {
+                sourceColumn = column
+                sourceRow = row
+                break
+            }
+        }
+
+        guard sourceColumn != -1 else { return }
+
+        let destinationColumn = columnIndex
+        guard let destinationRow = layout[destinationColumn].firstIndex(of: item) else { return }
+
+        withAnimation(.interactiveSpring(response: 0.38, dampingFraction: 0.88, blendDuration: 0.12)) {
+            if sourceColumn == destinationColumn {
+                layout[sourceColumn].move(
+                    fromOffsets: IndexSet(integer: sourceRow),
+                    toOffset: destinationRow > sourceRow ? destinationRow + 1 : destinationRow
+                )
+            } else {
+                let removed = layout[sourceColumn].remove(at: sourceRow)
+                layout[destinationColumn].insert(removed, at: destinationRow)
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        if draggedItem != nil {
+            CardDragCoordinator.shared.markDropTargetReached()
+            PlatformCursor.closedHandSet()
+        }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        DispatchQueue.main.async {
+            CardDragCoordinator.shared.endSession()
+            self.draggedItem = nil
+            self.onDropEnd()
+            PlatformCursor.arrowSet()
+        }
+        return true
+    }
+}
+
+private struct KartAralikDropDelegate: DropDelegate {
+    let after: KartTipi
+    let columnIndex: Int
+    @Binding var layout: [[KartTipi]]
+    @Binding var draggedItem: KartTipi?
+    @Binding var activeTarget: WorkspaceCardInsertDropTarget?
+    var onDropEnd: () -> Void
+
+    private var currentTarget: WorkspaceCardInsertDropTarget {
+        WorkspaceCardInsertDropTarget(columnIndex: columnIndex, after: after)
+    }
+
+    private func moveDraggedItemAfterTarget() {
+        guard let draggedItem,
+              draggedItem != after,
+              layout.indices.contains(columnIndex) else { return }
+
+        var sourceColumn: Int?
+        var sourceRow: Int?
+
+        for column in layout.indices {
+            if let row = layout[column].firstIndex(of: draggedItem) {
+                sourceColumn = column
+                sourceRow = row
+                break
+            }
+        }
+
+        guard let sourceColumn,
+              let sourceRow,
+              layout.indices.contains(sourceColumn),
+              let afterRow = layout[columnIndex].firstIndex(of: after) else { return }
+
+        withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.88, blendDuration: 0.10)) {
+            let removed = layout[sourceColumn].remove(at: sourceRow)
+            var insertIndex = afterRow + 1
+
+            if sourceColumn == columnIndex, sourceRow < insertIndex {
+                insertIndex -= 1
+            }
+
+            insertIndex = min(max(insertIndex, 0), layout[columnIndex].count)
+            layout[columnIndex].insert(removed, at: insertIndex)
+        }
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard draggedItem != nil else { return }
+        activeTarget = currentTarget
+        CardDragCoordinator.shared.markDropTargetReached()
+        PlatformCursor.closedHandSet()
+        moveDraggedItemAfterTarget()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        if draggedItem != nil {
+            activeTarget = currentTarget
+            CardDragCoordinator.shared.markDropTargetReached()
+            PlatformCursor.closedHandSet()
+            moveDraggedItemAfterTarget()
+        }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        moveDraggedItemAfterTarget()
+
+        DispatchQueue.main.async {
+            self.activeTarget = nil
+            CardDragCoordinator.shared.endSession()
+            self.draggedItem = nil
+            self.onDropEnd()
+            PlatformCursor.arrowSet()
+        }
+        return true
+    }
+}
+
+
+#if os(macOS)
+private struct WorkspacePanSurface: NSViewRepresentable {
+    func makeNSView(context: Context) -> WorkspacePanNSView {
+        WorkspacePanNSView()
+    }
+
+    func updateNSView(_ nsView: WorkspacePanNSView, context: Context) {}
+}
+
+private final class WorkspacePanNSView: NSView {
+    private var lastDragPoint: NSPoint?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .openHand)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        lastDragPoint = event.locationInWindow
+        NSCursor.closedHand.set()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let lastDragPoint else { return }
+
+        let currentPoint = event.locationInWindow
+        let deltaX = currentPoint.x - lastDragPoint.x
+        let deltaY = currentPoint.y - lastDragPoint.y
+        self.lastDragPoint = currentPoint
+
+        let horizontalScrollView = scrollableAncestor(axis: .horizontal)
+        let verticalScrollView = scrollableAncestor(axis: .vertical)
+
+        if let horizontalScrollView, horizontalScrollView === verticalScrollView {
+            scroll(horizontalScrollView, deltaX: deltaX, deltaY: deltaY, scrollsX: true, scrollsY: true)
+        } else {
+            if let horizontalScrollView {
+                scroll(horizontalScrollView, deltaX: deltaX, deltaY: 0, scrollsX: true, scrollsY: false)
+            }
+            if let verticalScrollView {
+                scroll(verticalScrollView, deltaX: 0, deltaY: deltaY, scrollsX: false, scrollsY: true)
+            }
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        lastDragPoint = nil
+        NSCursor.arrow.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if lastDragPoint != nil {
+            NSCursor.closedHand.set()
+        }
+    }
+
+    private enum ScrollAxis {
+        case horizontal
+        case vertical
+    }
+
+    private func scrollableAncestor(axis: ScrollAxis) -> NSScrollView? {
+        var view: NSView? = self
+        while let current = view {
+            if let scrollView = current as? NSScrollView, canScroll(scrollView, axis: axis) {
+                return scrollView
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
+    private func canScroll(_ scrollView: NSScrollView, axis: ScrollAxis) -> Bool {
+        let clipView = scrollView.contentView
+        let documentSize = scrollView.documentView?.bounds.size ?? .zero
+        let visibleSize = clipView.bounds.size
+
+        switch axis {
+        case .horizontal:
+            return documentSize.width > visibleSize.width + 1
+        case .vertical:
+            return documentSize.height > visibleSize.height + 1
+        }
+    }
+
+    private func scroll(_ scrollView: NSScrollView, deltaX: CGFloat, deltaY: CGFloat, scrollsX: Bool, scrollsY: Bool) {
+        let clipView = scrollView.contentView
+        let currentOrigin = clipView.bounds.origin
+        let documentSize = scrollView.documentView?.bounds.size ?? .zero
+        let visibleSize = clipView.bounds.size
+
+        let maxX = max(0, documentSize.width - visibleSize.width)
+        let maxY = max(0, documentSize.height - visibleSize.height)
+        let nextX = scrollsX ? min(max(currentOrigin.x - deltaX, 0), maxX) : currentOrigin.x
+        let verticalDelta = (scrollView.documentView?.isFlipped ?? true) ? deltaY : -deltaY
+        let nextY = scrollsY ? min(max(currentOrigin.y + verticalDelta, 0), maxY) : currentOrigin.y
+
+        guard nextX != currentOrigin.x || nextY != currentOrigin.y else { return }
+        clipView.scroll(to: NSPoint(x: nextX, y: nextY))
+        scrollView.reflectScrolledClipView(clipView)
+    }
+}
+
+final class SubtleWorkspaceScroller: NSScroller {
+    private var isHovering = false
+    private var trackingAreaRef: NSTrackingArea?
+
+    override class func scrollerWidth(for controlSize: NSControl.ControlSize, scrollerStyle: NSScroller.Style) -> CGFloat {
+        return 13
+    }
+
+    private var isVerticalScroller: Bool {
+        bounds.height >= bounds.width
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingAreaRef {
+            removeTrackingArea(trackingAreaRef)
+        }
+
+        let options: NSTrackingArea.Options = [
+            .mouseEnteredAndExited,
+            .activeInKeyWindow,
+            .inVisibleRect
+        ]
+
+        let area = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        trackingAreaRef = area
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            animator().alphaValue = 0.86
+        }
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            animator().alphaValue = 0.50
+        }
+        needsDisplay = true
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
+        let insetX: CGFloat = isHovering ? (isVerticalScroller ? 2.5 : 2.0) : (isVerticalScroller ? 4.0 : 3.0)
+        let insetY: CGFloat = isHovering ? (isVerticalScroller ? 2.0 : 2.5) : (isVerticalScroller ? 3.0 : 4.0)
+
+        let trackRect = slotRect.insetBy(dx: insetX, dy: insetY)
+        guard trackRect.width > 0, trackRect.height > 0 else { return }
+
+        NSColor.labelColor.withAlphaComponent(isHovering ? 0.085 : 0.045).setFill()
+        NSBezierPath(
+            roundedRect: trackRect,
+            xRadius: min(trackRect.width, trackRect.height) / 2,
+            yRadius: min(trackRect.width, trackRect.height) / 2
+        ).fill()
+    }
+
+    override func drawKnob() {
+        let knobRect = rect(for: .knob)
+
+        let insetX: CGFloat = isHovering ? (isVerticalScroller ? 1.5 : 1.0) : (isVerticalScroller ? 3.0 : 2.0)
+        let insetY: CGFloat = isHovering ? (isVerticalScroller ? 1.0 : 1.5) : (isVerticalScroller ? 2.0 : 3.0)
+
+        let visibleKnobRect = knobRect.insetBy(dx: insetX, dy: insetY)
+        guard visibleKnobRect.width > 0, visibleKnobRect.height > 0 else { return }
+
+        NSColor.labelColor.withAlphaComponent(isHighlighted || isHovering ? 0.52 : 0.30).setFill()
+        NSBezierPath(
+            roundedRect: visibleKnobRect,
+            xRadius: min(visibleKnobRect.width, visibleKnobRect.height) / 2,
+            yRadius: min(visibleKnobRect.width, visibleKnobRect.height) / 2
+        ).fill()
+    }
+}
+
+struct SoftStyledWorkspaceScrollView<Content: View>: NSViewRepresentable {
+    let colorScheme: ColorScheme
+    let expectedContentSize: CGSize
+    let content: Content
+
+    init(
+        colorScheme: ColorScheme,
+        expectedContentSize: CGSize,
+        enablePinchZoom: Bool = false,
+        zoomScale: Binding<CGFloat> = .constant(1.0),
+        @ViewBuilder content: () -> Content
+    ) {
+        self.colorScheme = colorScheme
+        self.expectedContentSize = expectedContentSize
+        self.content = content()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(rootView: content)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.autohidesScrollers = false
+        scrollView.scrollerStyle = .overlay
+        scrollView.usesPredominantAxisScrolling = false
+        scrollView.horizontalScrollElasticity = .automatic
+        scrollView.verticalScrollElasticity = .automatic
+
+        let horizontalScroller = SubtleWorkspaceScroller()
+        horizontalScroller.controlSize = .regular
+
+        let verticalScroller = SubtleWorkspaceScroller()
+        verticalScroller.controlSize = .regular
+
+        scrollView.horizontalScroller = horizontalScroller
+        scrollView.verticalScroller = verticalScroller
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = false
+        horizontalScroller.isHidden = true
+        verticalScroller.isHidden = true
+        horizontalScroller.alphaValue = 0
+        verticalScroller.alphaValue = 0
+        scrollView.documentView = context.coordinator.hostingView
+
+        context.coordinator.refresh(in: scrollView, colorScheme: colorScheme, expectedContentSize: expectedContentSize)
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        context.coordinator.hostingView.rootView = content
+        DispatchQueue.main.async {
+            context.coordinator.refresh(in: nsView, colorScheme: colorScheme, expectedContentSize: expectedContentSize)
+        }
+    }
+
+    final class Coordinator {
+        let hostingView: NSHostingView<Content>
+
+        init(rootView: Content) {
+            hostingView = NSHostingView(rootView: rootView)
+            hostingView.frame.origin = .zero
+        }
+
+        func refresh(in scrollView: NSScrollView, colorScheme: ColorScheme, expectedContentSize: CGSize) {
+            hostingView.layoutSubtreeIfNeeded()
+
+            let fitting = hostingView.fittingSize
+            let clipSize = scrollView.contentView.bounds.size
+            let horizontalTolerance: CGFloat = 18
+            let verticalTolerance: CGFloat = 24
+
+            let needsHorizontal = expectedContentSize.width > clipSize.width + horizontalTolerance
+            let needsVertical = expectedContentSize.height > clipSize.height + verticalTolerance
+
+            scrollView.hasHorizontalScroller = needsHorizontal
+            scrollView.hasVerticalScroller = needsVertical
+
+            if !needsHorizontal && scrollView.contentView.bounds.origin.x != 0 {
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: scrollView.contentView.bounds.origin.y))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+
+            let targetSize = NSSize(
+                width: max(expectedContentSize.width, fitting.width, clipSize.width),
+                height: max(expectedContentSize.height, fitting.height, clipSize.height)
+            )
+
+            if hostingView.frame.size != targetSize {
+                hostingView.frame = CGRect(origin: .zero, size: targetSize)
+            } else {
+                hostingView.frame.origin = .zero
+            }
+
+            style(scrollView.horizontalScroller, colorScheme: colorScheme, isVisible: needsHorizontal)
+            style(scrollView.verticalScroller, colorScheme: colorScheme, isVisible: needsVertical)
+
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            scrollView.needsDisplay = true
+            scrollView.horizontalScroller?.needsDisplay = true
+            scrollView.verticalScroller?.needsDisplay = true
+        }
+
+        private func style(_ scroller: NSScroller?, colorScheme: ColorScheme, isVisible: Bool) {
+            guard let scroller else { return }
+            scroller.controlSize = .regular
+            scroller.knobStyle = colorScheme == .dark ? .light : .dark
+            scroller.isHidden = !isVisible
+            scroller.alphaValue = isVisible ? 0.50 : 0
+            scroller.needsDisplay = true
+        }
+    }
+}
+
+
+#else
+private struct WorkspacePanSurface: View {
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+    }
+}
+
+struct SoftStyledWorkspaceScrollView<Content: View>: View {
+    let colorScheme: ColorScheme
+    let expectedContentSize: CGSize
+    let enablePinchZoom: Bool
+    let content: Content
+    @Binding var zoomScale: CGFloat
+    @GestureState private var gestureScale: CGFloat = 1.0
+
+    init(
+        colorScheme: ColorScheme,
+        expectedContentSize: CGSize,
+        enablePinchZoom: Bool = false,
+        zoomScale: Binding<CGFloat> = .constant(1.0),
+        @ViewBuilder content: () -> Content
+    ) {
+        self.colorScheme = colorScheme
+        self.expectedContentSize = expectedContentSize
+        self.enablePinchZoom = enablePinchZoom
+        self._zoomScale = zoomScale
+        self.content = content()
+    }
+
+    var body: some View {
+        let effectiveScale = enablePinchZoom ? min(max(zoomScale * gestureScale, 0.65), 1.75) : 1.0
+        let zoomedSize = CGSize(
+            width: max(expectedContentSize.width * effectiveScale, 1),
+            height: max(expectedContentSize.height * effectiveScale, 1)
+        )
+
+        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+            content
+                .frame(
+                    minWidth: max(expectedContentSize.width, 1),
+                    minHeight: max(expectedContentSize.height, 1),
+                    alignment: .topLeading
+                )
+                .scaleEffect(effectiveScale, anchor: .topLeading)
+                .frame(width: zoomedSize.width, height: zoomedSize.height, alignment: .topLeading)
+        }
+        .simultaneousGesture(
+            MagnificationGesture()
+                .updating($gestureScale) { value, state, _ in
+                    guard enablePinchZoom else { return }
+                    state = value
+                }
+                .onEnded { value in
+                    guard enablePinchZoom else { return }
+                    zoomScale = min(max(zoomScale * value, 0.65), 1.75)
+                }
+        )
+    }
+}
+#endif
+
+struct PhoneKartDropDelegate: DropDelegate {
+    let item: KartTipi
+    @Binding var order: [KartTipi]
+    @Binding var draggedItem: KartTipi?
+    var allCardsProvider: () -> [KartTipi]
+    var onDropEnd: () -> Void
+
+    private func ensureOrderReady() {
+        let allCards = allCardsProvider()
+        if order.isEmpty {
+            order = allCards
+            return
+        }
+
+        var seen: Set<KartTipi> = []
+        var normalized: [KartTipi] = []
+
+        for kart in order where allCards.contains(kart) && !seen.contains(kart) {
+            seen.insert(kart)
+            normalized.append(kart)
+        }
+
+        for kart in allCards where !seen.contains(kart) {
+            seen.insert(kart)
+            normalized.append(kart)
+        }
+
+        if normalized != order {
+            order = normalized
+        }
+    }
+
+    private func moveDraggedItem() {
+        guard let draggedItem = draggedItem, draggedItem != item else { return }
+
+        ensureOrderReady()
+
+        guard let fromIndex = order.firstIndex(of: draggedItem),
+              let toIndex = order.firstIndex(of: item) else { return }
+
+        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.88, blendDuration: 0.08)) {
+            let removed = order.remove(at: fromIndex)
+            let adjustedToIndex = toIndex > fromIndex ? toIndex - 1 : toIndex
+            order.insert(removed, at: adjustedToIndex)
+        }
+    }
+
+    func dropEntered(info: DropInfo) {
+        CardDragCoordinator.shared.markDropTargetReached()
+        PlatformCursor.closedHandSet()
+        moveDraggedItem()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        if draggedItem != nil {
+            CardDragCoordinator.shared.markDropTargetReached()
+            PlatformCursor.closedHandSet()
+            moveDraggedItem()
+        }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        DispatchQueue.main.async {
+            CardDragCoordinator.shared.endSession()
+            self.onDropEnd()
+        }
+        return true
+    }
+}
+
+struct CalismaAlaniDropDelegate: DropDelegate {
+    @Binding var draggedItem: KartTipi?
+    var onDropEnd: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        if draggedItem != nil {
+            CardDragCoordinator.shared.markDropTargetReached()
+            PlatformCursor.closedHandSet()
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        if draggedItem != nil {
+            PlatformCursor.closedHandSet()
+        }
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        if draggedItem != nil {
+            PlatformCursor.closedHandSet()
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        DispatchQueue.main.async {
+            self.onDropEnd()
+            PlatformCursor.arrowSet()
+        }
+        return true
+    }
+}
+
+struct BosKolonDropDelegate: DropDelegate {
+    let columnIndex: Int
+    @Binding var layout: [[KartTipi]]
+    @Binding var draggedItem: KartTipi?
+    var onDropEnd: () -> Void
+
+    private func moveDraggedItemToColumn() {
+        guard let draggedItem = draggedItem,
+              layout.indices.contains(columnIndex) else { return }
+
+        var sourceColumn: Int?
+        var sourceRow: Int?
+
+        for column in layout.indices {
+            if let row = layout[column].firstIndex(of: draggedItem) {
+                sourceColumn = column
+                sourceRow = row
+                break
+            }
+        }
+
+        guard let sourceColumn,
+              let sourceRow,
+              layout.indices.contains(sourceColumn) else { return }
+
+        // Zaten aynı boşluğa bırakılıyorsa gereksiz hareket yaptırma.
+        if sourceColumn == columnIndex { return }
+
+        withAnimation(.interactiveSpring(response: 0.38, dampingFraction: 0.88, blendDuration: 0.12)) {
+            let removed = layout[sourceColumn].remove(at: sourceRow)
+            layout[columnIndex].append(removed)
+        }
+    }
+
+    func dropEntered(info: DropInfo) {
+        if draggedItem != nil {
+            CardDragCoordinator.shared.markDropTargetReached()
+            PlatformCursor.closedHandSet()
+        }
+        moveDraggedItemToColumn()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        if draggedItem != nil {
+            CardDragCoordinator.shared.markDropTargetReached()
+            PlatformCursor.closedHandSet()
+            moveDraggedItemToColumn()
+        }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        moveDraggedItemToColumn()
+
+        DispatchQueue.main.async {
+            CardDragCoordinator.shared.endSession()
+            self.draggedItem = nil
+            self.onDropEnd()
+            PlatformCursor.arrowSet()
+        }
+        return true
+    }
+}
+
+
+// 🌟 GÜNCELLENDİ: BLOKLARA (KARTLARA) RENK DEĞİŞTİRME ÖZELLİĞİ EKLENDİ 🌟
+struct DetayKarti<Content: View>: View {
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("workspaceCardsLockedV1") private var workspaceCardsLocked: Bool = false
+    @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan: String = StudioBillingPlan.teamMonthly.rawValue
+    
+    let title: String
+    let iconName: String
+    let kartTipi: KartTipi
+    @Binding var yukseklik: Double?
+    @Binding var sutunGenisligi: Double
+    @Binding var draggedKart: KartTipi?
+    var uiTetikleyici: Bool
+    
+    var kartRengi: String // 🎨 KARTIN AKTİF RENGİ
+    var minimumHeightOverride: Double? = nil
+    var autoAdjustHeightOnContentChange: Bool = true
+    
+    var onHeightChangeEnd: () -> Void
+    var onWidthChangeEnd: () -> Void
+    var onHide: () -> Void
+    var onColorChange: (String) -> Void // 🎨 RENK DEĞİŞTİRME MOTORU
+    var onEditHeadings: (() -> Void)? = nil
+    var onExport: (() -> Void)? = nil
+    
+    let content: Content
+    
+    @State private var initialHeight: Double = 0
+    @State private var initialWidth: Double = 0
+    @State private var minimumBoy: Double = 200
+    @State private var lastMeasuredMinimumBoy: Double? = nil
+    @State private var dragHandleHovering: Bool = false
+    
+    private let minKartBoyu: Double = 160
+    private let previewMinBoyu: Double = 220
+    private let ustBaslikAlani: Double = 54
+    private let altTutamacAlani: Double = 16
+    private let guvenlikPayi: Double = 8
+    
+    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.iconName = iconName
+        self.kartTipi = kartTipi
+        self._yukseklik = yukseklik
+        self._sutunGenisligi = sutunGenisligi
+        self._draggedKart = draggedKart
+        self.uiTetikleyici = uiTetikleyici
+        self.kartRengi = kartRengi
+        self.minimumHeightOverride = minimumHeightOverride
+        self.autoAdjustHeightOnContentChange = autoAdjustHeightOnContentChange
+        self.onHeightChangeEnd = onHeightChangeEnd
+        self.onWidthChangeEnd = onWidthChangeEnd
+        self.onHide = onHide
+        self.onColorChange = onColorChange
+        self.onEditHeadings = onEditHeadings
+        self.onExport = onExport
+        self.content = content()
+    }
+    
+    // 🌟 KARTIN DİNAMİK TEMA RENGİ 🌟
+    // Biraz daha canlı özel renkler kullanıyoruz. Özellikle Pink, sistem .pink yerine
+    // daha temiz/fuşya bir tona çekildiği için koyu kırmızı gibi görünmez.
+    private func temaRengi(_ renkAdi: String) -> Color {
+        switch renkAdi {
+        case "Red": return Color(red: 1.00, green: 0.24, blue: 0.24)
+        case "Orange": return studioWarningOrange
+        case "Yellow": return Color(red: 1.00, green: 0.82, blue: 0.12)
+        case "Green": return Color(red: 0.18, green: 0.78, blue: 0.38)
+        case "Blue": return Color(red: 0.20, green: 0.52, blue: 1.00)
+        case "Purple": return Color(red: 0.62, green: 0.38, blue: 1.00)
+        case "Pink": return Color(red: 1.00, green: 0.24, blue: 0.62)
+        default: return Color.clear
+        }
+    }
+    
+    // 🌟 KARTIN DİNAMİK ARKA PLAN RENGİ 🌟
+    private var bgColor: Color {
+        if kartRengi == "Default" {
+            return colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
+        }
+        return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.18 : 0.14)
+    }
+    
+    // 🌟 KARTIN DİNAMİK ÇİZGİ (BORDER) RENGİ 🌟
+    private var borderColor: Color {
+        if kartRengi == "Default" { return Color.clear }
+        return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.62 : 0.50)
+    }
+
+    // 🌟 RENKLİ BLOKLARDA OKUNABİLİRLİĞİ ARTIRAN İÇ YÜZEY 🌟
+    // Rengi kısmadan, içeriğin arkasına hafif nötr bir panel veriyoruz.
+    // Böylece blok rengi görünür kalıyor ama yazılar ve alanlar daha net ayrışıyor.
+    private var contentPanelFill: Color {
+        if kartRengi == "Default" {
+            return colorScheme == .dark ? Color.white.opacity(0.025) : Color.black.opacity(0.018)
+        }
+        return colorScheme == .dark ? Color.black.opacity(0.18) : Color.white.opacity(0.58)
+    }
+
+    private var contentPanelBorder: Color {
+        if kartRengi == "Default" {
+            return Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06)
+        }
+        return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.30 : 0.22)
+    }
+
+    private var cardHighlightOverlay: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(colorScheme == .dark ? 0.06 : 0.08),
+                        Color.clear,
+                        Color.black.opacity(colorScheme == .dark ? 0.03 : 0.02)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .allowsHitTesting(false)
+    }
+    
+    private var etkiliMinimumBoy: Double { minimumHeightOverride ?? minimumBoy }
+    private var etkiliYukseklik: Double { max(etkiliMinimumBoy, yukseklik ?? etkiliMinimumBoy) }
+    private func hesaplananMinimumBoy(icerikBoyu: Double) -> Double { if kartTipi == .preview { return previewMinBoyu }; let hesap = icerikBoyu + ustBaslikAlani + altTutamacAlani + guvenlikPayi; return max(minKartBoyu, ceil(hesap)) }
+    private func sinirliYukseklik(_ deger: Double) -> Double { max(etkiliMinimumBoy, deger) }
+    private func sinirliGenislik(_ deger: Double) -> Double { min(max(deger, 250), 800) }
+    private var dragPreviewGenislik: CGFloat { CGFloat(sinirliGenislik(sutunGenisligi)) }
+    private var dragPreviewYukseklik: CGFloat { CGFloat(min(max(etkiliYukseklik, 120), 260)) }
+
+    private var silikKartDragPreview: some View {
+        let handleHotspotX: CGFloat = 28
+        let handleHotspotY: CGFloat = 28
+        let cardWidth = dragPreviewGenislik
+        let cardHeight = dragPreviewYukseklik
+        let leadingSpace = max(cardWidth - (handleHotspotX * 2), 0)
+        let topSpace = max(cardHeight - (handleHotspotY * 2), 0)
+        let canvasWidth = leadingSpace + cardWidth
+        let canvasHeight = topSpace + cardHeight
+
+        return ZStack(alignment: .topLeading) {
+            Color.clear
+                .frame(width: canvasWidth, height: canvasHeight)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundColor(.gray.opacity(0.55))
+                        .font(.system(size: 16, weight: .semibold))
+                        .padding(8)
+                    Image(systemName: iconName)
+                        .foregroundColor(.gray.opacity(0.85))
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary.opacity(0.75))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.10))
+                        .frame(height: 8)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
+                        .frame(width: cardWidth * 0.62, height: 8)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.06))
+                        .frame(width: cardWidth * 0.42, height: 8)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+            }
+            .frame(width: cardWidth, height: cardHeight, alignment: .topLeading)
+            .background(bgColor.opacity(colorScheme == .dark ? 0.82 : 0.92))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(borderColor.opacity(0.75), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: Color.black.opacity(0.18), radius: 14, x: 0, y: 8)
+            .opacity(0.72)
+            .allowsHitTesting(false)
+            .offset(x: leadingSpace, y: topSpace)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var canCustomizeThisCard: Bool {
+        let plan = StudioBillingPlan(rawValue: storedBillingPlan) ?? .teamMonthly
+        return plan.entitlements.cardCustomizationEnabled
+    }
+
+    @ViewBuilder
+    private var kartContextMenuActions: some View {
+        Button(role: .destructive) {
+            withAnimation(.snappy) { onHide() }
+        } label: {
+            Label(t("Hide Block", lang: seciliDil), systemImage: "eye.slash")
+        }
+
+        if let onEditHeadings {
+            Button {
+                onEditHeadings()
+            } label: {
+                Label(t("Edit Block Headings", lang: seciliDil), systemImage: "textformat")
+            }
+        }
+
+        if let onExport {
+            Button {
+                onExport()
+            } label: {
+                Label(t("Export", lang: seciliDil), systemImage: "square.and.arrow.up")
+            }
+        }
+
+        Divider()
+
+        if canCustomizeThisCard {
+            Menu("🎨 " + t("Color", lang: seciliDil)) {
+                Button("⚪️ " + t("Default", lang: seciliDil)) { onColorChange("Default") }
+                Button("🔴 " + t("Red", lang: seciliDil)) { onColorChange("Red") }
+                Button("🟠 " + t("Orange", lang: seciliDil)) { onColorChange("Orange") }
+                Button("🟡 " + t("Yellow", lang: seciliDil)) { onColorChange("Yellow") }
+                Button("🟢 " + t("Green", lang: seciliDil)) { onColorChange("Green") }
+                Button("🔵 " + t("Blue", lang: seciliDil)) { onColorChange("Blue") }
+                Button("🟣 " + t("Purple", lang: seciliDil)) { onColorChange("Purple") }
+                Button("🩷 " + t("Pink", lang: seciliDil)) { onColorChange("Pink") }
+            }
+        } else {
+            Label(t("Card moving, resizing and colours are available from StudioFlow Lite.", lang: seciliDil), systemImage: "lock.fill")
+        }
+    }
+
+    private var lockedCardHandle: some View {
+        Image(systemName: "lock.fill")
+            .foregroundColor(.secondary)
+            .font(.system(size: 15, weight: .semibold))
+            .frame(width: 42, height: 38)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(0.055))
+            )
+            .help(t("Layout locked", lang: seciliDil))
+            .accessibilityLabel(t("Layout locked", lang: seciliDil))
+    }
+
+    @ViewBuilder
+    private var phoneMoveMenuHandle: some View {
+        Menu {
+            Button {
+                sendPhoneMoveRequest("top")
+            } label: {
+                Label(t("Move to top", lang: seciliDil), systemImage: "arrow.up.to.line")
+            }
+
+            Button {
+                sendPhoneMoveRequest("up")
+            } label: {
+                Label(t("Move up", lang: seciliDil), systemImage: "arrow.up")
+            }
+
+            Button {
+                sendPhoneMoveRequest("down")
+            } label: {
+                Label(t("Move down", lang: seciliDil), systemImage: "arrow.down")
+            }
+
+            Button {
+                sendPhoneMoveRequest("bottom")
+            } label: {
+                Label(t("Move to bottom", lang: seciliDil), systemImage: "arrow.down.to.line")
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .foregroundColor(.blue.opacity(0.85))
+                .font(.system(size: 16, weight: .semibold))
+                .padding(8)
+                .background(Color.blue.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                PlatformHaptics.lightSelection()
+            }
+        )
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.15).onEnded { _ in
+                PlatformHaptics.lightSelection()
+            }
+        )
+    }
+
+    private func sendPhoneMoveRequest(_ action: String) {
+        NotificationCenter.default.post(
+            name: .phoneCardMoveRequested,
+            object: nil,
+            userInfo: [
+                "card": kartTipi.rawValue,
+                "action": action
+            ]
+        )
+    }
+    private func makeCardDragProvider() -> NSItemProvider {
+        let sessionID = CardDragCoordinator.shared.beginSession()
+
+        self.draggedKart = kartTipi
+        PlatformCursor.closedHandSet()
+
+        // Kısa otomatik iptal süreleri kartı geniş çalışma alanında bırakmadan önce
+        // drag state'i temizleyebiliyordu. Drop delegate başarılı bırakmada temizliyor;
+        // burada sadece iptal edilen sürüklemeler için uzun güvenlik temizliği var.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30.0) {
+            if CardDragCoordinator.shared.sessionID == sessionID,
+               draggedKart == kartTipi {
+                withAnimation(.easeOut(duration: 0.16)) {
+                    draggedKart = nil
+                }
+                CardDragCoordinator.shared.endSession()
+                PlatformCursor.arrowSet()
+            }
+        }
+
+        let provider = NSItemProvider(object: kartTipi.rawValue as NSString)
+        provider.suggestedName = kartTipi.rawValue
+        return provider
+    }
+
+    private var desktopDragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .foregroundColor(dragHandleHovering ? Color.blue.opacity(0.95) : Color.gray.opacity(0.58))
+            .font(.system(size: 17, weight: .semibold))
+            .frame(width: 42, height: 38)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(dragHandleHovering ? Color.blue.opacity(0.12) : Color.primary.opacity(0.001))
+            )
+            .contentShape(Rectangle())
+            .onHover { hover in
+                dragHandleHovering = hover
+                if hover {
+                    if draggedKart != nil {
+                        PlatformCursor.closedHandSet()
+                    } else {
+                        PlatformCursor.openHandSet()
+                    }
+                } else {
+                    if draggedKart != nil {
+                        PlatformCursor.closedHandSet()
+                    } else {
+                        PlatformCursor.arrowSet()
+                    }
+                }
+            }
+            .onChange(of: draggedKart) { _, yeniDeger in
+                if yeniDeger != nil {
+                    PlatformCursor.closedHandSet()
+                } else if dragHandleHovering {
+                    PlatformCursor.openHandSet()
+                } else {
+                    PlatformCursor.arrowSet()
+                }
+            }
+            .onDrag {
+                makeCardDragProvider()
+            } preview: {
+                silikKartDragPreview
+            }
+    }
+
+    var body: some View {
+        let controlledContentHeight = max(90, CGFloat(etkiliYukseklik - ustBaslikAlani - altTutamacAlani - 46))
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                if workspaceCardsLocked || !canCustomizeThisCard {
+                    lockedCardHandle
+                } else if isPhoneLayout {
+                    phoneMoveMenuHandle
+                } else {
+                    desktopDragHandle
+                }
+
+                // Title area: menü için. Burada drag yok.
+                HStack(spacing: 10) {
+                    Image(systemName: iconName)
+                        .foregroundColor(.gray)
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+                .contextMenu {
+                    kartContextMenuActions
+                }
+
+                // iPad'de uzun basma yerine net bir menü hedefi olsun.
+                Menu {
+                    kartContextMenuActions
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.gray.opacity(0.75))
+                        .padding(6)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            
+            Group {
+                if kartTipi == .preview {
+                    VStack(alignment: .leading, spacing: 15) { content }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                        .background(WorkspacePanSurface())
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(key: IcerikBoyuKey.self, value: Double(geo.size.height))
+                            }
+                        )
+                } else if autoAdjustHeightOnContentChange {
+                    VStack(alignment: .leading, spacing: 15) { content }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
+                        .background(WorkspacePanSurface())
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(contentPanelFill)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(contentPanelBorder, lineWidth: 1)
+                                )
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(key: IcerikBoyuKey.self, value: Double(geo.size.height))
+                            }
+                        )
+                } else {
+                    VStack(alignment: .leading, spacing: 15) { content }
+                        .frame(maxWidth: .infinity, maxHeight: controlledContentHeight, alignment: .top)
+                        .clipped()
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
+                        .background(WorkspacePanSurface())
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(contentPanelFill)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(contentPanelBorder, lineWidth: 1)
+                                )
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                        .background(
+                            GeometryReader { _ in
+                                Color.clear.preference(key: IcerikBoyuKey.self, value: minimumHeightOverride ?? minKartBoyu)
+                            }
+                        )
+                }
+            }
+            
+            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity)
+                .background(WorkspacePanSurface())
+            
+            if workspaceCardsLocked || !canCustomizeThisCard {
+                Color.clear
+                    .frame(height: 8)
+            } else {
+                ZStack(alignment: .center) {
+                    Rectangle().fill(Color.clear).frame(height: 16)
+                    Capsule().fill(Color.gray.opacity(0.3)).frame(width: 40, height: 4)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onHover { hover in if hover { PlatformCursor.resizeUpDownPush() } else { PlatformCursor.pop() } }
+                .gesture(
+                    DragGesture(coordinateSpace: .global)
+                        .onChanged { val in
+                            if initialHeight == 0 { initialHeight = etkiliYukseklik }
+                            let yeniYukseklik = initialHeight + Double(val.translation.height)
+                            yukseklik = sinirliYukseklik(yeniYukseklik)
+                        }
+                        .onEnded { _ in
+                            yukseklik = etkiliYukseklik
+                            initialHeight = 0
+                            onHeightChangeEnd()
+                        }
+                )
+            }
+        }
+        .onPreferenceChange(IcerikBoyuKey.self) { boy in
+            DispatchQueue.main.async {
+                // Some cards, such as History / Log, contain an internal ScrollView whose height is
+                // intentionally tied to the current card height. Measuring that content again as the
+                // card minimum creates a feedback loop where the card keeps growing by itself.
+                // For those cards we use the explicit override as the stable minimum and only respect
+                // manual resizing above that value.
+                if let fixedMinimum = minimumHeightOverride {
+                    let oncekiMinimum = lastMeasuredMinimumBoy
+                    let mevcutYukseklik = yukseklik ?? fixedMinimum
+                    let tolerans = 4.0
+
+                    minimumBoy = fixedMinimum
+                    lastMeasuredMinimumBoy = fixedMinimum
+
+                    if let currentHeight = yukseklik {
+                        if currentHeight < fixedMinimum - 0.5 {
+                            yukseklik = fixedMinimum
+                        } else if (kartTipi == .workTime || kartTipi == .historyLog),
+                                  let oncekiMinimum,
+                                  fixedMinimum < oncekiMinimum - 0.5,
+                                  mevcutYukseklik <= oncekiMinimum + tolerans {
+                            withAnimation(.snappy) {
+                                yukseklik = fixedMinimum
+                            }
+                            onHeightChangeEnd()
+                        }
+                    } else {
+                        yukseklik = fixedMinimum
+                    }
+                    return
+                }
+
+                let yeniMinimum = hesaplananMinimumBoy(icerikBoyu: boy)
+                let oncekiMinimum = lastMeasuredMinimumBoy
+                let mevcutYukseklik = yukseklik ?? minimumBoy
+                let tolerans = 4.0
+                var hedefYukseklik: Double? = nil
+
+                // İçerik büyüdüğünde kart her zaman içeriği sığdıracak kadar uzar.
+                if mevcutYukseklik < yeniMinimum - 0.5 {
+                    hedefYukseklik = yeniMinimum
+                }
+
+                // İçerik küçüldüğünde, kart daha önce otomatik ölçüye yakınsa otomatik kısalır.
+                // Böylece başlık silindiğinde boş alan kalmaz, ama kullanıcı kartı bilerek büyüttüyse o ölçü korunur.
+                if let oncekiMinimum, yeniMinimum < oncekiMinimum - 0.5 {
+                    let kartOtomatikOlcudeydi = mevcutYukseklik <= oncekiMinimum + tolerans
+                    if kartOtomatikOlcudeydi {
+                        hedefYukseklik = yeniMinimum
+                    }
+                }
+
+                minimumBoy = yeniMinimum
+                lastMeasuredMinimumBoy = yeniMinimum
+
+                if let hedefYukseklik, abs((yukseklik ?? -1) - hedefYukseklik) > 0.5 {
+                    withAnimation(.snappy) {
+                        yukseklik = hedefYukseklik
+                    }
+
+                    // İlk ölçümde gereksiz kayıt yapma; gerçek içerik değişimlerinde yeni yüksekliği sakla.
+                    if oncekiMinimum != nil {
+                        onHeightChangeEnd()
+                    }
+                } else if yukseklik == nil {
+                    yukseklik = yeniMinimum
+                }
+            }
+        }
+        .frame(height: etkiliYukseklik, alignment: .top)
+        .background(WorkspacePanSurface())
+        .background(bgColor) // 🌟 KARTIN DİNAMİK ARKA PLANI 🌟
+        .background(cardHighlightOverlay)
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(borderColor, lineWidth: 1.5)) // 🌟 KARTIN DİNAMİK ÇİZGİSİ 🌟
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+        .opacity(draggedKart == kartTipi ? 0.86 : 1.0)
+        .animation(.snappy, value: kartRengi)
+        .clipped()
+        .overlay(alignment: .trailing) {
+            if !isPhoneLayout && !workspaceCardsLocked {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(width: 8)
+                    .contentShape(Rectangle())
+                    .onHover { hover in if hover { PlatformCursor.resizeLeftRightPush() } else { PlatformCursor.pop() } }
+                    .gesture(
+                        DragGesture(coordinateSpace: .global)
+                            .onChanged { val in
+                                if initialWidth == 0 { initialWidth = sutunGenisligi }
+                                let hedefGenislik = sinirliGenislik(initialWidth + Double(val.translation.width))
+                                withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.9, blendDuration: 0.05)) {
+                                    sutunGenisligi = hedefGenislik
+                                }
+                            }
+                            .onEnded { _ in
+                                initialWidth = 0
+                                onWidthChangeEnd()
+                            }
+                    )
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if !isPhoneLayout && !workspaceCardsLocked {
+                Image(systemName: "circle.grid.2x2.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray.opacity(0.3))
+                    .padding(12)
+                    .contentShape(Rectangle())
+                    .onHover { hover in if hover { PlatformCursor.crosshairPush() } else { PlatformCursor.pop() } }
+                    .gesture(
+                        DragGesture(coordinateSpace: .global)
+                            .onChanged { val in
+                                if initialHeight == 0 { initialHeight = etkiliYukseklik }
+                                if initialWidth == 0 { initialWidth = sutunGenisligi }
+                                let hedefYukseklik = sinirliYukseklik(initialHeight + Double(val.translation.height))
+                                let hedefGenislik = sinirliGenislik(initialWidth + Double(val.translation.width))
+                                withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.9, blendDuration: 0.05)) {
+                                    yukseklik = hedefYukseklik
+                                    sutunGenisligi = hedefGenislik
+                                }
+                            }
+                            .onEnded { _ in
+                                yukseklik = etkiliYukseklik
+                                initialHeight = 0
+                                initialWidth = 0
+                                onHeightChangeEnd()
+                                onWidthChangeEnd()
+                            }
+                    )
+            }
+        }
+    }
+}
+
+struct OrderPDFView: View { let siparis: Siparis; var previewImage: PlatformImage?; var logoImage: PlatformImage?; var appSubtitle: String; var decodedSteps: [CustomStepDTO]; var sembol: String; var ondalik: String; var showCustomer: Bool; var showContact: Bool; var showPreview: Bool; var showFinCustomer: Bool; var showFinInternal: Bool; var showStatus: Bool; var showShipping: Bool; var showPaymentMethod: Bool; var showMaterials: Bool; var showPriority: Bool; var seciliDil: String; var taxNameRev: String; var taxNamePro: String; var invLbl1: String; var invLbl2: String; var invLbl3: String; var invLbl4: String; var customFieldsList: [CustomStepDTO]; var customTogglesList: [CustomStepDTO]; var body: some View { VStack(alignment: .leading, spacing: 20) { HStack(alignment: .center) { VStack(alignment: .leading, spacing: 4) { if let logo = logoImage { Image(platformImage: logo).resizable().scaledToFit().frame(height: 50) }; Text(appSubtitle).font(.system(size: 12)).foregroundColor(.gray) }; Spacer(); Text(t("JOB SHEET", lang: seciliDil)).font(.system(size: 28, weight: .bold)).foregroundColor(.gray.opacity(0.3)) }.padding(.bottom, 10); Divider().padding(.bottom, 10); HStack(alignment: .top, spacing: 30) { VStack(alignment: .leading, spacing: 25) { if showCustomer { VStack(alignment: .leading, spacing: 12) { Text(t("Customer & Design", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Customer Name", lang: seciliDil) + ":", value: siparis.customerName); pdfRow(title: t("Design Name", lang: seciliDil) + ":", value: siparis.designName.isEmpty ? "-" : siparis.designName); ForEach(customFieldsList, id: \.id) { field in pdfRow(title: t(field.title, lang: seciliDil) + ":", value: siparis.customFields?[field.title] ?? "-") }; pdfRow(title: t("Placed On", lang: seciliDil) + ":", value: siparis.paymentDate.formatted(date: .abbreviated, time: .omitted)) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPriority { VStack(alignment: .leading, spacing: 12) { Text(t("Priority / Risk", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Priority", lang: seciliDil) + ":", value: t(siparis.priority, lang: seciliDil)); pdfRow(title: t("Risk", lang: seciliDil) + ":", value: t(siparis.risk, lang: seciliDil)); if siparis.risk != "None" && siparis.riskReason != "-" {
+                    pdfRow(title: t("Reason", lang: seciliDil) + ":", value: t(siparis.riskReason, lang: seciliDil))
+                    if siparis.riskReason == "Other",
+                       let otherNote = siparis.customFields?["riskOtherNote"],
+                       !otherNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        pdfRow(title: t("Other Note", lang: seciliDil) + ":", value: otherNote)
+                    }
+                } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showMaterials { VStack(alignment: .leading, spacing: 12) { Text(t("Materials & Inventory", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: invLbl1 + ":", value: t(siparis.invBool1 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl2 + ":", value: t(siparis.invBool2 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl3 + ":", value: t(siparis.invBool3 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl4 + ":", value: t(siparis.invBool4 ? "Yes" : "No", lang: seciliDil)); if !siparis.invNotes.isEmpty { Divider().padding(.vertical, 4); Text(t("Notes / Supplier", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.invNotes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showContact { VStack(alignment: .leading, spacing: 12) { Text(t("Contact & Notes", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Email", lang: seciliDil) + ":", value: siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress); Divider().padding(.vertical, 4); Text(t("Special Notes", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.notes.isEmpty ? t("No special notes provided.", lang: seciliDil) : siparis.notes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPreview { VStack(alignment: .leading, spacing: 12) { Text(t("Preview", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); if let nsImage = previewImage { Image(platformImage: nsImage).resizable().scaledToFit().frame(maxHeight: 200, alignment: .leading).cornerRadius(8) } else { Text(t("No preview image provided.", lang: seciliDil)).font(.system(size: 12)).padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } } } }.frame(maxWidth: .infinity); VStack(alignment: .leading, spacing: 25) { if showFinCustomer || showFinInternal { VStack(alignment: .leading, spacing: 12) { Text(t("Financial Info", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { if showFinCustomer { pdfRow(title: t("Paid", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: ondalik))", valueColor: .green); pdfRow(title: t("Remaining", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.remainingAmount, ondalik: ondalik))", valueColor: studioWarningOrange); if showPaymentMethod { pdfRow(title: t("Payment Method", lang: seciliDil) + ":", value: t(siparis.paymentMethod, lang: seciliDil)) } }; if showFinCustomer && showFinInternal { Divider().padding(.vertical, 2) }; if showFinInternal { pdfRow(title: t("Platform Fee", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paymentFee, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Watch Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.watchPurchasePrice, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Shipping Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.deliveryCost, ondalik: ondalik))", valueColor: .red); let displayTaxType = siparis.taxType == "Revenue" ? taxNameRev : taxNamePro; pdfRow(title: t("Tax Amount", lang: seciliDil) + " (" + displayTaxType + "):", value: "\(sembol)\(formatFiyat(siparis.taxAmount, ondalik: ondalik))", valueColor: .red); Divider().padding(.vertical, 2); pdfRow(title: t("Final Profit", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.netKar - siparis.taxAmount, ondalik: ondalik))", valueColor: .green) } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showStatus { VStack(alignment: .leading, spacing: 12) { Text(t("Production Status", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Delivery Time", lang: seciliDil) + ":", value: "\(siparis.deliveryTime) \(t("days", lang: seciliDil))"); ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in if index == 0 { pdfRow(title: "\(step.title):", value: t(siparis.designStatus, lang: seciliDil)) } else if index == 1 { pdfRow(title: "\(step.title):", value: t(siparis.status, lang: seciliDil)) } else { pdfRow(title: "\(step.title):", value: t(siparis.extraStatuses?[step.title] ?? "Not Yet", lang: seciliDil)) } }; if !customTogglesList.isEmpty { Divider().padding(.vertical, 2); ForEach(customTogglesList, id: \.id) { toggle in pdfRow(title: t(toggle.title, lang: seciliDil) + ":", value: t((siparis.customToggles?[toggle.title] == true) ? "Yes" : "No", lang: seciliDil)) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showShipping { VStack(alignment: .leading, spacing: 12) { Text(t("Shipping & Tracking", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Dispatched", lang: seciliDil) + ":", value: t(siparis.isDispatched ? "Yes" : "No", lang: seciliDil)); pdfRow(title: t("Courier", lang: seciliDil) + ":", value: siparis.courier.isEmpty ? "-" : siparis.courier); pdfRow(title: t("Tracking No.", lang: seciliDil) + ":", value: siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } } }.frame(maxWidth: .infinity) }; Spacer(); Divider(); Text(t("Generated automatically from Studio Manager", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray).frame(maxWidth: .infinity, alignment: .center).padding(.top, 5) }.padding(40).frame(width: 595, height: 842).background(Color.white) }
+    private func pdfRow(title: String, value: String, valueColor: Color = .primary) -> some View { HStack(alignment: .top, spacing: 5) { Text(title).font(.system(size: 12, weight: .bold)).frame(width: 115, alignment: .leading); Text(value).font(.system(size: 12)).foregroundColor(valueColor).frame(maxWidth: .infinity, alignment: .leading) } }
+}
+
+
+
+struct ToDoPDFPageView: View {
+    let siparis: Siparis
+    let items: [OrderToDoItem]
+    let allItems: [OrderToDoItem]
+    var logoImage: PlatformImage?
+    var appSubtitle: String
+    var seciliDil: String
+    var pageNumber: Int
+    var totalPages: Int
+
+    private var orderDisplayName: String {
+        if !siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return siparis.customerName
+        }
+        if !siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return siparis.designName
+        }
+        return t("Order", lang: seciliDil)
+    }
+
+    private var openCount: Int { allItems.filter { !$0.isDone }.count }
+    private var doneCount: Int { allItems.filter { $0.isDone }.count }
+    private var overdueCount: Int {
+        let today = Calendar.current.startOfDay(for: Date())
+        return allItems.filter { item in
+            guard !item.isDone, let dueAt = item.dueAt else { return false }
+            return dueAt < today
+        }.count
+    }
+
+    private func dateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func dueDateText(_ date: Date?) -> String {
+        guard let date else { return t("No due date", lang: seciliDil) }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private func assigneeText(_ item: OrderToDoItem) -> String {
+        let email = item.assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = item.assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !email.isEmpty { return email }
+        if !uid.isEmpty { return uid }
+        return t("Unassigned", lang: seciliDil)
+    }
+
+    private func statusText(_ item: OrderToDoItem) -> String {
+        item.isDone ? t("Done", lang: seciliDil) : t("Open", lang: seciliDil)
+    }
+
+    private func taskIsOverdue(_ item: OrderToDoItem) -> Bool {
+        guard !item.isDone, let dueAt = item.dueAt else { return false }
+        return dueAt < Calendar.current.startOfDay(for: Date())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    if let logoImage {
+                        Image(platformImage: logoImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 42, alignment: .leading)
+                    }
+                    Text(appSubtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(t("To Do PDF", lang: seciliDil).uppercased())
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.gray.opacity(0.35))
+                    Text("\(t("Page", lang: seciliDil)) \(pageNumber) / \(totalPages)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.gray)
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(orderDisplayName)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.primary)
+                HStack(spacing: 14) {
+                    Text("\(t("Design Name", lang: seciliDil)): \(siparis.designName.isEmpty ? "-" : siparis.designName)")
+                    Text("\(t("Open", lang: seciliDil)): \(openCount)")
+                    Text("\(t("Done", lang: seciliDil)): \(doneCount)")
+                    Text("\(t("Overdue", lang: seciliDil)): \(overdueCount)")
+                }
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.black.opacity(0.035))
+            .cornerRadius(10)
+
+            if items.isEmpty {
+                Text(t("No tasks here", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.035))
+                    .cornerRadius(10)
+            } else {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(items) { item in
+                        toDoPDFRow(item)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Divider()
+            Text(t("Generated automatically from Studio Manager", lang: seciliDil))
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(40)
+        .frame(width: 595, height: 842, alignment: .topLeading)
+        .background(Color.white)
+    }
+
+    private func toDoPDFRow(_ item: OrderToDoItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(item.isDone ? .green : (taskIsOverdue(item) ? .red : .gray))
+                .frame(width: 20, alignment: .center)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("To Do", lang: seciliDil) : item.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                    Spacer(minLength: 10)
+                    Text(statusText(item))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(item.isDone ? .green : (taskIsOverdue(item) ? .red : .blue))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background((item.isDone ? Color.green : (taskIsOverdue(item) ? Color.red : Color.blue)).opacity(0.10))
+                        .clipShape(Capsule())
+                }
+
+                HStack(spacing: 10) {
+                    Label(assigneeText(item), systemImage: "person.crop.circle")
+                    Label(t(item.priority, lang: seciliDil), systemImage: "flag.fill")
+                    Label(dueDateText(item.dueAt), systemImage: "calendar")
+                }
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.gray)
+                .lineLimit(1)
+
+                if !item.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(item.note)
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .lineLimit(2)
+                }
+
+                if let completedAt = item.completedAt, item.isDone {
+                    Text("\(t("Done", lang: seciliDil)): \(dateText(completedAt))")
+                        .font(.system(size: 9))
+                        .foregroundColor(.gray)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background((item.isDone ? Color.green : (taskIsOverdue(item) ? Color.red : Color.blue)).opacity(0.045))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke((item.isDone ? Color.green : (taskIsOverdue(item) ? Color.red : Color.blue)).opacity(0.11), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+}
+
+
+struct HistoryLogPDFPageView: View {
+    let siparis: Siparis
+    let items: [OrderHistoryLogItem]
+    var logoImage: PlatformImage?
+    var appSubtitle: String
+    var seciliDil: String
+    var pageNumber: Int
+    var totalPages: Int
+
+    private var orderDisplayName: String {
+        if !siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return siparis.customerName
+        }
+        if !siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return siparis.designName
+        }
+        return t("Order", lang: seciliDil)
+    }
+
+    private func dateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func cleanValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "-" : trimmed
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    if let logoImage {
+                        Image(platformImage: logoImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 42, alignment: .leading)
+                    }
+                    Text(appSubtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(t("History Log PDF", lang: seciliDil).uppercased())
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.gray.opacity(0.35))
+                    Text("\(t("Page", lang: seciliDil)) \(pageNumber) / \(totalPages)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.gray)
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(orderDisplayName)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.primary)
+                HStack(spacing: 14) {
+                    Text("\(t("Design Name", lang: seciliDil)): \(siparis.designName.isEmpty ? "-" : siparis.designName)")
+                    Text("\(t("Placed On", lang: seciliDil)): \(dateText(siparis.paymentDate))")
+                    Text("\(t("Total Logs", lang: seciliDil)): \(siparis.historyLog?.count ?? 0)")
+                }
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.black.opacity(0.035))
+            .cornerRadius(10)
+
+            if items.isEmpty {
+                Text(t("No history yet. Important changes will appear here.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.035))
+                    .cornerRadius(10)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(items) { item in
+                        historyPDFRow(item)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Divider()
+            Text(t("Generated automatically from Studio Manager", lang: seciliDil))
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(40)
+        .frame(width: 595, height: 842, alignment: .topLeading)
+        .background(Color.white)
+    }
+
+    private func historyPDFRow(_ item: OrderHistoryLogItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(Color.blue.opacity(0.20))
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().fill(Color.blue).frame(width: 6, height: 6))
+                Rectangle()
+                    .fill(Color.blue.opacity(0.18))
+                    .frame(width: 1, height: 32)
+            }
+            .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(t(item.title, lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 10)
+                    Text(dateText(item.createdAt))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.gray)
+                }
+
+                HStack(alignment: .top, spacing: 7) {
+                    Text(cleanValue(item.oldValue))
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .lineLimit(2)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.gray)
+                        .padding(.top, 2)
+                    Text(cleanValue(item.newValue))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.blue.opacity(0.045))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.blue.opacity(0.11), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+}
+
+
+struct BlockHeadingsEditorSheet: View {
+    let kartTipi: KartTipi
+    @Binding var customStepsJSON: String
+    @Binding var customFieldsJSON: String
+    @Binding var financialExpenseItemsJSON: String
+    @Binding var financialRemainingItemsJSON: String
+    @Binding var financialShowBaseCost: Bool
+    @Binding var financialBaseCostLabel: String
+    @Binding var summaryStep1: String
+    @Binding var summaryStep2: String
+    @Binding var orderListStep1: String
+    @Binding var orderListStep2: String
+    @Binding var invLabel1: String
+    @Binding var invLabel2: String
+    @Binding var invLabel3: String
+    @Binding var invLabel4: String
+    @Binding var materialsTogglesJSON: String
+    @Binding var materialsDefaultChecksJSON: String
+    @Binding var communicationShowTelephone: Bool
+    @Binding var communicationShowEmail: Bool
+    @Binding var communicationShowAddress: Bool
+    @Binding var communicationShowChannel: Bool
+    @Binding var communicationShowCustomerNotes: Bool
+    @Binding var communicationChannelLabelsJSON: String
+    @Binding var specialNoteSectionsJSON: String
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("customTogglesJSON") private var customTogglesJSON: String = ""
+    @AppStorage("showStatusNotesSupplier") private var showStatusNotesSupplier: Bool = false
+    @AppStorage("showMaterialsNotesSupplier") private var showMaterialsNotesSupplier: Bool = true
+    @AppStorage("statusNotesSupplierLabel") private var statusNotesSupplierLabel: String = "Notes / Supplier"
+    @AppStorage("materialsNotesSupplierLabel") private var materialsNotesSupplierLabel: String = "Notes / Supplier"
+    @AppStorage("scheduleQuickRemindersJSONV2") private var scheduleQuickRemindersJSON: String = ""
+
+    @State private var editableItems: [CustomStepDTO] = []
+    @State private var editableToggleItems: [CustomStepDTO] = []
+    @State private var materialLabels: [String] = []
+    @State private var showNotesSupplierDraft: Bool = false
+    @State private var notesSupplierLabelDraft: String = "Notes / Supplier"
+    @State private var summaryStep1Draft: String = "Design"
+    @State private var summaryStep2Draft: String = "Painting"
+    @State private var orderListStep1Draft: String = "Design"
+    @State private var orderListStep2Draft: String = "Painting"
+    @State private var financialShowBaseCostDraft: Bool = true
+    @State private var financialBaseCostLabelDraft: String = "Cost (Base)"
+    @State private var communicationShowTelephoneDraft: Bool = true
+    @State private var communicationShowEmailDraft: Bool = true
+    @State private var communicationShowAddressDraft: Bool = true
+    @State private var communicationShowChannelDraft: Bool = true
+    @State private var communicationShowCustomerNotesDraft: Bool = true
+    @State private var communicationChannelLabelsDraft: [String] = ["Instagram", "WhatsApp", "TikTok"]
+
+    private var sheetTitle: String {
+        switch kartTipi {
+        case .summary: return t("Edit Summary & Order List Badges", lang: seciliDil)
+        case .financial: return t("Edit Financial Headings", lang: seciliDil)
+        case .status: return t("Edit Production Status Headings", lang: seciliDil)
+        case .customer: return t("Edit Customer & Communication Headings", lang: seciliDil)
+        case .notes: return t("Edit Notes Headings", lang: seciliDil)
+        case .materials: return t("Edit Materials Headings", lang: seciliDil)
+        case .schedule: return t("Edit Quick Reminder Headings", lang: seciliDil)
+        case .communication: return t("Edit Communication Headings", lang: seciliDil)
+        default: return t("Edit Block Headings", lang: seciliDil)
+        }
+    }
+
+    private var sheetSubtitle: String {
+        switch kartTipi {
+        case .summary:
+            return t("Choose which production statuses appear in Order Summary and in the small order cards on the left.", lang: seciliDil)
+        case .financial:
+            return t("Add custom spending headings and extra remaining / pending headings for the Financial Info block.", lang: seciliDil)
+        case .status:
+            return t("Edit both the status dropdown headings and the Yes / No headings shown inside the Production Status block.", lang: seciliDil)
+        case .customer:
+            return t("Edit customer fields, visible contact fields and the channel button names.", lang: seciliDil)
+        case .notes:
+            return t("Add, remove, or rename the note fields shown inside the Notes block.", lang: seciliDil)
+        case .materials:
+            return t("Edit the default material headings and add extra Yes / No checks for Materials & Inventory.", lang: seciliDil)
+        case .schedule:
+            return t("Choose the shortcut titles shown in Schedule & Alerts. Date, priority and note are set in the card.", lang: seciliDil)
+        case .communication:
+            return t("Choose which communication fields are visible and edit the channel button names.", lang: seciliDil)
+        default:
+            return t("Edit headings for this block.", lang: seciliDil)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            editorHeader
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if kartTipi == .summary {
+                        EditorSectionTitle(title: t("Order Summary", lang: seciliDil), systemImage: "doc.text")
+                        summaryBadgeEditor
+                    } else if kartTipi == .financial {
+                        EditorSectionTitle(title: t("Spending / Cost Headings", lang: seciliDil), systemImage: "minus.circle")
+                        financialExpenseEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Remaining / Pending Headings", lang: seciliDil), systemImage: "clock")
+                        financialRemainingEditor
+                    } else if kartTipi == .materials {
+                        EditorSectionTitle(title: t("Default Material Checks", lang: seciliDil), systemImage: "shippingbox")
+                        materialsEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Extra Yes / No Checks", lang: seciliDil), systemImage: "checkmark.circle")
+                        yesNoEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Notes / Supplier Field", lang: seciliDil), systemImage: "note.text")
+                        notesSupplierEditor
+                    } else if kartTipi == .status {
+                        EditorSectionTitle(title: t("Status Dropdown Headings", lang: seciliDil), systemImage: "list.bullet.rectangle")
+                        listEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Order Summary / Small Order Badges", lang: seciliDil), systemImage: "doc.text")
+                        summaryBadgeEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Extra Yes / No Checks", lang: seciliDil), systemImage: "checkmark.circle")
+                        yesNoEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Notes / Supplier Field", lang: seciliDil), systemImage: "note.text")
+                        notesSupplierEditor
+                    } else if kartTipi == .customer {
+                        EditorSectionTitle(title: t("Customer & Design Fields", lang: seciliDil), systemImage: "person.text.rectangle")
+                        customerDesignFieldsEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Visible Communication Fields", lang: seciliDil), systemImage: "eye")
+                        communicationVisibilityEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Channel Button Names", lang: seciliDil), systemImage: "bubble.left.and.bubble.right")
+                        communicationChannelEditor
+                    } else if kartTipi == .notes {
+                        EditorSectionTitle(title: t("Special Note Fields", lang: seciliDil), systemImage: "note.text")
+                        specialNoteSectionsEditor
+                    } else if kartTipi == .schedule {
+                        EditorSectionTitle(title: t("Quick reminders", lang: seciliDil), systemImage: "bolt.fill")
+                        listEditor
+                    } else if kartTipi == .communication {
+                        EditorSectionTitle(title: t("Visible Communication Fields", lang: seciliDil), systemImage: "eye")
+                        communicationVisibilityEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Channel Button Names", lang: seciliDil), systemImage: "bubble.left.and.bubble.right")
+                        communicationChannelEditor
+                    } else {
+                        unsupportedEditor
+                    }
+                }
+                .padding(editorInnerPadding)
+            }
+
+            Divider()
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    editorAddButtons
+
+                    Spacer()
+
+                    Button(t("Cancel", lang: seciliDil)) { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+
+                    Button(t("Save", lang: seciliDil)) {
+                        saveChanges()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    editorAddButtons
+
+                    HStack {
+                        Spacer()
+
+                        Button(t("Cancel", lang: seciliDil)) { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+
+                        Button(t("Save", lang: seciliDil)) {
+                            saveChanges()
+                            dismiss()
+                        }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+            .padding(editorInnerPadding)
+        }
+        .frame(width: editorWidth, height: editorHeight)
+        .background(colorScheme == .dark ? Color(white: 0.10) : Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: isCompactEditor ? 0 : 18, style: .continuous))
+        .onAppear(perform: loadCurrentValues)
+    }
+
+    @ViewBuilder
+    private var editorHeader: some View {
+        if isCompactEditor {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: iconName)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.blue)
+                        .frame(width: 34, height: 34)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    Text(sheetTitle)
+                        .font(.system(size: 17, weight: .bold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 6)
+
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.secondary.opacity(0.65))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Text(sheetSubtitle)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(editorInnerPadding)
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: iconName)
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .frame(width: 42, height: 42)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(sheetTitle)
+                        .font(.system(size: 20, weight: .bold))
+                    Text(sheetSubtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.secondary.opacity(0.65))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(editorInnerPadding)
+        }
+    }
+
+    private var isCompactEditor: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    private var editorWidth: CGFloat {
+        #if os(iOS)
+        if isCompactEditor {
+            return max(300, UIScreen.main.bounds.width - 16)
+        }
+        #endif
+        return 680
+    }
+
+    private var editorInnerPadding: CGFloat {
+        isCompactEditor ? 14 : 22
+    }
+
+    private var editorHeight: CGFloat {
+        let preferredHeight: CGFloat
+        switch kartTipi {
+        case .status: preferredHeight = 860
+        case .materials: preferredHeight = 740
+        case .financial: preferredHeight = 680
+        case .summary: preferredHeight = 560
+        case .schedule: preferredHeight = 560
+        case .communication: preferredHeight = 620
+        default: preferredHeight = 560
+        }
+        #if os(iOS)
+        if isCompactEditor {
+            return max(520, UIScreen.main.bounds.height - 24)
+        }
+        #endif
+        return preferredHeight
+    }
+
+    private var iconName: String {
+        switch kartTipi {
+        case .summary: return "doc.text"
+        case .financial: return "sterlingsign.circle.fill"
+        case .status: return "checklist"
+        case .customer: return "person.text.rectangle"
+        case .materials: return "shippingbox.circle.fill"
+        case .schedule: return "bolt.fill"
+        case .communication: return "bubble.left.and.bubble.right"
+        default: return "textformat"
+        }
+    }
+
+    @ViewBuilder
+    private var editorAddButtons: some View {
+        if kartTipi == .status || kartTipi == .schedule {
+            Button {
+                withAnimation(.snappy) {
+                    editableItems.append(CustomStepDTO(title: nextDefaultTitle()))
+                }
+            } label: {
+                Label(t("Add Heading", lang: seciliDil), systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private var financialFooterAddButtons: some View {
+        HStack(spacing: 12) {
+            financialAddSpendingButton
+            financialAddRemainingButton
+        }
+    }
+
+    private var financialAddSpendingButton: some View {
+        Button {
+            withAnimation(.snappy) {
+                editableItems.append(CustomStepDTO(title: ""))
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill")
+                Text(t("Spending", lang: seciliDil))
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.blue)
+        }
+        .buttonStyle(.borderless)
+        .help(t("Add Cost", lang: seciliDil))
+    }
+
+    private var financialAddRemainingButton: some View {
+        Button {
+            withAnimation(.snappy) {
+                editableToggleItems.append(CustomStepDTO(title: ""))
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill")
+                Text(t("Remaining", lang: seciliDil))
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.blue)
+        }
+        .buttonStyle(.borderless)
+        .help(t("Add Pending", lang: seciliDil))
+    }
+
+    private var materialsAddYesNoButton: some View {
+        Button {
+            withAnimation(.snappy) {
+                editableToggleItems.append(CustomStepDTO(title: nextDefaultToggleTitle()))
+            }
+        } label: {
+            Label(t("Add Yes / No", lang: seciliDil), systemImage: "checkmark.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.blue)
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private var materialsAddDefaultCheckButton: some View {
+        Button {
+            withAnimation(.snappy) {
+                materialLabels.append("Material Check \(materialLabels.count + 1)")
+            }
+        } label: {
+            Label(t("Add Heading", lang: seciliDil), systemImage: "plus.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.blue)
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private var financialBaseCostEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if financialShowBaseCostDraft {
+                HStack(spacing: 10) {
+                    TextField(t("Base Cost Label", lang: seciliDil), text: $financialBaseCostLabelDraft)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(10)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    Button(role: .destructive) {
+                        financialShowBaseCostDraft = false
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(t("Remove Base Cost", lang: seciliDil))
+                }
+
+                Text(t("This is the default base cost field. Extra spending headings can be added below.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(spacing: 10) {
+                    Text(t("Base cost field is hidden.", lang: seciliDil))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        financialShowBaseCostDraft = true
+                        if financialBaseCostLabelDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            financialBaseCostLabelDraft = "Cost (Base)"
+                        }
+                    } label: {
+                        Label(t("Add Base Cost", lang: seciliDil), systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(12)
+                .background(Color.gray.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+    }
+
+    private func isAutoFinancialPlaceholder(_ title: String, prefix: String) -> Bool {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedTitle.hasPrefix(prefix + " ") else { return false }
+        let numberPart = cleanedTitle.dropFirst(prefix.count + 1)
+        return !numberPart.isEmpty && numberPart.allSatisfy { $0.isNumber }
+    }
+
+    private func isUsableFinancialExpenseTitle(_ title: String) -> Bool {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !cleanedTitle.isEmpty && !isAutoFinancialPlaceholder(cleanedTitle, prefix: "Cost")
+    }
+
+    private func isUsableFinancialRemainingTitle(_ title: String) -> Bool {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !cleanedTitle.isEmpty && !isAutoFinancialPlaceholder(cleanedTitle, prefix: "Pending")
+    }
+
+    private var financialExpenseEditor: some View {
+        VStack(spacing: 10) {
+            financialBaseCostEditor
+
+            if editableItems.isEmpty {
+                Text(t("No extra spending headings yet. Use + Spending below.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.gray.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                ForEach($editableItems) { itemBinding in
+                    EditableHeadingRow(
+                        item: itemBinding,
+                        index: indexForItem(itemBinding.wrappedValue.id),
+                        totalCount: editableItems.count,
+                        isStatusBlock: false,
+                        language: seciliDil,
+                        moveUp: { moveItemByID(itemBinding.wrappedValue.id, -1) },
+                        moveDown: { moveItemByID(itemBinding.wrappedValue.id, 1) },
+                        delete: { deleteItemByID(itemBinding.wrappedValue.id) }
+                    )
+                }
+            }
+
+            financialAddSpendingButton
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 2)
+        }
+    }
+
+    private var financialRemainingEditor: some View {
+        VStack(spacing: 10) {
+            if editableToggleItems.isEmpty {
+                Text(t("No extra pending headings yet. Use + Remaining below.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.gray.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                ForEach($editableToggleItems) { itemBinding in
+                    EditableHeadingRow(
+                        item: itemBinding,
+                        index: indexForToggleItem(itemBinding.wrappedValue.id),
+                        totalCount: editableToggleItems.count,
+                        isStatusBlock: false,
+                        language: seciliDil,
+                        moveUp: { moveToggleItemByID(itemBinding.wrappedValue.id, -1) },
+                        moveDown: { moveToggleItemByID(itemBinding.wrappedValue.id, 1) },
+                        delete: { deleteToggleItemByID(itemBinding.wrappedValue.id) }
+                    )
+                }
+            }
+
+            financialAddRemainingButton
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 2)
+        }
+    }
+
+    private var productionStepOptions: [String] {
+        var options: [String] = []
+        if let data = customStepsJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) {
+            options = decoded.map { cleaned($0.title) }.filter { !$0.isEmpty }
+        }
+
+        if options.isEmpty {
+            options = ["Design", "Painting"]
+        }
+
+        for value in [summaryStep1Draft, summaryStep2Draft, orderListStep1Draft, orderListStep2Draft] {
+            let cleanedValue = cleaned(value)
+            if !cleanedValue.isEmpty && !options.contains(cleanedValue) {
+                options.append(cleanedValue)
+            }
+        }
+
+        return options
+    }
+
+    private var summaryBadgeEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(
+                kartTipi == .summary
+                ? t("These selections control only the two status rows shown inside the Order Summary card.", lang: seciliDil)
+                : t("These selections control the two status rows inside Order Summary and the two compact badges shown on the small order cards.", lang: seciliDil)
+            )
+            .font(.system(size: 12))
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(t("Order Summary Status Rows", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.primary)
+
+                PickerRow(title: t("Summary 1", lang: seciliDil), selection: $summaryStep1Draft, options: productionStepOptions, language: seciliDil)
+                PickerRow(title: t("Summary 2", lang: seciliDil), selection: $summaryStep2Draft, options: productionStepOptions, language: seciliDil)
+            }
+            .padding(12)
+            .background(Color.gray.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if kartTipi != .summary {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(t("Small Order Card Badges", lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.primary)
+
+                    PickerRow(title: t("Badge 1", lang: seciliDil), selection: $orderListStep1Draft, options: productionStepOptions, language: seciliDil)
+                    PickerRow(title: t("Badge 2", lang: seciliDil), selection: $orderListStep2Draft, options: productionStepOptions, language: seciliDil)
+
+                    Text(t("The title is shortened automatically on the order cards so the small list stays clean.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(Color.blue.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+    }
+
+    private var listEditor: some View {
+        VStack(spacing: 10) {
+            ForEach($editableItems) { itemBinding in
+                EditableHeadingRow(
+                    item: itemBinding,
+                    index: indexForItem(itemBinding.wrappedValue.id),
+                    totalCount: editableItems.count,
+                    isStatusBlock: kartTipi == .status,
+                    language: seciliDil,
+                    moveUp: { moveItemByID(itemBinding.wrappedValue.id, -1) },
+                    moveDown: { moveItemByID(itemBinding.wrappedValue.id, 1) },
+                    delete: { deleteItemByID(itemBinding.wrappedValue.id) }
+                )
+            }
+        }
+    }
+
+    private var customerDesignFieldsEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            listEditor
+
+            Button {
+                withAnimation(.snappy) {
+                    editableItems.append(CustomStepDTO(title: nextDefaultTitle()))
+                }
+            } label: {
+                Label(t("Add Heading", lang: seciliDil), systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var yesNoEditor: some View {
+        VStack(spacing: 10) {
+            if editableToggleItems.isEmpty {
+                Text(t("No extra Yes / No headings yet. Use Add Yes / No below.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.gray.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                ForEach($editableToggleItems) { itemBinding in
+                    EditableHeadingRow(
+                        item: itemBinding,
+                        index: indexForToggleItem(itemBinding.wrappedValue.id),
+                        totalCount: editableToggleItems.count,
+                        isStatusBlock: false,
+                        language: seciliDil,
+                        moveUp: { moveToggleItemByID(itemBinding.wrappedValue.id, -1) },
+                        moveDown: { moveToggleItemByID(itemBinding.wrappedValue.id, 1) },
+                        delete: { deleteToggleItemByID(itemBinding.wrappedValue.id) }
+                    )
+                }
+            }
+
+            if kartTipi == .materials || kartTipi == .status {
+                materialsAddYesNoButton
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private var materialsEditor: some View {
+        VStack(spacing: 12) {
+            ForEach(Array(materialLabels.indices), id: \.self) { index in
+                MaterialHeadingRow(
+                    label: t("Item", lang: seciliDil) + " \(index + 1)",
+                    headingPlaceholder: t("Heading", lang: seciliDil),
+                    value: Binding(
+                        get: { materialLabels.indices.contains(index) ? materialLabels[index] : "" },
+                        set: { newValue in
+                            if materialLabels.indices.contains(index) {
+                                materialLabels[index] = newValue
+                            }
+                        }
+                    ),
+                    canDelete: materialLabels.count > 1,
+                    delete: {
+                        if materialLabels.indices.contains(index) {
+                            withAnimation(.snappy) {
+                                materialLabels.remove(at: index)
+                            }
+                        }
+                    }
+                )
+            }
+
+            materialsAddDefaultCheckButton
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 2)
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+private var notesSupplierEditor: some View {
+    VStack(alignment: .leading, spacing: 12) {
+        Toggle(isOn: $showNotesSupplierDraft) {
+            Text(t("Show Notes / Supplier", lang: seciliDil))
+                .font(.system(size: 13, weight: .semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .tint(.blue)
+        .controlSize(.small)
+
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                Text(t("Heading", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 90, alignment: .leading)
+
+                TextField(t("Notes / Supplier", lang: seciliDil), text: $notesSupplierLabelDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: .infinity)
+                    .disabled(!showNotesSupplierDraft)
+                    .opacity(showNotesSupplierDraft ? 1 : 0.45)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(t("Heading", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                TextField(t("Notes / Supplier", lang: seciliDil), text: $notesSupplierLabelDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: .infinity)
+                    .disabled(!showNotesSupplierDraft)
+                    .opacity(showNotesSupplierDraft ? 1 : 0.45)
+            }
+        }
+    }
+    .padding(12)
+    .background(Color.gray.opacity(0.08))
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+}
+
+    private var communicationVisibilityEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $communicationShowTelephoneDraft) {
+                Label(t("Telephone", lang: seciliDil), systemImage: "phone")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .tint(.blue)
+            .controlSize(.small)
+
+            Toggle(isOn: $communicationShowEmailDraft) {
+                Label(t("Email", lang: seciliDil), systemImage: "envelope")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .tint(.blue)
+            .controlSize(.small)
+
+            Toggle(isOn: $communicationShowAddressDraft) {
+                Label(t("Address", lang: seciliDil), systemImage: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .tint(.blue)
+            .controlSize(.small)
+
+            Toggle(isOn: $communicationShowChannelDraft) {
+                Label(t("Channel", lang: seciliDil), systemImage: "bubble.left.and.bubble.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .tint(.blue)
+            .controlSize(.small)
+
+            Toggle(isOn: $communicationShowCustomerNotesDraft) {
+                Label(t("Customer Notes", lang: seciliDil), systemImage: "note.text")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .tint(.blue)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(Color.gray.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var communicationChannelEditor: some View {
+        VStack(spacing: 10) {
+            if communicationChannelLabelsDraft.isEmpty {
+                Text(t("No channel buttons yet. Add one below if you want another platform.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            }
+
+            ForEach(Array(communicationChannelLabelsDraft.indices), id: \.self) { index in
+                HStack(spacing: 10) {
+                    Text("\(index + 1)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+
+                    TextField(t("Channel", lang: seciliDil), text: Binding(
+                        get: {
+                            communicationChannelLabelsDraft.indices.contains(index) ? communicationChannelLabelsDraft[index] : ""
+                        },
+                        set: { newValue in
+                            if communicationChannelLabelsDraft.indices.contains(index) {
+                                communicationChannelLabelsDraft[index] = newValue
+                            }
+                        }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(10)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    Button(role: .destructive) {
+                        withAnimation(.snappy) {
+                            if communicationChannelLabelsDraft.indices.contains(index) {
+                                communicationChannelLabelsDraft.remove(at: index)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+
+            Button {
+                withAnimation(.snappy) {
+                    communicationChannelLabelsDraft.append("")
+                }
+            } label: {
+                Label(t("Add Channel", lang: seciliDil), systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(t("Channel button names can be added, removed, or renamed. Telephone, Email and Address stay as their own fields and can be shown or hidden above.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var specialNoteSectionsEditor: some View {
+        VStack(spacing: 10) {
+            ForEach(Array(editableItems.indices), id: \.self) { index in
+                HStack(spacing: 10) {
+                    Text("\(index + 1)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+
+                    TextField(t("Note Heading", lang: seciliDil), text: Binding(
+                        get: {
+                            editableItems.indices.contains(index) ? editableItems[index].title : ""
+                        },
+                        set: { newValue in
+                            if editableItems.indices.contains(index) {
+                                editableItems[index].title = newValue
+                            }
+                        }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(10)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    if editableItems.indices.contains(index), editableItems[index].id == primarySpecialNoteID {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .help(t("This is the main Special Notes field and cannot be removed.", lang: seciliDil))
+                    } else {
+                        Button(role: .destructive) {
+                            withAnimation(.snappy) {
+                                if editableItems.indices.contains(index) {
+                                    editableItems.remove(at: index)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            Button {
+                withAnimation(.snappy) {
+                    editableItems.append(CustomStepDTO(title: "Special Note \(editableItems.count + 1)"))
+                }
+            } label: {
+                Label(t("Add Note Field", lang: seciliDil), systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(t("Customer Notes always stay inside the Notes block. Use this section to add, remove, or rename separate Special Note fields.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var unsupportedEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("This block does not have editable headings yet.", lang: seciliDil))
+                .font(.system(size: 14, weight: .semibold))
+            Text(t("Use this menu on Production Status, Customer & Communication, Schedule, or Materials & Inventory blocks.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 0.5, green: 0.5, blue: 0.5, opacity: 0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func loadCurrentValues() {
+        summaryStep1Draft = summaryStep1
+        summaryStep2Draft = summaryStep2
+        orderListStep1Draft = orderListStep1
+        orderListStep2Draft = orderListStep2
+
+        if kartTipi == .summary {
+            return
+        }
+
+        if kartTipi == .communication {
+            communicationShowTelephoneDraft = communicationShowTelephone
+            communicationShowEmailDraft = communicationShowEmail
+            communicationShowAddressDraft = communicationShowAddress
+            communicationShowChannelDraft = communicationShowChannel
+            communicationShowCustomerNotesDraft = communicationShowCustomerNotes
+            communicationChannelLabelsDraft = normalizedCommunicationChannelLabels(from: communicationChannelLabelsJSON)
+            return
+        }
+
+        if kartTipi == .notes {
+            editableItems = normalizedSpecialNoteSections(from: specialNoteSectionsJSON)
+            return
+        }
+
+        if kartTipi == .schedule {
+            if let data = scheduleQuickRemindersJSON.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode([ScheduleQuickReminderItem].self, from: data),
+               !decoded.isEmpty {
+                editableItems = decoded.map { CustomStepDTO(id: $0.id, title: $0.title) }
+            } else {
+                editableItems = [
+                    CustomStepDTO(title: "Follow up customer"),
+                    CustomStepDTO(title: "Send design update"),
+                    CustomStepDTO(title: "Ask for approval"),
+                    CustomStepDTO(title: "Check payment"),
+                    CustomStepDTO(title: "Check materials"),
+                    CustomStepDTO(title: "Quality check"),
+                    CustomStepDTO(title: "Prepare shipment"),
+                    CustomStepDTO(title: "Check delivery status")
+                ]
+            }
+            return
+        }
+
+        if kartTipi == .financial {
+
+            financialShowBaseCostDraft = financialShowBaseCost
+            financialBaseCostLabelDraft = financialBaseCostLabel
+            editableItems = decodeItems(from: financialExpenseItemsJSON)
+                .filter { isUsableFinancialExpenseTitle($0.title) }
+
+            editableToggleItems = decodeItems(from: financialRemainingItemsJSON)
+                .filter { isUsableFinancialRemainingTitle($0.title) }
+
+            return
+        }
+
+        if kartTipi == .materials {
+            let decodedDefaultLabels = decodeItems(from: materialsDefaultChecksJSON)
+                .map { cleaned($0.title) }
+                .filter { !$0.isEmpty }
+            materialLabels = decodedDefaultLabels.isEmpty
+                ? [invLabel1, invLabel2, invLabel3, invLabel4].map { cleaned($0) }.filter { !$0.isEmpty }
+                : decodedDefaultLabels
+            if materialLabels.isEmpty { materialLabels = ["Material Check 1"] }
+            editableToggleItems = decodeItems(from: materialsTogglesJSON)
+            showNotesSupplierDraft = showMaterialsNotesSupplier
+            notesSupplierLabelDraft = materialsNotesSupplierLabel
+            return
+        }
+
+        if kartTipi == .status {
+            showNotesSupplierDraft = showStatusNotesSupplier
+            notesSupplierLabelDraft = statusNotesSupplierLabel
+        }
+
+        if kartTipi == .customer {
+            communicationShowTelephoneDraft = communicationShowTelephone
+            communicationShowEmailDraft = communicationShowEmail
+            communicationShowAddressDraft = communicationShowAddress
+            communicationShowChannelDraft = communicationShowChannel
+            communicationShowCustomerNotesDraft = communicationShowCustomerNotes
+            communicationChannelLabelsDraft = normalizedCommunicationChannelLabels(from: communicationChannelLabelsJSON)
+        }
+
+        let source = kartTipi == .status ? customStepsJSON : customFieldsJSON
+        let trimmedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let data = trimmedSource.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) {
+            if kartTipi == .status && decoded.isEmpty {
+                editableItems = [CustomStepDTO(title: "Design"), CustomStepDTO(title: "Painting")]
+            } else {
+                editableItems = decoded
+            }
+        } else if kartTipi == .status {
+            editableItems = [CustomStepDTO(title: "Design"), CustomStepDTO(title: "Painting")]
+        } else {
+            editableItems = []
+        }
+
+        if kartTipi == .status {
+            editableToggleItems = decodeItems(from: customTogglesJSON)
+        }
+    }
+
+    private func saveChanges() {
+        if kartTipi == .summary {
+            summaryStep1 = cleaned(summaryStep1Draft).isEmpty ? "Design" : cleaned(summaryStep1Draft)
+            summaryStep2 = cleaned(summaryStep2Draft).isEmpty ? "Painting" : cleaned(summaryStep2Draft)
+            syncEditedSettingsToCloud()
+            return
+        }
+
+        if kartTipi == .communication {
+            communicationShowTelephone = communicationShowTelephoneDraft
+            communicationShowEmail = communicationShowEmailDraft
+            communicationShowAddress = communicationShowAddressDraft
+            communicationShowChannel = communicationShowChannelDraft
+            communicationShowCustomerNotes = communicationShowCustomerNotesDraft
+
+            let cleanedLabels = communicationChannelLabelsDraft
+                .map { cleaned($0) }
+                .filter { !$0.isEmpty }
+
+            let finalLabels = normalizedCommunicationChannelLabels(from: encodeStringArray(cleanedLabels))
+
+            if let data = try? JSONEncoder().encode(finalLabels),
+               let str = String(data: data, encoding: .utf8) {
+                communicationChannelLabelsJSON = str
+            }
+
+            syncEditedSettingsToCloud()
+            return
+        }
+
+        if kartTipi == .notes {
+            let finalItems = normalizedSpecialNoteSections(editableItems)
+            if let data = try? JSONEncoder().encode(finalItems),
+               let str = String(data: data, encoding: .utf8) {
+                specialNoteSectionsJSON = str
+                syncEditedSettingsToCloud()
+            }
+            return
+        }
+
+        if kartTipi == .schedule {
+            let cleanedItems = editableItems
+                .map { ScheduleQuickReminderItem(id: $0.id, title: cleaned($0.title), days: 1, hours: 0, priority: "Normal", notify: true) }
+                .filter { !$0.title.isEmpty }
+
+            let finalItems = cleanedItems.isEmpty ? [
+                ScheduleQuickReminderItem(title: "Follow up customer"),
+                ScheduleQuickReminderItem(title: "Send design update"),
+                ScheduleQuickReminderItem(title: "Ask for approval"),
+                ScheduleQuickReminderItem(title: "Check payment")
+            ] : cleanedItems
+
+            if let data = try? JSONEncoder().encode(finalItems),
+               let str = String(data: data, encoding: .utf8) {
+                scheduleQuickRemindersJSON = str
+                syncEditedSettingsToCloud()
+            }
+            return
+        }
+
+        if kartTipi == .financial {
+
+            financialShowBaseCost = financialShowBaseCostDraft
+            let cleanedBaseLabel = cleaned(financialBaseCostLabelDraft)
+            financialBaseCostLabel = cleanedBaseLabel.isEmpty ? "Cost (Base)" : cleanedBaseLabel
+            financialExpenseItemsJSON = encodeItems(editableItems)
+            financialRemainingItemsJSON = encodeItems(editableToggleItems)
+            syncEditedSettingsToCloud()
+            return
+        }
+
+        if kartTipi == .materials {
+            var cleanedMaterialLabels = materialLabels.map { cleaned($0) }.filter { !$0.isEmpty }
+            if cleanedMaterialLabels.isEmpty { cleanedMaterialLabels = ["Material Check 1"] }
+            let padded = cleanedMaterialLabels.padding(to: 4, with: "Item")
+            invLabel1 = padded[0]
+            invLabel2 = padded[1]
+            invLabel3 = padded[2]
+            invLabel4 = padded[3]
+            materialsDefaultChecksJSON = encodeItems(cleanedMaterialLabels.map { CustomStepDTO(title: $0) })
+            materialsTogglesJSON = encodeItems(editableToggleItems)
+            showMaterialsNotesSupplier = showNotesSupplierDraft
+            let materialNoteLabel = cleaned(notesSupplierLabelDraft)
+            materialsNotesSupplierLabel = materialNoteLabel.isEmpty ? "Notes / Supplier" : materialNoteLabel
+            syncEditedSettingsToCloud()
+            return
+        }
+
+        let cleanedItems = editableItems
+            .map { CustomStepDTO(id: $0.id, title: cleaned($0.title)) }
+            .filter { !$0.title.isEmpty }
+
+        let finalItems: [CustomStepDTO]
+        if kartTipi == .status {
+            finalItems = cleanedItems.isEmpty ? [CustomStepDTO(title: "Design"), CustomStepDTO(title: "Painting")] : cleanedItems
+        } else {
+            finalItems = cleanedItems
+        }
+
+        if let data = try? JSONEncoder().encode(finalItems), let str = String(data: data, encoding: .utf8) {
+            if kartTipi == .status {
+                customStepsJSON = str
+                customTogglesJSON = encodeItems(editableToggleItems)
+                showStatusNotesSupplier = showNotesSupplierDraft
+                let statusNoteLabel = cleaned(notesSupplierLabelDraft)
+                statusNotesSupplierLabel = statusNoteLabel.isEmpty ? "Notes / Supplier" : statusNoteLabel
+
+                summaryStep1 = cleaned(summaryStep1Draft).isEmpty ? "Design" : cleaned(summaryStep1Draft)
+                summaryStep2 = cleaned(summaryStep2Draft).isEmpty ? "Painting" : cleaned(summaryStep2Draft)
+                orderListStep1 = cleaned(orderListStep1Draft).isEmpty ? summaryStep1 : cleaned(orderListStep1Draft)
+                orderListStep2 = cleaned(orderListStep2Draft).isEmpty ? summaryStep2 : cleaned(orderListStep2Draft)
+            } else if kartTipi == .customer {
+                customFieldsJSON = str
+                communicationShowTelephone = communicationShowTelephoneDraft
+                communicationShowEmail = communicationShowEmailDraft
+                communicationShowAddress = communicationShowAddressDraft
+                communicationShowChannel = communicationShowChannelDraft
+                communicationShowCustomerNotes = communicationShowCustomerNotesDraft
+
+                let cleanedLabels = communicationChannelLabelsDraft
+                    .map { cleaned($0) }
+                    .filter { !$0.isEmpty }
+                let finalLabels = normalizedCommunicationChannelLabels(from: encodeStringArray(cleanedLabels))
+
+                if let labelData = try? JSONEncoder().encode(finalLabels),
+                   let labelString = String(data: labelData, encoding: .utf8) {
+                    communicationChannelLabelsJSON = labelString
+                }
+            }
+
+            syncEditedSettingsToCloud()
+        }
+    }
+
+    private func syncEditedSettingsToCloud() {
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(firebaseManager.currentCompanyId)
+            .setData([
+                "customStepsJSON": customStepsJSON,
+                "customFieldsJSON": customFieldsJSON,
+                "customTogglesJSON": customTogglesJSON,
+                "materialsTogglesJSON": materialsTogglesJSON,
+                "materialsDefaultChecksJSON": materialsDefaultChecksJSON,
+                "financialExpenseItemsJSON": financialExpenseItemsJSON,
+                "financialRemainingItemsJSON": financialRemainingItemsJSON,
+                "financialShowBaseCost": financialShowBaseCost,
+                "financialBaseCostLabel": financialBaseCostLabel,
+                "summaryStep1": summaryStep1,
+                "summaryStep2": summaryStep2,
+                "orderListStep1": orderListStep1,
+                "orderListStep2": orderListStep2,
+                "invLabel1": invLabel1,
+                "invLabel2": invLabel2,
+                "invLabel3": invLabel3,
+                "invLabel4": invLabel4,
+                "showStatusNotesSupplier": showStatusNotesSupplier,
+                "showMaterialsNotesSupplier": showMaterialsNotesSupplier,
+                "statusNotesSupplierLabel": statusNotesSupplierLabel,
+                "materialsNotesSupplierLabel": materialsNotesSupplierLabel,
+                "scheduleQuickRemindersJSON": scheduleQuickRemindersJSON,
+                "communicationShowTelephone": communicationShowTelephone,
+                "communicationShowEmail": communicationShowEmail,
+                "communicationShowAddress": communicationShowAddress,
+                "communicationShowChannel": communicationShowChannel,
+                "communicationShowCustomerNotes": communicationShowCustomerNotes,
+                "communicationChannelLabelsJSON": communicationChannelLabelsJSON,
+                "specialNoteSectionsJSON": specialNoteSectionsJSON,
+                "workflowSettingsUpdatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+    }
+
+    private func normalizedCommunicationChannelLabels(from json: String) -> [String] {
+        let defaults = ["Instagram", "WhatsApp", "TikTok"]
+        let trimmedJSON = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedJSON.isEmpty,
+              let data = trimmedJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return defaults
+        }
+
+        var labels: [String] = []
+        for rawLabel in decoded {
+            let value = cleaned(rawLabel)
+            guard !value.isEmpty else { continue }
+            if !labels.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
+                labels.append(value)
+            }
+        }
+        return labels
+    }
+
+    private func encodeStringArray(_ values: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(values), let str = String(data: data, encoding: .utf8) else { return "" }
+        return str
+    }
+
+    private func decodeItems(from json: String) -> [CustomStepDTO] {
+        guard let data = json.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) else { return [] }
+        return decoded
+    }
+
+    private func encodeItems(_ items: [CustomStepDTO]) -> String {
+        let cleanedItems = items
+            .map { CustomStepDTO(id: $0.id, title: cleaned($0.title)) }
+            .filter { !$0.title.isEmpty }
+        guard let data = try? JSONEncoder().encode(cleanedItems), let str = String(data: data, encoding: .utf8) else { return "" }
+        return str
+    }
+
+    private func cleaned(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func nextDefaultTitle() -> String {
+        kartTipi == .status ? "Step \(editableItems.count + 1)" : (kartTipi == .schedule ? "Custom reminder" : "Custom Field \(editableItems.count + 1)")
+    }
+
+    private func nextDefaultToggleTitle() -> String {
+        kartTipi == .materials ? "Material Check \(editableToggleItems.count + 1)" : "Check \(editableToggleItems.count + 1)"
+    }
+
+    private func nextDefaultFinancialExpenseTitle() -> String {
+        ""
+    }
+
+    private func nextDefaultFinancialRemainingTitle() -> String {
+        ""
+    }
+
+    private func moveItem(_ index: Int, _ offset: Int) {
+        let newIndex = index + offset
+        guard editableItems.indices.contains(index), editableItems.indices.contains(newIndex) else { return }
+        withAnimation(.snappy) {
+            let item = editableItems.remove(at: index)
+            editableItems.insert(item, at: newIndex)
+        }
+    }
+
+    private func moveToggleItem(_ index: Int, _ offset: Int) {
+        let newIndex = index + offset
+        guard editableToggleItems.indices.contains(index), editableToggleItems.indices.contains(newIndex) else { return }
+        withAnimation(.snappy) {
+            let item = editableToggleItems.remove(at: index)
+            editableToggleItems.insert(item, at: newIndex)
+        }
+    }
+
+    private func indexForItem(_ id: UUID) -> Int {
+        editableItems.firstIndex(where: { $0.id == id }) ?? 0
+    }
+
+    private func indexForToggleItem(_ id: UUID) -> Int {
+        editableToggleItems.firstIndex(where: { $0.id == id }) ?? 0
+    }
+
+    private func moveItemByID(_ id: UUID, _ offset: Int) {
+        guard let index = editableItems.firstIndex(where: { $0.id == id }) else { return }
+        moveItem(index, offset)
+    }
+
+    private func moveToggleItemByID(_ id: UUID, _ offset: Int) {
+        guard let index = editableToggleItems.firstIndex(where: { $0.id == id }) else { return }
+        moveToggleItem(index, offset)
+    }
+
+    private func deleteItemByID(_ id: UUID) {
+        DispatchQueue.main.async {
+            guard let index = editableItems.firstIndex(where: { $0.id == id }) else { return }
+            editableItems.remove(at: index)
+        }
+    }
+
+    private func deleteToggleItemByID(_ id: UUID) {
+        DispatchQueue.main.async {
+            guard let index = editableToggleItems.firstIndex(where: { $0.id == id }) else { return }
+            editableToggleItems.remove(at: index)
+        }
+    }
+}
+
+private struct PickerRow: View {
+    let title: String
+    @Binding var selection: String
+    let options: [String]
+    let language: String
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    var body: some View {
+        if isCompact {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                Picker(title, selection: $selection) {
+                    ForEach(options, id: \.self) { option in
+                        Text(t(option, lang: language)).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 105, alignment: .leading)
+
+                Picker(title, selection: $selection) {
+                    ForEach(options, id: \.self) { option in
+                        Text(t(option, lang: language)).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+private struct EditorSectionTitle: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundColor(.blue)
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.primary)
+            Spacer()
+        }
+    }
+}
+
+private struct EditableHeadingRow: View {
+    @Binding var item: CustomStepDTO
+    let index: Int
+    let totalCount: Int
+    let isStatusBlock: Bool
+    let language: String
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+    let delete: () -> Void
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    var body: some View {
+        Group {
+            if isCompact {
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: 8) {
+                        rowNumber
+                        Spacer()
+                        rowButtons
+                    }
+
+                    TextField(t("Heading", lang: language), text: $item.title)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                HStack(spacing: 10) {
+                    rowNumber
+
+                    TextField(t("Heading", lang: language), text: $item.title)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+
+                    rowButtons
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var rowNumber: some View {
+        Text("\(index + 1)")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(.secondary)
+            .frame(width: 28, height: 28)
+            .background(Color.gray.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var rowButtons: some View {
+        HStack(spacing: isCompact ? 10 : 8) {
+            Button(action: moveUp) {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .disabled(index == 0)
+
+            Button(action: moveDown) {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .disabled(index >= totalCount - 1)
+
+            Button(role: .destructive, action: delete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .disabled(isStatusBlock && totalCount <= 1)
+        }
+    }
+}
+
+private struct MaterialHeadingRow: View {
+    let label: String
+    let headingPlaceholder: String
+    @Binding var value: String
+    let canDelete: Bool
+    let delete: () -> Void
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    var body: some View {
+        Group {
+            if isCompact {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(label)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        deleteButton
+                    }
+
+                    TextField(headingPlaceholder, text: $value)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                HStack(spacing: 10) {
+                    Text(label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 78, alignment: .leading)
+
+                    TextField(headingPlaceholder, text: $value)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+
+                    deleteButton
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive, action: delete) {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(.borderless)
+        .disabled(!canDelete)
+        .opacity(canDelete ? 1 : 0.35)
+    }
+}
+
+private extension Array where Element == String {
+    func padding(to count: Int, with fallback: String) -> [String] {
+        var result = self
+        while result.count < count { result.append(fallback) }
+        if result.count > count { result = Array(result.prefix(count)) }
+        return result
+    }
+}
+
+struct PriorityMenuField: View { let label: String; @Binding var value: String; let options: [String]; @AppStorage("seciliDil") private var seciliDil: String = "English"; var body: some View { HStack { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading); Spacer(); Menu { ForEach(options, id: \.self) { option in Button(t(option, lang: seciliDil)) { value = option } } } label: { Text(t(value, lang: seciliDil)).font(.system(size: 12, weight: .bold)).foregroundColor(getColor()).padding(.horizontal, 12).padding(.vertical, 6).background(getColor().opacity(0.2)).cornerRadius(6) }.buttonStyle(.plain) } }; private func getColor() -> Color { switch value { case "Urgent": return .red; case "High": return studioWarningOrange; case "Normal": return .green; default: return .gray } } }
+struct StatusMenuField: View { let label: String; @Binding var value: String; let options: [String]; @AppStorage("seciliDil") private var seciliDil: String = "English"; var body: some View { HStack { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading); Spacer(); Menu { ForEach(options, id: \.self) { option in Button(t(option, lang: seciliDil)) { value = option } } } label: { Text(t(value, lang: seciliDil)).font(.system(size: 12, weight: .bold)).foregroundColor(dinamikRenk(icin: value)).padding(.horizontal, 12).padding(.vertical, 6).background(dinamikRenk(icin: value).opacity(0.2)).cornerRadius(6) }.buttonStyle(.plain) } } }
+func dinamikRenk(icin value: String) -> Color {
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let yesiller: Set<String> = ["none", "done", "completed", "delivered", "approved", "deposit paid", "shipped", "ready to ship"]
+    let kirmizilar: Set<String> = ["not yet", "blocked", "overdue", "urgent"]
+    let griler: Set<String> = ["cancelled", "refunded", "new", "quoted", "low"]
+    if yesiller.contains(normalized) { return .green }
+    if kirmizilar.contains(normalized) { return .red }
+    if griler.contains(normalized) { return .gray }
+    return studioWarningOrange
+}
+struct YesNoField: View { let label: String; @Binding var value: Bool; @AppStorage("seciliDil") private var seciliDil: String = "English"; var body: some View { HStack { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading); Spacer(); HStack(spacing: 6) { Button(action: { value = true }) { Text(t("Yes", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(value ? .green : .gray).padding(.horizontal, 14).padding(.vertical, 6).background(value ? Color.green.opacity(0.2) : Color.primary.opacity(0.05)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(value ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1)) }; Button(action: { value = false }) { Text(t("No", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(!value ? .red : .gray).padding(.horizontal, 14).padding(.vertical, 6).background(!value ? Color.red.opacity(0.2) : Color.primary.opacity(0.05)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(!value ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)) } }.buttonStyle(.plain) } } }
+
+private func colorSchemeFieldSurface(isReadOnly: Bool = false) -> some View {
+    RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .fill(Color.primary.opacity(isReadOnly ? 0.015 : 0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+        )
+}
+
+struct NoteSupplierField: View {
+    let label: String
+    @Binding var value: String
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.gray)
+
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $value)
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .frame(minHeight: 86)
+                    .padding(8)
+                    .scrollContentBackground(.hidden)
+                    .background(colorSchemeFieldSurface())
+                    .cornerRadius(8)
+                    .focused($isFocused)
+
+                if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isFocused {
+                    Text(t("Add notes or supplier details...", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray.opacity(0.55))
+                        .padding(.top, 16)
+                        .padding(.leading, 14)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+    }
+}
+
+struct DetailField: View {
+    let label: String
+    @Binding var value: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            TextField("", text: $value)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(colorSchemeFieldSurface())
+                .cornerRadius(6)
+        }
+    }
+}
+
+struct CommitDetailField: View {
+    let label: String
+    @Binding var value: String
+    var emptyFallback: String? = nil
+    @State private var draftValue: String = ""
+    @FocusState private var isFocused: Bool
+
+    private func commitDraft() {
+        let nextValue = draftValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (emptyFallback ?? draftValue) : draftValue
+        if nextValue != value {
+            value = nextValue
+        }
+        if nextValue != draftValue {
+            draftValue = nextValue
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            TextField("", text: $draftValue)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(colorSchemeFieldSurface())
+                .cornerRadius(6)
+                .focused($isFocused)
+                .onSubmit {
+                    commitDraft()
+                }
+        }
+        .onAppear {
+            draftValue = value
+        }
+        .onChange(of: value) { _, newValue in
+            if !isFocused {
+                draftValue = newValue
+            }
+        }
+        .onChange(of: isFocused) { _, focused in
+            if focused {
+                draftValue = value
+            } else {
+                commitDraft()
+            }
+        }
+        .onDisappear {
+            commitDraft()
+        }
+    }
+}
+struct CurrencyField: View {
+    let label: String
+    @Binding var value: Double
+    var isCost: Bool = false
+    var isReadOnly: Bool = false
+    var sembol: String = "£"
+    var ondalik: String = "."
+    @State private var textValue: String = ""
+    @FocusState private var isFocused: Bool
+    @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            HStack(spacing: 2) {
+                Text(sembol).font(.system(size: 13, weight: .bold)).foregroundColor(isCost ? .red : .green)
+                if hideSensitiveNumbers {
+                    Text("••••")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(isCost ? .red : .green)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    TextField("0.00", text: $textValue)
+                        .focused($isFocused)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(isCost ? .red : .green)
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .background(colorSchemeFieldSurface(isReadOnly: isReadOnly))
+            .cornerRadius(6)
+            .disabled(isReadOnly || hideSensitiveNumbers)
+            .opacity(isReadOnly ? 0.6 : 1.0)
+            .onChange(of: textValue) { _, newValue in
+                if isFocused {
+                    let temiz = newValue.replacingOccurrences(of: ondalik == "," ? "." : ",", with: "")
+                    let formatli = temiz.replacingOccurrences(of: ondalik, with: ".")
+                    if let sayi = Double(formatli) { value = sayi } else if newValue.isEmpty { value = 0.0 }
+                }
+            }
+            .onChange(of: isFocused) { _, focused in
+                if !focused { textValue = formatFiyat(value, ondalik: ondalik) }
+                else {
+                    let str = String(format: "%.2f", value).replacingOccurrences(of: ".", with: ondalik)
+                    textValue = value == 0.0 ? "" : (value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : str)
+                }
+            }
+            .onAppear { textValue = formatFiyat(value, ondalik: ondalik) }
+            .onChange(of: value) { _, newValue in if !isFocused { textValue = formatFiyat(newValue, ondalik: ondalik) } }
+        }
+    }
+}
+struct StepperField: View {
+    let label: String
+    @Binding var value: Int
+    let lblGun: String
+    var color: Color = .green
+
+    var body: some View {
+        HStack {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            Spacer()
+            Stepper("\(value) \(lblGun)", value: $value, in: 0...365).labelsHidden()
+            Text("\(value) \(lblGun)")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(color.opacity(0.1))
+                .cornerRadius(10)
+        }
+    }
+}
+struct DatePickerField: View {
+    let label: String
+    @Binding var date: Date
+
+    var body: some View {
+        HStack {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            Spacer()
+            DatePicker("", selection: $date, displayedComponents: .date).labelsHidden()
+        }
+    }
+}
+struct PickerField: View {
+    let label: String
+    @Binding var value: String
+    let options: [String]
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundColor(.gray)
+                .frame(width: 110, alignment: .leading)
+
+            Spacer(minLength: 8)
+
+            Menu {
+                ForEach(options, id: \.self) { option in
+                    Button(t(option, lang: seciliDil)) {
+                        value = option
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(t(value, lang: seciliDil))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.78)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: 220, alignment: .trailing)
+                .background(colorSchemeFieldSurface())
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
