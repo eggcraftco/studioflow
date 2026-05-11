@@ -1,0 +1,1339 @@
+"use client";
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import {
+  PLAN_ENTITLEMENTS,
+  storageLimitLabel,
+  type PlanEntitlements,
+  type StudioBillingPlan
+} from "@/lib/studioflow/plans";
+import type { StudioLanguage } from "@/lib/studioflow/language";
+import {
+  PublicSiteLanguageProvider,
+  usePublicSiteLanguage
+} from "@/lib/publicSite/i18n";
+import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
+import {
+  createStripeCheckoutSession,
+  type StripeBillingItemKey
+} from "@/lib/studioflow/billingActions";
+import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
+
+type FeatureTone = "sage" | "clay" | "sky" | "lilac" | "rose" | "gold" | "graphite";
+
+type FeatureHighlight = {
+  titleKey: PublicSiteTranslationKey;
+  eyebrowKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  bulletKeys: PublicSiteTranslationKey[];
+  tone: FeatureTone;
+  metricKey: PublicSiteTranslationKey;
+  artifactKey: PublicSiteTranslationKey;
+};
+
+type InfoSection = {
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  bulletKeys?: PublicSiteTranslationKey[];
+};
+
+type PlatformKind = "apple" | "android" | "web" | "windows";
+
+type PlatformCard = {
+  kind: PlatformKind;
+  nameKey: PublicSiteTranslationKey;
+  detailKey: PublicSiteTranslationKey;
+  statusKey: PublicSiteTranslationKey;
+};
+
+type OrderCardInfo = {
+  titleKey: PublicSiteTranslationKey;
+  detailKey: PublicSiteTranslationKey;
+  icon: CardIcon;
+};
+
+type ScrollStoryStep = {
+  eyebrowKey: PublicSiteTranslationKey;
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  cardKey: PublicSiteTranslationKey;
+};
+
+const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
+  {
+    titleKey: "feature.orders.title",
+    eyebrowKey: "feature.orders.eyebrow",
+    bodyKey: "feature.orders.body",
+    bulletKeys: ["feature.orders.bullet1", "feature.orders.bullet2", "feature.orders.bullet3"],
+    tone: "sage",
+    metricKey: "feature.orders.metric",
+    artifactKey: "feature.orders.artifact"
+  },
+  {
+    titleKey: "feature.files.title",
+    eyebrowKey: "feature.files.eyebrow",
+    bodyKey: "feature.files.body",
+    bulletKeys: ["feature.files.bullet1", "feature.files.bullet2", "feature.files.bullet3"],
+    tone: "sky",
+    metricKey: "feature.files.metric",
+    artifactKey: "feature.files.artifact"
+  },
+  {
+    titleKey: "feature.timeline.title",
+    eyebrowKey: "feature.timeline.eyebrow",
+    bodyKey: "feature.timeline.body",
+    bulletKeys: ["feature.timeline.bullet1", "feature.timeline.bullet2", "feature.timeline.bullet3"],
+    tone: "gold",
+    metricKey: "feature.timeline.metric",
+    artifactKey: "feature.timeline.artifact"
+  },
+  {
+    titleKey: "feature.todo.title",
+    eyebrowKey: "feature.todo.eyebrow",
+    bodyKey: "feature.todo.body",
+    bulletKeys: ["feature.todo.bullet1", "feature.todo.bullet2", "feature.todo.bullet3"],
+    tone: "rose",
+    metricKey: "feature.todo.metric",
+    artifactKey: "feature.todo.artifact"
+  },
+  {
+    titleKey: "feature.team.title",
+    eyebrowKey: "feature.team.eyebrow",
+    bodyKey: "feature.team.body",
+    bulletKeys: ["feature.team.bullet1", "feature.team.bullet2", "feature.team.bullet3"],
+    tone: "lilac",
+    metricKey: "feature.team.metric",
+    artifactKey: "feature.team.artifact"
+  },
+  {
+    titleKey: "feature.dashboard.title",
+    eyebrowKey: "feature.dashboard.eyebrow",
+    bodyKey: "feature.dashboard.body",
+    bulletKeys: ["feature.dashboard.bullet1", "feature.dashboard.bullet2", "feature.dashboard.bullet3"],
+    tone: "clay",
+    metricKey: "feature.dashboard.metric",
+    artifactKey: "feature.dashboard.artifact"
+  },
+  {
+    titleKey: "feature.export.title",
+    eyebrowKey: "feature.export.eyebrow",
+    bodyKey: "feature.export.body",
+    bulletKeys: ["feature.export.bullet1", "feature.export.bullet2", "feature.export.bullet3"],
+    tone: "graphite",
+    metricKey: "feature.export.metric",
+    artifactKey: "feature.export.artifact"
+  }
+];
+
+const PLATFORM_CARDS: PlatformCard[] = [
+  {
+    kind: "apple",
+    nameKey: "platform.apple.name",
+    detailKey: "platform.apple.detail",
+    statusKey: "platform.apple.status"
+  },
+  {
+    kind: "android",
+    nameKey: "platform.android.name",
+    detailKey: "platform.android.detail",
+    statusKey: "platform.android.status"
+  },
+  {
+    kind: "web",
+    nameKey: "platform.web.name",
+    detailKey: "platform.web.detail",
+    statusKey: "platform.web.status"
+  },
+  {
+    kind: "windows",
+    nameKey: "platform.windows.name",
+    detailKey: "platform.windows.detail",
+    statusKey: "platform.windows.status"
+  }
+];
+
+const ORDER_CARDS: OrderCardInfo[] = [
+  { titleKey: "orderCard.preview", detailKey: "orderCard.preview.detail", icon: "photo" },
+  { titleKey: "orderCard.summary", detailKey: "orderCard.summary.detail", icon: "docText" },
+  { titleKey: "orderCard.customer", detailKey: "orderCard.customer.detail", icon: "customer" },
+  { titleKey: "orderCard.materials", detailKey: "orderCard.materials.detail", icon: "shippingBox" },
+  { titleKey: "orderCard.priority", detailKey: "orderCard.priority.detail", icon: "warningTriangle" },
+  { titleKey: "orderCard.delivery", detailKey: "orderCard.delivery.detail", icon: "calendarClock" },
+  { titleKey: "orderCard.notes", detailKey: "orderCard.notes.detail", icon: "notes" },
+  { titleKey: "orderCard.clientFiles", detailKey: "orderCard.clientFiles.detail", icon: "folderPerson" },
+  { titleKey: "orderCard.todo", detailKey: "orderCard.todo.detail", icon: "checklist" },
+  { titleKey: "orderCard.workTime", detailKey: "orderCard.workTime.detail", icon: "workTime" },
+  { titleKey: "orderCard.financial", detailKey: "orderCard.financial.detail", icon: "finance" },
+  { titleKey: "orderCard.status", detailKey: "orderCard.status.detail", icon: "paintbrush" },
+  { titleKey: "orderCard.shipping", detailKey: "orderCard.shipping.detail", icon: "airplane" },
+  { titleKey: "orderCard.schedule", detailKey: "orderCard.schedule.detail", icon: "bellBadge" },
+  { titleKey: "orderCard.history", detailKey: "orderCard.history.detail", icon: "historyClock" }
+];
+
+const ORDER_CARD_TONES = ["default", "green", "blue", "yellow", "pink", "purple"] as const;
+
+const SCROLL_STORY_STEPS: ScrollStoryStep[] = [
+  {
+    eyebrowKey: "scrollStory.step1.eyebrow",
+    titleKey: "scrollStory.step1.title",
+    bodyKey: "scrollStory.step1.body",
+    cardKey: "scrollStory.card1"
+  },
+  {
+    eyebrowKey: "scrollStory.step2.eyebrow",
+    titleKey: "scrollStory.step2.title",
+    bodyKey: "scrollStory.step2.body",
+    cardKey: "scrollStory.card2"
+  },
+  {
+    eyebrowKey: "scrollStory.step3.eyebrow",
+    titleKey: "scrollStory.step3.title",
+    bodyKey: "scrollStory.step3.body",
+    cardKey: "scrollStory.card3"
+  },
+  {
+    eyebrowKey: "scrollStory.step4.eyebrow",
+    titleKey: "scrollStory.step4.title",
+    bodyKey: "scrollStory.step4.body",
+    cardKey: "scrollStory.card4"
+  }
+];
+
+const FEATURE_GROUPS: InfoSection[] = [
+  {
+    titleKey: "workflow.group1.title",
+    bodyKey: "workflow.group1.body"
+  },
+  {
+    titleKey: "workflow.group2.title",
+    bodyKey: "workflow.group2.body"
+  },
+  {
+    titleKey: "workflow.group3.title",
+    bodyKey: "workflow.group3.body"
+  }
+];
+
+const ACCENT_CARD_KEYS: PublicSiteTranslationKey[] = [
+  "accent.card.orders",
+  "accent.card.files",
+  "accent.card.delivery",
+  "accent.card.todo",
+  "accent.card.export"
+];
+
+const PLAN_ORDER: StudioBillingPlan[] = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"];
+
+type PublicPlanCopy = {
+  shortNameKey: PublicSiteTranslationKey;
+  publicNameKey: PublicSiteTranslationKey;
+  priceLabelKey: PublicSiteTranslationKey;
+  modelKey: PublicSiteTranslationKey;
+  noteKey: PublicSiteTranslationKey;
+  ctaKey: PublicSiteTranslationKey;
+  href?: string;
+  disabled?: boolean;
+  featured?: boolean;
+  badgeKey?: PublicSiteTranslationKey;
+  billingKey?: StripeBillingItemKey;
+  bulletKeys: PublicSiteTranslationKey[];
+};
+
+const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
+  demo: {
+    shortNameKey: "plan.demo.shortName",
+    publicNameKey: "plan.demo.publicName",
+    priceLabelKey: "plan.demo.price",
+    modelKey: "plan.model.demo",
+    noteKey: "plan.demo.note",
+    ctaKey: "cta.startFree",
+    href: "/signup",
+    bulletKeys: ["plan.demo.bullet1", "plan.demo.bullet2", "plan.demo.bullet3"]
+  },
+  lifetime_lite: {
+    shortNameKey: "plan.lite.shortName",
+    publicNameKey: "plan.lite.publicName",
+    priceLabelKey: "plan.lite.price",
+    modelKey: "plan.model.oneTime",
+    noteKey: "plan.lite.note",
+    ctaKey: "cta.getStarted",
+    billingKey: "lifetime_lite",
+    bulletKeys: ["plan.lite.bullet1", "plan.lite.bullet2", "plan.lite.bullet3"]
+  },
+  pro_monthly: {
+    shortNameKey: "plan.pro.shortName",
+    publicNameKey: "plan.pro.publicName",
+    priceLabelKey: "plan.pro.price",
+    modelKey: "plan.model.monthly",
+    noteKey: "plan.pro.note",
+    ctaKey: "cta.getStarted",
+    billingKey: "pro_monthly",
+    featured: true,
+    badgeKey: "plan.pro.badge",
+    bulletKeys: ["plan.pro.bullet1", "plan.pro.bullet2", "plan.pro.bullet3"]
+  },
+  team_monthly: {
+    shortNameKey: "plan.team.shortName",
+    publicNameKey: "plan.team.publicName",
+    priceLabelKey: "plan.team.price",
+    modelKey: "plan.model.monthly",
+    noteKey: "plan.team.note",
+    ctaKey: "cta.getStarted",
+    billingKey: "team_monthly",
+    href: "/contact",
+    bulletKeys: ["plan.team.bullet1", "plan.team.bullet2", "plan.team.bullet3"]
+  }
+};
+
+const FAQS: InfoSection[] = [
+  { titleKey: "faq.q1.title", bodyKey: "faq.q1.body" },
+  { titleKey: "faq.q2.title", bodyKey: "faq.q2.body" },
+  { titleKey: "faq.q3.title", bodyKey: "faq.q3.body" },
+  { titleKey: "faq.q4.title", bodyKey: "faq.q4.body" },
+  { titleKey: "faq.q5.title", bodyKey: "faq.q5.body" }
+];
+
+const PRIVACY_SECTIONS: InfoSection[] = [
+  { titleKey: "privacy.s1.title", bodyKey: "privacy.s1.body" },
+  { titleKey: "privacy.s2.title", bodyKey: "privacy.s2.body" },
+  { titleKey: "privacy.s3.title", bodyKey: "privacy.s3.body" },
+  { titleKey: "privacy.s4.title", bodyKey: "privacy.s4.body" }
+];
+
+const TERMS_SECTIONS: InfoSection[] = [
+  { titleKey: "terms.s1.title", bodyKey: "terms.s1.body" },
+  { titleKey: "terms.s2.title", bodyKey: "terms.s2.body" },
+  { titleKey: "terms.s3.title", bodyKey: "terms.s3.body" },
+  { titleKey: "terms.s4.title", bodyKey: "terms.s4.body" }
+];
+
+const CONTACT_SECTIONS: InfoSection[] = [
+  { titleKey: "contact.s1.title", bodyKey: "contact.s1.body" },
+  { titleKey: "contact.s2.title", bodyKey: "contact.s2.body" },
+  { titleKey: "contact.s3.title", bodyKey: "contact.s3.body" }
+];
+
+function usePublicScrollReveal(routeKey: string) {
+  useEffect(() => {
+    const revealTargets = Array.from(document.querySelectorAll<HTMLElement>(
+      ".public-scroll-reveal, .public-scroll-stagger > *"
+    ));
+
+    if (!revealTargets.length) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    revealTargets.forEach((target, index) => {
+      target.style.setProperty("--reveal-index", String(index % 8));
+      if (prefersReducedMotion) target.classList.add("is-visible");
+    });
+
+    if (prefersReducedMotion) return;
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: "-8% 0px -12% 0px", threshold: 0.16 });
+
+    revealTargets.forEach(target => observer.observe(target));
+
+    return () => observer.disconnect();
+  }, [routeKey]);
+}
+
+function useOrderCardAssembly() {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const cards = Array.from(root.querySelectorAll<HTMLElement>("[data-order-assemble-card]"));
+    if (!cards.length) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const origins = [
+      [-72, 0, -2],
+      [0, -54, 1.5],
+      [72, 0, 2],
+      [-64, 0, 1],
+      [64, 0, -1],
+      [-56, 0, -1.5],
+      [0, 54, 1],
+      [56, 0, 1.5],
+      [-70, 0, 2],
+      [70, 0, -2],
+      [-52, 0, 1],
+      [52, 0, -1],
+      [-62, 0, -1.5],
+      [62, 0, 1.5],
+      [0, 58, 0]
+    ];
+
+    let frame = 0;
+
+    const applyProgress = () => {
+      frame = 0;
+
+      if (prefersReducedMotion || window.innerWidth <= 700) {
+        root.dataset.assembled = "true";
+        cards.forEach(card => {
+          card.style.opacity = "1";
+          card.style.transform = "";
+        });
+        return;
+      }
+
+      const section = root.closest<HTMLElement>(".public-order-flow-section") ?? root;
+      const sectionRect = section.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const stickyOffset = Math.min(112, viewportHeight * 0.14);
+      const scrollableDistance = Math.max(1, sectionRect.height - viewportHeight);
+      const rawProgress = (stickyOffset - sectionRect.top) / scrollableDistance;
+      const progress = Math.min(1, Math.max(0, rawProgress));
+      const settle = progress >= 0.995;
+
+      root.style.setProperty("--order-assemble-progress", progress.toFixed(3));
+      root.dataset.assembled = settle ? "true" : "false";
+
+      cards.forEach((card, index) => {
+        const [x, y, rotation] = origins[index % origins.length];
+        const sequenceStart = index * 0.046;
+        const sequenceDuration = 0.34;
+        const localProgress = Math.min(1, Math.max(0, (progress - sequenceStart) / sequenceDuration));
+        const eased = localProgress * localProgress * (3 - 2 * localProgress);
+        const distance = 1 - eased;
+        const scale = 0.88 + eased * 0.12;
+        const opacity = localProgress <= 0.001 ? 0 : Math.min(1, eased * 1.08);
+        card.style.opacity = opacity.toFixed(3);
+        card.style.transform = localProgress >= 0.995
+          ? ""
+          : `translate3d(${Math.round(x * distance)}px, ${Math.round(y * distance)}px, 0) rotate(${(rotation * distance).toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+      });
+    };
+
+    const requestApply = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(applyProgress);
+    };
+
+    requestApply();
+    window.addEventListener("scroll", requestApply, { passive: true });
+    window.addEventListener("resize", requestApply);
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", requestApply);
+      window.removeEventListener("resize", requestApply);
+    };
+  }, []);
+
+  return rootRef;
+}
+
+function PublicLanguageSelector() {
+  const { language, languages, setLanguage, t } = usePublicSiteLanguage();
+  return (
+    <label className="public-language-select">
+      <span>{t("language.label")}</span>
+      <select
+        aria-label={t("language.selectorLabel")}
+        value={language}
+        onChange={event => setLanguage(event.target.value as StudioLanguage)}
+      >
+        {languages.map(option => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function PublicHeader() {
+  const { user } = useAuth();
+  const { t } = usePublicSiteLanguage();
+  return (
+    <header className="public-header">
+      <div className="public-shell public-header-inner">
+        <Link href="/" className="public-brand" aria-label={t("brand.homeAria")}>
+          <span className="public-mark">SF</span>
+          <span>
+            <strong>{t("brand.name")}</strong>
+            <small>{t("brand.byline")}</small>
+          </span>
+        </Link>
+
+        <nav className="public-nav-links" aria-label={t("nav.publicPages")}>
+          <Link href="/features">{t("nav.features")}</Link>
+          <Link href="/pricing">{t("nav.pricing")}</Link>
+          <Link href="/faq">{t("nav.faq")}</Link>
+        </nav>
+
+        <div className="public-header-actions">
+          <PublicLanguageSelector />
+          <Link href={user ? "/dashboard" : "/login"} className="public-button ghost">
+            {user ? t("cta.openPortal") : t("cta.login")}
+          </Link>
+          <Link href="/signup" className="public-button">
+            {t("cta.startFree")}
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function PublicFooter() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <footer className="public-footer">
+      <div className="public-shell public-footer-inner">
+        <div>
+          <strong>{t("brand.full")}</strong>
+          <p>{t("brand.footerDescription")}</p>
+        </div>
+        <nav aria-label={t("nav.footer")}>
+          <Link href="/features">{t("nav.features")}</Link>
+          <Link href="/pricing">{t("nav.pricing")}</Link>
+          <Link href="/privacy">{t("nav.privacy")}</Link>
+          <Link href="/terms">{t("nav.terms")}</Link>
+          <Link href="/contact">{t("nav.contact")}</Link>
+        </nav>
+      </div>
+    </footer>
+  );
+}
+
+function PublicShellContent({ children }: { children: ReactNode }) {
+  const { dir } = usePublicSiteLanguage();
+  const pathname = usePathname();
+  usePublicScrollReveal(pathname);
+
+  return (
+    <div className="public-site" dir={dir}>
+      <PublicHeader />
+      <main>{children}</main>
+      <PublicFooter />
+    </div>
+  );
+}
+
+function PublicShell({ children }: { children: ReactNode }) {
+  return (
+    <PublicSiteLanguageProvider>
+      <PublicShellContent>{children}</PublicShellContent>
+    </PublicSiteLanguageProvider>
+  );
+}
+
+function ProductScene() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="public-hero-visual" aria-hidden="true">
+      <div className="product-board">
+        <div className="product-frame-label">{t("product.frameLabel")}</div>
+        <div className="product-sidebar">
+          <div className="product-window-controls">
+            <span />
+            <span />
+            <span />
+          </div>
+          <span className="product-dot active" data-label={t("product.orders")} />
+          <span className="product-dot" data-label={t("product.files")} />
+          <span className="product-dot" data-label={t("product.team")} />
+          <span className="product-dot" data-label={t("product.export")} />
+        </div>
+        <div className="product-main">
+          <div className="product-toolbar">
+            <div>
+              <span>{t("product.monthNet")}</span>
+              <strong>{t("product.dashboard")}</strong>
+            </div>
+            <span className="product-sync-pill">{t("product.saved")}</span>
+          </div>
+          <div className="product-accent-strip">
+            <span data-color="sage" />
+            <span data-color="clay" />
+            <span data-color="sky" />
+            <span data-color="rose" />
+            <span data-color="gold" />
+          </div>
+          <div className="product-grid">
+            <div className="product-panel product-panel-large" data-tone="sage">
+              <span className="product-kicker">{t("product.orders")}</span>
+              <strong>{t("product.orderTitle")}</strong>
+              <p>{t("product.due")}</p>
+              <div className="product-mini-list">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="product-progress"><span style={{ width: "72%" }} /></div>
+            </div>
+            <div className="product-panel" data-tone="sky">
+              <span className="product-kicker">{t("product.files")}</span>
+              <strong>{t("product.assets")}</strong>
+              <p>{t("product.assetsNote")}</p>
+            </div>
+            <div className="product-panel" data-tone="rose">
+              <span className="product-kicker">{t("product.todo")}</span>
+              <strong>{t("product.todoCount")}</strong>
+              <p>{t("product.todoNote")}</p>
+            </div>
+            <div className="product-panel product-panel-wide" data-tone="gold">
+              <span className="product-kicker">{t("product.timeline")}</span>
+              <strong>{t("product.productionWindow")}</strong>
+              <div className="product-timeline">
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeroActions() {
+  const { user } = useAuth();
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="public-hero-actions">
+      <Link href="/signup" className="public-button large">
+        {t("cta.startFree")}
+      </Link>
+      <Link href={user ? "/dashboard" : "/login"} className="public-button secondary large">
+        {user ? t("cta.openPortal") : t("cta.login")}
+      </Link>
+      <Link href="/pricing" className="public-button ghost large">
+        {t("cta.viewPricing")}
+      </Link>
+    </div>
+  );
+}
+
+function SectionHeader({
+  eyebrowKey,
+  titleKey,
+  bodyKey
+}: {
+  eyebrowKey: PublicSiteTranslationKey;
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+}) {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="public-section-header">
+      <span className="public-eyebrow">{t(eyebrowKey)}</span>
+      <h2>{t(titleKey)}</h2>
+      <p>{t(bodyKey)}</p>
+    </div>
+  );
+}
+
+function FeatureCard({ feature, index }: { feature: FeatureHighlight; index: number }) {
+  const { t } = usePublicSiteLanguage();
+  const title = t(feature.titleKey);
+  return (
+    <article className="public-card public-feature-card" data-tone={feature.tone}>
+      <div className="public-feature-top">
+        <div className="public-card-index">{String(index + 1).padStart(2, "0")}</div>
+        <div className="public-feature-swatch" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
+      <span className="public-eyebrow">{t(feature.eyebrowKey)}</span>
+      <h3>{title}</h3>
+      <p>{t(feature.bodyKey)}</p>
+      <div className="public-feature-preview" aria-hidden="true">
+        <strong>{t(feature.metricKey)}</strong>
+        <span>{t(feature.artifactKey)}</span>
+      </div>
+      <ul>
+        {feature.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
+      </ul>
+    </article>
+  );
+}
+
+function OrderCardTitleGrid() {
+  const { t } = usePublicSiteLanguage();
+  const [selectedCardIndex, setSelectedCardIndex] = useState(0);
+  const assembleRef = useOrderCardAssembly();
+  const selectedCard = ORDER_CARDS[selectedCardIndex] ?? ORDER_CARDS[0];
+
+  return (
+    <div className="public-order-card-system" ref={assembleRef}>
+      <div className="public-order-card-grid" aria-label={t("orderCards.aria")}>
+        {ORDER_CARDS.map((card, index) => {
+          const isSelected = selectedCardIndex === index;
+          return (
+            <div className="public-order-card-slot" key={card.titleKey}>
+              <article
+                className="public-order-card-chip"
+                data-active={isSelected ? "true" : "false"}
+                data-order-assemble-card="true"
+                data-tone={ORDER_CARD_TONES[index % ORDER_CARD_TONES.length]}
+              >
+                <button
+                  aria-controls="public-order-card-detail-panel"
+                  aria-pressed={isSelected}
+                  className="public-order-card-toggle"
+                  onClick={() => setSelectedCardIndex(index)}
+                  type="button"
+                >
+                  <span className="public-order-card-icon" aria-hidden="true">
+                    <CardIconGlyph icon={card.icon} />
+                  </span>
+                  <h3>{t(card.titleKey)}</h3>
+                </button>
+              </article>
+            </div>
+          );
+        })}
+      </div>
+      <aside className="public-order-card-panel" id="public-order-card-detail-panel">
+        <span className="public-order-card-panel-index" aria-hidden="true">
+          <CardIconGlyph icon={selectedCard.icon} />
+        </span>
+        <div>
+          <h3>{t(selectedCard.titleKey)}</h3>
+          <p>{t(selectedCard.detailKey)}</p>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function PlanAction({ copy }: { copy: PublicPlanCopy }) {
+  const { user } = useAuth();
+  const { t } = usePublicSiteLanguage();
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleCheckout() {
+    if (!copy.billingKey) return;
+    if (!user) {
+      window.location.assign("/signup");
+      return;
+    }
+
+    setLoading(true);
+    setMessage("");
+    try {
+      const result = await createStripeCheckoutSession({ itemKey: copy.billingKey });
+      if (result.configured && result.url) {
+        window.location.assign(result.url);
+        return;
+      }
+      setMessage(result.message || t("billing.notConfigured"));
+    } catch (checkoutError) {
+      setMessage(checkoutError instanceof Error ? checkoutError.message : t("billing.notConfigured"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (copy.billingKey) {
+    return (
+      <div className="public-plan-action-stack">
+        <button className="public-button secondary" type="button" onClick={handleCheckout} disabled={loading}>
+          {loading ? t("billing.startingCheckout") : t(copy.ctaKey)}
+        </button>
+        {message ? <span>{message}</span> : null}
+      </div>
+    );
+  }
+
+  if (copy.disabled) {
+    return (
+      <button className="public-button secondary" type="button" disabled>
+        {t(copy.ctaKey)}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={copy.href ?? "/signup"} className="public-button secondary">
+      {t(copy.ctaKey)}
+    </Link>
+  );
+}
+
+function PublicPlanCard({ plan, compact = false }: { plan: PlanEntitlements; compact?: boolean }) {
+  const { t } = usePublicSiteLanguage();
+  const copy = PUBLIC_PLAN_COPY[plan.plan];
+  const bulletKeys = compact ? copy.bulletKeys.slice(0, 3) : copy.bulletKeys;
+  return (
+    <article className={copy.featured ? "public-card public-plan-card featured" : "public-card public-plan-card"} data-plan={plan.plan}>
+      <div className="public-plan-glint" aria-hidden="true" />
+      <div className="public-plan-topline">
+        <span className="public-eyebrow">{t(copy.shortNameKey)}</span>
+        {copy.badgeKey ? <span className="public-plan-badge">{t(copy.badgeKey)}</span> : null}
+      </div>
+      <h3>{t(copy.publicNameKey)}</h3>
+      <div className="public-plan-price">{t(copy.priceLabelKey)}</div>
+      <span className="public-plan-model">{t(copy.modelKey)}</span>
+      <p>{t(copy.noteKey)}</p>
+      <dl className="public-plan-limits">
+        <div>
+          <dt>{t("plan.limit.orders")}</dt>
+          <dd>{plan.orderLimit ?? t("plan.limit.unlimited")}</dd>
+        </div>
+        <div>
+          <dt>{t("plan.limit.customers")}</dt>
+          <dd>{plan.customerLimit ?? t("plan.limit.unlimited")}</dd>
+        </div>
+        <div>
+          <dt>{t("plan.limit.storage")}</dt>
+          <dd>{storageLimitLabel(plan)}</dd>
+        </div>
+        <div>
+          <dt>{t("plan.limit.team")}</dt>
+          <dd>{plan.teamMemberLimit}</dd>
+        </div>
+      </dl>
+      <ul>
+        {bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
+      </ul>
+      <PlanAction copy={copy} />
+    </article>
+  );
+}
+
+function PublicPlanGrid({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="public-plan-grid">
+      {PLAN_ORDER.map(planKey => (
+        <PublicPlanCard key={planKey} plan={PLAN_ENTITLEMENTS[planKey]} compact={compact} />
+      ))}
+    </div>
+  );
+}
+
+function StudioAccentBand() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-accent-band public-scroll-reveal">
+      <div className="public-shell public-accent-grid">
+        <div>
+          <span className="public-eyebrow">{t("accent.eyebrow")}</span>
+          <h2>{t("accent.title")}</h2>
+          <p>{t("accent.body")}</p>
+        </div>
+        <div className="public-custom-card-row public-scroll-stagger" aria-hidden="true">
+          {ACCENT_CARD_KEYS.map((cardKey, index) => (
+            <span key={cardKey} data-index={index}>{t(cardKey)}</span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ScrollStoryShowcase() {
+  const { t } = usePublicSiteLanguage();
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    const steps = Array.from(document.querySelectorAll<HTMLElement>("[data-public-story-step]"));
+    if (!steps.length) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      setActiveStep(0);
+      return;
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      const visibleEntry = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
+
+      if (!visibleEntry) return;
+
+      const nextIndex = Number((visibleEntry.target as HTMLElement).dataset.storyIndex ?? 0);
+      if (!Number.isNaN(nextIndex)) setActiveStep(nextIndex);
+    }, { rootMargin: "-30% 0px -36% 0px", threshold: [0.24, 0.42, 0.6, 0.78] });
+
+    steps.forEach(step => observer.observe(step));
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section className="public-scroll-story public-scroll-reveal">
+      <div className="public-shell public-scroll-story-grid">
+        <div className="public-scroll-stage" data-active-step={activeStep}>
+          <div className="public-scroll-stage-window">
+            <span className="public-scroll-stage-label">{t("scrollStory.stageLabel")}</span>
+            <div className="public-scroll-stage-toolbar">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="public-scroll-stage-cards">
+              {SCROLL_STORY_STEPS.map((step, index) => (
+                <article data-active={activeStep === index ? "true" : "false"} key={step.cardKey}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{t(step.cardKey)}</strong>
+                </article>
+              ))}
+              <span className="public-story-cursor" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+
+        <div className="public-scroll-steps">
+          {SCROLL_STORY_STEPS.map((step, index) => (
+            <article
+              className={activeStep === index ? "public-story-step is-active" : "public-story-step"}
+              data-public-story-step
+              data-story-index={index}
+              key={step.titleKey}
+            >
+              <span className="public-eyebrow">{t(step.eyebrowKey)}</span>
+              <h2>{t(step.titleKey)}</h2>
+              <p>{t(step.bodyKey)}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureWorkflowPanel() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-workflow-section">
+      <div className="public-shell public-workflow-panel">
+        <div>
+          <span className="public-eyebrow">{t("workflow.eyebrow")}</span>
+          <h2>{t("workflow.title")}</h2>
+        </div>
+        <div className="public-workflow-grid">
+          {FEATURE_GROUPS.map(group => (
+            <article key={group.titleKey}>
+              <span />
+              <h3>{t(group.titleKey)}</h3>
+              <p>{t(group.bodyKey)}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlatformLogo({ kind }: { kind: PlatformKind }) {
+  if (kind === "apple") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M16.4 1.2c.1 1.2-.4 2.3-1.2 3.1-.8.8-2 1.4-3.1 1.3-.1-1.1.4-2.2 1.2-3 .8-.8 2.1-1.4 3.1-1.4ZM21 17.4c-.6 1.4-.9 2-1.7 3.1-1.1 1.6-2.5 3.3-4.2 3.3-1.5 0-2-1-4-1s-2.5 1-4 1c-1.7 0-3-1.6-4.1-3.2C.2 16.5-.1 11.2 1.8 8.4c1.4-2 3.5-3.2 5.6-3.2 2 0 3.3 1.1 5 1.1 1.6 0 2.7-1.1 5-1.1 1.8 0 3.7 1 5 2.7-4.4 2.4-3.7 8.6.6 9.5Z" />
+      </svg>
+    );
+  }
+
+  if (kind === "android") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M7.1 7.4 5.7 4.9a.7.7 0 0 1 1.2-.7l1.5 2.6a8.4 8.4 0 0 1 7.2 0l1.5-2.6a.7.7 0 0 1 1.2.7l-1.4 2.5A7.7 7.7 0 0 1 20.5 14H3.5a7.7 7.7 0 0 1 3.6-6.6ZM8.1 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm7.8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM4.5 15.4h15v5.1c0 1.2-.9 2.1-2.1 2.1H6.6c-1.2 0-2.1-.9-2.1-2.1v-5.1Z" />
+      </svg>
+    );
+  }
+
+  if (kind === "windows") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M3 4.4 10.9 3v8.4H3V4.4Zm9.5-1.6L21 1.4v10h-8.5V2.8ZM3 12.8h7.9v8.4L3 19.8v-7Zm9.5 0H21v9.8l-8.5-1.4v-8.4Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.8 6h-3a14.1 14.1 0 0 0-1.3-3.1A8.1 8.1 0 0 1 18.8 8ZM12 4.1c.6.8 1.2 2.1 1.6 3.9h-3.2c.4-1.8 1-3.1 1.6-3.9ZM4.3 14a7.7 7.7 0 0 1 0-4h3.4a18 18 0 0 0 0 4H4.3Zm.9 2h3a14.1 14.1 0 0 0 1.3 3.1A8.1 8.1 0 0 1 5.2 16Zm3-8h-3a8.1 8.1 0 0 1 4.3-3.1A14.1 14.1 0 0 0 8.2 8Zm3.8 11.9c-.6-.8-1.2-2.1-1.6-3.9h3.2c-.4 1.8-1 3.1-1.6 3.9Zm2-5.9h-4a15.8 15.8 0 0 1 0-4h4a15.8 15.8 0 0 1 0 4Zm.5 5.1a14.1 14.1 0 0 0 1.3-3.1h3a8.1 8.1 0 0 1-4.3 3.1ZM16.3 14a18 18 0 0 0 0-4h3.4a7.7 7.7 0 0 1 0 4h-3.4Z" />
+    </svg>
+  );
+}
+
+function PlatformNote() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-section-soft public-scroll-reveal">
+      <div className="public-shell public-platform-panel">
+        <div>
+          <span className="public-eyebrow">{t("platform.eyebrow")}</span>
+          <h2>{t("platform.title")}</h2>
+        </div>
+        <div className="public-platform-grid public-scroll-stagger" aria-label={t("platform.gridAria")}>
+          {PLATFORM_CARDS.map(platform => (
+            <article className="public-platform-card" data-platform={platform.kind} key={platform.kind}>
+              <span className="public-platform-logo">
+                <PlatformLogo kind={platform.kind} />
+              </span>
+              <div>
+                <span>{t(platform.statusKey)}</span>
+                <h3>{t(platform.nameKey)}</h3>
+                <p>{t(platform.detailKey)}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function PublicHomePage() {
+  const HomeContent = () => {
+    const { t } = usePublicSiteLanguage();
+
+    return (
+      <>
+        <section className="public-hero">
+          <ProductScene />
+          <div className="public-shell public-hero-content">
+            <div className="public-hero-copy public-scroll-reveal">
+              <span className="public-eyebrow">{t("hero.eyebrow")}</span>
+              <h1>{t("hero.title")}</h1>
+              <p>{t("hero.body")}</p>
+              <HeroActions />
+            </div>
+          </div>
+        </section>
+
+        <PlatformNote />
+
+        <StudioAccentBand />
+
+        <ScrollStoryShowcase />
+
+        <section className="public-section public-order-flow-section">
+          <div className="public-order-flow-sticky">
+            <div className="public-shell">
+              <SectionHeader
+                eyebrowKey="section.flow.eyebrow"
+                titleKey="section.flow.title"
+                bodyKey="section.flow.body"
+              />
+              <OrderCardTitleGrid />
+            </div>
+          </div>
+        </section>
+
+        <section className="public-section public-scroll-reveal">
+          <div className="public-shell">
+            <SectionHeader
+              eyebrowKey="pricingPreview.eyebrow"
+              titleKey="pricingPreview.title"
+              bodyKey="pricingPreview.body"
+            />
+            <PublicPlanGrid compact />
+          </div>
+        </section>
+
+        <section className="public-section public-cta-band public-scroll-reveal">
+          <div className="public-shell public-cta-inner">
+            <div>
+              <span className="public-eyebrow">{t("ctaBand.eyebrow")}</span>
+              <h2>{t("ctaBand.title")}</h2>
+            </div>
+            <HeroActions />
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <HomeContent />
+    </PublicShell>
+  );
+}
+
+export function PublicFeaturesPage() {
+  const Page = () => {
+    const { t } = usePublicSiteLanguage();
+    return (
+      <>
+        <section className="public-page-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("featuresPage.eyebrow")}</span>
+            <h1>{t("featuresPage.title")}</h1>
+            <p>{t("featuresPage.body")}</p>
+          </div>
+        </section>
+
+        <FeatureWorkflowPanel />
+
+        <section className="public-section">
+          <div className="public-shell">
+            <div className="public-feature-grid">
+              {FEATURE_HIGHLIGHTS.map((feature, index) => (
+                <FeatureCard key={feature.titleKey} feature={feature} index={index} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <PlatformNote />
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicPricingPage() {
+  const Page = () => {
+    const { t } = usePublicSiteLanguage();
+    return (
+      <>
+        <section className="public-page-hero public-pricing-page-hero">
+          <div className="public-shell public-pricing-hero">
+            <div>
+              <span className="public-eyebrow">{t("pricingPage.eyebrow")}</span>
+              <h1>{t("pricingPage.title")}</h1>
+              <p>{t("pricingPage.body")}</p>
+            </div>
+            <div className="public-pricing-actions">
+              <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
+              <span className="public-billing-note">{t("pricingPage.safeCheckout")}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell">
+            <PublicPlanGrid />
+          </div>
+        </section>
+
+        <section className="public-section public-section-soft">
+          <div className="public-shell">
+            <SectionHeader
+              eyebrowKey="pricingPage.addons.eyebrow"
+              titleKey="pricingPage.addons.title"
+              bodyKey="pricingPage.addons.body"
+            />
+            <div className="public-addon-grid">
+              <article className="public-card public-addon-card" data-addon="100">
+                <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
+                <h3>{t("pricingPage.addon100.title")}</h3>
+                <p>{t("pricingPage.addon100.body")}</p>
+                <button className="public-button secondary" type="button" disabled>{t("cta.billingSoon")}</button>
+              </article>
+              <article className="public-card public-addon-card" data-addon="200">
+                <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
+                <h3>{t("pricingPage.addon200.title")}</h3>
+                <p>{t("pricingPage.addon200.body")}</p>
+                <button className="public-button secondary" type="button" disabled>{t("cta.billingSoon")}</button>
+              </article>
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicSignupPage() {
+  const Page = () => {
+    const { user } = useAuth();
+    const { t } = usePublicSiteLanguage();
+    return (
+      <section className="public-page-hero public-signup-hero">
+        <div className="public-shell public-signup-layout">
+          <div>
+            <span className="public-eyebrow">{t("signup.eyebrow")}</span>
+            <h1>{t("signup.title")}</h1>
+            <p>{t("signup.body")}</p>
+            <div className="public-hero-actions">
+              <Link href={user ? "/dashboard" : "/login"} className="public-button large">
+                {user ? t("cta.openPortal") : t("cta.loginToStudioFlow")}
+              </Link>
+              <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
+            </div>
+          </div>
+          <aside className="public-card public-signup-card">
+            <span className="public-eyebrow">{t("signup.safe.eyebrow")}</span>
+            <h2>{t("signup.safe.title")}</h2>
+            <p>{t("signup.safe.body")}</p>
+            <ul>
+              <li>{t("signup.safe.bullet1")}</li>
+              <li>{t("signup.safe.bullet2")}</li>
+              <li>{t("signup.safe.bullet3")}</li>
+            </ul>
+            <div className="public-signup-mini" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+          </aside>
+        </div>
+      </section>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicFaqPage() {
+  const Page = () => {
+    const { t } = usePublicSiteLanguage();
+    return (
+      <>
+        <section className="public-page-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("faq.eyebrow")}</span>
+            <h1>{t("faq.title")}</h1>
+            <p>{t("faq.body")}</p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-info-list">
+            {FAQS.map(item => (
+              <article className="public-card public-info-card" key={item.titleKey}>
+                <h2>{t(item.titleKey)}</h2>
+                <p>{t(item.bodyKey)}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+function PublicInfoContent({
+  eyebrowKey,
+  titleKey,
+  bodyKey,
+  sections
+}: {
+  eyebrowKey: PublicSiteTranslationKey;
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  sections: InfoSection[];
+}) {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t(eyebrowKey)}</span>
+          <h1>{t(titleKey)}</h1>
+          <p>{t(bodyKey)}</p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-info-list">
+          {sections.map(section => (
+            <article className="public-card public-info-card" key={section.titleKey}>
+              <h2>{t(section.titleKey)}</h2>
+              <p>{t(section.bodyKey)}</p>
+              {section.bulletKeys ? (
+                <ul>
+                  {section.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
+                </ul>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function PublicInfoPage({
+  eyebrowKey,
+  titleKey,
+  bodyKey,
+  sections
+}: {
+  eyebrowKey: PublicSiteTranslationKey;
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  sections: InfoSection[];
+}) {
+  return (
+    <PublicShell>
+      <PublicInfoContent
+        eyebrowKey={eyebrowKey}
+        titleKey={titleKey}
+        bodyKey={bodyKey}
+        sections={sections}
+      />
+    </PublicShell>
+  );
+}
+
+export function PublicPrivacyPage() {
+  return (
+    <PublicInfoPage
+      eyebrowKey="privacy.eyebrow"
+      titleKey="privacy.title"
+      bodyKey="privacy.body"
+      sections={PRIVACY_SECTIONS}
+    />
+  );
+}
+
+export function PublicTermsPage() {
+  return (
+    <PublicInfoPage
+      eyebrowKey="terms.eyebrow"
+      titleKey="terms.title"
+      bodyKey="terms.body"
+      sections={TERMS_SECTIONS}
+    />
+  );
+}
+
+export function PublicContactPage() {
+  return (
+    <PublicInfoPage
+      eyebrowKey="contact.eyebrow"
+      titleKey="contact.title"
+      bodyKey="contact.body"
+      sections={CONTACT_SECTIONS}
+    />
+  );
+}
