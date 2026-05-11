@@ -116,3 +116,6 @@ studioflow-web/.git_BACKUP_DO_NOT_COMMIT/
 # Backup/original patch files
 *.orig
 *.bak
+
+# Android Studio local Gradle daemon settings
+studioflow-android/gradle/gradle-daemon-jvm.properties
