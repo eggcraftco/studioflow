@@ -82,9 +82,11 @@ export async function declineJoinRequest(workspace: WorkspaceContext, request: J
   });
 }
 
-export async function requestWorkspaceAccess(ownerCompanyId: string) {
+export async function requestWorkspaceAccess(ownerIdentifier: string) {
+  const cleanIdentifier = ownerIdentifier.trim();
   return callTeamFunction("requestWorkspaceAccess", {
-    ownerCompanyId: ownerCompanyId.trim()
+    ownerIdentifier: cleanIdentifier,
+    ownerCompanyId: cleanIdentifier
   });
 }
 

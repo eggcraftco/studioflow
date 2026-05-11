@@ -154,9 +154,29 @@ function statusTone(value: string) {
 }
 
 function shortStepTitle(stepName: string) {
+  const normalized = stepName.trim().toLowerCase();
+  if (normalized === "design" || normalized === "desi" || normalized === "tasarım") return "DESI";
+  if (normalized === "painting" || normalized === "paint" || normalized === "boya" || normalized === "boyama") return "BOYA";
   const cleaned = stepName.replaceAll("/", " ").replaceAll("&", " ").trim();
   const firstWord = cleaned.split(/\s+/)[0] || "ST";
   return firstWord.slice(0, 4).toUpperCase();
+}
+
+function localizedCardStatus(value: string, language: string | null | undefined) {
+  const displayValue = value.trim() || "Not Yet";
+  const normalizedLanguage = String(language || "").toLowerCase();
+  const wantsTurkish = normalizedLanguage.includes("türk") || normalizedLanguage === "tr" || normalizedLanguage === "turkish";
+  if (!wantsTurkish) return displayValue;
+
+  const normalized = displayValue.toLowerCase();
+  if (normalized === "done" || normalized === "completed") return "Bitti";
+  if (normalized === "not yet") return "Yapılmadı";
+  if (normalized === "in progress") return "Yapılıyor";
+  if (normalized === "cancelled" || normalized === "canceled") return "İptal";
+  if (normalized === "pending") return "Bekliyor";
+  if (normalized === "ready" || normalized === "ready to ship") return "Hazır";
+  if (normalized === "waiting for deposit") return "Depozito";
+  return displayValue;
 }
 
 function displayOrderCustomerName(value: string) {
@@ -168,7 +188,7 @@ function displayOrderCustomerName(value: string) {
 }
 
 function initialsForName(value: string) {
-  const cleaned = value.replace(/@.*/, "").replace(/[._-]+/g, " ").trim();
+  const cleaned = displayNameFromEmail(value) || value.replace(/[._-]+/g, " ").trim();
   const initials = cleaned
     .split(/\s+/)
     .filter(Boolean)
@@ -176,6 +196,17 @@ function initialsForName(value: string) {
     .map(part => part.charAt(0).toUpperCase())
     .join("");
   return initials || "•";
+}
+
+function displayNameFromEmail(value = "") {
+  const localPart = value.trim().replace(/@.*/, "");
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ");
 }
 
 function availableBadgeSteps(settings?: BlockHeadingSettings | null) {
@@ -239,7 +270,8 @@ export function OrderListCard({
     : "";
   const deliveryCountdown = shouldShowDeliveryCountdown(order) ? dueLabel(order) : "";
   const scheduleItem = nextScheduleItem(order);
-  const assignmentLabel = assigneeName.trim() || order.assignedToEmail?.trim() || "";
+  const assignmentLabel = assigneeName.trim() || displayNameFromEmail(order.assignedToEmail ?? "");
+  const displayLanguage = (moneySettings as { selectedLanguage?: string } | null | undefined)?.selectedLanguage;
   const content = (
     <div className="order-list-card-content">
       <div className="order-list-thumbnail" aria-hidden="true">
@@ -299,8 +331,8 @@ export function OrderListCard({
         <div className="order-list-side">
           {showStatusBadges ? (
             <div className="order-list-badges">
-              {firstBadgeStep ? <OrderStatusBadge stepName={firstBadgeStep} value={stepValue(order, blockHeadingSettings, firstBadgeStep)} /> : null}
-              {secondBadgeStep ? <OrderStatusBadge stepName={secondBadgeStep} value={stepValue(order, blockHeadingSettings, secondBadgeStep)} /> : null}
+              {firstBadgeStep ? <OrderStatusBadge stepName={firstBadgeStep} value={stepValue(order, blockHeadingSettings, firstBadgeStep)} language={displayLanguage} /> : null}
+              {secondBadgeStep ? <OrderStatusBadge stepName={secondBadgeStep} value={stepValue(order, blockHeadingSettings, secondBadgeStep)} language={displayLanguage} /> : null}
             </div>
           ) : null}
           {canSeeFinance ? (
@@ -339,13 +371,13 @@ export function OrderListCard({
   );
 }
 
-function OrderStatusBadge({ stepName, value }: { stepName: string; value: string }) {
+function OrderStatusBadge({ stepName, value, language }: { stepName: string; value: string; language?: string }) {
   const displayValue = value.trim() || "Not Yet";
   const tone = statusTone(displayValue);
   return (
     <span className="order-status-badge-row">
       <span className="order-status-abbrev">{shortStepTitle(stepName)}</span>
-      <span className={`order-status-value ${tone}`}>{displayValue}</span>
+      <span className={`order-status-value ${tone}`}>{localizedCardStatus(displayValue, language)}</span>
     </span>
   );
 }

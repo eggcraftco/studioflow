@@ -1,5 +1,7 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { db, functions } from "@/lib/firebase/client";
+import { PLAN_ENTITLEMENTS, type StudioBillingPlan } from "@/lib/studioflow/plans";
 import {
   type DashboardWidgetVisibility,
   normalizeWorkspaceRole,
@@ -116,6 +118,12 @@ export type DeleteWorkspaceDataResult = {
   deletedCustomers?: number;
 };
 
+export type UpdateWorkspaceBillingPlanResult = {
+  ok: boolean;
+  message: string;
+  plan: StudioBillingPlan;
+};
+
 export function canEditWorkspaceSettingsForRole(role: string) {
   const normalized = normalizeWorkspaceRole(role);
   return normalized === "owner" || normalized === "admin" || normalized === "member";
@@ -124,6 +132,10 @@ export function canEditWorkspaceSettingsForRole(role: string) {
 export function canDeleteWorkspaceDataForRole(role: string) {
   const normalized = normalizeWorkspaceRole(role);
   return normalized === "owner" || normalized === "admin";
+}
+
+export function canUseOwnerTestingControlsForRole(role: string) {
+  return normalizeWorkspaceRole(role) === "owner";
 }
 
 function friendlySettingsError(error: unknown) {
@@ -149,6 +161,38 @@ export async function saveUploadSafetySettings(workspace: WorkspaceContext, sett
       }
       return result.data;
     }, "Saving settings to cloud.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
+export async function updateWorkspaceBillingPlan(workspace: WorkspaceContext, plan: StudioBillingPlan): Promise<UpdateWorkspaceBillingPlanResult> {
+  if (!canUseOwnerTestingControlsForRole(workspace.role)) {
+    throw new Error("Only the workspace owner can change the plan.");
+  }
+
+  const entitlements = PLAN_ENTITLEMENTS[plan];
+  if (!entitlements) {
+    throw new Error("Unknown plan selected.");
+  }
+
+  try {
+    await withWebSyncStatus(async () => {
+      await setDoc(doc(db, "companies", workspace.id), {
+        billingPlan: entitlements.plan,
+        billingPlanName: entitlements.title,
+        billingPlanSource: "manual_workspace",
+        billingUpdatedAt: serverTimestamp(),
+        billingStorageLimitMB: entitlements.storageLimitMB,
+        billingTeamMemberLimit: entitlements.teamMemberLimit,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }, "Saving plan test change to cloud.");
+    return {
+      ok: true,
+      message: `Plan updated to ${entitlements.title}.`,
+      plan: entitlements.plan
+    };
   } catch (error) {
     throw new Error(friendlySettingsError(error));
   }

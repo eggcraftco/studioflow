@@ -49,8 +49,8 @@ export function MemberAccessEditor({
 
   function toggleAccess(key: WorkspaceMemberAccessKey) {
     if (disabled || ownerLocked) return;
-    const isAssignedScope = key === "assignedProjectsOnly";
-    const currentValue = isAssignedScope ? normalizedAccess[key] === true : normalizedAccess[key] !== false;
+    const strictEnabled = key === "assignedProjectsOnly" || key === "manageProjectAssignments";
+    const currentValue = strictEnabled ? normalizedAccess[key] === true : normalizedAccess[key] !== false;
     onChange({
       ...normalizedAccess,
       [key]: !currentValue
@@ -90,7 +90,7 @@ export function MemberAccessEditor({
       id: "scope",
       eyebrow: "Scope",
       title: "Project assignment",
-      note: "Limits what this role can see across project lists and workspaces.",
+      note: "Controls assigned-project scope and whether this role can change project assignees.",
       options: WORKSPACE_SCOPE_ACCESS_OPTIONS,
       onLabel: "Only assigned projects",
       offLabel: "All projects"
@@ -130,16 +130,16 @@ export function MemberAccessEditor({
               </div>
               <div className="member-access-grid">
                 {section.options.map(option => {
-                  const isAssignedScope = option.key === "assignedProjectsOnly";
-                  const enabled = isAssignedScope ? normalizedAccess[option.key] === true : normalizedAccess[option.key] !== false;
-                  const detail = enabled ? section.onLabel : section.offLabel;
+                  const strictEnabled = option.key === "assignedProjectsOnly" || option.key === "manageProjectAssignments";
+                  const enabled = strictEnabled ? normalizedAccess[option.key] === true : normalizedAccess[option.key] !== false;
+                  const detail = accessToggleDetail(option.key, enabled, section);
                   return (
                     <button
                       key={option.key}
                       className={[
                         "member-access-toggle",
                         enabled ? "is-on" : "",
-                        isAssignedScope ? "is-scope-toggle" : ""
+                        strictEnabled ? "is-scope-toggle" : ""
                       ].filter(Boolean).join(" ")}
                       type="button"
                       aria-pressed={enabled}
@@ -162,4 +162,11 @@ export function MemberAccessEditor({
       </div>
     </div>
   );
+}
+
+function accessToggleDetail(key: WorkspaceMemberAccessKey, enabled: boolean, section: AccessSection) {
+  if (key === "manageProjectAssignments") {
+    return enabled ? "Can assign projects" : "Assign hidden";
+  }
+  return enabled ? section.onLabel : section.offLabel;
 }

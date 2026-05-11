@@ -58,7 +58,7 @@ export default function TeamPage() {
   const [joinRequests, setJoinRequests] = useState<JoinRequestDetail[]>([]);
   const [customRoles, setCustomRoles] = useState<WorkspaceCustomRole[]>([]);
   const [requestRoles, setRequestRoles] = useState<Record<string, string>>({});
-  const [requestOwnerCompanyId, setRequestOwnerCompanyId] = useState("");
+  const [requestOwnerIdentifier, setRequestOwnerIdentifier] = useState("");
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [actioning, setActioning] = useState("");
   const [message, setMessage] = useState("");
@@ -175,14 +175,14 @@ export default function TeamPage() {
   }
 
   async function submitAccessRequest() {
-    const cleanCompanyId = requestOwnerCompanyId.trim();
-    if (!cleanCompanyId || actioning) return;
+    const cleanIdentifier = requestOwnerIdentifier.trim();
+    if (!cleanIdentifier || actioning) return;
     await runTeamAction(
       "request-access",
-      () => requestWorkspaceAccess(cleanCompanyId),
+      () => requestWorkspaceAccess(cleanIdentifier),
       "Access request sent. The workspace owner can approve it from Team Access."
     );
-    setRequestOwnerCompanyId("");
+    setRequestOwnerIdentifier("");
   }
 
   if (loading || !user) return <LoadingScreen />;
@@ -228,10 +228,10 @@ export default function TeamPage() {
           <div className="team-access-entry-panel">
             <div className="team-access-entry-heading">
               <strong>Invite People</strong>
-              <span>{isOwner ? hasTeamPlan ? "Share this Company ID" : "Team plan required" : "Owner only"}</span>
+              <span>{isOwner ? hasTeamPlan ? "Share email or Company ID" : "Team plan required" : "Owner only"}</span>
             </div>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Share your Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.
+              Share your account email or Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.
             </p>
             {isOwner && hasTeamPlan ? (
               <div className="team-access-id-box">
@@ -254,17 +254,17 @@ export default function TeamPage() {
               <span>Every role and plan</span>
             </div>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Enter another owner’s Company ID to ask for access to their workspace.
+              Enter another owner’s email address or Company ID to ask for access to their workspace.
             </p>
             <div className="team-access-request-row">
               <input
                 className="input"
-                value={requestOwnerCompanyId}
-                onChange={event => setRequestOwnerCompanyId(event.target.value)}
-                placeholder="Owner Company ID"
+                value={requestOwnerIdentifier}
+                onChange={event => setRequestOwnerIdentifier(event.target.value)}
+                placeholder="Owner email or Company ID"
                 disabled={Boolean(actioning)}
               />
-              <button className="button" type="submit" disabled={!requestOwnerCompanyId.trim() || Boolean(actioning)}>
+              <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
                 {actioning === "request-access" ? "Sending..." : "Send"}
               </button>
             </div>

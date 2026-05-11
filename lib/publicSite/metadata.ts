@@ -17,13 +17,13 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
   home: {
     title: "StudioFlow by EGGcraft | Premium Studio Management",
     description:
-      "A calm, premium workspace for artists, custom studios and order-based creative businesses managing orders, files, timelines, teams and exports.",
+      "A calm, premium workspace for artists, custom studios and order-based creative businesses across web, Apple devices and planned Android phone and tablet support.",
     path: "/"
   },
   features: {
     title: "StudioFlow Features | Orders, Files, Teams and Exports",
     description:
-      "Explore StudioFlow features for order tracking, Client Files, timeline and delivery planning, To Do, Team Access, dashboards and export.",
+      "Explore StudioFlow features for order tracking, Client Files, timeline and delivery planning, To Do, Team Access, dashboards, export and cross-platform studio workflows.",
     path: "/features"
   },
   pricing: {

@@ -18,6 +18,7 @@ import {
   loadTeamAccessData,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  normalizeWorkspaceRole,
   orderIsAssignedToCurrentUser,
   subscribeOrderDetail,
   workspaceAssignedProjectsOnly,
@@ -74,13 +75,34 @@ function applyOrderListPatch(order: OrderListItem, patch: Partial<OrderDetail>):
 }
 
 function initialsForMember(member: TeamMemberDetail) {
-  const source = (member.displayName || member.email || "").replace(/@.*/, "").replace(/[._-]+/g, " ").trim();
+  const source = assigneeDisplayName(member);
   return source
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map(part => part.charAt(0).toUpperCase())
     .join("") || "•";
+}
+
+function displayNameFromEmail(email = "") {
+  const localPart = email.trim().replace(/@.*/, "");
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ");
+}
+
+function assigneeDisplayName(member: Pick<TeamMemberDetail, "displayName" | "email" | "id"> | null | undefined) {
+  if (!member) return "";
+  return member.displayName.trim() || displayNameFromEmail(member.email) || member.id;
+}
+
+function normalizeWorkspaceAssignmentAccess(workspace: WorkspaceContext) {
+  return normalizeWorkspaceRole(workspace.role) === "owner" ||
+    (canDeleteOrdersForRole(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "manageProjectAssignments"));
 }
 
 export default function OrdersPage() {
@@ -363,7 +385,7 @@ export default function OrdersPage() {
 
   function assigneeNameForOrder(order: OrderListItem) {
     const member = assigneeForOrder(order);
-    return member?.displayName || member?.email || order.assignedToEmail || "";
+    return assigneeDisplayName(member) || displayNameFromEmail(order.assignedToEmail || "");
   }
 
   function assigneePhotoForOrder(order: OrderListItem) {
@@ -372,7 +394,8 @@ export default function OrdersPage() {
 
   async function assignOrderFromMenu(order: OrderListItem, member: TeamMemberDetail | null) {
     if (!workspace) return;
-    if (!canDeleteOrdersForRole(workspace.role)) {
+    const canManageAssignments = normalizeWorkspaceAssignmentAccess(workspace);
+    if (!canManageAssignments) {
       setOrderActionError("Your workspace role cannot assign projects.");
       return;
     }
@@ -381,7 +404,7 @@ export default function OrdersPage() {
     const assignedToEmail = member?.email ?? "";
     setOrderContextMenu(null);
     setOrderActionError(null);
-    setOrderActionStatus(member ? `Assigning project to ${member.displayName || member.email}...` : "Clearing project assignment...");
+    setOrderActionStatus(member ? `Assigning project to ${assigneeDisplayName(member)}...` : "Clearing project assignment...");
 
     setOrders(current => current.map(item => item.id === order.id ? { ...item, assignedToUid, assignedToEmail } : item));
     setSelectedOrder(current => current?.id === order.id ? { ...current, assignedToUid, assignedToEmail } : current);
@@ -420,7 +443,7 @@ export default function OrdersPage() {
   const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
   const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
   const canDeleteOrders = workspace ? canDeleteOrdersForRole(workspace.role) : false;
-  const canAssignOrders = workspace ? canDeleteOrdersForRole(workspace.role) : false;
+  const canAssignOrders = workspace ? normalizeWorkspaceAssignmentAccess(workspace) : false;
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
 
@@ -537,34 +560,37 @@ export default function OrdersPage() {
                 <span aria-hidden="true">{showOrderStatusBadges ? "✓" : "○"}</span>
                 {t("Production Status")}
               </button>
-              <div className="order-list-context-divider" />
-              <div className="order-list-context-subtitle">{t("Assign Project")}</div>
-              <button
-                role="menuitem"
-                type="button"
-                className="order-list-context-row"
-                disabled={!canAssignOrders || !contextOrder.assignedToUid}
-                onClick={() => void assignOrderFromMenu(contextOrder, null)}
-              >
-                <span aria-hidden="true">○</span>
-                {t("Unassigned")}
-              </button>
-              {teamMembers
-                .filter(member => !member.isOwner)
-                .map(member => (
+              {canAssignOrders ? (
+                <>
+                  <div className="order-list-context-divider" />
+                  <div className="order-list-context-subtitle">{t("Assign Project")}</div>
                   <button
-                    key={member.id}
                     role="menuitem"
                     type="button"
                     className="order-list-context-row"
-                    disabled={!canAssignOrders}
-                    onClick={() => void assignOrderFromMenu(contextOrder, member)}
+                    disabled={!contextOrder.assignedToUid}
+                    onClick={() => void assignOrderFromMenu(contextOrder, null)}
                   >
-                    <span aria-hidden="true">{contextOrder.assignedToUid === member.id ? "✓" : initialsForMember(member)}</span>
-                    {member.displayName || member.email}
+                    <span aria-hidden="true">○</span>
+                    {t("Unassigned")}
                   </button>
-                ))}
-              <div className="order-list-context-divider" />
+                  {teamMembers
+                    .filter(member => !member.isOwner)
+                    .map(member => (
+                      <button
+                        key={member.id}
+                        role="menuitem"
+                        type="button"
+                        className="order-list-context-row"
+                        onClick={() => void assignOrderFromMenu(contextOrder, member)}
+                      >
+                        <span aria-hidden="true">{contextOrder.assignedToUid === member.id ? "✓" : initialsForMember(member)}</span>
+                        {assigneeDisplayName(member)}
+                      </button>
+                    ))}
+                  <div className="order-list-context-divider" />
+                </>
+              ) : null}
               <button
                 role="menuitem"
                 type="button"

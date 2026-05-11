@@ -27,6 +27,7 @@ export type CardIcon =
   | "shippingBox"
   | "storage"
   | "tasks"
+  | "team"
   | "timer"
   | "workTime"
   | "warningTriangle";
@@ -58,6 +59,7 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   shippingBox: ["M4 8 12 4l8 4-8 4-8-4Z", "M4 8v8l8 4 8-4V8", "M12 12v8"],
   storage: ["M4 7c0-2 16-2 16 0v10c0 2-16 2-16 0V7Z", "M4 7c0 2 16 2 16 0", "M4 12c0 2 16 2 16 0"],
   tasks: ["m5 7 2 2 4-4", "M13 8h6", "m5 15 2 2 4-4", "M13 16h6"],
+  team: ["M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M17 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "M2.5 21a7 7 0 0 1 13 0", "M13 21a5.5 5.5 0 0 1 8.5 0"],
   timer: ["M10 2h4", "M12 14V9", "M16.2 5.8l1.4-1.4", "M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"],
   workTime: ["M12 7v5l3 2", "M19 12a7 7 0 1 1-2.05-4.95", "M19 4v5h-5"],
   warningTriangle: ["M12 3 2 21h20L12 3Z", "M12 9v5", "M12 17h.01"]

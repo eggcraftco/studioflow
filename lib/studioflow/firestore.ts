@@ -68,7 +68,8 @@ export const WORKSPACE_CARD_ACCESS_OPTIONS = [
 ] as const;
 
 export const WORKSPACE_SCOPE_ACCESS_OPTIONS = [
-  { key: "assignedProjectsOnly", label: "Assigned Projects Only", description: "Limit this role to projects assigned to the current member." }
+  { key: "assignedProjectsOnly", label: "Assigned Projects Only", description: "Limit this role to projects assigned to the current member." },
+  { key: "manageProjectAssignments", label: "Change Project Assignments", description: "Allow this role to assign and reassign projects from the order card menu." }
 ] as const;
 
 export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
@@ -88,7 +89,7 @@ export type WorkspaceCustomRole = {
 };
 
 export const WORKSPACE_MEMBER_ACCESS_DEFAULTS: WorkspaceMemberAccess = WORKSPACE_MEMBER_ACCESS_OPTIONS.reduce((acc, option) => {
-  acc[option.key] = option.key === "assignedProjectsOnly" ? false : true;
+  acc[option.key] = option.key === "assignedProjectsOnly" || option.key === "manageProjectAssignments" ? false : true;
   return acc;
 }, {} as WorkspaceMemberAccess);
 
@@ -550,7 +551,7 @@ function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess
 }
 
 export function workspaceAccessAllows(access: WorkspaceMemberAccess | undefined, key: WorkspaceMemberAccessKey) {
-  if (key === "assignedProjectsOnly") return access?.assignedProjectsOnly === true;
+  if (key === "assignedProjectsOnly" || key === "manageProjectAssignments") return access?.[key] === true;
   return access?.[key] !== false;
 }
 

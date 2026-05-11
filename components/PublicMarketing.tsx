@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   PLAN_ENTITLEMENTS,
@@ -19,6 +20,7 @@ import {
   createStripeCheckoutSession,
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
+import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
 
 type FeatureTone = "sage" | "clay" | "sky" | "lilac" | "rose" | "gold" | "graphite";
 
@@ -36,6 +38,28 @@ type InfoSection = {
   titleKey: PublicSiteTranslationKey;
   bodyKey: PublicSiteTranslationKey;
   bulletKeys?: PublicSiteTranslationKey[];
+};
+
+type PlatformKind = "apple" | "android" | "web" | "windows";
+
+type PlatformCard = {
+  kind: PlatformKind;
+  nameKey: PublicSiteTranslationKey;
+  detailKey: PublicSiteTranslationKey;
+  statusKey: PublicSiteTranslationKey;
+};
+
+type OrderCardInfo = {
+  titleKey: PublicSiteTranslationKey;
+  detailKey: PublicSiteTranslationKey;
+  icon: CardIcon;
+};
+
+type ScrollStoryStep = {
+  eyebrowKey: PublicSiteTranslationKey;
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  cardKey: PublicSiteTranslationKey;
 };
 
 const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
@@ -104,10 +128,78 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
   }
 ];
 
-const PLATFORM_NOTE_KEYS: PublicSiteTranslationKey[] = [
-  "platform.note1",
-  "platform.note2",
-  "platform.note3"
+const PLATFORM_CARDS: PlatformCard[] = [
+  {
+    kind: "apple",
+    nameKey: "platform.apple.name",
+    detailKey: "platform.apple.detail",
+    statusKey: "platform.apple.status"
+  },
+  {
+    kind: "android",
+    nameKey: "platform.android.name",
+    detailKey: "platform.android.detail",
+    statusKey: "platform.android.status"
+  },
+  {
+    kind: "web",
+    nameKey: "platform.web.name",
+    detailKey: "platform.web.detail",
+    statusKey: "platform.web.status"
+  },
+  {
+    kind: "windows",
+    nameKey: "platform.windows.name",
+    detailKey: "platform.windows.detail",
+    statusKey: "platform.windows.status"
+  }
+];
+
+const ORDER_CARDS: OrderCardInfo[] = [
+  { titleKey: "orderCard.preview", detailKey: "orderCard.preview.detail", icon: "photo" },
+  { titleKey: "orderCard.summary", detailKey: "orderCard.summary.detail", icon: "docText" },
+  { titleKey: "orderCard.customer", detailKey: "orderCard.customer.detail", icon: "customer" },
+  { titleKey: "orderCard.materials", detailKey: "orderCard.materials.detail", icon: "shippingBox" },
+  { titleKey: "orderCard.priority", detailKey: "orderCard.priority.detail", icon: "warningTriangle" },
+  { titleKey: "orderCard.delivery", detailKey: "orderCard.delivery.detail", icon: "calendarClock" },
+  { titleKey: "orderCard.notes", detailKey: "orderCard.notes.detail", icon: "notes" },
+  { titleKey: "orderCard.clientFiles", detailKey: "orderCard.clientFiles.detail", icon: "folderPerson" },
+  { titleKey: "orderCard.todo", detailKey: "orderCard.todo.detail", icon: "checklist" },
+  { titleKey: "orderCard.workTime", detailKey: "orderCard.workTime.detail", icon: "workTime" },
+  { titleKey: "orderCard.financial", detailKey: "orderCard.financial.detail", icon: "finance" },
+  { titleKey: "orderCard.status", detailKey: "orderCard.status.detail", icon: "paintbrush" },
+  { titleKey: "orderCard.shipping", detailKey: "orderCard.shipping.detail", icon: "airplane" },
+  { titleKey: "orderCard.schedule", detailKey: "orderCard.schedule.detail", icon: "bellBadge" },
+  { titleKey: "orderCard.history", detailKey: "orderCard.history.detail", icon: "historyClock" }
+];
+
+const ORDER_CARD_TONES = ["default", "green", "blue", "yellow", "pink", "purple"] as const;
+
+const SCROLL_STORY_STEPS: ScrollStoryStep[] = [
+  {
+    eyebrowKey: "scrollStory.step1.eyebrow",
+    titleKey: "scrollStory.step1.title",
+    bodyKey: "scrollStory.step1.body",
+    cardKey: "scrollStory.card1"
+  },
+  {
+    eyebrowKey: "scrollStory.step2.eyebrow",
+    titleKey: "scrollStory.step2.title",
+    bodyKey: "scrollStory.step2.body",
+    cardKey: "scrollStory.card2"
+  },
+  {
+    eyebrowKey: "scrollStory.step3.eyebrow",
+    titleKey: "scrollStory.step3.title",
+    bodyKey: "scrollStory.step3.body",
+    cardKey: "scrollStory.card3"
+  },
+  {
+    eyebrowKey: "scrollStory.step4.eyebrow",
+    titleKey: "scrollStory.step4.title",
+    bodyKey: "scrollStory.step4.body",
+    cardKey: "scrollStory.card4"
+  }
 ];
 
 const FEATURE_GROUPS: InfoSection[] = [
@@ -224,6 +316,127 @@ const CONTACT_SECTIONS: InfoSection[] = [
   { titleKey: "contact.s3.title", bodyKey: "contact.s3.body" }
 ];
 
+function usePublicScrollReveal(routeKey: string) {
+  useEffect(() => {
+    const revealTargets = Array.from(document.querySelectorAll<HTMLElement>(
+      ".public-scroll-reveal, .public-scroll-stagger > *"
+    ));
+
+    if (!revealTargets.length) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    revealTargets.forEach((target, index) => {
+      target.style.setProperty("--reveal-index", String(index % 8));
+      if (prefersReducedMotion) target.classList.add("is-visible");
+    });
+
+    if (prefersReducedMotion) return;
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: "-8% 0px -12% 0px", threshold: 0.16 });
+
+    revealTargets.forEach(target => observer.observe(target));
+
+    return () => observer.disconnect();
+  }, [routeKey]);
+}
+
+function useOrderCardAssembly() {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const cards = Array.from(root.querySelectorAll<HTMLElement>("[data-order-assemble-card]"));
+    if (!cards.length) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const origins = [
+      [-72, 0, -2],
+      [0, -54, 1.5],
+      [72, 0, 2],
+      [-64, 0, 1],
+      [64, 0, -1],
+      [-56, 0, -1.5],
+      [0, 54, 1],
+      [56, 0, 1.5],
+      [-70, 0, 2],
+      [70, 0, -2],
+      [-52, 0, 1],
+      [52, 0, -1],
+      [-62, 0, -1.5],
+      [62, 0, 1.5],
+      [0, 58, 0]
+    ];
+
+    let frame = 0;
+
+    const applyProgress = () => {
+      frame = 0;
+
+      if (prefersReducedMotion || window.innerWidth <= 700) {
+        root.dataset.assembled = "true";
+        cards.forEach(card => {
+          card.style.opacity = "1";
+          card.style.transform = "";
+        });
+        return;
+      }
+
+      const section = root.closest<HTMLElement>(".public-order-flow-section") ?? root;
+      const sectionRect = section.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const stickyOffset = Math.min(112, viewportHeight * 0.14);
+      const scrollableDistance = Math.max(1, sectionRect.height - viewportHeight);
+      const rawProgress = (stickyOffset - sectionRect.top) / scrollableDistance;
+      const progress = Math.min(1, Math.max(0, rawProgress));
+      const settle = progress >= 0.995;
+
+      root.style.setProperty("--order-assemble-progress", progress.toFixed(3));
+      root.dataset.assembled = settle ? "true" : "false";
+
+      cards.forEach((card, index) => {
+        const [x, y, rotation] = origins[index % origins.length];
+        const sequenceStart = index * 0.046;
+        const sequenceDuration = 0.34;
+        const localProgress = Math.min(1, Math.max(0, (progress - sequenceStart) / sequenceDuration));
+        const eased = localProgress * localProgress * (3 - 2 * localProgress);
+        const distance = 1 - eased;
+        const scale = 0.88 + eased * 0.12;
+        const opacity = localProgress <= 0.001 ? 0 : Math.min(1, eased * 1.08);
+        card.style.opacity = opacity.toFixed(3);
+        card.style.transform = localProgress >= 0.995
+          ? ""
+          : `translate3d(${Math.round(x * distance)}px, ${Math.round(y * distance)}px, 0) rotate(${(rotation * distance).toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+      });
+    };
+
+    const requestApply = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(applyProgress);
+    };
+
+    requestApply();
+    window.addEventListener("scroll", requestApply, { passive: true });
+    window.addEventListener("resize", requestApply);
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", requestApply);
+      window.removeEventListener("resize", requestApply);
+    };
+  }, []);
+
+  return rootRef;
+}
+
 function PublicLanguageSelector() {
   const { language, languages, setLanguage, t } = usePublicSiteLanguage();
   return (
@@ -299,6 +512,9 @@ function PublicFooter() {
 
 function PublicShellContent({ children }: { children: ReactNode }) {
   const { dir } = usePublicSiteLanguage();
+  const pathname = usePathname();
+  usePublicScrollReveal(pathname);
+
   return (
     <div className="public-site" dir={dir}>
       <PublicHeader />
@@ -451,6 +667,55 @@ function FeatureCard({ feature, index }: { feature: FeatureHighlight; index: num
   );
 }
 
+function OrderCardTitleGrid() {
+  const { t } = usePublicSiteLanguage();
+  const [selectedCardIndex, setSelectedCardIndex] = useState(0);
+  const assembleRef = useOrderCardAssembly();
+  const selectedCard = ORDER_CARDS[selectedCardIndex] ?? ORDER_CARDS[0];
+
+  return (
+    <div className="public-order-card-system" ref={assembleRef}>
+      <div className="public-order-card-grid" aria-label={t("orderCards.aria")}>
+        {ORDER_CARDS.map((card, index) => {
+          const isSelected = selectedCardIndex === index;
+          return (
+            <div className="public-order-card-slot" key={card.titleKey}>
+              <article
+                className="public-order-card-chip"
+                data-active={isSelected ? "true" : "false"}
+                data-order-assemble-card="true"
+                data-tone={ORDER_CARD_TONES[index % ORDER_CARD_TONES.length]}
+              >
+                <button
+                  aria-controls="public-order-card-detail-panel"
+                  aria-pressed={isSelected}
+                  className="public-order-card-toggle"
+                  onClick={() => setSelectedCardIndex(index)}
+                  type="button"
+                >
+                  <span className="public-order-card-icon" aria-hidden="true">
+                    <CardIconGlyph icon={card.icon} />
+                  </span>
+                  <h3>{t(card.titleKey)}</h3>
+                </button>
+              </article>
+            </div>
+          );
+        })}
+      </div>
+      <aside className="public-order-card-panel" id="public-order-card-detail-panel">
+        <span className="public-order-card-panel-index" aria-hidden="true">
+          <CardIconGlyph icon={selectedCard.icon} />
+        </span>
+        <div>
+          <h3>{t(selectedCard.titleKey)}</h3>
+          <p>{t(selectedCard.detailKey)}</p>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 function PlanAction({ copy }: { copy: PublicPlanCopy }) {
   const { user } = useAuth();
   const { t } = usePublicSiteLanguage();
@@ -560,16 +825,88 @@ function PublicPlanGrid({ compact = false }: { compact?: boolean }) {
 function StudioAccentBand() {
   const { t } = usePublicSiteLanguage();
   return (
-    <section className="public-section public-accent-band">
+    <section className="public-section public-accent-band public-scroll-reveal">
       <div className="public-shell public-accent-grid">
         <div>
           <span className="public-eyebrow">{t("accent.eyebrow")}</span>
           <h2>{t("accent.title")}</h2>
           <p>{t("accent.body")}</p>
         </div>
-        <div className="public-custom-card-row" aria-hidden="true">
+        <div className="public-custom-card-row public-scroll-stagger" aria-hidden="true">
           {ACCENT_CARD_KEYS.map((cardKey, index) => (
             <span key={cardKey} data-index={index}>{t(cardKey)}</span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ScrollStoryShowcase() {
+  const { t } = usePublicSiteLanguage();
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    const steps = Array.from(document.querySelectorAll<HTMLElement>("[data-public-story-step]"));
+    if (!steps.length) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      setActiveStep(0);
+      return;
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      const visibleEntry = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
+
+      if (!visibleEntry) return;
+
+      const nextIndex = Number((visibleEntry.target as HTMLElement).dataset.storyIndex ?? 0);
+      if (!Number.isNaN(nextIndex)) setActiveStep(nextIndex);
+    }, { rootMargin: "-30% 0px -36% 0px", threshold: [0.24, 0.42, 0.6, 0.78] });
+
+    steps.forEach(step => observer.observe(step));
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section className="public-scroll-story public-scroll-reveal">
+      <div className="public-shell public-scroll-story-grid">
+        <div className="public-scroll-stage" data-active-step={activeStep}>
+          <div className="public-scroll-stage-window">
+            <span className="public-scroll-stage-label">{t("scrollStory.stageLabel")}</span>
+            <div className="public-scroll-stage-toolbar">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="public-scroll-stage-cards">
+              {SCROLL_STORY_STEPS.map((step, index) => (
+                <article data-active={activeStep === index ? "true" : "false"} key={step.cardKey}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{t(step.cardKey)}</strong>
+                </article>
+              ))}
+              <span className="public-story-cursor" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+
+        <div className="public-scroll-steps">
+          {SCROLL_STORY_STEPS.map((step, index) => (
+            <article
+              className={activeStep === index ? "public-story-step is-active" : "public-story-step"}
+              data-public-story-step
+              data-story-index={index}
+              key={step.titleKey}
+            >
+              <span className="public-eyebrow">{t(step.eyebrowKey)}</span>
+              <h2>{t(step.titleKey)}</h2>
+              <p>{t(step.bodyKey)}</p>
+            </article>
           ))}
         </div>
       </div>
@@ -600,18 +937,61 @@ function FeatureWorkflowPanel() {
   );
 }
 
+function PlatformLogo({ kind }: { kind: PlatformKind }) {
+  if (kind === "apple") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M16.4 1.2c.1 1.2-.4 2.3-1.2 3.1-.8.8-2 1.4-3.1 1.3-.1-1.1.4-2.2 1.2-3 .8-.8 2.1-1.4 3.1-1.4ZM21 17.4c-.6 1.4-.9 2-1.7 3.1-1.1 1.6-2.5 3.3-4.2 3.3-1.5 0-2-1-4-1s-2.5 1-4 1c-1.7 0-3-1.6-4.1-3.2C.2 16.5-.1 11.2 1.8 8.4c1.4-2 3.5-3.2 5.6-3.2 2 0 3.3 1.1 5 1.1 1.6 0 2.7-1.1 5-1.1 1.8 0 3.7 1 5 2.7-4.4 2.4-3.7 8.6.6 9.5Z" />
+      </svg>
+    );
+  }
+
+  if (kind === "android") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M7.1 7.4 5.7 4.9a.7.7 0 0 1 1.2-.7l1.5 2.6a8.4 8.4 0 0 1 7.2 0l1.5-2.6a.7.7 0 0 1 1.2.7l-1.4 2.5A7.7 7.7 0 0 1 20.5 14H3.5a7.7 7.7 0 0 1 3.6-6.6ZM8.1 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm7.8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM4.5 15.4h15v5.1c0 1.2-.9 2.1-2.1 2.1H6.6c-1.2 0-2.1-.9-2.1-2.1v-5.1Z" />
+      </svg>
+    );
+  }
+
+  if (kind === "windows") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M3 4.4 10.9 3v8.4H3V4.4Zm9.5-1.6L21 1.4v10h-8.5V2.8ZM3 12.8h7.9v8.4L3 19.8v-7Zm9.5 0H21v9.8l-8.5-1.4v-8.4Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.8 6h-3a14.1 14.1 0 0 0-1.3-3.1A8.1 8.1 0 0 1 18.8 8ZM12 4.1c.6.8 1.2 2.1 1.6 3.9h-3.2c.4-1.8 1-3.1 1.6-3.9ZM4.3 14a7.7 7.7 0 0 1 0-4h3.4a18 18 0 0 0 0 4H4.3Zm.9 2h3a14.1 14.1 0 0 0 1.3 3.1A8.1 8.1 0 0 1 5.2 16Zm3-8h-3a8.1 8.1 0 0 1 4.3-3.1A14.1 14.1 0 0 0 8.2 8Zm3.8 11.9c-.6-.8-1.2-2.1-1.6-3.9h3.2c-.4 1.8-1 3.1-1.6 3.9Zm2-5.9h-4a15.8 15.8 0 0 1 0-4h4a15.8 15.8 0 0 1 0 4Zm.5 5.1a14.1 14.1 0 0 0 1.3-3.1h3a8.1 8.1 0 0 1-4.3 3.1ZM16.3 14a18 18 0 0 0 0-4h3.4a7.7 7.7 0 0 1 0 4h-3.4Z" />
+    </svg>
+  );
+}
+
 function PlatformNote() {
   const { t } = usePublicSiteLanguage();
   return (
-    <section className="public-section public-section-soft">
+    <section className="public-section public-section-soft public-scroll-reveal">
       <div className="public-shell public-platform-panel">
         <div>
           <span className="public-eyebrow">{t("platform.eyebrow")}</span>
           <h2>{t("platform.title")}</h2>
         </div>
-        <ul>
-          {PLATFORM_NOTE_KEYS.map(noteKey => <li key={noteKey}>{t(noteKey)}</li>)}
-        </ul>
+        <div className="public-platform-grid public-scroll-stagger" aria-label={t("platform.gridAria")}>
+          {PLATFORM_CARDS.map(platform => (
+            <article className="public-platform-card" data-platform={platform.kind} key={platform.kind}>
+              <span className="public-platform-logo">
+                <PlatformLogo kind={platform.kind} />
+              </span>
+              <div>
+                <span>{t(platform.statusKey)}</span>
+                <h3>{t(platform.nameKey)}</h3>
+                <p>{t(platform.detailKey)}</p>
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -620,12 +1000,13 @@ function PlatformNote() {
 export function PublicHomePage() {
   const HomeContent = () => {
     const { t } = usePublicSiteLanguage();
+
     return (
       <>
         <section className="public-hero">
           <ProductScene />
           <div className="public-shell public-hero-content">
-            <div className="public-hero-copy">
+            <div className="public-hero-copy public-scroll-reveal">
               <span className="public-eyebrow">{t("hero.eyebrow")}</span>
               <h1>{t("hero.title")}</h1>
               <p>{t("hero.body")}</p>
@@ -634,26 +1015,26 @@ export function PublicHomePage() {
           </div>
         </section>
 
+        <PlatformNote />
+
         <StudioAccentBand />
 
-        <section className="public-section">
-          <div className="public-shell">
-            <SectionHeader
-              eyebrowKey="section.flow.eyebrow"
-              titleKey="section.flow.title"
-              bodyKey="section.flow.body"
-            />
-            <div className="public-feature-grid">
-              {FEATURE_HIGHLIGHTS.map((feature, index) => (
-                <FeatureCard key={feature.titleKey} feature={feature} index={index} />
-              ))}
+        <ScrollStoryShowcase />
+
+        <section className="public-section public-order-flow-section">
+          <div className="public-order-flow-sticky">
+            <div className="public-shell">
+              <SectionHeader
+                eyebrowKey="section.flow.eyebrow"
+                titleKey="section.flow.title"
+                bodyKey="section.flow.body"
+              />
+              <OrderCardTitleGrid />
             </div>
           </div>
         </section>
 
-        <PlatformNote />
-
-        <section className="public-section">
+        <section className="public-section public-scroll-reveal">
           <div className="public-shell">
             <SectionHeader
               eyebrowKey="pricingPreview.eyebrow"
@@ -664,7 +1045,7 @@ export function PublicHomePage() {
           </div>
         </section>
 
-        <section className="public-section public-cta-band">
+        <section className="public-section public-cta-band public-scroll-reveal">
           <div className="public-shell public-cta-inner">
             <div>
               <span className="public-eyebrow">{t("ctaBand.eyebrow")}</span>

@@ -50,6 +50,7 @@ function roleDescription(role: WorkspaceCustomRole) {
   const hiddenMenus = WORKSPACE_NAVIGATION_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const hiddenCards = WORKSPACE_CARD_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const assignedScope = access.assignedProjectsOnly === true ? " · assigned projects only" : "";
+  const assignmentControl = access.manageProjectAssignments === true ? " · can assign projects" : "";
   const base = WEB_TEAM_ROLES.find(option => option.value === role.baseRole)?.label ?? "Member";
   const baseDetail = role.baseRole === "viewer"
     ? "read-only behavior"
@@ -61,8 +62,8 @@ function roleDescription(role: WorkspaceCustomRole) {
     hiddenCards > 0 ? `${hiddenCards} card${hiddenCards === 1 ? "" : "s"} hidden` : ""
   ].filter(Boolean);
   return hiddenParts.length === 0
-    ? `${base} with ${baseDetail}${assignedScope}`
-    : `${base} with ${hiddenParts.join(" · ")}${assignedScope}`;
+    ? `${base} with ${baseDetail}${assignedScope}${assignmentControl}`
+    : `${base} with ${hiddenParts.join(" · ")}${assignedScope}${assignmentControl}`;
 }
 
 export function CustomRoleManager({ roles, disabled = false, savingKey = "", onSave, onDelete }: CustomRoleManagerProps) {
