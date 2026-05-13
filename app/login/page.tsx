@@ -77,8 +77,7 @@ function LoginPageContent() {
     <main className="page-shell login-public-shell">
       <nav className="login-public-nav" aria-label={t("login.nav.publicNavigation")}>
         <Link href="/" className="login-public-brand">
-          <span className="public-mark">SF</span>
-          <span>{t("brand.name")}</span>
+          <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt={t("brand.name")} />
         </Link>
         <span className="login-public-actions">
           <LoginLanguageSelector />

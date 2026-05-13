@@ -240,7 +240,7 @@ export default function TeamPage() {
               </div>
             ) : (
               <p style={{ color: "var(--muted)", margin: 0 }}>
-                {isOwner ? "Upgrade to StudioFlow Team to approve new members." : "Only the workspace owner can invite and approve new members."}
+                {isOwner ? "Upgrade to NivaDesk Team to approve new members." : "Only the workspace owner can invite and approve new members."}
               </p>
             )}
           </div>
@@ -288,10 +288,10 @@ export default function TeamPage() {
 
       {!hasTeamPlan ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-          <div className="pill">Available in StudioFlow Team</div>
+          <div className="pill">Available in NivaDesk Team</div>
           <h2 style={{ margin: "12px 0 8px" }}>Team management is locked on this plan</h2>
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            You can still see your current workspace membership, but accepting join requests and changing team roles require StudioFlow Team.
+            You can still see your current workspace membership, but accepting join requests and changing team roles require NivaDesk Team.
           </p>
         </section>
       ) : null}
@@ -326,7 +326,7 @@ export default function TeamPage() {
           />
         ) : (
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            Only the workspace owner on StudioFlow Team can create custom role profiles.
+            Only the workspace owner on NivaDesk Team can create custom role profiles.
           </p>
         )}
       </section>
@@ -466,7 +466,7 @@ export default function TeamPage() {
                     </div>
                     {!hasTeamPlan ? (
                       <p style={{ color: "var(--muted)", margin: "12px 0 0" }}>
-                        Approving new team members requires StudioFlow Team. Decline remains available for cleanup.
+                        Approving new team members requires NivaDesk Team. Decline remains available for cleanup.
                       </p>
                     ) : null}
                   </article>

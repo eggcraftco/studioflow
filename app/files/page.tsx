@@ -271,7 +271,7 @@ export default function FilesPage() {
         <section className="card locked-panel" style={{ padding: 22, marginBottom: 18 }}>
           <CardTitle icon="lock" eyebrow="Locked" title="Open and download require Pro or Team" />
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            File metadata is listed for reference, but full Client Files cloud access stays locked on Free Demo and StudioFlow Lite. Data export remains available separately.
+            File metadata is listed for reference, but full Client Files cloud access stays locked on Free Demo and NivaDesk Lite. Data export remains available separately.
           </p>
         </section>
       ) : null}

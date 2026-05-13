@@ -64,6 +64,9 @@ import {
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
+const ORDER_HEADER_SHOW_DELIVERY_TIME_KEY = "orderDetailHeaderShowDeliveryTime";
+const ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY = "orderDetailHeaderShowUpcomingSchedule";
+const ORDER_HEADER_SHOW_ORDER_VALUE_KEY = "orderDetailHeaderShowOrderValue";
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -320,7 +323,7 @@ function downloadOrderCalendarFile(order: OrderDetail) {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//EGGcraft//StudioFlow//EN",
+    "PRODID:-//NivaDesk//NivaDesk//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
@@ -352,7 +355,7 @@ function downloadTodoReminderFile(order: OrderDetail, task: ToDoDetail) {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//EGGcraft//StudioFlow//EN",
+    "PRODID:-//NivaDesk//NivaDesk//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VTODO",
@@ -470,7 +473,7 @@ function todoPdfHtml(order: OrderDetail, tasks: ToDoDetail[], workspaceName: str
       <body>
         <main class="page">
           <header>
-            <div class="brand">${escapeHtml(workspaceName || "StudioFlow")}</div>
+            <div class="brand">${escapeHtml(workspaceName || "NivaDesk")}</div>
             <div class="doc-title">TO DO PDF</div>
           </header>
           <section class="summary">
@@ -483,7 +486,7 @@ function todoPdfHtml(order: OrderDetail, tasks: ToDoDetail[], workspaceName: str
             </div>
           </section>
           ${rows}
-          <footer>Generated automatically from StudioFlow</footer>
+          <footer>Generated automatically from NivaDesk</footer>
         </main>
       </body>
     </html>`;
@@ -566,7 +569,7 @@ function historyPdfHtml(order: OrderDetail, logs: OrderDetail["historyLog"], wor
       <body>
         <main class="page">
           <header>
-            <div class="brand">${escapeHtml(workspaceName || "StudioFlow")}</div>
+            <div class="brand">${escapeHtml(workspaceName || "NivaDesk")}</div>
             <div class="doc-title">HISTORY LOG PDF</div>
           </header>
           <section class="summary">
@@ -578,7 +581,7 @@ function historyPdfHtml(order: OrderDetail, logs: OrderDetail["historyLog"], wor
             </div>
           </section>
           ${rows}
-          <footer>Generated automatically from StudioFlow</footer>
+          <footer>Generated automatically from NivaDesk</footer>
         </main>
       </body>
     </html>`;
@@ -661,7 +664,7 @@ function orderPdfHtml(
   const showShipping = settings?.pdfShowShipping ?? true;
   const showMaterials = settings?.pdfShowMaterials ?? true;
   const showPriority = settings?.pdfShowPriority ?? true;
-  const appSubtitle = settings?.appSubtitle?.trim() || workspaceName || "StudioFlow";
+  const appSubtitle = settings?.appSubtitle?.trim() || workspaceName || "NivaDesk";
   const logoUrl = settings?.appLogoUrl?.trim() || "";
   const taxRuleName = order.taxType === "Profit"
     ? (settings?.taxRuleNameProfit || "Margin Scheme (2nd Hand)")
@@ -782,7 +785,7 @@ function orderPdfHtml(
         <main class="page">
           <header>
             <div class="brand">
-              ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(workspaceName || "StudioFlow")}" />` : ""}
+              ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(workspaceName || "NivaDesk")}" />` : ""}
               ${escapeHtml(appSubtitle)}
             </div>
             <div class="doc-title">JOB SHEET</div>
@@ -809,7 +812,7 @@ function orderPdfHtml(
               ${shippingSection}
             </div>
           </div>
-          <footer>Generated automatically from StudioFlow</footer>
+          <footer>Generated automatically from NivaDesk</footer>
         </main>
       </body>
     </html>`;
@@ -1218,6 +1221,20 @@ function scheduleTone(item: WebScheduleReminder) {
   return "blue";
 }
 
+function nextHeaderScheduleItem(items: WebScheduleReminder[]) {
+  const now = Date.now();
+  return [...items]
+    .filter(item => item.status !== "Done")
+    .sort((first, second) => {
+      const firstTime = first.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const secondTime = second.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const firstOverdue = firstTime < now;
+      const secondOverdue = secondTime < now;
+      if (firstOverdue !== secondOverdue) return firstOverdue ? -1 : 1;
+      return firstTime - secondTime;
+    })[0] ?? null;
+}
+
 function schedulePriorityTone(priority: string) {
   const normalized = priority.trim().toLowerCase();
   if (normalized === "urgent") return "red";
@@ -1445,6 +1462,11 @@ export function OrderDetailContent({
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
+  const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [headerPreferencesLoaded, setHeaderPreferencesLoaded] = useState(false);
+  const [headerShowDeliveryTime, setHeaderShowDeliveryTime] = useState(true);
+  const [headerShowUpcomingSchedule, setHeaderShowUpcomingSchedule] = useState(true);
+  const [headerShowOrderValue, setHeaderShowOrderValue] = useState(true);
   const [cardsLocked, setCardsLocked] = useState(false);
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
@@ -1504,6 +1526,48 @@ export function OrderDetailContent({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [orderActionsOpen]);
+
+  useEffect(() => {
+    try {
+      const delivery = window.localStorage.getItem(ORDER_HEADER_SHOW_DELIVERY_TIME_KEY);
+      const schedule = window.localStorage.getItem(ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY);
+      const value = window.localStorage.getItem(ORDER_HEADER_SHOW_ORDER_VALUE_KEY);
+      if (delivery !== null) setHeaderShowDeliveryTime(delivery !== "false");
+      if (schedule !== null) setHeaderShowUpcomingSchedule(schedule !== "false");
+      if (value !== null) setHeaderShowOrderValue(value !== "false");
+    } catch {
+      setHeaderShowDeliveryTime(true);
+      setHeaderShowUpcomingSchedule(true);
+      setHeaderShowOrderValue(true);
+    } finally {
+      setHeaderPreferencesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!headerPreferencesLoaded) return;
+    try {
+      window.localStorage.setItem(ORDER_HEADER_SHOW_DELIVERY_TIME_KEY, String(headerShowDeliveryTime));
+      window.localStorage.setItem(ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY, String(headerShowUpcomingSchedule));
+      window.localStorage.setItem(ORDER_HEADER_SHOW_ORDER_VALUE_KEY, String(headerShowOrderValue));
+    } catch {
+      // Local preference persistence is best-effort.
+    }
+  }, [headerPreferencesLoaded, headerShowDeliveryTime, headerShowUpcomingSchedule, headerShowOrderValue]);
+
+  useEffect(() => {
+    if (!headerDetailsMenuPosition) return;
+    const closeMenu = () => setHeaderDetailsMenuPosition(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHeaderDetailsMenuPosition(null);
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [headerDetailsMenuPosition]);
   const [savingInlineField, setSavingInlineField] = useState<string | null>(null);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const [previewLinkEditing, setPreviewLinkEditing] = useState(false);
@@ -1867,6 +1931,7 @@ export function OrderDetailContent({
   const scheduleItems = optimisticScheduleItems;
   const activeScheduleItems = useMemo(() => scheduleItems.filter(item => item.status !== "Done"), [scheduleItems]);
   const completedScheduleItems = useMemo(() => scheduleItems.filter(item => item.status === "Done"), [scheduleItems]);
+  const headerScheduleItem = useMemo(() => nextHeaderScheduleItem(activeScheduleItems), [activeScheduleItems]);
   const clientFileItems = useMemo(() => {
     return [...order.clientFiles].sort((first, second) => {
       const firstTime = first.uploadedAt?.getTime() ?? 0;
@@ -1887,7 +1952,7 @@ export function OrderDetailContent({
     setCalendarError(null);
 
     if (!canUseCalendarExport) {
-      setCalendarError("Apple Calendar export is available from StudioFlow Lite.");
+      setCalendarError("Apple Calendar export is available from NivaDesk Lite.");
       return;
     }
 
@@ -2193,7 +2258,7 @@ export function OrderDetailContent({
     setLayoutStatus(null);
 
     if (!canCustomizeCards) {
-      setLayoutError("Card customization is available from StudioFlow Lite.");
+      setLayoutError("Card customization is available from NivaDesk Lite.");
       return;
     }
     if (!canEditCardLayout) {
@@ -2490,7 +2555,7 @@ export function OrderDetailContent({
     setLayoutStatus(null);
 
     if (!canCustomizeCards) {
-      setLayoutError("Card customization is available from StudioFlow Lite.");
+      setLayoutError("Card customization is available from NivaDesk Lite.");
       return;
     }
     if (!canEditOrderFully) {
@@ -2529,7 +2594,7 @@ export function OrderDetailContent({
     setLayoutStatus(null);
 
     if (!canCustomizeCards) {
-      setLayoutError("Card customization is available from StudioFlow Lite.");
+      setLayoutError("Card customization is available from NivaDesk Lite.");
       return;
     }
     if (!canEditOrderFully) {
@@ -3484,7 +3549,7 @@ export function OrderDetailContent({
     setTodoError(null);
 
     if (!canUseCalendarExport) {
-      setTodoError("Apple Calendar and Reminders are available from StudioFlow Lite.");
+      setTodoError("Apple Calendar and Reminders are available from NivaDesk Lite.");
       return;
     }
 
@@ -3779,7 +3844,7 @@ export function OrderDetailContent({
     const locked = !canEditCardLayout || !layoutReady;
     const headingAvailable = WEB_BLOCK_HEADING_CARD_IDS.has(cardId);
     const lockedNote = !canCustomizeCards
-      ? "Card customization is available from StudioFlow Lite."
+      ? "Card customization is available from NivaDesk Lite."
       : !canEditCardLayout
         ? "Your workspace role cannot edit card layout."
         : "Card layout is loading.";
@@ -4089,7 +4154,7 @@ export function OrderDetailContent({
                 ) : null}
               </div>
             ) : (
-              <LockedInline title="Materials & Inventory locked" note="Materials cards are available from StudioFlow Lite." />
+              <LockedInline title="Materials & Inventory locked" note="Materials cards are available from NivaDesk Lite." />
             )}
           </section>
         );
@@ -4158,7 +4223,7 @@ export function OrderDetailContent({
                 </button>
                 <p>Downloads an all-day calendar file from the created date to the delivery due date.</p>
                 {!canUseCalendarExport ? (
-                  <p className="app-calendar-status muted-copy">Available from StudioFlow Lite.</p>
+                  <p className="app-calendar-status muted-copy">Available from NivaDesk Lite.</p>
                 ) : null}
                 {calendarStatus ? <p className="app-calendar-status success-copy">{calendarStatus}</p> : null}
                 {calendarError ? <p className="app-calendar-status layout-error">{calendarError}</p> : null}
@@ -4426,7 +4491,7 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Cost (Base)"}
                       onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
-                    <LockedInline title="Advanced financial fields" note="Remaining, VAT, shipping, platform fee and final profit are available from StudioFlow Lite." />
+                    <LockedInline title="Advanced financial fields" note="Remaining, VAT, shipping, platform fee and final profit are available from NivaDesk Lite." />
                   </>
                   )}
                 </div>
@@ -4643,7 +4708,7 @@ export function OrderDetailContent({
                   + Add Reminder
                 </button>
                 {!canNotifyScheduleItems ? (
-                  <p className="muted-copy app-schedule-note-copy">Calendar and reminder notifications are available from StudioFlow Lite.</p>
+                  <p className="muted-copy app-schedule-note-copy">Calendar and reminder notifications are available from NivaDesk Lite.</p>
                 ) : null}
               </div>
               <div className="app-schedule-list-block">
@@ -4816,7 +4881,7 @@ export function OrderDetailContent({
                             <div>
                               <strong>{session.title}</strong>
                               <p>{formatTime(session.startedAt)} → {session.endedAt ? formatTime(session.endedAt) : "Running"}</p>
-                              <small>{session.createdByEmail || session.source || "StudioFlow"}</small>
+                              <small>{session.createdByEmail || session.source || "NivaDesk"}</small>
                             </div>
                             <b>{formatWorkDuration(workSessionDurationSeconds(session, workTimeNow))}</b>
                             {canEditWorkTime ? (
@@ -4901,7 +4966,7 @@ export function OrderDetailContent({
                 </div>
               </div>
             ) : (
-              <LockedInline title="History / Log locked" note="History cards are available from StudioFlow Lite." />
+              <LockedInline title="History / Log locked" note="History cards are available from NivaDesk Lite." />
             )}
           </section>
         );
@@ -5418,7 +5483,7 @@ export function OrderDetailContent({
         ) : (
           <span
             className="order-card-layout-lock-handle"
-            title={cardsLocked ? t("Layout locked") : t("Card customization is available from StudioFlow Lite.")}
+            title={cardsLocked ? t("Layout locked") : t("Card customization is available from NivaDesk Lite.")}
             aria-label={cardsLocked ? t("Layout locked") : t("Card customization locked")}
           >
             <CardIconGlyph icon="lock" />
@@ -5519,14 +5584,98 @@ export function OrderDetailContent({
     );
   }
 
+  function renderHeaderDetailsMenuContent() {
+    const toggleRows = [
+      {
+        label: t("Delivery Time"),
+        checked: headerShowDeliveryTime,
+        onClick: () => setHeaderShowDeliveryTime(value => !value)
+      },
+      {
+        label: t("Upcoming Schedule"),
+        checked: headerShowUpcomingSchedule,
+        onClick: () => setHeaderShowUpcomingSchedule(value => !value)
+      },
+      ...(canSeeFinance ? [{
+        label: t("Order Value"),
+        checked: headerShowOrderValue,
+        onClick: () => setHeaderShowOrderValue(value => !value)
+      }] : [])
+    ];
+
+    return (
+      <>
+        <div className="order-header-details-title">
+          <CardIconGlyph icon="dashboard" />
+          <span>{t("Order Header Details")}</span>
+        </div>
+        {toggleRows.map(row => (
+          <button
+            key={row.label}
+            className="order-header-details-toggle"
+            type="button"
+            aria-pressed={row.checked}
+            onClick={event => {
+              event.stopPropagation();
+              row.onClick();
+            }}
+          >
+            <span aria-hidden="true">{row.checked ? "✓" : "○"}</span>
+            {row.label}
+          </button>
+        ))}
+      </>
+    );
+  }
+
+  function renderHeaderMeta() {
+    const deliveryTone = summaryDeliveryTone(order);
+    const scheduleToneName = headerScheduleItem ? scheduleTone(headerScheduleItem) : "gray";
+    return (
+      <div className="order-header-meta">
+        {headerShowUpcomingSchedule && headerScheduleItem ? (
+          <span className={`order-header-meta-pill ${scheduleToneName}`}>
+            <CardIconGlyph icon="bellBadge" />
+            {`${headerScheduleItem.title.trim() || t("Reminder")} · ${scheduleRelativeLabel(headerScheduleItem)}`}
+          </span>
+        ) : null}
+        {headerShowDeliveryTime ? (
+          <span className={`order-header-meta-pill ${deliveryTone}`}>
+            <CardIconGlyph icon="calendarClock" />
+            {summaryDeliveryLabel(order)}
+          </span>
+        ) : null}
+        {headerShowOrderValue && canSeeFinance ? (
+          <span className="order-header-meta-pill green">
+            <CardIconGlyph icon="finance" symbol={moneySymbol(moneySettings)} />
+            {money(order.paidAmount + order.remainingAmount, hideNumbers)}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="order-detail-shell">
-      <section className="order-detail-toolbar">
+      <section
+        className="order-detail-toolbar"
+        onContextMenu={event => {
+          event.preventDefault();
+          setOrderActionsOpen(false);
+          const menuWidth = 260;
+          const menuHeight = 190;
+          setHeaderDetailsMenuPosition({
+            x: Math.max(12, Math.min(event.clientX, window.innerWidth - menuWidth)),
+            y: Math.max(12, Math.min(event.clientY, window.innerHeight - menuHeight))
+          });
+        }}
+      >
         <div>
           {showBackLink ? <Link className="studio-pill" href="/orders">Back to orders</Link> : null}
           <h1>{normalizeOrderCustomerName(order.customerName)}</h1>
           <p>{order.designName}</p>
         </div>
+        {renderHeaderMeta()}
         <div className="order-toolbar-pills">
           <button
             className={["card-layout-lock-button", cardsLocked ? "is-locked" : "is-unlocked"].join(" ")}
@@ -5552,6 +5701,10 @@ export function OrderDetailContent({
             </button>
             {orderActionsOpen ? (
               <div className="order-actions-menu-panel">
+                <div className="order-actions-header-details">
+                  {renderHeaderDetailsMenuContent()}
+                </div>
+                <div className="order-actions-menu-divider" />
                 <button
                   type="button"
                   onClick={() => {
@@ -5575,6 +5728,18 @@ export function OrderDetailContent({
           </div>
         </div>
       </section>
+      {headerDetailsMenuPosition ? (
+        <div
+          className="order-header-details-context-menu"
+          style={{
+            left: headerDetailsMenuPosition.x,
+            top: headerDetailsMenuPosition.y
+          }}
+          onClick={event => event.stopPropagation()}
+        >
+          {renderHeaderDetailsMenuContent()}
+        </div>
+      ) : null}
 
       {orderActionError ? <p className="layout-error order-action-message">{orderActionError}</p> : null}
       {inlineError ? <p className="layout-error order-action-message">{inlineError}</p> : null}
@@ -5648,7 +5813,7 @@ export function OrderDetailContent({
 
             {!canCustomizeCards ? (
               <div className="mini-panel locked-panel compact-mini-panel">
-                <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Card customization is available from StudioFlow Lite.")} />
+                <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Card customization is available from NivaDesk Lite.")} />
               </div>
             ) : null}
 
@@ -6157,7 +6322,7 @@ function BlockHeadingsModal({
     setStatus("");
 
     if (!canSave) {
-      setError(canCustomizeCards ? "Your workspace role cannot edit block headings." : "Card customization is available from StudioFlow Lite.");
+      setError(canCustomizeCards ? "Your workspace role cannot edit block headings." : "Card customization is available from NivaDesk Lite.");
       return;
     }
 
@@ -6246,7 +6411,7 @@ function BlockHeadingsModal({
 
   function renderEditor() {
     if (!canCustomizeCards) {
-      return <LockedInline title="Card customization is available from StudioFlow Lite." note="Demo / Free workspaces cannot edit block headings." />;
+      return <LockedInline title="Card customization is available from NivaDesk Lite." note="Demo / Free workspaces cannot edit block headings." />;
     }
 
     if (!supported) {

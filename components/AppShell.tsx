@@ -178,15 +178,6 @@ function ToolbarAvatarPlaceholder() {
   );
 }
 
-function WorkspaceLogoFallback({ language }: { language: string | null | undefined }) {
-  return (
-    <span className="workspace-studio-fallback" aria-label={studioT("Studio", language)}>
-      <span className="workspace-studio-mark" aria-hidden="true" />
-      <span className="workspace-studio-text">{studioT("Studio", language)}</span>
-    </span>
-  );
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
   const shellAlreadyMounted = useContext(AppShellMountedContext);
   if (shellAlreadyMounted) return <>{children}</>;
@@ -217,6 +208,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [orderCreateError, setOrderCreateError] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
+  const [workspaceLogoFailed, setWorkspaceLogoFailed] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -420,6 +412,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   }, [workspace?.currentMemberPhotoURL]);
 
   useEffect(() => {
+    setWorkspaceLogoFailed(false);
+  }, [settings?.appLogoUrl]);
+
+  useEffect(() => {
     if (!mobileNavOpen) return;
 
     function handleEscape(event: KeyboardEvent) {
@@ -445,6 +441,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   );
   const toolbarAvatarUrl = workspace?.currentMemberPhotoURL ?? "";
   const showToolbarAvatarImage = Boolean(toolbarAvatarUrl && !avatarImageFailed);
+  const workspaceLogoUrl = settings?.appLogoUrl?.trim() ?? "";
+  const toolbarLogoUrl = workspaceLogoUrl && !workspaceLogoFailed ? workspaceLogoUrl : "/brand/nivadesk-logo.png";
   const canCreateToolbarOrder = Boolean(
     workspace &&
     memberCanAccess(workspace, "orders") &&
@@ -495,13 +493,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <header className="app-toolbar app-toolbar-native">
           <div className="toolbar-main">
             <Link href={canSeeToolbarFinance ? "/dashboard" : "/orders"} className="toolbar-brand native-brand" aria-label={canSeeToolbarFinance ? "Dashboard" : "Orders"}>
-              {settings?.appLogoUrl ? (
-                <span className="native-brand-logo-frame">
-                  <img src={settings.appLogoUrl} alt="Workspace logo" />
-                </span>
-              ) : (
-                <WorkspaceLogoFallback language={language} />
-              )}
+              <span className="native-brand-logo-frame" aria-label={workspaceLogoUrl ? `${workspace?.name || "Workspace"} logo` : "NivaDesk"}>
+                <img
+                  src={toolbarLogoUrl}
+                  alt=""
+                  aria-hidden="true"
+                  onError={() => {
+                    if (workspaceLogoUrl) setWorkspaceLogoFailed(true);
+                  }}
+                />
+              </span>
             </Link>
             {canSeeToolbarFinance ? (
               <div className="toolbar-net-strip" aria-label="Workspace net profit">

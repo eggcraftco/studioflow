@@ -8,63 +8,113 @@ type PublicMetadataKey =
   | "faq"
   | "privacy"
   | "terms"
+  | "cookies"
+  | "accountDeletion"
+  | "refundCancellation"
+  | "security"
+  | "subprocessors"
+  | "dataProcessingAgreement"
+  | "acceptableUse"
   | "contact"
   | "login";
 
-const siteName = "StudioFlow by EGGcraft";
+const siteName = "NivaDesk";
+const brandImage = "/brand/nivadesk-logo.png";
 
 const publicMetadata: Record<PublicMetadataKey, { title: string; description: string; path: string }> = {
   home: {
-    title: "StudioFlow by EGGcraft | Premium Studio Management",
+    title: "NivaDesk | Premium Studio Management",
     description:
-      "A calm, premium workspace for artists, custom studios and order-based creative businesses across web, Apple devices and planned Android phone and tablet support.",
+      "A calm, premium workspace for artists, custom studios and order-based creative businesses across web, Apple devices and Android phone and tablet support.",
     path: "/"
   },
   features: {
-    title: "StudioFlow Features | Orders, Files, Teams and Exports",
+    title: "NivaDesk Features | Orders, Files, Teams and Exports",
     description:
-      "Explore StudioFlow features for order tracking, Client Files, timeline and delivery planning, To Do, Team Access, dashboards, export and cross-platform studio workflows.",
+      "Explore NivaDesk features for order tracking, Client Files, timeline and delivery planning, To Do, Team Access, dashboards, export and cross-platform studio workflows.",
     path: "/features"
   },
   pricing: {
-    title: "StudioFlow Pricing | Free, Lite, Pro and Team Plans",
+    title: "NivaDesk Pricing | Free, Lite, Pro and Team Plans",
     description:
-      "Preview StudioFlow pricing for Free/Demo, StudioFlow Lite, StudioFlow Pro, StudioFlow Team and future storage add-ons. Live billing is not enabled yet.",
+      "Preview NivaDesk pricing for Free/Demo, NivaDesk Lite, NivaDesk Pro, NivaDesk Team and future storage add-ons. Live billing is not enabled yet.",
     path: "/pricing"
   },
   signup: {
-    title: "Get Started with StudioFlow",
+    title: "Get Started with NivaDesk",
     description:
-      "Start with the StudioFlow Free/Demo path, sign in to the web portal, or review pricing before paid billing is enabled.",
+      "Start with the NivaDesk Free/Demo path, sign in to the web portal, or review pricing before paid billing is enabled.",
     path: "/signup"
   },
   faq: {
-    title: "StudioFlow FAQ",
+    title: "NivaDesk FAQ",
     description:
-      "Answers about StudioFlow plans, platform priorities, Free/Demo fallback behavior, export access and safe billing placeholders.",
+      "Answers about NivaDesk plans, platform priorities, Free/Demo fallback behavior, export access and safe billing placeholders.",
     path: "/faq"
   },
   privacy: {
-    title: "StudioFlow Privacy Policy Draft",
+    title: "NivaDesk Privacy Policy",
     description:
-      "Public draft structure for StudioFlow privacy topics including workspace data, Client Files, service providers, exports and data rights.",
+      "How NivaDesk handles account, workspace, billing, uploaded files, support, technical data, data rights, retention and third-party providers.",
     path: "/privacy"
   },
   terms: {
-    title: "StudioFlow Terms of Service Draft",
+    title: "NivaDesk Terms of Service",
     description:
-      "Public draft structure for StudioFlow terms covering workspace ownership, plans, billing, acceptable use and data continuity.",
+      "Terms governing access to and use of NivaDesk, including accounts, workspaces, subscriptions, uploaded content, acceptable use, support and platform billing.",
     path: "/terms"
   },
-  contact: {
-    title: "Contact StudioFlow",
+  cookies: {
+    title: "NivaDesk Cookie Policy",
     description:
-      "Contact paths for StudioFlow support, billing questions and new studio onboarding before the public launch flow is finalized.",
+      "How NivaDesk uses cookies and similar technologies for login sessions, preferences, security, analytics, app storage, third-party providers and cookie choices.",
+    path: "/cookies"
+  },
+  accountDeletion: {
+    title: "NivaDesk Account Deletion Policy",
+    description:
+      "How NivaDesk users can request account deletion, verify identity, export data, understand workspace exceptions, retained records, timing and subscription cancellation responsibilities.",
+    path: "/account-deletion"
+  },
+  refundCancellation: {
+    title: "NivaDesk Refund and Cancellation Policy",
+    description:
+      "How NivaDesk cancellations, renewals, downgrades, refunds, trials, lifetime plans, storage add-ons, payment disputes and subscription access work.",
+    path: "/refund-cancellation"
+  },
+  security: {
+    title: "NivaDesk Security Overview",
+    description:
+      "A practical overview of how NivaDesk protects accounts, workspaces, files, business data, payments, backups, offline data, roles and security incidents.",
+    path: "/security"
+  },
+  subprocessors: {
+    title: "NivaDesk Subprocessors",
+    description:
+      "Third-party service providers NivaDesk may use to host, operate, secure, support and improve the service, including infrastructure, payments, analytics, diagnostics and support providers.",
+    path: "/subprocessors"
+  },
+  dataProcessingAgreement: {
+    title: "NivaDesk Data Processing Agreement",
+    description:
+      "The NivaDesk Data Processing Agreement for customer personal data, processor obligations, subprocessors, transfers, security measures, deletion, audits and compliance assistance.",
+    path: "/data-processing-agreement"
+  },
+  acceptableUse: {
+    title: "NivaDesk Acceptable Use Policy",
+    description:
+      "The NivaDesk Acceptable Use Policy covering lawful use, prohibited content, file uploads, third-party data, security, communications, integrations, fair usage and abuse reporting.",
+    path: "/acceptable-use"
+  },
+  contact: {
+    title: "NivaDesk Support and Contact",
+    description:
+      "How to contact NivaDesk for in-app support tickets, account help, billing questions, privacy requests, security reports, response times and company contact details.",
     path: "/contact"
   },
   login: {
-    title: "StudioFlow Login",
-    description: "Sign in to the StudioFlow web portal with the same account used by the StudioFlow app.",
+    title: "NivaDesk Login",
+    description: "Sign in to the NivaDesk web portal with the same account used by the NivaDesk app.",
     path: "/login"
   }
 };
@@ -75,7 +125,8 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
   return {
     title: page.title,
     description: page.description,
-    applicationName: "StudioFlow",
+    metadataBase: new URL("https://nivadesk.co"),
+    applicationName: "NivaDesk",
     alternates: {
       canonical: page.path
     },
@@ -84,12 +135,21 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
       description: page.description,
       siteName,
       type: "website",
-      locale: "en_GB"
+      locale: "en_GB",
+      images: [
+        {
+          url: brandImage,
+          width: 3021,
+          height: 752,
+          alt: "NivaDesk"
+        }
+      ]
     },
     twitter: {
       card: "summary_large_image",
       title: page.title,
-      description: page.description
+      description: page.description,
+      images: [brandImage]
     },
     robots: {
       index: true,

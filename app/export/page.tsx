@@ -148,7 +148,7 @@ export default function ExportPage() {
 
         <ExportCard
           title="Export Backup"
-          description="Download a StudioFlow app-compatible backup. This can be imported back into the Swift app or into the web portal."
+          description="Download a NivaDesk app-compatible backup. This can be imported back into the Swift app or into the web portal."
           count={(exportData?.orders.length ?? 0) + (exportData?.customers.length ?? 0)}
           buttonTitle="Download backup"
           disabled={!exportAllowed || !exportData}

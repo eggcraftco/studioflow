@@ -319,7 +319,7 @@ function downloadScheduleCalendarFile(order: ScheduleOrderItem) {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//EGGcraft//StudioFlow//EN",
+    "PRODID:-//NivaDesk//NivaDesk//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
@@ -358,7 +358,7 @@ function planNotice(workspace: WorkspaceContext | null) {
   if (workspace.billingPlan === "team_monthly") return "Team includes shared schedule planning for the whole workspace.";
   if (workspace.billingPlan === "pro_monthly") return "";
   if (workspace.billingPlan === "lifetime_lite") return "Lite includes weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.";
-  return "Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from StudioFlow Lite.";
+  return "Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Lite.";
 }
 
 export default function SchedulePage() {
@@ -758,7 +758,7 @@ export default function SchedulePage() {
     }
 
     if (!canUseCalendarExport) {
-      setScheduleError("Apple Calendar export is available from StudioFlow Lite.");
+      setScheduleError("Apple Calendar export is available from NivaDesk Lite.");
       return;
     }
 
@@ -870,7 +870,7 @@ export default function SchedulePage() {
                 type="button"
                 disabled={!selectedOrder || !canUseCalendarExport}
                 onClick={downloadSelectedCalendarFile}
-                title={canUseCalendarExport ? t("Download an all-day calendar file") : t("Available from StudioFlow Lite")}
+                title={canUseCalendarExport ? t("Download an all-day calendar file") : t("Available from NivaDesk Lite")}
               >
                 {t("Calendar File")}
               </button>

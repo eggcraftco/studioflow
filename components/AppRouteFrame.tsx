@@ -1,9 +1,14 @@
 "use client";
 
 import { type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/lib/auth/AuthProvider";
+
+const AppShell = dynamic(
+  () => import("@/components/AppShell").then(module => module.AppShell),
+  { ssr: false }
+);
 
 const APP_ROUTE_PREFIXES = [
   "/orders",
