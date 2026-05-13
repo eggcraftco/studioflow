@@ -37,6 +37,21 @@ const PUBLIC_LANGUAGE_LOCALES: Record<StudioLanguage, string> = {
   "हिन्दी (Hindi)": "hi"
 };
 
+const PUBLIC_BROWSER_LANGUAGE_ALIASES: Record<string, StudioLanguage> = {
+  ar: "العربية (Arabic)",
+  de: "Deutsch",
+  en: "English",
+  es: "Español (Spanish)",
+  fr: "Français",
+  hi: "हिन्दी (Hindi)",
+  it: "Italiano",
+  ja: "日本語 (Japanese)",
+  pt: "Português",
+  ru: "Русский (Russian)",
+  tr: "Türkçe",
+  zh: "中文 (Chinese)"
+};
+
 type PublicSiteText = (key: PublicSiteTranslationKey) => string;
 
 type PublicSiteLanguageContextValue = {
@@ -59,16 +74,41 @@ export function publicLanguageDir(language: StudioLanguage) {
   return language === "العربية (Arabic)" ? "rtl" : "ltr";
 }
 
+function languageFromBrowserLocales(locales: readonly string[] | undefined) {
+  for (const locale of locales ?? []) {
+    const normalizedLocale = locale.trim().toLowerCase();
+    if (!normalizedLocale) continue;
+
+    const languageCode = normalizedLocale.split("-")[0];
+    const matchedLanguage = PUBLIC_BROWSER_LANGUAGE_ALIASES[languageCode];
+    if (matchedLanguage) return matchedLanguage;
+  }
+
+  return "English";
+}
+
+function getInitialPublicSiteLanguage() {
+  try {
+    const storedLanguage = window.localStorage.getItem(PUBLIC_SITE_LANGUAGE_STORAGE_KEY);
+    if (storedLanguage && SUPPORTED_STUDIO_LANGUAGES.includes(storedLanguage as StudioLanguage)) {
+      return storedLanguage as StudioLanguage;
+    }
+
+    const browserLanguages = window.navigator.languages?.length
+      ? window.navigator.languages
+      : [window.navigator.language];
+
+    return languageFromBrowserLocales(browserLanguages);
+  } catch {
+    return "English";
+  }
+}
+
 export function PublicSiteLanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<StudioLanguage>("English");
 
   useEffect(() => {
-    try {
-      const storedLanguage = window.localStorage.getItem(PUBLIC_SITE_LANGUAGE_STORAGE_KEY);
-      setLanguageState(normalizeStudioLanguage(storedLanguage));
-    } catch {
-      setLanguageState("English");
-    }
+    setLanguageState(getInitialPublicSiteLanguage());
   }, []);
 
   const setLanguage = useCallback((nextLanguage: StudioLanguage | string) => {
