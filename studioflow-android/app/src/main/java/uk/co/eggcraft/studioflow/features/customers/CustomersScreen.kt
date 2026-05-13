@@ -20,10 +20,16 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,14 +40,30 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
-import uk.co.eggcraft.studioflow.features.shell.SearchBarLike
 import uk.co.eggcraft.studioflow.features.shell.SectionHeader
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
 @Composable
-fun CustomersScreen(state: StudioFlowUiState) {
+fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") {
     val customers = remember(state.orders) { customersFromOrders(state.orders) }
+    var searchText by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(focusedCustomerName) {
+        if (focusedCustomerName.isNotBlank()) {
+            searchText = focusedCustomerName
+        }
+    }
+    val visibleCustomers = remember(customers, searchText) {
+        val query = searchText.trim().lowercase(Locale.UK)
+        if (query.isBlank()) {
+            customers
+        } else {
+            customers.filter { customer ->
+                customer.name.lowercase(Locale.UK).contains(query) ||
+                    customer.designs.any { it.lowercase(Locale.UK).contains(query) }
+            }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -49,17 +71,26 @@ fun CustomersScreen(state: StudioFlowUiState) {
     ) {
         SectionHeader(
             title = "Customers",
-            subtitle = "${customers.size} customers",
+            subtitle = "${visibleCustomers.size} customers",
             trailingIcon = Icons.Filled.Tune
         )
-        SearchBarLike()
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = { searchText = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            placeholder = { Text("Search...") }
+        )
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .padding(top = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(customers, key = { it.name }) { customer ->
+            items(visibleCustomers, key = { it.name }) { customer ->
                 CustomerRow(customer = customer)
             }
         }
@@ -72,7 +103,7 @@ fun CustomersScreen(state: StudioFlowUiState) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Icon(Icons.Filled.People, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${customers.size} Customers", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text("${visibleCustomers.size} Customers", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
     }

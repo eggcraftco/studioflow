@@ -1,9 +1,11 @@
 package uk.co.eggcraft.studioflow.features.settings
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -85,9 +87,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -95,9 +100,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import uk.co.eggcraft.studioflow.R
 import uk.co.eggcraft.studioflow.data.model.QuickReplyTemplateItem
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
@@ -126,6 +135,7 @@ private val DangerRed = Color(0xFFFF5A5F)
 @Composable
 fun SettingsScreen(
     state: StudioFlowUiState,
+    initialSectionKey: String? = null,
     requireDeviceUnlock: Boolean,
     onSetRequireDeviceUnlock: (Boolean) -> Unit,
     onSignOut: () -> Unit,
@@ -151,8 +161,13 @@ fun SettingsScreen(
     onDeleteWorkspaceData: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
     val sections = rememberSettingsSections()
+    LaunchedEffect(initialSectionKey) {
+        if (!initialSectionKey.isNullOrBlank()) {
+            selectedKey = initialSectionKey
+        }
+    }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -1202,7 +1217,7 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
         }
         DetailCard(title = "What you need to do", icon = Icons.Filled.CheckCircle) {
             StepRow("1", "Open WooCommerce webhooks", "In WordPress, open WooCommerce > Settings > Advanced > Webhooks.")
-            StepRow("2", "Create a new webhook", "Create a new webhook for StudioFlow orders.")
+            StepRow("2", "Create a new webhook", "Create a new webhook for NivaDesk orders.")
             StepRow("3", "Set it active", "Set Status to Active and Topic to Order created.")
             StepRow("4", "Paste the Delivery URL", "Paste the copied Delivery URL, save the webhook, then place a test order.")
         }
@@ -1335,7 +1350,7 @@ private fun AccountDetail(
     val user = state.user
     val settings = state.workspaceSettings
     var displayName by rememberSaveable(workspace?.accountDisplayName) { mutableStateOf(workspace?.accountDisplayName.orEmpty()) }
-    var companyName by rememberSaveable(workspace?.name) { mutableStateOf(workspace?.name ?: "EGGcraft") }
+    var companyName by rememberSaveable(workspace?.name) { mutableStateOf(workspace?.name ?: "NivaDesk") }
     var emailDraft by rememberSaveable(user?.email) { mutableStateOf(user?.email.orEmpty()) }
     var pendingLogo by remember { mutableStateOf<PickedUpload?>(null) }
     var logoPolicyAccepted by rememberSaveable(workspace?.id) { mutableStateOf(!settings.uploadSafetyRequirePolicyAcceptance) }
@@ -1379,7 +1394,7 @@ private fun AccountDetail(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text("Account", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Manage your StudioFlow profile, company details and sign-in security.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Manage your NivaDesk profile, company details and sign-in security.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -1430,14 +1445,21 @@ private fun AccountDetail(
                 }
                 TextButton(onClick = {
                     displayName = workspace?.accountDisplayName.orEmpty()
-                    companyName = workspace?.name ?: "EGGcraft"
+                    companyName = workspace?.name ?: "NivaDesk"
                 }) { Text("Reset") }
             }
         }
         DetailCard(title = "Workspace Logo", icon = Icons.Filled.PhotoLibrary) {
             Text("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                Text("EGGcraft", modifier = Modifier.padding(22.dp), color = Color(0xFFB98224), fontFamily = FontFamily.Serif, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                WorkspaceLogoPreview(
+                    logoUrl = settings.appLogoUrl,
+                    workspaceName = workspace?.name ?: "Workspace",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(62.dp)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
             }
             Text("Workspace Logo", fontWeight = FontWeight.ExtraBold)
             Text(if (logoSet) "This logo is used in the app header on Mac, iPad, iPhone and Android." else "No logo uploaded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1465,7 +1487,7 @@ private fun AccountDetail(
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SettingSwitch("Require Face ID / device passcode on app launch", requireDeviceUnlock, onSetRequireDeviceUnlock)
-                    Text("When enabled, StudioFlow asks for fingerprint, face unlock or your Android screen lock whenever the app opens with an existing session.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("When enabled, NivaDesk asks for fingerprint, face unlock or your Android screen lock whenever the app opens with an existing session.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("This preference is saved locally on this Android device, matching the Apple app's per-device unlock setting.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -1544,9 +1566,9 @@ private fun PlanAccessDetail(
                     }
                 }
             }
-            StoreProductCard("StudioFlow Lite", "uk.co.eggcraft.studioflow.lite.lifetime", "Buy once")
-            StoreProductCard("StudioFlow Pro", "uk.co.eggcraft.studioflow.pro.monthly", "Subscribe")
-            StoreProductCard("StudioFlow Team", "uk.co.eggcraft.studioflow.team.monthly", "Subscribe")
+            StoreProductCard("NivaDesk Lite", "uk.co.eggcraft.studioflow.lite.lifetime", "Buy once")
+            StoreProductCard("NivaDesk Pro", "uk.co.eggcraft.studioflow.pro.monthly", "Subscribe")
+            StoreProductCard("NivaDesk Team", "uk.co.eggcraft.studioflow.team.monthly", "Subscribe")
         }
         DetailCard(title = "Available now", icon = Icons.Filled.CheckCircle) {
             Text("Current plan access", fontWeight = FontWeight.ExtraBold)
@@ -1651,7 +1673,7 @@ private fun TeamAccessDetail(
                                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioOrange)
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(workspace?.name ?: "EGGcraft", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                                    Text(workspace?.name ?: "NivaDesk", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Pill(workspace?.roleLabel ?: "Owner", StudioOrange)
                                         Text(if (workspace?.isOwner == true) "You own this workspace" else "Shared with you", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1688,7 +1710,7 @@ private fun TeamAccessDetail(
                                     Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(workspace?.name ?: "EGGcraft", fontWeight = FontWeight.ExtraBold)
+                                        Text(workspace?.name ?: "NivaDesk", fontWeight = FontWeight.ExtraBold)
                                         Text(workspace?.roleLabel ?: "Owner", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Pill("Current", StudioGreen)
@@ -1711,7 +1733,7 @@ private fun TeamAccessDetail(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
                     DetailCard(title = "Current Workspace", icon = Icons.Filled.People) {
-                        Text(workspace?.name ?: "EGGcraft", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(workspace?.name ?: "NivaDesk", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Pill(workspace?.roleLabel ?: "Owner", StudioOrange)
                             Text(if (workspace?.isOwner == true) "You own this workspace" else "Shared with you", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1723,7 +1745,7 @@ private fun TeamAccessDetail(
                             Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(workspace?.name ?: "EGGcraft", fontWeight = FontWeight.ExtraBold)
+                                Text(workspace?.name ?: "NivaDesk", fontWeight = FontWeight.ExtraBold)
                                 Text(workspace?.roleLabel ?: "Owner", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Pill("Current", StudioGreen)
@@ -2152,17 +2174,92 @@ private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): Work
 private fun AboutDetail() {
     DetailColumn {
         DetailCard(title = "About", icon = Icons.Filled.Info) {
-            Box(
+            NivaDeskLogoLockup(
                 modifier = Modifier
-                    .size(72.dp)
-                    .background(StudioOrange, RoundedCornerShape(18.dp))
+                    .fillMaxWidth()
+                    .height(72.dp)
             )
-            Text("Studio Manager", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
             Text("Version 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("An EGGcraft brand for studio workspace management.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
             Text("(c) 2026 All rights reserved.", fontWeight = FontWeight.ExtraBold)
             Text("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun NivaDeskLogoLockup(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(id = R.drawable.nivadesk_logo_lockup),
+        contentDescription = "NivaDesk",
+        modifier = modifier,
+        alignment = Alignment.CenterStart,
+        contentScale = ContentScale.Fit
+    )
+}
+
+@Composable
+private fun WorkspaceLogoPreview(
+    logoUrl: String,
+    workspaceName: String,
+    modifier: Modifier = Modifier
+) {
+    val cleanLogoUrl = logoUrl.trim()
+    var bitmap by remember(cleanLogoUrl) { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(cleanLogoUrl) {
+        bitmap = null
+        if (cleanLogoUrl.startsWith("http://") || cleanLogoUrl.startsWith("https://")) {
+            bitmap = withContext(Dispatchers.IO) {
+                runCatching {
+                    URL(cleanLogoUrl).openStream().use { stream -> BitmapFactory.decodeStream(stream) }
+                }.getOrNull()
+            }
+        }
+    }
+
+    val logoBitmap = bitmap
+    if (logoBitmap != null) {
+        Image(
+            bitmap = logoBitmap.asImageBitmap(),
+            contentDescription = "$workspaceName logo",
+            modifier = modifier,
+            alignment = Alignment.CenterStart,
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        WorkspaceLogoNameFallback(
+            workspaceName = workspaceName,
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+private fun WorkspaceLogoNameFallback(
+    workspaceName: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.nivadesk_workspace_icon),
+            contentDescription = null,
+            modifier = Modifier.size(34.dp),
+            contentScale = ContentScale.Fit
+        )
+        Text(
+            text = workspaceName.trim().ifBlank { "Workspace" },
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -2219,7 +2316,7 @@ private fun SecurityStatusPanel(requireDeviceUnlock: Boolean) {
                 )
                 Text(
                     if (requireDeviceUnlock) {
-                        "StudioFlow will lock again after the app leaves the foreground and reopens with this session."
+                        "NivaDesk will lock again after the app leaves the foreground and reopens with this session."
                     } else {
                         "This Android device will keep the current session open until you sign out."
                     },
@@ -3198,7 +3295,7 @@ private fun defaultQuickReplyRules(): List<QuickReplyTemplateItem> = listOf(
     QuickReplyTemplateItem("default-rule-1", "Delivery Rule", "We usually deliver within 3-5 business days.")
 )
 
-private fun smartWorkflowTemplateUpdates(prompt: String, currentBusinessType: String): Map<String, Any?> {
+internal fun smartWorkflowTemplateUpdates(prompt: String, currentBusinessType: String): Map<String, Any?> {
     val text = "$currentBusinessType $prompt".lowercase(Locale.UK)
     val hasShipping = containsWorkflowTerm(text, "ship", "shipping", "delivery", "courier", "dispatch", "kargo", "teslimat")
     val hasMaterials = containsWorkflowTerm(text, "material", "parts", "fabric", "metal", "stone", "paint", "inventory", "stock", "malzeme", "parca", "kumas")
@@ -3367,7 +3464,7 @@ private fun smartWorkflowTemplateUpdates(prompt: String, currentBusinessType: St
     }
 }
 
-private fun standardWorkflowTemplate(businessType: String): Map<String, Any?> {
+internal fun standardWorkflowTemplate(businessType: String): Map<String, Any?> {
     return smartWorkflowTemplateUpdates("", businessType).minus("businessDescriptionPrompt")
 }
 

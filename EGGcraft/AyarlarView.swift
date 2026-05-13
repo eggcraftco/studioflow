@@ -994,15 +994,17 @@ struct AyarlarView: View {
     private var aboutAyari: some View {
         SettingsCard(title: t("About", lang: seciliDil), iconName: "info.circle.fill") {
             VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: "hexagon.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(studioWarningOrange)
+                Image("NivaDeskLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 220, maxHeight: 58, alignment: .leading)
                     .padding(.bottom, 5)
-                Text("Studio Manager")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.primary)
+                    .accessibilityLabel("NivaDesk")
                 Text("Version 1.0.0")
                     .font(.system(size: 13))
+                    .foregroundColor(.gray)
+                Text("An EGGcraft brand for studio workspace management.")
+                    .font(.system(size: 12))
                     .foregroundColor(.gray)
                 Divider().padding(.vertical, 10)
                 Text("© 2026 All rights reserved.")
@@ -3042,7 +3044,7 @@ struct AyarlarView: View {
             SettingsCard(title: t("What you need to do", lang: seciliDil), iconName: "checklist") {
                 VStack(alignment: .leading, spacing: 10) {
                     integrationInfoRow(number: "1", title: t("Open WooCommerce webhooks", lang: seciliDil), detail: t("In WordPress, open WooCommerce > Settings > Advanced > Webhooks.", lang: seciliDil))
-                    integrationInfoRow(number: "2", title: t("Create a new webhook", lang: seciliDil), detail: t("Create a new webhook for StudioFlow orders.", lang: seciliDil))
+                    integrationInfoRow(number: "2", title: t("Create a new webhook", lang: seciliDil), detail: t("Create a new webhook for NivaDesk orders.", lang: seciliDil))
                     integrationInfoRow(number: "3", title: t("Set it active", lang: seciliDil), detail: t("Set Status to Active and Topic to Order created.", lang: seciliDil))
                     integrationInfoRow(number: "4", title: t("Paste the Delivery URL", lang: seciliDil), detail: t("Paste the copied Delivery URL, save the webhook, then place a test order.", lang: seciliDil))
                 }
@@ -3610,7 +3612,7 @@ struct AyarlarView: View {
             } else if let eskiSiparisler = try? JSONDecoder().decode([SiparisTransfer].self, from: data) {
                 for t in eskiSiparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; firebaseManager.addSiparis(yeni); importedOrders += 1 }
             } else {
-                importSonucMesaji = "This file could not be imported. Please choose a valid StudioFlow backup JSON file."
+                importSonucMesaji = "This file could not be imported. Please choose a valid NivaDesk backup JSON file."
                 importSonucGosteriliyor = true
                 return
             }
@@ -3816,12 +3818,12 @@ struct SettingsLogoURLField: View {
             .background(Color.primary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         } else {
-            Image(systemName: "photo.badge.plus")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(.blue)
+            Image("NivaDeskWorkspaceIcon")
+                .resizable()
+                .scaledToFit()
                 .frame(width: isCompactLayout ? 72 : 84, height: isCompactLayout ? 52 : 56)
                 .padding(10)
-                .background(Color.blue.opacity(0.10))
+                .background(Color.primary.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
@@ -3865,7 +3867,7 @@ struct SettingsLogoURLField: View {
 
     private var uploadButton: some View {
         Button {
-            showLogoImporter = true
+            presentLogoPicker()
         } label: {
             if isUploadingLogo {
                 ProgressView()
@@ -3877,6 +3879,32 @@ struct SettingsLogoURLField: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .disabled(isUploadingLogo)
+    }
+
+    private func presentLogoPicker() {
+        #if os(macOS)
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.canCreateDirectories = false
+            panel.title = t(cleanedURLString.isEmpty ? "Upload Logo" : "Replace Logo", lang: seciliDil)
+            panel.message = t("Choose a JPG, PNG, HEIC, HEIF or WEBP image for your workspace logo.", lang: seciliDil)
+
+            if #available(macOS 12.0, *) {
+                panel.allowedContentTypes = [.image]
+            } else {
+                panel.allowedFileTypes = ["jpg", "jpeg", "png", "heic", "heif", "webp"]
+            }
+
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            requestSafeLogoUpload(url: url)
+        }
+        #else
+        showLogoImporter = true
+        #endif
     }
 
     private var removeButton: some View {

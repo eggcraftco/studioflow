@@ -1,10 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { auth } from "@/lib/firebase/client";
 import {
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
@@ -20,6 +22,12 @@ import { studioT } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { canCreateOrdersForRole, createOrderFromWeb } from "@/lib/studioflow/orders";
 import { WEB_SYNC_STATUS_EVENT, type WebSyncState, type WebSyncStatusDetail } from "@/lib/studioflow/syncStatus";
+import {
+  saveWorkspaceOnboardingSkip,
+  saveWorkspaceOnboardingTemplate,
+  workspaceOnboardingPromptSeed,
+  WORKSPACE_ONBOARDING_BUSINESS_TYPES
+} from "@/lib/studioflow/workspaceOnboarding";
 
 type NavIconName = "orders" | "dashboard" | "schedule" | "customers" | "reply" | "settings";
 
@@ -80,6 +88,24 @@ function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
 
 function memberCanAccess(workspace: WorkspaceContext | null, key: WorkspaceMemberAccessKey) {
   return workspace ? workspaceAccessAllows(workspace.memberAccess, key) : true;
+}
+
+function profileInitials(displayName: string | null | undefined, email: string | null | undefined) {
+  const cleanName = displayName?.trim() ?? "";
+  const cleanEmailName = (email ?? "")
+    .split("@")[0]
+    .replace(/[._-]+/g, " ")
+    .trim();
+  const source = cleanName || cleanEmailName || "NivaDesk";
+  const parts = source.split(/\s+/).filter(Boolean);
+  const initials = parts.length >= 2
+    ? `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`
+    : source.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2);
+  return (initials || "ND").toUpperCase();
+}
+
+function roleCanSetUpWorkspace(role: string) {
+  return ["owner", "admin"].includes(role.trim().toLowerCase());
 }
 
 function orderInCurrentMonth(order: DashboardFinanceOrder) {
@@ -167,14 +193,99 @@ function NavIcon({ name }: { name: NavIconName }) {
   );
 }
 
-function ToolbarAvatarPlaceholder() {
+function ToolbarAvatarPlaceholder({ initials }: { initials: string }) {
   return (
     <span className="toolbar-avatar-placeholder" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-        <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
-      </svg>
+      {initials}
     </span>
+  );
+}
+
+function WorkspaceOnboardingScreen({
+  businessType,
+  prompt,
+  saving,
+  error,
+  language,
+  onBusinessTypeChange,
+  onPromptChange,
+  onSmart,
+  onStandard,
+  onSkip
+}: {
+  businessType: string;
+  prompt: string;
+  saving: boolean;
+  error: string;
+  language: string;
+  onBusinessTypeChange: (value: string) => void;
+  onPromptChange: (value: string) => void;
+  onSmart: () => void;
+  onStandard: () => void;
+  onSkip: () => void;
+}) {
+  const t = (text: string) => studioT(text, language);
+  return (
+    <section className="workspace-onboarding-shell" aria-label={t("Set up your workspace")}>
+      <div className="workspace-onboarding-inner">
+        <div className="workspace-onboarding-hero">
+          <span className="workspace-onboarding-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 4 5 5" />
+              <path d="M14 5 3 16l5 5L19 10" />
+              <path d="M5 8h.01" />
+              <path d="M12 2v4" />
+              <path d="M10 4h4" />
+              <path d="M19 16v4" />
+              <path d="M17 18h4" />
+            </svg>
+          </span>
+          <h1>{t("Set up your workspace")}</h1>
+          <p>{t("Choose your business type first. NivaDesk can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.")}</p>
+        </div>
+
+        <div className="workspace-onboarding-card">
+          <label className="workspace-onboarding-field">
+            <span>{t("Business Type")}</span>
+            <select
+              value={businessType}
+              disabled={saving}
+              onChange={event => onBusinessTypeChange(event.target.value)}
+            >
+              {WORKSPACE_ONBOARDING_BUSINESS_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+
+          <div className="workspace-onboarding-copy">
+            <strong>{t("Optional smart description")}</strong>
+            <p>{t("You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you leave this empty, NivaDesk will use the standard template for the selected business type.")}</p>
+          </div>
+
+          <textarea
+            className="workspace-onboarding-textarea"
+            value={prompt}
+            disabled={saving}
+            placeholder={t("Example: We create custom painted watch dials. We need watch model, dial size, artwork theme, client approval, deposit, painting stage, curing, final photos and shipping.")}
+            onChange={event => onPromptChange(event.target.value)}
+          />
+
+          <div className="workspace-onboarding-actions">
+            <button className="workspace-onboarding-primary" type="button" disabled={saving} onClick={onSmart}>
+              {saving ? t("Saving...") : t("Smart Customize")}
+            </button>
+            <button className="workspace-onboarding-secondary" type="button" disabled={saving} onClick={onStandard}>
+              {t("Use Standard Template")}
+            </button>
+            <button className="workspace-onboarding-skip" type="button" disabled={saving} onClick={onSkip}>
+              {t("Skip for now")}
+            </button>
+          </div>
+          {error ? <p className="layout-error">{error}</p> : null}
+        </div>
+
+        <p className="workspace-onboarding-footer">{t("You can change this later from Settings > Workflow > Business Type.")}</p>
+      </div>
+    </section>
   );
 }
 
@@ -207,8 +318,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [orderCreateError, setOrderCreateError] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [workspaceLogoFailed, setWorkspaceLogoFailed] = useState(false);
+  const [onboardingBusinessType, setOnboardingBusinessType] = useState("Photography Studio");
+  const [onboardingPrompt, setOnboardingPrompt] = useState(workspaceOnboardingPromptSeed("Photography Studio"));
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [onboardingError, setOnboardingError] = useState("");
 
   useEffect(() => {
     if (!user) {
@@ -405,6 +521,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setAvatarMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -441,8 +558,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   );
   const toolbarAvatarUrl = workspace?.currentMemberPhotoURL ?? "";
   const showToolbarAvatarImage = Boolean(toolbarAvatarUrl && !avatarImageFailed);
+  const toolbarAvatarInitials = profileInitials(workspace?.currentMemberDisplayName || user?.displayName, user?.email);
   const workspaceLogoUrl = settings?.appLogoUrl?.trim() ?? "";
-  const toolbarLogoUrl = workspaceLogoUrl && !workspaceLogoFailed ? workspaceLogoUrl : "/brand/nivadesk-logo.png";
+  const showWorkspaceToolbarLogo = Boolean(workspaceLogoUrl && !workspaceLogoFailed);
+  const toolbarLogoSrc = showWorkspaceToolbarLogo ? workspaceLogoUrl : "/brand/nivadesk-logo.png";
+  const toolbarLogoLabel = showWorkspaceToolbarLogo ? `${workspace?.name || "Workspace"} logo` : "NivaDesk";
   const canCreateToolbarOrder = Boolean(
     workspace &&
     memberCanAccess(workspace, "orders") &&
@@ -451,6 +571,22 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   );
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
+  const showWorkspaceOnboarding = Boolean(
+    user &&
+    workspace &&
+    settings &&
+    !settings.businessOnboardingCompleted &&
+    financeOrders.length === 0 &&
+    memberCanAccess(workspace, "settings") &&
+    roleCanSetUpWorkspace(workspace.role)
+  );
+
+  useEffect(() => {
+    if (!showWorkspaceOnboarding) return;
+    setOnboardingError("");
+    setOnboardingBusinessType(current => current || "Photography Studio");
+    setOnboardingPrompt(current => current || workspaceOnboardingPromptSeed(onboardingBusinessType || "Photography Studio"));
+  }, [showWorkspaceOnboarding, onboardingBusinessType]);
 
   function handleOrderCreated(orderId: string) {
     window.dispatchEvent(new CustomEvent("studioflow-order-created", { detail: { orderId } }));
@@ -486,6 +622,69 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     }
   }
 
+  async function handleToolbarSignOut() {
+    setAvatarMenuOpen(false);
+    await signOut(auth);
+    router.replace("/login");
+  }
+
+  async function completeWorkspaceOnboarding(action: "smart" | "standard" | "skip") {
+    if (!workspace || !user) return;
+    setOnboardingSaving(true);
+    setOnboardingError("");
+    try {
+      if (action === "skip") {
+        await saveWorkspaceOnboardingSkip(workspace.id, user.uid);
+      } else {
+        await saveWorkspaceOnboardingTemplate(
+          workspace.id,
+          user.uid,
+          onboardingBusinessType,
+          onboardingPrompt,
+          action === "smart"
+        );
+      }
+      setSettings(current => {
+        const mergedSettings = current ? { ...current, businessOnboardingCompleted: true } : current;
+        if (mergedSettings && user?.uid) rememberAppShellSnapshot(user.uid, { settings: mergedSettings });
+        return mergedSettings;
+      });
+      window.dispatchEvent(new CustomEvent("studioflow-settings-updated", {
+        detail: { settings: { businessOnboardingCompleted: true } }
+      }));
+    } catch (saveError) {
+      setOnboardingError(saveError instanceof Error ? saveError.message : t("Workspace setup could not be saved."));
+    } finally {
+      setOnboardingSaving(false);
+    }
+  }
+
+  if (showWorkspaceOnboarding) {
+    return (
+      <AppShellMountedContext.Provider value={true}>
+        <WorkspaceOnboardingScreen
+          businessType={onboardingBusinessType}
+          prompt={onboardingPrompt}
+          saving={onboardingSaving}
+          error={onboardingError}
+          language={language}
+          onBusinessTypeChange={nextType => {
+            setOnboardingBusinessType(nextType);
+            setOnboardingPrompt(current => current.trim() ? current : workspaceOnboardingPromptSeed(nextType));
+            setOnboardingError("");
+          }}
+          onPromptChange={nextPrompt => {
+            setOnboardingPrompt(nextPrompt);
+            setOnboardingError("");
+          }}
+          onSmart={() => completeWorkspaceOnboarding("smart")}
+          onStandard={() => completeWorkspaceOnboarding("standard")}
+          onSkip={() => completeWorkspaceOnboarding("skip")}
+        />
+      </AppShellMountedContext.Provider>
+    );
+  }
+
   return (
     <AppShellMountedContext.Provider value={true}>
       <main className="page-shell app-shell-fixed">
@@ -493,13 +692,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <header className="app-toolbar app-toolbar-native">
           <div className="toolbar-main">
             <Link href={canSeeToolbarFinance ? "/dashboard" : "/orders"} className="toolbar-brand native-brand" aria-label={canSeeToolbarFinance ? "Dashboard" : "Orders"}>
-              <span className="native-brand-logo-frame" aria-label={workspaceLogoUrl ? `${workspace?.name || "Workspace"} logo` : "NivaDesk"}>
+              <span className="native-brand-logo-frame" aria-label={toolbarLogoLabel}>
                 <img
-                  src={toolbarLogoUrl}
+                  src={toolbarLogoSrc}
                   alt=""
                   aria-hidden="true"
                   onError={() => {
-                    if (workspaceLogoUrl) setWorkspaceLogoFailed(true);
+                    if (showWorkspaceToolbarLogo) setWorkspaceLogoFailed(true);
                   }}
                 />
               </span>
@@ -582,19 +781,39 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <span>{creatingOrder ? t("Creating...") : `+ ${t("Add Project")}`}</span>
               </button>
             ) : null}
-            <button
-              className="toolbar-avatar"
-              type="button"
-              title={t("Account")}
-              aria-label={t("Account")}
-              onClick={() => router.push("/settings?section=account")}
-            >
-              {showToolbarAvatarImage ? (
-                <img src={toolbarAvatarUrl} alt="" onError={() => setAvatarImageFailed(true)} />
-              ) : (
-                <ToolbarAvatarPlaceholder />
-              )}
-            </button>
+            <span className="toolbar-avatar-wrap">
+              <button
+                className="toolbar-avatar"
+                type="button"
+                title={t("Account")}
+                aria-label={t("Account")}
+                aria-expanded={avatarMenuOpen}
+                onClick={() => setAvatarMenuOpen(open => !open)}
+              >
+                {showToolbarAvatarImage ? (
+                  <img src={toolbarAvatarUrl} alt="" onError={() => setAvatarImageFailed(true)} />
+                ) : (
+                  <ToolbarAvatarPlaceholder initials={toolbarAvatarInitials} />
+                )}
+              </button>
+              {avatarMenuOpen ? (
+                <span className="toolbar-avatar-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      router.push("/settings?section=account");
+                    }}
+                  >
+                    {t("Account")}
+                  </button>
+                  <button type="button" role="menuitem" className="danger" onClick={handleToolbarSignOut}>
+                    {t("Sign Out")}
+                  </button>
+                </span>
+              ) : null}
+            </span>
             <button
               className={mobileNavOpen ? "toolbar-menu-button is-open" : "toolbar-menu-button"}
               type="button"

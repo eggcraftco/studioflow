@@ -233,7 +233,7 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
     return { sent: 0, failed: 0, reason: "no_device_tokens" };
   }
 
-  const title = String(notification.title || "EGGcraft").slice(0, 120);
+  const title = String(notification.title || "NivaDesk").slice(0, 120);
   const body = String(notification.message || notification.body || "You have a new update.").slice(0, 240);
   const data = toPushStringMap({
     companyId,
@@ -308,7 +308,7 @@ const PLAN_ENTITLEMENTS = {
   },
   lifetime_lite: {
     plan: "lifetime_lite",
-    displayName: "StudioFlow Lite",
+    displayName: "NivaDesk Lite",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 250,
@@ -334,7 +334,7 @@ const PLAN_ENTITLEMENTS = {
   },
   pro_monthly: {
     plan: "pro_monthly",
-    displayName: "StudioFlow Pro",
+    displayName: "NivaDesk Pro",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 10240,
@@ -360,7 +360,7 @@ const PLAN_ENTITLEMENTS = {
   },
   team_monthly: {
     plan: "team_monthly",
-    displayName: "StudioFlow Team",
+    displayName: "NivaDesk Team",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 51200,
@@ -1178,7 +1178,7 @@ function cleanDashboardWidgetVisibility(value = {}) {
 function requireWorkspaceCardCustomization(companyData = {}) {
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.cardCustomizationEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Card customization is available from StudioFlow Lite.", {
+    throw new HttpsError("failed-precondition", "Card customization is available from NivaDesk Lite.", {
       requiredPlan: "lifetime_lite",
       plan: entitlements.plan,
       planName: entitlements.displayName
@@ -3567,7 +3567,7 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2" }, async (reques
   const customerItems = backupCustomerItems(backup).slice(0, 500);
   const settingsUpdates = importedBackupSettingsPayload(backup && typeof backup === "object" ? backup.settings : null);
   if (orderItems.length === 0 && customerItems.length === 0 && Object.keys(settingsUpdates).length === 0) {
-    throw new HttpsError("invalid-argument", "Choose a valid StudioFlow backup JSON file.");
+    throw new HttpsError("invalid-argument", "Choose a valid NivaDesk backup JSON file.");
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
@@ -4032,7 +4032,7 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   const basicFields = new Set(["paidAmount", "watchPurchasePrice"]);
   const isBasicFinanceOnly = entitlements?.plan === "demo";
   if (isBasicFinanceOnly && changedFields.some((field) => !basicFields.has(field))) {
-    throw new HttpsError("failed-precondition", "Advanced financial fields are available from StudioFlow Lite.");
+    throw new HttpsError("failed-precondition", "Advanced financial fields are available from NivaDesk Lite.");
   }
 
   const previousPaidAmount = roundMoneyValue(orderData.paidAmount);
@@ -4683,7 +4683,7 @@ function applyWebSchedulePatch({ patch, orderData, updates, historyEntries, uid,
 
   const assertNotifyAllowed = (notify) => {
     if (notify && entitlements?.calendarRemindersEnabled !== true) {
-      throw new HttpsError("failed-precondition", "Apple Calendar and Reminders are available from StudioFlow Lite.");
+      throw new HttpsError("failed-precondition", "Apple Calendar and Reminders are available from NivaDesk Lite.");
     }
   };
 
@@ -4818,7 +4818,7 @@ function applyWebTodoPatch({ patch, orderData, updates, historyEntries, uid, ema
     let assignedToEmail = "";
     if (hasOwnField(patch, "assignedToUid") || hasOwnField(patch, "assignedToEmail")) {
       if (entitlements?.teamAccessEnabled !== true) {
-        throw new HttpsError("failed-precondition", "To Do assignment is available on StudioFlow Team.");
+        throw new HttpsError("failed-precondition", "To Do assignment is available on NivaDesk Team.");
       }
       assignedToUid = cleanOrderText(patch.assignedToUid, "", 160);
       assignedToEmail = assignedToUid ? cleanOrderText(patch.assignedToEmail, "", 220) : "";
@@ -4927,7 +4927,7 @@ function applyWebTodoPatch({ patch, orderData, updates, historyEntries, uid, ema
       }
       if (hasOwnField(patch, "assignedToUid") || hasOwnField(patch, "assignedToEmail")) {
         if (entitlements?.teamAccessEnabled !== true) {
-          throw new HttpsError("failed-precondition", "To Do assignment is available on StudioFlow Team.");
+          throw new HttpsError("failed-precondition", "To Do assignment is available on NivaDesk Team.");
         }
         item.assignedToUid = cleanOrderText(patch.assignedToUid, "", 160);
         item.assignedToEmail = item.assignedToUid ? cleanOrderText(patch.assignedToEmail, "", 220) : "";
@@ -6126,7 +6126,7 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   }
   const entitlements = billingEntitlementsForCompany(companyData);
   if (attemptedMaterialsEdit && !entitlements.materialsInventoryCardsEnabled) {
-    throw new HttpsError("failed-precondition", "Materials & Inventory is available from StudioFlow Lite.");
+    throw new HttpsError("failed-precondition", "Materials & Inventory is available from NivaDesk Lite.");
   }
   if (attemptedProjectAssignmentEdit && !canManageProjectAssignments(companyData, uid, normalizedRole)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot assign projects.");
@@ -6401,7 +6401,7 @@ function validateClientFileMutationPlan(action, companyData = {}, companyId = ""
   };
   const validation = validateBillingAction(action, entitlements, usage, limits, requestData);
   if (!validation.allowed) {
-    throw new HttpsError("failed-precondition", "Client Files management requires StudioFlow Pro or Team.", validation);
+    throw new HttpsError("failed-precondition", "Client Files management requires NivaDesk Pro or Team.", validation);
   }
   return { entitlements, limits, usage, companyId };
 }
@@ -7020,7 +7020,7 @@ exports.saveWorkspaceCustomRole = onCall({ region: "europe-west2" }, async (requ
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.teamAccessEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Custom roles require StudioFlow Team.");
+    throw new HttpsError("failed-precondition", "Custom roles require NivaDesk Team.");
   }
 
   const requestedId = customRoleId(request.data?.roleId);
@@ -7126,7 +7126,7 @@ exports.addWorkspaceTeamMember = onCall({ region: "europe-west2" }, async (reque
 
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.teamAccessEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Adding team members requires StudioFlow Team.");
+    throw new HttpsError("failed-precondition", "Adding team members requires NivaDesk Team.");
   }
 
   const members = companyMembersMap(companyData);
@@ -7201,7 +7201,7 @@ exports.updateWorkspaceMemberProfile = onCall({ region: "europe-west2" }, async 
 
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.teamAccessEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Changing team member profiles requires StudioFlow Team.");
+    throw new HttpsError("failed-precondition", "Changing team member profiles requires NivaDesk Team.");
   }
 
   const members = companyMembersMap(companyData);
@@ -7250,7 +7250,7 @@ exports.updateWorkspaceMemberRole = onCall({ region: "europe-west2" }, async (re
 
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.teamAccessEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Changing team roles requires StudioFlow Team.");
+    throw new HttpsError("failed-precondition", "Changing team roles requires NivaDesk Team.");
   }
 
   const members = companyMembersMap(companyData);
@@ -7306,7 +7306,7 @@ exports.updateWorkspaceMemberAccess = onCall({ region: "europe-west2" }, async (
 
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.teamAccessEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Changing team access requires StudioFlow Team.");
+    throw new HttpsError("failed-precondition", "Changing team access requires NivaDesk Team.");
   }
 
   const members = companyMembersMap(companyData);

@@ -76,7 +76,7 @@ fun QuickReplyScreen(
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
 ) {
     val settings = state.workspaceSettings
-    val workspaceName = state.workspace?.name ?: "StudioFlow"
+    val workspaceName = state.workspace?.name ?: "NivaDesk"
     val replyMode = normalizeReplyMode(settings.replyMode)
     var politeness by rememberSaveable(settings.quickReplyPoliteness) {
         mutableStateOf(normalizePoliteness(settings.quickReplyPoliteness))

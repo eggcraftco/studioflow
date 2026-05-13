@@ -15,7 +15,7 @@ final class ClientFileShareViewController: UIViewController {
     private func configureView() {
         view.backgroundColor = .systemBackground
 
-        statusLabel.text = "Saving file for StudioFlow…"
+        statusLabel.text = "Saving file for NivaDesk…"
         statusLabel.font = .systemFont(ofSize: 15, weight: .semibold)
         statusLabel.textColor = .label
         statusLabel.textAlignment = .center
@@ -23,7 +23,7 @@ final class ClientFileShareViewController: UIViewController {
 
         spinner.startAnimating()
 
-        openButton.setTitle("Open StudioFlow", for: .normal)
+        openButton.setTitle("Open NivaDesk", for: .normal)
         openButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
         openButton.isHidden = true
         openButton.addTarget(self, action: #selector(openMainAppButtonTapped), for: .touchUpInside)
@@ -84,7 +84,7 @@ final class ClientFileShareViewController: UIViewController {
         spinner.stopAnimating()
 
         if savedCount > 0 {
-            statusLabel.text = "Saved for StudioFlow. Tap Open StudioFlow to choose the order."
+            statusLabel.text = "Saved for NivaDesk. Tap Open NivaDesk to choose the order."
             openButton.isHidden = false
             openButton.isEnabled = true
         } else {
@@ -101,9 +101,9 @@ final class ClientFileShareViewController: UIViewController {
     }
 
     private func openMainApp() {
-        guard let url = URL(string: "studioflow://client-files") else { return }
+        guard let url = URL(string: "nivadesk://client-files") else { return }
         openButton.isEnabled = false
-        statusLabel.text = "Opening StudioFlow…"
+        statusLabel.text = "Opening NivaDesk…"
 
         extensionContext?.open(url) { [weak self] success in
             DispatchQueue.main.async {
@@ -114,7 +114,7 @@ final class ClientFileShareViewController: UIViewController {
                     }
                 } else {
                     self.openButton.isEnabled = true
-                    self.statusLabel.text = "Saved for StudioFlow. If it does not open automatically, open StudioFlow manually and the order selection will appear."
+                    self.statusLabel.text = "Saved for NivaDesk. If it does not open automatically, open NivaDesk manually and the order selection will appear."
                 }
             }
         }

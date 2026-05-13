@@ -1,8 +1,10 @@
 package uk.co.eggcraft.studioflow.features.orders
 
+import android.app.Activity
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipDescription
+import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Paint
@@ -21,8 +23,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,27 +40,37 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,7 +78,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -76,6 +90,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,14 +101,28 @@ import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -102,11 +131,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 import java.net.URL
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
@@ -120,6 +152,9 @@ import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioTodoItem
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
+import uk.co.eggcraft.studioflow.data.model.StudioWorkSession
+import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
+import uk.co.eggcraft.studioflow.features.shell.privateCurrencyText
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
@@ -127,14 +162,36 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
 private val LocalDetailCardsUnlocked = compositionLocalOf { false }
 private val LocalOrderCardActions = compositionLocalOf<OrderCardCustomizationActions?> { null }
+private val LocalOrderHeadingEditorActions = compositionLocalOf<OrderHeadingEditorActions?> { null }
 private val LocalUnifiedBoardVerticalScroll = compositionLocalOf { false }
 private val LocalCurrencySymbol = compositionLocalOf { "£" }
 private val LocalDecimalSeparator = compositionLocalOf { "." }
 private const val StudioCardDragMime = "application/x-studioflow-card"
+private const val OrderWorkspaceLayoutKey = "__workspaceLayoutV1"
+private const val MaxDesktopCardColumns = 8
+private const val DesktopViewportColumnWidth = 390f
+private const val OrderDetailPrefsName = "studioflow_order_detail_layout"
+private const val WorkspaceCardsLockedKey = "workspaceCardsLockedV1"
+private const val OrderHeaderShowDeliveryTimeKey = "orderDetailHeaderShowDeliveryTime"
+private const val OrderHeaderShowUpcomingScheduleKey = "orderDetailHeaderShowUpcomingSchedule"
+private const val OrderHeaderShowOrderValueKey = "orderDetailHeaderShowOrderValue"
+private const val CardResizeDragSensitivity = 1f
+
+private fun scrollWheelDeltaToPixels(delta: Float, stepPx: Float): Float {
+    if (delta == 0f) return 0f
+    return if (abs(delta) <= 3f) delta * stepPx else delta
+}
+
+private fun orderCardsLockedPreferenceKey(workspaceId: String?, userId: String): String {
+    val workspacePart = workspaceId?.trim()?.ifBlank { null } ?: "workspace"
+    val userPart = userId.trim().ifBlank { "anonymous" }
+    return "$WorkspaceCardsLockedKey:$workspacePart:$userPart"
+}
 
 private data class OrderCardCustomizationActions(
     val cardId: OrderDetailCardId,
     val orderId: String,
+    val isPhoneLayout: Boolean,
     val columnIndex: Int,
     val columnCount: Int,
     val columnWidth: Int,
@@ -142,7 +199,79 @@ private data class OrderCardCustomizationActions(
     val onColumnResizeStart: () -> Unit,
     val onColumnResizeBy: (Float) -> Unit,
     val onColumnResizeFinish: () -> Unit,
+    val onCardDragStart: (OrderDetailCardId) -> Unit,
+    val onCardDragEnd: () -> Unit,
+    val onCardResizeStart: () -> Unit = {},
+    val onCardResizeFinish: () -> Unit = {},
     val onSaveLayout: (OrderDetailCardLayout) -> Unit
+)
+
+private data class OrderHeadingEditorActions(
+    val workspaceSettings: StudioWorkspaceSettings,
+    val onSave: (Map<String, Any?>, String) -> Unit
+)
+
+private data class OrderHeadingEditorConfig(
+    val title: String,
+    val subtitle: String,
+    val groups: List<OrderHeadingEditorGroup> = emptyList(),
+    val fields: List<OrderHeadingEditorField> = emptyList(),
+    val toggles: List<OrderHeadingEditorToggle> = emptyList(),
+    val saveMessage: String,
+    val buildUpdates: (OrderHeadingEditorDraft) -> Map<String, Any?>
+)
+
+private data class OrderHeadingEditorGroup(
+    val key: String,
+    val title: String,
+    val description: String,
+    val addLabel: String,
+    val emptyText: String,
+    val items: List<StudioHeadingItem>,
+    val lockedFirstId: String? = null,
+    val minimumCount: Int = 0
+)
+
+private data class OrderHeadingEditorField(
+    val key: String,
+    val label: String,
+    val value: String,
+    val fallback: String
+)
+
+private data class OrderHeadingEditorToggle(
+    val key: String,
+    val label: String,
+    val value: Boolean
+)
+
+private data class OrderHeadingEditorDraft(
+    val groups: Map<String, List<StudioHeadingItem>>,
+    val fields: Map<String, String>,
+    val toggles: Map<String, Boolean>
+)
+
+private data class OrderHeaderDetailsState(
+    val showDeliveryTime: Boolean,
+    val showUpcomingSchedule: Boolean,
+    val showOrderValue: Boolean,
+    val setShowDeliveryTime: (Boolean) -> Unit,
+    val setShowUpcomingSchedule: (Boolean) -> Unit,
+    val setShowOrderValue: (Boolean) -> Unit
+)
+
+private data class SavedCardLayoutProfile(
+    val id: String,
+    val name: String,
+    val snapshotJSON: String
+)
+
+private data class TeamCardLayoutProfile(
+    val userId: String,
+    val displayName: String,
+    val subtitle: String,
+    val snapshotJSON: String,
+    val isMine: Boolean
 )
 
 @Composable
@@ -155,6 +284,8 @@ fun OrderDetailScreen(
     onBack: () -> Unit,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onSaveOrderCardLayout: (StudioOrder, String) -> Unit = { _, _ -> },
+    onResetOrderCardLayout: (StudioOrder) -> Unit = {},
     onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit,
     onUploadPreviewImage: (StudioOrder, ByteArray, String, String) -> Unit,
     onRefreshLiveTracking: (StudioOrder) -> Unit,
@@ -169,7 +300,7 @@ fun OrderDetailScreen(
     fun allowed(key: String): Boolean = access?.allows(key) != false && workspaceSettings.showsCard(key)
     val canSeeFinancial = workspace?.canSeeFinancialData == true && allowed("cardFinancial")
     val canAssign = workspace?.let {
-        it.isOwner || (it.role in setOf("admin", "member") && it.memberAccess.manageProjectAssignments)
+        it.isOwner || it.memberAccess.manageProjectAssignments
     } == true
     val canEditWorkflow = workspace?.let {
         (it.isOwner || it.role in setOf("admin", "member", "workflow")) && it.memberAccess.orders
@@ -179,7 +310,18 @@ fun OrderDetailScreen(
     } == true
     val canAssignTasks = workspace?.billingPlan == StudioBillingPlan.TeamMonthly && teamMembers.isNotEmpty()
     val financeAdvancedEnabled = workspace?.billingPlan != StudioBillingPlan.Demo
-    val canManageCardLayout = workspace?.let { it.isOwner || it.role in setOf("admin", "member") } == true
+    val canManageCardLayout = workspace?.let {
+        it.isOwner || (it.role in setOf("admin", "member", "workflow") && it.memberAccess.orders)
+    } == true
+    val independentOrderLayout = remember(order.id, order.customFields) {
+        order.customFields[OrderWorkspaceLayoutKey]
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { orderDetailCardLayoutFromSnapshotJSON(it) }
+    }
+    val effectiveWorkspaceSettings = remember(workspaceSettings, independentOrderLayout) {
+        independentOrderLayout?.let { workspaceSettings.copy(orderCardLayout = it) } ?: workspaceSettings
+    }
     fun allowedCard(cardId: OrderDetailCardId): Boolean {
         return when (cardId) {
             OrderDetailCardId.Financial -> canSeeFinancial
@@ -188,6 +330,10 @@ fun OrderDetailScreen(
     }
     fun saveCardLayout(nextLayout: OrderDetailCardLayout) {
         val snapshotJSON = nextLayout.toWorkspaceSnapshotJSON()
+        if (independentOrderLayout != null) {
+            onSaveOrderCardLayout(order, snapshotJSON)
+            return
+        }
         val updates = mutableMapOf<String, Any?>("sharedWorkspaceSnapshotJSON" to snapshotJSON)
         val profilesJSON = upsertWorkspaceUserProfileJSON(
             existingJSON = workspaceSettings.workspaceUserProfilesJSON,
@@ -201,7 +347,11 @@ fun OrderDetailScreen(
 
     CompositionLocalProvider(
         LocalCurrencySymbol provides workspaceSettings.selectedCurrency.ifBlank { "£" },
-        LocalDecimalSeparator provides workspaceSettings.selectedDecimalSeparator
+        LocalDecimalSeparator provides workspaceSettings.selectedDecimalSeparator,
+        LocalOrderHeadingEditorActions provides OrderHeadingEditorActions(
+            workspaceSettings = workspaceSettings,
+            onSave = onUpdateWorkspaceSettings
+        )
     ) {
         BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val useBoardLayout = !showBack && maxWidth >= 520.dp
@@ -209,7 +359,7 @@ fun OrderDetailScreen(
             DesktopOrderDetailBoard(
                 order = order,
                 workspace = workspace,
-                workspaceSettings = workspaceSettings,
+                workspaceSettings = effectiveWorkspaceSettings,
                 teamMembers = teamMembers,
                 statusOptions = statusOptions,
                 canAssign = canAssign,
@@ -226,29 +376,51 @@ fun OrderDetailScreen(
                 onRenameClientFile = onRenameClientFile,
                 onDeleteClientFile = onDeleteClientFile,
                 canManageCardLayout = canManageCardLayout,
+                isOrderIndependentLayout = independentOrderLayout != null,
+                onDetachOrderLayout = {
+                    onSaveOrderCardLayout(order, effectiveWorkspaceSettings.orderCardLayout.toWorkspaceSnapshotJSON())
+                },
+                onResetOrderLayout = { onResetOrderCardLayout(order) },
                 onSaveCardLayout = ::saveCardLayout,
+                currentUserId = currentUserId,
+                onSaveWorkspaceProfilesJSON = { profilesJSON, message ->
+                    onUpdateWorkspaceSettings(mapOf("workspaceUserProfilesJSON" to profilesJSON), message)
+                },
                 modifier = Modifier.fillMaxSize()
             )
             return@BoxWithConstraints
         }
 
-        val visiblePhoneCards = workspaceSettings.orderCardLayout.phoneOrder
-            .filter { cardId -> allowedCard(cardId) && workspaceSettings.orderCardLayout.isVisible(cardId) }
+        val phoneLayout = effectiveWorkspaceSettings.orderCardLayout
+        val visiblePhoneCards = phoneLayout.phoneOrder
+            .filter { cardId -> allowedCard(cardId) && phoneLayout.isVisible(cardId) }
+        val hiddenPhoneCards = OrderDetailCardId.DefaultOrder
+            .filter { cardId -> allowedCard(cardId) && !phoneLayout.isVisible(cardId) }
+        var resizingPhoneCard by remember(order.id) { mutableStateOf(false) }
+        var draggingPhoneCard by remember(order.id) { mutableStateOf<OrderDetailCardId?>(null) }
+        var phoneCardProfilesOpen by remember(order.id) { mutableStateOf(false) }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            userScrollEnabled = !resizingPhoneCard
         ) {
             item {
                 DetailTopBar(
                     order = order,
-                    workspaceSettings = workspaceSettings,
+                    workspaceSettings = effectiveWorkspaceSettings,
                     canSeeFinancial = canSeeFinancial,
                     financeAdvancedEnabled = financeAdvancedEnabled,
                     onBack = onBack,
-                    showBack = showBack
+                    showBack = showBack,
+                    canManageCardLayout = canManageCardLayout,
+                    onOpenCardProfiles = if (canManageCardLayout && currentUserId.isNotBlank()) {
+                        { phoneCardProfilesOpen = true }
+                    } else {
+                        null
+                    }
                 )
             }
             item {
@@ -260,21 +432,56 @@ fun OrderDetailScreen(
                     onAssignOrder = onAssignOrder
                 )
             }
+            if (hiddenPhoneCards.isNotEmpty() && canManageCardLayout) {
+                item {
+                    HiddenCardsBar(
+                        hiddenCards = hiddenPhoneCards,
+                        onShowCard = { cardId ->
+                            saveCardLayout(phoneLayout.withCardVisibility(cardId, true))
+                        }
+                    )
+                }
+            }
             visiblePhoneCards.forEach { cardId ->
                 item(key = cardId.raw) {
                     OrderLayoutCardFrame(
                         cardId = cardId,
                         cardsUnlocked = canManageCardLayout,
-                        onDropCard = { dragged ->
+                        isDragging = draggingPhoneCard == cardId,
+                        customizationActions = OrderCardCustomizationActions(
+                            cardId = cardId,
+                            orderId = order.id,
+                            isPhoneLayout = true,
+                            columnIndex = -1,
+                            columnCount = 0,
+                            columnWidth = 0,
+                            layout = phoneLayout,
+                            onColumnResizeStart = {},
+                            onColumnResizeBy = {},
+                            onColumnResizeFinish = {},
+                            onCardDragStart = { dragged -> draggingPhoneCard = dragged },
+                            onCardDragEnd = { draggingPhoneCard = null },
+                            onCardResizeStart = { resizingPhoneCard = true },
+                            onCardResizeFinish = { resizingPhoneCard = false },
+                            onSaveLayout = ::saveCardLayout
+                        ),
+                        onDragEnd = { draggingPhoneCard = null },
+                        onDropCard = { dragged, insertAfter ->
                             if (dragged != cardId) {
-                                saveCardLayout(workspaceSettings.orderCardLayout.movePhoneCardAfter(dragged, cardId))
+                                saveCardLayout(
+                                    if (insertAfter) {
+                                        phoneLayout.movePhoneCardAfter(dragged, cardId)
+                                    } else {
+                                        phoneLayout.movePhoneCardBefore(dragged, cardId)
+                                    }
+                                )
                             }
                         }
                     ) {
                         OrderDetailCardContent(
                             cardId = cardId,
                             order = order,
-                            workspaceSettings = workspaceSettings,
+                            workspaceSettings = effectiveWorkspaceSettings,
                             statusOptions = statusOptions,
                             teamMembers = teamMembers,
                             canEditWorkflow = canEditWorkflow,
@@ -296,6 +503,34 @@ fun OrderDetailScreen(
                 Spacer(modifier = Modifier.height(18.dp))
             }
         }
+        if (phoneCardProfilesOpen) {
+            CardLayoutProfilesDialog(
+                profilesJSON = workspaceSettings.workspaceUserProfilesJSON,
+                currentUserId = currentUserId,
+                workspace = workspace,
+                orderId = order.id,
+                cardLayout = phoneLayout,
+                isOrderIndependentLayout = independentOrderLayout != null,
+                currentSnapshotJSON = phoneLayout.toWorkspaceSnapshotJSON(),
+                onDismiss = { phoneCardProfilesOpen = false },
+                onLoadLayout = { nextLayout ->
+                    saveCardLayout(nextLayout)
+                    phoneCardProfilesOpen = false
+                },
+                onApplyLayout = ::saveCardLayout,
+                onDetachOrderLayout = {
+                    onSaveOrderCardLayout(order, phoneLayout.toWorkspaceSnapshotJSON())
+                    phoneCardProfilesOpen = false
+                },
+                onResetOrderLayout = {
+                    onResetOrderCardLayout(order)
+                    phoneCardProfilesOpen = false
+                },
+                onSaveProfilesJSON = { profilesJSON, message ->
+                    onUpdateWorkspaceSettings(mapOf("workspaceUserProfilesJSON" to profilesJSON), message)
+                }
+            )
+        }
     }
     }
 }
@@ -307,49 +542,115 @@ private fun DetailTopBar(
     canSeeFinancial: Boolean,
     financeAdvancedEnabled: Boolean,
     onBack: () -> Unit,
-    showBack: Boolean
+    showBack: Boolean,
+    canManageCardLayout: Boolean,
+    onOpenCardProfiles: (() -> Unit)?
 ) {
     val context = LocalContext.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (showBack) {
-            TextButton(onClick = onBack) {
-                Text("Orders", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
-            }
+    val headerDetails = rememberOrderHeaderDetailsState()
+    var actionsOpen by remember { mutableStateOf(false) }
+
+    @Composable
+    fun ActionsMenuButton() {
+        Box {
+            HeaderActionsMenuButton(onClick = { actionsOpen = true })
+            OrderHeaderActionsMenu(
+                expanded = actionsOpen,
+                onDismiss = { actionsOpen = false },
+                canCustomize = canManageCardLayout && onOpenCardProfiles != null,
+                canSeeFinancial = canSeeFinancial,
+                headerDetails = headerDetails,
+                onCustomize = {
+                    actionsOpen = false
+                    onOpenCardProfiles?.invoke()
+                },
+                onExportPdf = {
+                    actionsOpen = false
+                    shareOrderPdf(
+                        context = context,
+                        order = order,
+                        settings = workspaceSettings,
+                        canSeeFinancial = canSeeFinancial,
+                        advancedFinanceEnabled = financeAdvancedEnabled
+                    )
+                }
+            )
         }
-        TextButton(
-            onClick = {
-                shareOrderPdf(
-                    context = context,
-                    order = order,
-                    settings = workspaceSettings,
-                    canSeeFinancial = canSeeFinancial,
-                    advancedFinanceEnabled = financeAdvancedEnabled
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val tabletHeader = maxWidth >= 600.dp
+        if (tabletHeader) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 54.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (showBack) {
+                    TextButton(onClick = onBack) {
+                        Text("Orders", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+                Text(
+                    text = order.displayCustomerName.ifBlank { "New Project" },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 22.sp
                 )
+                OrderHeaderBadges(
+                    order = order,
+                    canSeeFinancial = canSeeFinancial,
+                    headerDetails = headerDetails,
+                    compact = true,
+                    modifier = Modifier
+                        .widthIn(max = 260.dp)
+                        .horizontalScroll(rememberScrollState())
+                )
+                ActionsMenuButton()
             }
-        ) {
-            Icon(Icons.Filled.Description, contentDescription = null, tint = StudioBlue)
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("PDF", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
-        }
-        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-            Text(
-                text = order.displayCustomerName,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp
-            )
-            Text(
-                text = order.designName.ifBlank { "New Project" },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp
-            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (showBack) {
+                    TextButton(onClick = onBack) {
+                        Text("Orders", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = order.displayCustomerName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp
+                    )
+                    Text(
+                        text = order.designName.ifBlank { "New Project" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                    OrderHeaderBadges(
+                        order = order,
+                        canSeeFinancial = canSeeFinancial,
+                        headerDetails = headerDetails,
+                        compact = true,
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .horizontalScroll(rememberScrollState())
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                ActionsMenuButton()
+            }
         }
     }
 }
@@ -477,7 +778,12 @@ private fun DesktopOrderDetailBoard(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit,
     canManageCardLayout: Boolean,
+    isOrderIndependentLayout: Boolean,
+    onDetachOrderLayout: () -> Unit,
+    onResetOrderLayout: () -> Unit,
     onSaveCardLayout: (OrderDetailCardLayout) -> Unit,
+    currentUserId: String,
+    onSaveWorkspaceProfilesJSON: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val access = workspace?.memberAccess
@@ -488,21 +794,39 @@ private fun DesktopOrderDetailBoard(
             else -> allowed(cardId.accessKey)
         }
     }
-    var cardsUnlocked by remember(order.id) { mutableStateOf(true) }
+    val context = LocalContext.current
+    val cardsLockPreferences = remember(context) {
+        context.getSharedPreferences(OrderDetailPrefsName, Context.MODE_PRIVATE)
+    }
+    val cardsLockedPreferenceKey = remember(workspace?.id, currentUserId) {
+        orderCardsLockedPreferenceKey(workspace?.id, currentUserId)
+    }
+    var cardsUnlocked by remember(cardsLockedPreferenceKey) {
+        mutableStateOf(!cardsLockPreferences.getBoolean(cardsLockedPreferenceKey, false))
+    }
+    var cardProfilesOpen by remember(order.id) { mutableStateOf(false) }
     var resizingColumnIndex by remember(order.id) { mutableStateOf<Int?>(null) }
     var resizeColumnBaseWidth by remember(order.id) { mutableStateOf(0) }
     var resizeColumnDeltaDp by remember(order.id) { mutableStateOf(0f) }
+    var draggingBoardCard by remember(order.id) { mutableStateOf<OrderDetailCardId?>(null) }
+    LaunchedEffect(draggingBoardCard) {
+        val activeDrag = draggingBoardCard ?: return@LaunchedEffect
+        delay(30_000)
+        if (draggingBoardCard == activeDrag) draggingBoardCard = null
+    }
 
     BoxWithConstraints(
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
     ) {
         val boardMaxWidth = maxWidth
+        val minColumnHeight = maxOf(520, (maxHeight.value - 180f).roundToInt())
         val density = LocalDensity.current
         val layout = workspaceSettings.orderCardLayout
         Column(modifier = Modifier.fillMaxSize()) {
             DesktopOrderHeader(
                 order = order,
+                workspace = workspace,
                 workspaceSettings = workspaceSettings,
                 canAssign = canAssign,
                 canEditWorkflow = canEditWorkflow,
@@ -510,19 +834,54 @@ private fun DesktopOrderDetailBoard(
                 canSeeFinancial = canSeeFinancial,
                 financeAdvancedEnabled = financeAdvancedEnabled,
                 cardsUnlocked = cardsUnlocked && canManageCardLayout,
-                onCardsUnlockedChange = { if (canManageCardLayout) cardsUnlocked = it },
+                onCardsUnlockedChange = {
+                    if (canManageCardLayout) {
+                        cardsUnlocked = it
+                        cardsLockPreferences
+                            .edit()
+                            .putBoolean(cardsLockedPreferenceKey, !it)
+                            .apply()
+                        if (!it) draggingBoardCard = null
+                    }
+                },
                 canManageCardLayout = canManageCardLayout,
+                isOrderIndependentLayout = isOrderIndependentLayout,
                 cardLayout = layout,
                 teamMembers = teamMembers,
                 onAssignOrder = onAssignOrder,
                 onUpdateOrderFields = onUpdateOrderFields,
-                onSaveCardLayout = onSaveCardLayout
+                onDetachOrderLayout = onDetachOrderLayout,
+                onResetOrderLayout = onResetOrderLayout,
+                onSaveCardLayout = onSaveCardLayout,
+                onOpenCardProfiles = { cardProfilesOpen = true },
+                currentUserId = currentUserId,
+                onSaveWorkspaceProfilesJSON = onSaveWorkspaceProfilesJSON
             )
             CompositionLocalProvider(
                 LocalDetailCardsUnlocked provides (cardsUnlocked && canManageCardLayout),
                 LocalUnifiedBoardVerticalScroll provides true
             ) {
-                val columnCount = layout.columns.size.coerceAtLeast(3).coerceAtMost(8)
+                val lastVisibleColumnIndex = layout.columns.indices.lastOrNull { columnIndex ->
+                    layout.columns[columnIndex].any { cardId -> allowedCard(cardId) && layout.isVisible(cardId) }
+                } ?: -1
+                val visibleColumnCount = (lastVisibleColumnIndex + 1)
+                    .coerceAtLeast(1)
+                    .coerceAtMost(MaxDesktopCardColumns)
+                val viewportColumnCount = maxOf(
+                    OrderDetailCardId.DefaultColumns.size,
+                    ((boardMaxWidth.value + 40f) / DesktopViewportColumnWidth).toInt().coerceAtLeast(1)
+                ).coerceAtMost(MaxDesktopCardColumns)
+                val availableColumnCount = maxOf(
+                    layout.columns.size,
+                    viewportColumnCount,
+                    visibleColumnCount
+                ).coerceAtMost(MaxDesktopCardColumns)
+                val columnCount = (if (draggingBoardCard != null) {
+                    maxOf(availableColumnCount, visibleColumnCount + 1)
+                } else {
+                    visibleColumnCount
+                })
+                    .coerceAtMost(MaxDesktopCardColumns)
                 val hiddenCards = OrderDetailCardId.DefaultOrder
                     .filter { cardId -> allowedCard(cardId) && !layout.isVisible(cardId) }
                 if (hiddenCards.isNotEmpty() && cardsUnlocked && canManageCardLayout) {
@@ -535,15 +894,53 @@ private fun DesktopOrderDetailBoard(
                 }
                 val boardHorizontalScroll = rememberScrollState()
                 val boardVerticalScroll = rememberScrollState()
+                val edgeScrollStepPx = with(density) { 22.dp.toPx() }
+                val mouseWheelStepPx = with(density) { 84.dp.toPx() }
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .horizontalScroll(boardHorizontalScroll)
+                        .horizontalScroll(boardHorizontalScroll, enabled = false)
+                        .pointerInput(boardHorizontalScroll, boardVerticalScroll, mouseWheelStepPx) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.type != PointerEventType.Scroll) continue
+
+                                    var consumed = false
+                                    event.changes.forEach { change ->
+                                        val scrollDelta = change.scrollDelta
+                                        val horizontalDelta = scrollWheelDeltaToPixels(scrollDelta.x, mouseWheelStepPx)
+                                        val verticalDelta = scrollWheelDeltaToPixels(scrollDelta.y, mouseWheelStepPx)
+                                        if (horizontalDelta != 0f) {
+                                            consumed = boardHorizontalScroll.dispatchRawDelta(horizontalDelta) != 0f || consumed
+                                        }
+                                        if (verticalDelta != 0f) {
+                                            consumed = boardVerticalScroll.dispatchRawDelta(verticalDelta) != 0f || consumed
+                                        }
+                                    }
+                                    if (consumed) {
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                }
+                            }
+                        }
+                        .pointerInput(boardHorizontalScroll, boardVerticalScroll, draggingBoardCard, resizingColumnIndex) {
+                            detectDragGestures { change, dragAmount ->
+                                if (draggingBoardCard != null || resizingColumnIndex != null || change.isConsumed) {
+                                    return@detectDragGestures
+                                }
+                                val consumedX = boardHorizontalScroll.dispatchRawDelta(-dragAmount.x)
+                                val consumedY = boardVerticalScroll.dispatchRawDelta(-dragAmount.y)
+                                if (consumedX != 0f || consumedY != 0f) {
+                                    change.consume()
+                                }
+                            }
+                        }
                 ) {
                     Row(
                         modifier = Modifier
-                            .verticalScroll(boardVerticalScroll)
+                            .verticalScroll(boardVerticalScroll, enabled = false)
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.Top
@@ -565,8 +962,22 @@ private fun DesktopOrderDetailBoard(
                             val columnCards = layout.columns
                                 .getOrElse(columnIndex) { emptyList() }
                                 .filter { cardId -> allowedCard(cardId) && layout.isVisible(cardId) }
+                            val visibleCardHeights = columnCards.sumOf { cardId ->
+                                layout.savedHeightFor(cardId, order.id) ?: defaultRenderedCardHeight(cardId)
+                            }
+                            val visibleGapHeights = if (draggingBoardCard != null) {
+                                columnCards.size * 30
+                            } else {
+                                columnCards.size * 12
+                            }
+                            val bottomDropZoneHeight = if (columnCards.isEmpty()) {
+                                minColumnHeight
+                            } else {
+                                maxOf(80, minColumnHeight - visibleCardHeights - visibleGapHeights)
+                            }
                             DesktopColumn(
                                 widthDp = columnWidth,
+                                minHeightDp = minColumnHeight,
                                 resizable = cardsUnlocked && canManageCardLayout,
                                 isResizing = resizingColumnIndex == columnIndex,
                                 onResizeStart = {
@@ -593,20 +1004,25 @@ private fun DesktopOrderDetailBoard(
                                 }
                             ) {
                                 columnCards.forEach { cardId ->
-                                    CardInsertionDropZone(
-                                        enabled = cardsUnlocked && canManageCardLayout,
-                                        onDropCard = { dragged ->
-                                            if (dragged != cardId) {
-                                                onSaveCardLayout(layout.moveDesktopCardBefore(dragged, columnIndex, cardId))
+                                    if (draggingBoardCard != null) {
+                                        CardInsertionDropZone(
+                                            enabled = cardsUnlocked && canManageCardLayout,
+                                            onDragEnd = { draggingBoardCard = null },
+                                            onDropCard = { dragged ->
+                                                if (dragged != cardId) {
+                                                    onSaveCardLayout(layout.moveDesktopCardBefore(dragged, columnIndex, cardId))
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                     OrderLayoutCardFrame(
                                         cardId = cardId,
                                         cardsUnlocked = cardsUnlocked && canManageCardLayout,
+                                        isDragging = draggingBoardCard == cardId,
                                         customizationActions = OrderCardCustomizationActions(
                                             cardId = cardId,
                                             orderId = order.id,
+                                            isPhoneLayout = false,
                                             columnIndex = columnIndex,
                                             columnCount = columnCount,
                                             columnWidth = columnWidth,
@@ -624,11 +1040,20 @@ private fun DesktopOrderDetailBoard(
                                                 resizeColumnBaseWidth = 0
                                                 resizeColumnDeltaDp = 0f
                                             },
+                                            onCardDragStart = { dragged -> draggingBoardCard = dragged },
+                                            onCardDragEnd = { draggingBoardCard = null },
                                             onSaveLayout = onSaveCardLayout
                                         ),
-                                        onDropCard = { dragged ->
+                                        onDragEnd = { draggingBoardCard = null },
+                                        onDropCard = { dragged, insertAfter ->
                                             if (dragged != cardId) {
-                                                onSaveCardLayout(layout.moveDesktopCardAfter(dragged, columnIndex, cardId))
+                                                onSaveCardLayout(
+                                                    if (insertAfter) {
+                                                        layout.moveDesktopCardAfter(dragged, columnIndex, cardId)
+                                                    } else {
+                                                        layout.moveDesktopCardBefore(dragged, columnIndex, cardId)
+                                                    }
+                                                )
                                             }
                                         }
                                     ) {
@@ -655,6 +1080,8 @@ private fun DesktopOrderDetailBoard(
                                 ColumnDropZone(
                                     enabled = cardsUnlocked && canManageCardLayout,
                                     hasCards = columnCards.isNotEmpty(),
+                                    heightDp = bottomDropZoneHeight,
+                                    onDragEnd = { draggingBoardCard = null },
                                     onDropCard = { dragged ->
                                         onSaveCardLayout(layout.moveDesktopCardToColumnEnd(dragged, columnIndex))
                                     }
@@ -662,7 +1089,59 @@ private fun DesktopOrderDetailBoard(
                             }
                         }
                     }
+                    if (draggingBoardCard != null && cardsUnlocked && canManageCardLayout) {
+                        BoardEdgeScrollDropZone(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .fillMaxHeight()
+                                .width(54.dp),
+                            enabled = boardHorizontalScroll.value > 0,
+                            onDragEnd = { draggingBoardCard = null },
+                            onScrollStep = { boardHorizontalScroll.dispatchRawDelta(-edgeScrollStepPx) },
+                            onDropCard = { dragged ->
+                                onSaveCardLayout(layout.moveDesktopCardToColumnEnd(dragged, 0))
+                            }
+                        )
+                        BoardEdgeScrollDropZone(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .width(54.dp),
+                            enabled = boardHorizontalScroll.value < boardHorizontalScroll.maxValue,
+                            onDragEnd = { draggingBoardCard = null },
+                            onScrollStep = { boardHorizontalScroll.dispatchRawDelta(edgeScrollStepPx) },
+                            onDropCard = { dragged ->
+                                onSaveCardLayout(layout.moveDesktopCardToColumnEnd(dragged, (columnCount - 1).coerceAtLeast(0)))
+                            }
+                        )
+                    }
                 }
+            }
+            if (cardProfilesOpen) {
+                CardLayoutProfilesDialog(
+                    profilesJSON = workspaceSettings.workspaceUserProfilesJSON,
+                    currentUserId = currentUserId,
+                    workspace = workspace,
+                    orderId = order.id,
+                    cardLayout = layout,
+                    isOrderIndependentLayout = isOrderIndependentLayout,
+                    currentSnapshotJSON = layout.toWorkspaceSnapshotJSON(),
+                    onDismiss = { cardProfilesOpen = false },
+                    onLoadLayout = { nextLayout ->
+                        onSaveCardLayout(nextLayout)
+                        cardProfilesOpen = false
+                    },
+                    onApplyLayout = onSaveCardLayout,
+                    onDetachOrderLayout = {
+                        onDetachOrderLayout()
+                        cardProfilesOpen = false
+                    },
+                    onResetOrderLayout = {
+                        onResetOrderLayout()
+                        cardProfilesOpen = false
+                    },
+                    onSaveProfilesJSON = onSaveWorkspaceProfilesJSON
+                )
             }
         }
     }
@@ -671,6 +1150,7 @@ private fun DesktopOrderDetailBoard(
 @Composable
 private fun DesktopOrderHeader(
     order: StudioOrder,
+    workspace: StudioWorkspace?,
     workspaceSettings: StudioWorkspaceSettings,
     canAssign: Boolean,
     canEditWorkflow: Boolean,
@@ -680,161 +1160,138 @@ private fun DesktopOrderHeader(
     cardsUnlocked: Boolean,
     onCardsUnlockedChange: (Boolean) -> Unit,
     canManageCardLayout: Boolean,
+    isOrderIndependentLayout: Boolean,
     cardLayout: OrderDetailCardLayout,
     teamMembers: List<StudioTeamMember>,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
-    onSaveCardLayout: (OrderDetailCardLayout) -> Unit
+    onDetachOrderLayout: () -> Unit,
+    onResetOrderLayout: () -> Unit,
+    onSaveCardLayout: (OrderDetailCardLayout) -> Unit,
+    onOpenCardProfiles: () -> Unit,
+    currentUserId: String,
+    onSaveWorkspaceProfilesJSON: (String, String) -> Unit
 ) {
     val context = LocalContext.current
+    val headerDetails = rememberOrderHeaderDetailsState()
     var actionsOpen by remember { mutableStateOf(false) }
-    val hiddenCardCount = OrderDetailCardId.DefaultOrder.count { cardLayout.isVisible(it).not() }
+
+    @Composable
+    fun HeaderBadges() {
+        OrderHeaderBadges(
+            order = order,
+            canSeeFinancial = canSeeFinancial,
+            headerDetails = headerDetails
+        )
+    }
+
+    @Composable
+    fun HeaderActions() {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HeaderLockPill(
+                cardsUnlocked = cardsUnlocked,
+                canManageCardLayout = canManageCardLayout,
+                onCardsUnlockedChange = onCardsUnlockedChange
+            )
+            Box {
+                HeaderActionsMenuButton(onClick = { actionsOpen = true })
+                OrderHeaderActionsMenu(
+                    expanded = actionsOpen,
+                    onDismiss = { actionsOpen = false },
+                    canCustomize = canManageCardLayout && currentUserId.isNotBlank(),
+                    canSeeFinancial = canSeeFinancial,
+                    headerDetails = headerDetails,
+                    onCustomize = {
+                        actionsOpen = false
+                        onOpenCardProfiles()
+                    },
+                    onExportPdf = {
+                        actionsOpen = false
+                        shareOrderPdf(
+                            context = context,
+                            order = order,
+                            settings = workspaceSettings,
+                            canSeeFinancial = canSeeFinancial,
+                            advancedFinanceEnabled = financeAdvancedEnabled
+                        )
+                    }
+                )
+            }
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
+        shadowElevation = 1.dp
     ) {
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .heightIn(min = 58.dp)
+                .padding(horizontal = 24.dp, vertical = 8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = order.displayCustomerName,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                    text = order.designName.ifBlank { order.watchRef.ifBlank { "New Project" } },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            StatusPill(deliveryLabel(order), deliveryColor(order))
-            if (canSeeFinancial) StatusPill(money(order.orderValue), StudioGreen)
-            if (canAssign) {
-                AssignmentMenuForDetail(order = order, teamMembers = teamMembers, onAssignOrder = onAssignOrder)
-            }
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = if (cardsUnlocked) StudioGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.dp, if (cardsUnlocked) StudioGreen.copy(alpha = 0.22f) else MaterialTheme.colorScheme.outlineVariant),
-                onClick = { onCardsUnlockedChange(!cardsUnlocked) }
-            ) {
-                Text(
-                    if (cardsUnlocked) "Cards Unlocked" else "Cards Locked",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = if (cardsUnlocked) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-            Box {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = { actionsOpen = true }
+            val narrowHeader = maxWidth < 760.dp
+            val compactHeader = maxWidth < 1100.dp
+            if (narrowHeader) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = order.displayCustomerName.ifBlank { "New Project" },
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        HeaderActions()
+                    }
+                    HeaderBadges()
+                }
+            } else if (compactHeader) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Actions",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        fontSize = 12.sp,
+                        text = order.displayCustomerName.ifBlank { "New Project" },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
+                    HeaderBadges()
+                    HeaderActions()
                 }
-                DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Export PDF") },
-                        onClick = {
-                            actionsOpen = false
-                            shareOrderPdf(
-                                context = context,
-                                order = order,
-                                settings = workspaceSettings,
-                                canSeeFinancial = canSeeFinancial,
-                                advancedFinanceEnabled = financeAdvancedEnabled
-                            )
-                        }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 42.dp)
+                ) {
+                    Text(
+                        text = order.displayCustomerName.ifBlank { "New Project" },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .widthIn(max = 440.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
-                    if (canManageCardLayout) {
-                        DropdownMenuItem(
-                            text = { Text("Restore all hidden cards") },
-                            enabled = cardsUnlocked && hiddenCardCount > 0,
-                            onClick = {
-                                actionsOpen = false
-                                onSaveCardLayout(cardLayout.withAllCardsVisible())
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Auto-size all cards") },
-                            enabled = cardsUnlocked,
-                            onClick = {
-                                actionsOpen = false
-                                onSaveCardLayout(cardLayout.withAllCardsAutoHeight(order.id))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Reset column widths") },
-                            enabled = cardsUnlocked,
-                            onClick = {
-                                actionsOpen = false
-                                onSaveCardLayout(cardLayout.withDefaultColumnWidths())
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Reset board layout") },
-                            enabled = cardsUnlocked,
-                            onClick = {
-                                actionsOpen = false
-                                onSaveCardLayout(cardLayout.withDefaultDesktopBoard(order.id))
-                            }
-                        )
+                    Box(modifier = Modifier.align(Alignment.Center)) {
+                        HeaderBadges()
                     }
-                    if (canEditWorkflow) {
-                        DropdownMenuItem(
-                            text = { Text("Mark design and painting done") },
-                            onClick = {
-                                actionsOpen = false
-                                onUpdateOrderFields(order, mapOf("designStatus" to "Done", "paintingStatus" to "Done"))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Cancel project") },
-                            onClick = {
-                                actionsOpen = false
-                                onUpdateOrderFields(order, mapOf("designStatus" to "Cancelled", "paintingStatus" to "Cancelled"))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Mark dispatched") },
-                            onClick = {
-                                actionsOpen = false
-                                onUpdateOrderFields(order, mapOf("details" to mapOf("isDispatched" to true, "isDelivered" to false)))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Mark delivered") },
-                            onClick = {
-                                actionsOpen = false
-                                onUpdateOrderFields(order, mapOf("details" to mapOf("isDispatched" to true, "isDelivered" to true)))
-                            }
-                        )
-                    }
-                    if (canEditFinance) {
-                        DropdownMenuItem(
-                            text = { Text("Mark full payment received") },
-                            onClick = {
-                                actionsOpen = false
-                                onUpdateOrderFields(order, mapOf("finance" to mapOf("fullPaymentReceived" to true)))
-                            }
-                        )
+                    Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                        HeaderActions()
                     }
                 }
             }
@@ -843,8 +1300,926 @@ private fun DesktopOrderHeader(
 }
 
 @Composable
+private fun rememberOrderHeaderDetailsState(): OrderHeaderDetailsState {
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences(OrderDetailPrefsName, Context.MODE_PRIVATE)
+    }
+    var showDeliveryTime by remember {
+        mutableStateOf(prefs.getBoolean(OrderHeaderShowDeliveryTimeKey, true))
+    }
+    var showUpcomingSchedule by remember {
+        mutableStateOf(prefs.getBoolean(OrderHeaderShowUpcomingScheduleKey, true))
+    }
+    var showOrderValue by remember {
+        mutableStateOf(prefs.getBoolean(OrderHeaderShowOrderValueKey, true))
+    }
+    fun save(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+    }
+    return OrderHeaderDetailsState(
+        showDeliveryTime = showDeliveryTime,
+        showUpcomingSchedule = showUpcomingSchedule,
+        showOrderValue = showOrderValue,
+        setShowDeliveryTime = { value ->
+            showDeliveryTime = value
+            save(OrderHeaderShowDeliveryTimeKey, value)
+        },
+        setShowUpcomingSchedule = { value ->
+            showUpcomingSchedule = value
+            save(OrderHeaderShowUpcomingScheduleKey, value)
+        },
+        setShowOrderValue = { value ->
+            showOrderValue = value
+            save(OrderHeaderShowOrderValueKey, value)
+        }
+    )
+}
+
+@Composable
+private fun OrderHeaderBadges(
+    order: StudioOrder,
+    canSeeFinancial: Boolean,
+    headerDetails: OrderHeaderDetailsState,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    val nextSchedule = remember(order.scheduleReminders) { nextHeaderScheduleReminder(order) }
+    val hasVisibleBadge = (headerDetails.showUpcomingSchedule && nextSchedule != null) ||
+        headerDetails.showDeliveryTime ||
+        (headerDetails.showOrderValue && canSeeFinancial)
+    if (!hasVisibleBadge) return
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (headerDetails.showUpcomingSchedule && nextSchedule != null) {
+            HeaderMetricPill(
+                label = "${nextSchedule.title.ifBlank { "Reminder" }} · ${scheduleRelativeLabel(nextSchedule)}",
+                color = scheduleStatusColor(nextSchedule),
+                icon = Icons.Filled.Info,
+                compact = compact
+            )
+        }
+        if (headerDetails.showDeliveryTime) {
+            HeaderMetricPill(
+                label = deliveryLongLabel(order),
+                color = deliveryColor(order),
+                icon = Icons.Filled.DateRange,
+                compact = compact
+            )
+        }
+        if (headerDetails.showOrderValue && canSeeFinancial) {
+            HeaderMetricPill(
+                label = money(order.orderValue),
+                color = StudioGreen,
+                iconText = LocalCurrencySymbol.current,
+                compact = compact
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeaderMetricPill(
+    label: String,
+    color: Color,
+    icon: ImageVector? = null,
+    iconText: String? = null,
+    compact: Boolean = false
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.13f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.22f))
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = if (compact) 9.dp else 13.dp,
+                vertical = if (compact) 6.dp else 7.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
+        ) {
+            if (iconText != null) {
+                Text(
+                    text = iconText,
+                    color = color,
+                    fontSize = if (compact) 12.sp else 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(if (compact) 14.dp else 15.dp)
+                )
+            }
+            Text(
+                text = label,
+                color = color,
+                fontSize = if (compact) 12.sp else 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeaderLockPill(
+    cardsUnlocked: Boolean,
+    canManageCardLayout: Boolean,
+    onCardsUnlockedChange: (Boolean) -> Unit
+) {
+    val label = if (cardsUnlocked) "Cards Unlocked" else "Cards Locked"
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        onClick = {
+            if (canManageCardLayout) onCardsUnlockedChange(!cardsUnlocked)
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.LockOpen,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = textColor
+            )
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeaderActionsMenuButton(onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MoreHoriz,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = "Actions",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrderHeaderActionsMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    canCustomize: Boolean,
+    canSeeFinancial: Boolean,
+    headerDetails: OrderHeaderDetailsState,
+    onCustomize: () -> Unit,
+    onExportPdf: () -> Unit
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        Text(
+            text = "Order Header Details",
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        HeaderDetailsToggleMenuItem(
+            label = "Delivery Time",
+            checked = headerDetails.showDeliveryTime,
+            onToggle = { headerDetails.setShowDeliveryTime(!headerDetails.showDeliveryTime) }
+        )
+        HeaderDetailsToggleMenuItem(
+            label = "Upcoming Schedule",
+            checked = headerDetails.showUpcomingSchedule,
+            onToggle = { headerDetails.setShowUpcomingSchedule(!headerDetails.showUpcomingSchedule) }
+        )
+        if (canSeeFinancial) {
+            HeaderDetailsToggleMenuItem(
+                label = "Order Value",
+                checked = headerDetails.showOrderValue,
+                onToggle = { headerDetails.setShowOrderValue(!headerDetails.showOrderValue) }
+            )
+        }
+        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+        DropdownMenuItem(
+            text = { Text("Customize") },
+            leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+            enabled = canCustomize,
+            onClick = onCustomize
+        )
+        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+        DropdownMenuItem(
+            text = { Text("Export PDF") },
+            leadingIcon = { Icon(Icons.Filled.Description, contentDescription = null) },
+            onClick = onExportPdf
+        )
+    }
+}
+
+@Composable
+private fun HeaderDetailsToggleMenuItem(label: String, checked: Boolean, onToggle: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = {
+            Text(
+                text = if (checked) "✓" else "○",
+                color = StudioBlue,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 15.sp
+            )
+        },
+        onClick = onToggle
+    )
+}
+
+@Composable
+private fun CardLayoutProfilesDialog(
+    profilesJSON: String,
+    currentUserId: String,
+    workspace: StudioWorkspace?,
+    orderId: String,
+    cardLayout: OrderDetailCardLayout,
+    isOrderIndependentLayout: Boolean,
+    currentSnapshotJSON: String,
+    onDismiss: () -> Unit,
+    onLoadLayout: (OrderDetailCardLayout) -> Unit,
+    onApplyLayout: (OrderDetailCardLayout) -> Unit,
+    onDetachOrderLayout: () -> Unit,
+    onResetOrderLayout: () -> Unit,
+    onSaveProfilesJSON: (String, String) -> Unit
+) {
+    var profiles by remember(profilesJSON, currentUserId, currentSnapshotJSON) {
+        mutableStateOf(
+            savedCardLayoutProfilesForCurrentUser(
+                existingJSON = profilesJSON,
+                userId = currentUserId,
+                currentSnapshotJSON = currentSnapshotJSON
+            )
+        )
+    }
+    val teamProfiles = remember(profilesJSON, currentUserId) {
+        teamCardLayoutProfilesForDisplay(profilesJSON, currentUserId)
+    }
+    val followedTeamUserId = remember(profilesJSON, currentUserId) {
+        currentWorkspaceProfileSyncSourceUserId(profilesJSON, currentUserId)
+    }
+    val followedTeamProfile = remember(teamProfiles, followedTeamUserId) {
+        teamProfiles.firstOrNull { it.userId == followedTeamUserId }
+    }
+    var workingLayout by remember(cardLayout) { mutableStateOf(cardLayout) }
+    val workingSnapshotJSON = workingLayout.toWorkspaceSnapshotJSON()
+
+    fun persist(nextProfiles: List<SavedCardLayoutProfile>, message: String) {
+        val cleanProfiles = normalizedSavedCardLayoutProfiles(nextProfiles, workingSnapshotJSON)
+        profiles = cleanProfiles
+        val updatedJSON = upsertSavedCardLayoutProfilesJSON(
+            existingJSON = profilesJSON,
+            userId = currentUserId,
+            workspace = workspace,
+            savedProfiles = cleanProfiles,
+            activeSnapshotJSON = workingSnapshotJSON
+        )
+        if (updatedJSON != null) onSaveProfilesJSON(updatedJSON, message)
+    }
+
+    fun loadTeamProfile(profile: TeamCardLayoutProfile) {
+        val layout = orderDetailCardLayoutFromSnapshotJSON(profile.snapshotJSON) ?: return
+        workingLayout = layout
+        if (!profile.isMine) {
+            val ownSnapshotJSON = currentWorkspaceProfileSnapshotJSON(profilesJSON, currentUserId)
+                .ifBlank { workingSnapshotJSON }
+            val updatedJSON = upsertSavedCardLayoutProfilesJSON(
+                existingJSON = profilesJSON,
+                userId = currentUserId,
+                workspace = workspace,
+                savedProfiles = profiles,
+                activeSnapshotJSON = ownSnapshotJSON,
+                syncSourceUserId = profile.userId
+            )
+            if (updatedJSON != null) {
+                onSaveProfilesJSON(updatedJSON, "Synced with team card profile: ${profile.displayName}")
+            }
+            onDismiss()
+            return
+        }
+        onLoadLayout(layout)
+    }
+
+    fun loadPersonalProfile(profile: SavedCardLayoutProfile) {
+        val layout = orderDetailCardLayoutFromSnapshotJSON(profile.snapshotJSON) ?: return
+        workingLayout = layout
+        val updatedJSON = upsertSavedCardLayoutProfilesJSON(
+            existingJSON = profilesJSON,
+            userId = currentUserId,
+            workspace = workspace,
+            savedProfiles = profiles,
+            activeSnapshotJSON = profile.snapshotJSON
+        )
+        if (updatedJSON != null) {
+            onSaveProfilesJSON(updatedJSON, "${profile.name.trim().ifBlank { "Card profile" }} loaded.")
+        }
+        onLoadLayout(layout)
+    }
+
+    fun stopFollowingTeamProfile() {
+        val ownSnapshotJSON = currentWorkspaceProfileSnapshotJSON(profilesJSON, currentUserId)
+            .ifBlank { workingSnapshotJSON }
+        val updatedJSON = upsertSavedCardLayoutProfilesJSON(
+            existingJSON = profilesJSON,
+            userId = currentUserId,
+            workspace = workspace,
+            savedProfiles = profiles,
+            activeSnapshotJSON = ownSnapshotJSON
+        )
+        if (updatedJSON != null) {
+            onSaveProfilesJSON(updatedJSON, "Team card sync stopped.")
+        }
+        val ownLayout = orderDetailCardLayoutFromSnapshotJSON(ownSnapshotJSON)
+        if (ownLayout != null) {
+            workingLayout = ownLayout
+            onLoadLayout(ownLayout)
+        } else {
+            onDismiss()
+        }
+    }
+
+    fun applyWorkingLayout(nextLayout: OrderDetailCardLayout) {
+        workingLayout = nextLayout
+        onApplyLayout(nextLayout)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Workspace Customization", fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Choose which blocks are visible and manage the layout for this order.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 680.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (followedTeamProfile != null) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = StudioGreen.copy(alpha = 0.10f),
+                        border = BorderStroke(1.dp, StudioGreen.copy(alpha = 0.20f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(38.dp),
+                                shape = RoundedCornerShape(13.dp),
+                                color = StudioGreen.copy(alpha = 0.14f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = StudioGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Following ${followedTeamProfile.displayName}",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "This board uses their latest card layout. Manual card changes switch back to your own profile.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            TextButton(onClick = { stopFollowingTeamProfile() }) {
+                                Text("Use mine")
+                            }
+                        }
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isOrderIndependentLayout) StudioWarningOrange.copy(alpha = 0.10f) else StudioBlue.copy(alpha = 0.08f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isOrderIndependentLayout) StudioWarningOrange.copy(alpha = 0.22f) else StudioBlue.copy(alpha = 0.16f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(38.dp),
+                                shape = RoundedCornerShape(13.dp),
+                                color = if (isOrderIndependentLayout) StudioWarningOrange.copy(alpha = 0.14f) else StudioBlue.copy(alpha = 0.14f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Filled.Settings,
+                                        contentDescription = null,
+                                        tint = if (isOrderIndependentLayout) StudioWarningOrange else StudioBlue,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Workspace Customization",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    if (isOrderIndependentLayout) "This order has its own layout" else "This order uses the shared layout",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Text(
+                            if (isOrderIndependentLayout) {
+                                "Changes here affect only this order. Other orders continue using the shared layout."
+                            } else {
+                                "Changes here update the shared layout for normal orders. You can separate this order whenever needed."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isOrderIndependentLayout) {
+                                Button(onClick = { onApplyLayout(workingLayout) }) {
+                                    Text("Save this order")
+                                }
+                                TextButton(onClick = onResetOrderLayout) {
+                                    Text("Rejoin shared")
+                                }
+                            } else {
+                                Button(onClick = onDetachOrderLayout) {
+                                    Text("Make independent")
+                                }
+                                TextButton(onClick = { onApplyLayout(workingLayout) }) {
+                                    Text("Save shared")
+                                }
+                            }
+                        }
+                        HorizontalDivider()
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Board cleanup",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    enabled = OrderDetailCardId.DefaultOrder.any { !workingLayout.isVisible(it) },
+                                    onClick = { applyWorkingLayout(workingLayout.withAllCardsVisible()) }
+                                ) {
+                                    Text("Restore hidden")
+                                }
+                                TextButton(
+                                    onClick = { applyWorkingLayout(workingLayout.withAllCardsAutoHeight(orderId)) }
+                                ) {
+                                    Text("Auto-size cards")
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { applyWorkingLayout(workingLayout.withDefaultColumnWidths()) }
+                                ) {
+                                    Text("Reset columns")
+                                }
+                                TextButton(
+                                    onClick = { applyWorkingLayout(workingLayout.withDefaultDesktopBoard(orderId)) }
+                                ) {
+                                    Text("Reset board")
+                                }
+                            }
+                        }
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Layout Profiles",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 17.sp
+                            )
+                            Text(
+                                "Save and load different card layout presets for this order area.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                val nextIndex = profiles.size + 1
+                                persist(
+                                    profiles + SavedCardLayoutProfile(
+                                        id = UUID.randomUUID().toString(),
+                                        name = "Profile $nextIndex",
+                                        snapshotJSON = workingSnapshotJSON
+                                    ),
+                                    "Card profile added."
+                                )
+                            }
+                        ) {
+                            Text("+ Add")
+                        }
+                    }
+                }
+                profiles.forEachIndexed { index, profile ->
+                    val parsedLayout = remember(profile.snapshotJSON) {
+                        orderDetailCardLayoutFromSnapshotJSON(profile.snapshotJSON)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(36.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = StudioBlue.copy(alpha = 0.12f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Filled.TableChart,
+                                            contentDescription = null,
+                                            tint = StudioBlue,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        profile.name.ifBlank { "Profile ${index + 1}" },
+                                        fontWeight = FontWeight.ExtraBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        "${orderDetailCardLayoutFromSnapshotJSON(profile.snapshotJSON)?.columns?.sumOf { it.size } ?: 0} cards",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = profile.name,
+                                onValueChange = { value ->
+                                    profiles = profiles.toMutableList().also { next ->
+                                        next[index] = profile.copy(name = value.take(48))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("Profile name") }
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val next = profiles.toMutableList()
+                                        next[index] = profile.copy(
+                                            name = profile.name.trim().ifBlank { "Profile ${index + 1}" },
+                                            snapshotJSON = workingSnapshotJSON
+                                        )
+                                        persist(next, "Card profile saved.")
+                                    }
+                                ) {
+                                    Text("Save")
+                                }
+                                TextButton(
+                                    enabled = parsedLayout != null,
+                                    onClick = { loadPersonalProfile(profile) }
+                                ) {
+                                    Text("Load")
+                                }
+                                TextButton(
+                                    enabled = profiles.size > 1,
+                                    onClick = {
+                                        val next = profiles.toMutableList().also { it.removeAt(index) }
+                                        persist(next, "Card profile deleted.")
+                                    }
+                                ) {
+                                    Text("Delete", color = if (profiles.size > 1) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (teamProfiles.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text(
+                        "Team Card Profiles",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        "Load another team member's current card layout into this Android board.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    teamProfiles.forEach { profile ->
+                        val parsedLayout = remember(profile.snapshotJSON) {
+                            orderDetailCardLayoutFromSnapshotJSON(profile.snapshotJSON)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (profile.isMine) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (profile.isMine) StudioBlue.copy(alpha = 0.18f) else MaterialTheme.colorScheme.outlineVariant
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(36.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = StudioBlue.copy(alpha = 0.12f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Filled.Person,
+                                            contentDescription = null,
+                                            tint = StudioBlue,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            profile.displayName,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (profile.isMine) {
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = StudioBlue.copy(alpha = 0.12f)
+                                            ) {
+                                                Text(
+                                                    "Mine",
+                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                    color = StudioBlue,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.ExtraBold
+                                                )
+                                            }
+                                        } else if (profile.userId == followedTeamUserId) {
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = StudioGreen.copy(alpha = 0.14f)
+                                            ) {
+                                                Text(
+                                                    "Following",
+                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                    color = StudioGreen,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.ExtraBold
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        profile.subtitle,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        "${parsedLayout?.columns?.sumOf { it.size } ?: 0} cards",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                TextButton(
+                                    enabled = parsedLayout != null,
+                                    onClick = { loadTeamProfile(profile) }
+                                ) {
+                                    Text(if (profile.isMine) "Load" else "Sync")
+                                }
+                            }
+                        }
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = StudioGreen.copy(alpha = 0.13f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = StudioGreen,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Text(
+                            if (followedTeamProfile != null) "Using synced team card profile" else "Using your card profile",
+                            color = StudioGreen,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+                HorizontalDivider()
+                Text(
+                    "Workspace Blocks",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp
+                )
+                Text(
+                    "Show or hide the cards you want to see in the order detail workspace.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OrderDetailCardId.DefaultOrder.forEach { cardId ->
+                    val roleAllowsCard = workspace?.memberAccess?.let { access ->
+                        access.allows(cardId.accessKey) && (cardId != OrderDetailCardId.Financial || access.financialInfo)
+                    } != false
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (roleAllowsCard) {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                        } else {
+                            StudioWarningOrange.copy(alpha = 0.08f)
+                        },
+                        border = BorderStroke(
+                            1.dp,
+                            if (roleAllowsCard) MaterialTheme.colorScheme.outlineVariant else StudioWarningOrange.copy(alpha = 0.22f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(34.dp),
+                                shape = RoundedCornerShape(11.dp),
+                                color = orderDetailCardAccent(cardId).copy(alpha = 0.12f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        orderDetailCardIcon(cardId),
+                                        contentDescription = null,
+                                        tint = orderDetailCardAccent(cardId),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    cardId.title,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    when {
+                                        !roleAllowsCard -> "Locked by role permissions"
+                                        workingLayout.isVisible(cardId) -> "Visible in this board"
+                                        else -> "Hidden from this board"
+                                    },
+                                    color = if (roleAllowsCard) MaterialTheme.colorScheme.onSurfaceVariant else StudioWarningOrange,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = workingLayout.isVisible(cardId),
+                                enabled = roleAllowsCard,
+                                onCheckedChange = { visible ->
+                                    applyWorkingLayout(workingLayout.withCardVisibility(cardId, visible))
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Done")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
 private fun DesktopColumn(
     widthDp: Int,
+    minHeightDp: Int,
     resizable: Boolean,
     isResizing: Boolean,
     onResizeStart: () -> Unit,
@@ -856,11 +2231,13 @@ private fun DesktopColumn(
     Box(
         modifier = Modifier
             .width(widthDp.dp)
+            .heightIn(min = minHeightDp.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = if (resizable) 10.dp else 0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = minHeightDp.dp)
+                    .padding(end = if (resizable) 14.dp else 0.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
@@ -869,13 +2246,13 @@ private fun DesktopColumn(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
-                    .width(18.dp)
+                    .width(28.dp)
                     .pointerInput(widthDp) {
-                        detectHorizontalDragGestures(
+                        detectDragGestures(
                             onDragStart = { onResizeStart() },
-                            onHorizontalDrag = { change, dragAmount ->
+                            onDrag = { change, dragAmount ->
                                 change.consume()
-                                onResizeBy(dragAmount)
+                                onResizeBy(dragAmount.x)
                             },
                             onDragEnd = { onResizeEnd() },
                             onDragCancel = { onResizeCancel() }
@@ -892,6 +2269,83 @@ private fun DesktopColumn(
                 ) {}
             }
         }
+    }
+}
+
+@Composable
+private fun BoardQuickActionsStrip(
+    visibleCardCount: Int,
+    hiddenCardCount: Int,
+    columnCount: Int,
+    cardsUnlocked: Boolean,
+    canManageCardLayout: Boolean,
+    isOrderIndependentLayout: Boolean,
+    onCustomizeCards: () -> Unit,
+    onShowAllCards: () -> Unit,
+    onAutoSizeCards: () -> Unit,
+    onResetColumns: () -> Unit,
+    onResetBoard: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        BoardInfoPill("$visibleCardCount visible", StudioGreen)
+        BoardInfoPill("$hiddenCardCount hidden", if (hiddenCardCount > 0) StudioWarningOrange else MaterialTheme.colorScheme.onSurfaceVariant)
+        BoardInfoPill("$columnCount columns", StudioBlue)
+        BoardInfoPill(if (isOrderIndependentLayout) "Order Layout" else "Shared Layout", if (isOrderIndependentLayout) StudioWarningOrange else StudioBlue)
+        if (canManageCardLayout && cardsUnlocked) {
+            BoardActionChip("Customize cards", onCustomizeCards)
+            if (hiddenCardCount > 0) {
+                BoardActionChip("Show hidden", onShowAllCards)
+            }
+            BoardActionChip("Auto-size", onAutoSizeCards)
+            BoardActionChip("Reset columns", onResetColumns)
+            BoardActionChip("Reset board", onResetBoard)
+        } else {
+            BoardInfoPill(if (canManageCardLayout) "Cards locked" else "Layout read-only", MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun BoardInfoPill(label: String, color: Color) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = color.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.18f))
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+            color = color,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun BoardActionChip(label: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = StudioBlue.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, StudioBlue.copy(alpha = 0.20f)),
+        onClick = onClick
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            color = StudioBlue,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1
+        )
     }
 }
 
@@ -939,38 +2393,58 @@ private fun HiddenCardsBar(
 private fun OrderLayoutCardFrame(
     cardId: OrderDetailCardId,
     cardsUnlocked: Boolean,
+    isDragging: Boolean = false,
     customizationActions: OrderCardCustomizationActions? = null,
-    onDropCard: (OrderDetailCardId) -> Unit,
+    onDragEnd: () -> Unit = {},
+    onDropCard: (OrderDetailCardId, Boolean) -> Unit,
     content: @Composable () -> Unit
 ) {
     var isDropTarget by remember(cardId) { mutableStateOf(false) }
-    val dropTarget = remember(cardId, cardsUnlocked) {
+    var dropAfter by remember(cardId) { mutableStateOf(true) }
+    var cardHeightPx by remember(cardId) { mutableStateOf(0) }
+    fun updateDropPlacement(event: DragAndDropEvent): Boolean {
+        val nextDropAfter = cardHeightPx <= 0 || event.toAndroidDragEvent().y > cardHeightPx / 2f
+        dropAfter = nextDropAfter
+        return nextDropAfter
+    }
+    val dropTarget = remember(cardId, cardsUnlocked, cardHeightPx) {
         object : DragAndDropTarget {
             override fun onEntered(event: DragAndDropEvent) {
-                if (cardsUnlocked && draggedCardFromEvent(event) != cardId) isDropTarget = true
+                if (cardsUnlocked && draggedCardFromEvent(event) != cardId) {
+                    isDropTarget = true
+                    updateDropPlacement(event)
+                }
+            }
+
+            override fun onMoved(event: DragAndDropEvent) {
+                if (isDropTarget) updateDropPlacement(event)
             }
 
             override fun onExited(event: DragAndDropEvent) {
                 isDropTarget = false
+                dropAfter = true
             }
 
             override fun onEnded(event: DragAndDropEvent) {
                 isDropTarget = false
+                dropAfter = true
+                onDragEnd()
             }
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 val dragged = draggedCardFromEvent(event) ?: return false
+                val insertAfter = updateDropPlacement(event)
                 isDropTarget = false
-                if (!cardsUnlocked || dragged == cardId) return false
-                onDropCard(dragged)
+                dropAfter = true
+                if (!cardsUnlocked || dragged == cardId) {
+                    onDragEnd()
+                    return false
+                }
+                onDropCard(dragged, insertAfter)
+                onDragEnd()
                 return true
             }
         }
-    }
-    val dragModifier = if (cardsUnlocked) {
-        Modifier.dragAndDropSource { _ -> cardTransferData(cardId) }
-    } else {
-        Modifier
     }
     val dropModifier = if (cardsUnlocked) {
         Modifier.dragAndDropTarget(
@@ -984,6 +2458,12 @@ private fun OrderLayoutCardFrame(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = if (isDragging) 0.58f else 1f
+                scaleX = if (isDragging) 0.985f else 1f
+                scaleY = if (isDragging) 0.985f else 1f
+            }
+            .onSizeChanged { size -> cardHeightPx = size.height }
             .clip(RoundedCornerShape(16.dp))
             .border(
                 BorderStroke(
@@ -994,18 +2474,94 @@ private fun OrderLayoutCardFrame(
             )
             .padding(if (isDropTarget) 2.dp else 0.dp)
             .then(dropModifier)
-            .then(dragModifier)
     ) {
-        CompositionLocalProvider(LocalOrderCardActions provides customizationActions) {
+        CompositionLocalProvider(
+            LocalDetailCardsUnlocked provides cardsUnlocked,
+            LocalOrderCardActions provides customizationActions
+        ) {
             content()
         }
+        if (isDropTarget) {
+            Surface(
+                modifier = Modifier
+                    .align(if (dropAfter) Alignment.BottomCenter else Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(5.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = StudioBlue.copy(alpha = 0.78f)
+            ) {}
+        }
     }
+}
+
+@Composable
+private fun BoardEdgeScrollDropZone(
+    modifier: Modifier,
+    enabled: Boolean,
+    onDragEnd: () -> Unit = {},
+    onScrollStep: () -> Unit,
+    onDropCard: ((OrderDetailCardId) -> Unit)? = null
+) {
+    var isActive by remember { mutableStateOf(false) }
+    val latestOnScrollStep by rememberUpdatedState(onScrollStep)
+    val latestOnDropCard by rememberUpdatedState(onDropCard)
+
+    LaunchedEffect(isActive, enabled) {
+        while (isActive && enabled) {
+            latestOnScrollStep()
+            delay(16)
+        }
+    }
+
+    val target = remember(enabled) {
+        object : DragAndDropTarget {
+            override fun onEntered(event: DragAndDropEvent) {
+                if (!enabled) return
+                isActive = true
+                latestOnScrollStep()
+            }
+
+            override fun onMoved(event: DragAndDropEvent) {
+                if (enabled) latestOnScrollStep()
+            }
+
+            override fun onExited(event: DragAndDropEvent) {
+                isActive = false
+            }
+
+            override fun onEnded(event: DragAndDropEvent) {
+                isActive = false
+                onDragEnd()
+            }
+
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                val dragged = draggedCardFromEvent(event)
+                isActive = false
+                if (!enabled || dragged == null) return false
+                latestOnDropCard?.invoke(dragged) ?: return false
+                onDragEnd()
+                return true
+            }
+        }
+    }
+    Box(
+        modifier = modifier
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { event -> enabled && acceptsCardDrag(event) },
+                target = target
+            )
+            .background(
+                if (isActive) StudioBlue.copy(alpha = 0.06f) else Color.Transparent
+            )
+    )
 }
 
 @Composable
 private fun ColumnDropZone(
     enabled: Boolean,
     hasCards: Boolean,
+    heightDp: Int,
+    onDragEnd: () -> Unit = {},
     onDropCard: (OrderDetailCardId) -> Unit
 ) {
     var isDropTarget by remember { mutableStateOf(false) }
@@ -1021,13 +2577,18 @@ private fun ColumnDropZone(
 
             override fun onEnded(event: DragAndDropEvent) {
                 isDropTarget = false
+                onDragEnd()
             }
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 val dragged = draggedCardFromEvent(event) ?: return false
                 isDropTarget = false
-                if (!enabled) return false
+                if (!enabled) {
+                    onDragEnd()
+                    return false
+                }
                 onDropCard(dragged)
+                onDragEnd()
                 return true
             }
         }
@@ -1036,16 +2597,24 @@ private fun ColumnDropZone(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (hasCards) 34.dp else 78.dp)
+            .height(heightDp.coerceAtLeast(if (hasCards) 34 else 78).dp)
             .dragAndDropTarget(
                 shouldStartDragAndDrop = { event -> enabled && acceptsCardDrag(event) },
                 target = target
             ),
         shape = RoundedCornerShape(14.dp),
-        color = if (isDropTarget) StudioBlue.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        color = when {
+            isDropTarget -> StudioBlue.copy(alpha = 0.10f)
+            hasCards -> Color.Transparent
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        },
         border = BorderStroke(
             1.dp,
-            if (isDropTarget) StudioBlue.copy(alpha = 0.65f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            when {
+                isDropTarget -> StudioBlue.copy(alpha = 0.65f)
+                hasCards -> Color.Transparent
+                else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            }
         )
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -1062,6 +2631,7 @@ private fun ColumnDropZone(
 @Composable
 private fun CardInsertionDropZone(
     enabled: Boolean,
+    onDragEnd: () -> Unit = {},
     onDropCard: (OrderDetailCardId) -> Unit
 ) {
     if (!enabled) return
@@ -1078,13 +2648,18 @@ private fun CardInsertionDropZone(
 
             override fun onEnded(event: DragAndDropEvent) {
                 isDropTarget = false
+                onDragEnd()
             }
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 val dragged = draggedCardFromEvent(event) ?: return false
                 isDropTarget = false
-                if (!enabled) return false
+                if (!enabled) {
+                    onDragEnd()
+                    return false
+                }
                 onDropCard(dragged)
+                onDragEnd()
                 return true
             }
         }
@@ -1170,7 +2745,11 @@ private fun OrderDetailCardContent(
             canEditWorkflow = canEditWorkflow,
             onUpdateOrderFields = onUpdateOrderFields
         )
-        OrderDetailCardId.Delivery -> TimelineDeliveryCard(order = order)
+        OrderDetailCardId.Delivery -> TimelineDeliveryCard(
+            order = order,
+            canEditWorkflow = canEditWorkflow,
+            onUpdateOrderFields = onUpdateOrderFields
+        )
         OrderDetailCardId.Notes -> DesktopNotesCard(
             order = order,
             workspaceSettings = workspaceSettings,
@@ -1244,6 +2823,7 @@ private fun DesktopPreviewCard(
     var imageFailed by remember(displayPreviewUrl) { mutableStateOf(false) }
     var linkEditing by remember(order.id) { mutableStateOf(false) }
     var linkDraft by remember(order.id, previewUrl) { mutableStateOf(previewUrl) }
+    var actionMenuOpen by remember(order.id) { mutableStateOf(false) }
     val previewImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             val fileName = displayNameForUri(context, uri)
@@ -1274,9 +2854,9 @@ private fun DesktopPreviewCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .height(310.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f)),
             contentAlignment = Alignment.Center
         ) {
             val bitmap = previewBitmap
@@ -1306,16 +2886,97 @@ private fun DesktopPreviewCard(
                     }
                 }
             } else {
-                Text(
-                    text = when {
-                        displayPreviewUrl.isBlank() -> "No preview image provided."
-                        imageFailed -> "Preview link is not an image."
-                        else -> "Loading preview..."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PhotoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(42.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
+                    )
+                    Text(
+                        text = when {
+                            displayPreviewUrl.isBlank() -> "No preview image provided."
+                            imageFailed -> "Preview link is not an image."
+                            else -> "Loading preview..."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(14.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    tonalElevation = 3.dp,
+                    onClick = { actionMenuOpen = true }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreHoriz,
+                        contentDescription = "Preview image actions",
+                        modifier = Modifier.padding(11.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(expanded = actionMenuOpen, onDismissRequest = { actionMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (previewUrl.isBlank()) "Upload Image" else "Replace Image") },
+                        leadingIcon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
+                        enabled = canEditPreview,
+                        onClick = {
+                            actionMenuOpen = false
+                            previewImagePicker.launch("image/*")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (previewUrl.isBlank()) "Paste Link" else "Edit Link") },
+                        leadingIcon = { Icon(Icons.Filled.Description, contentDescription = null) },
+                        enabled = canEditPreview,
+                        onClick = {
+                            actionMenuOpen = false
+                            linkDraft = previewUrl
+                            linkEditing = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Use Latest Client Image") },
+                        leadingIcon = { Icon(Icons.Filled.TableChart, contentDescription = null) },
+                        enabled = canEditPreview && latestImageFile != null && latestImageFile.downloadUrl != previewUrl,
+                        onClick = {
+                            actionMenuOpen = false
+                            if (latestImageFile != null) {
+                                onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to latestImageFile.downloadUrl)))
+                            }
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Open Image") },
+                        enabled = displayPreviewUrl.isNotBlank(),
+                        onClick = {
+                            actionMenuOpen = false
+                            if (displayPreviewUrl.isNotBlank()) uriHandler.openUri(displayPreviewUrl)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove Image", color = StudioRed) },
+                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = StudioRed) },
+                        enabled = canEditPreview && previewUrl.isNotBlank(),
+                        onClick = {
+                            actionMenuOpen = false
+                            onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to "")))
+                        }
+                    )
+                }
             }
         }
         if (linkEditing) {
@@ -1345,57 +3006,6 @@ private fun DesktopPreviewCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Cancel", fontWeight = FontWeight.ExtraBold)
-                }
-            }
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(
-                    onClick = { if (displayPreviewUrl.isNotBlank()) uriHandler.openUri(displayPreviewUrl) },
-                    enabled = displayPreviewUrl.isNotBlank(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Open", fontWeight = FontWeight.ExtraBold)
-                }
-                TextButton(
-                    onClick = { previewImagePicker.launch("image/*") },
-                    enabled = canEditPreview,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (previewUrl.isBlank()) "Upload Image" else "Replace Image", fontWeight = FontWeight.ExtraBold)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(
-                    onClick = {
-                        if (latestImageFile != null) {
-                            onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to latestImageFile.downloadUrl)))
-                        }
-                    },
-                    enabled = canEditPreview && latestImageFile != null && latestImageFile.downloadUrl != previewUrl,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Use Latest", fontWeight = FontWeight.ExtraBold)
-                }
-                TextButton(
-                    onClick = {
-                        linkDraft = previewUrl
-                        linkEditing = true
-                    },
-                    enabled = canEditPreview,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (previewUrl.isBlank()) "Paste Link" else "Edit Link", fontWeight = FontWeight.ExtraBold)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(
-                    onClick = {
-                        onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to "")))
-                    },
-                    enabled = canEditPreview && previewUrl.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Remove", color = StudioRed, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
@@ -1484,90 +3094,164 @@ private fun DesktopClientFilesCard(
     }
 
     DetailCard(title = "Client Files") {
-        Text(
-            "PDF, image, PSD and PSB files for this order. Visible to workspace members who can open this order.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Button(
-            onClick = { filePicker.launch(arrayOf("*/*")) },
-            shape = RoundedCornerShape(10.dp)
+        ClientFileDropUploadArea(
+            order = order,
+            onUploadClientFile = onUploadClientFile
         ) {
-            Text("Upload File", fontWeight = FontWeight.ExtraBold)
-        }
-        if (order.clientFiles.isEmpty()) {
-            DetailListRow("No client files yet.", "Upload PDFs, images, PSD or PSB files that belong to this client order.", MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            order.clientFiles.take(5).forEach { file ->
-                DetailListRow(
-                    title = file.fileName,
-                    subtitle = listOf(fileSizeLabel(file.fileSize), shortDateOrDash(file.uploadedAt)).filter { it.isNotBlank() }.joinToString(" · "),
-                    tone = StudioBlue
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
-                        enabled = file.downloadUrl.isNotBlank(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Open", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = {
-                            if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
-                                onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
-                            }
-                        },
-                        enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Preview", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = {
-                            renameFileId = file.id
-                            renameText = file.fileName
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Rename", fontWeight = FontWeight.ExtraBold)
-                    }
-                }
-                if (renameFileId == file.id) {
-                    OutlinedTextField(
-                        value = renameText,
-                        onValueChange = { renameText = it },
-                        label = { Text("File name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+            Text(
+                "PDF, image, PSD and PSB files for this order. Visible to workspace members who can open this order.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Button(
+                onClick = { filePicker.launch(arrayOf("*/*")) },
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Upload File", fontWeight = FontWeight.ExtraBold)
+            }
+            if (order.clientFiles.isEmpty()) {
+                DetailListRow("No client files yet.", "Upload PDFs, images, PSD or PSB files that belong to this client order.", MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                val visibleClientFiles = order.clientFiles.take(3)
+                visibleClientFiles.forEach { file ->
+                    DetailListRow(
+                        title = file.fileName,
+                        subtitle = listOf(fileSizeLabel(file.fileSize), shortDateOrDash(file.uploadedAt)).filter { it.isNotBlank() }.joinToString(" · "),
+                        tone = StudioBlue
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = {
-                                onRenameClientFile(order, file.id, renameText.trim())
-                                renameFileId = ""
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
+                            enabled = file.downloadUrl.isNotBlank(),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text("Save", fontWeight = FontWeight.ExtraBold)
+                            Text("Open", fontWeight = FontWeight.ExtraBold)
                         }
                         TextButton(
                             onClick = {
-                                onDeleteClientFile(order, file.id)
-                                renameFileId = ""
+                                if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
+                                    onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
+                                }
+                            },
+                            enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Preview", fontWeight = FontWeight.ExtraBold)
+                        }
+                        TextButton(
+                            onClick = {
+                                renameFileId = file.id
+                                renameText = file.fileName
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                            Text("Rename", fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                    if (renameFileId == file.id) {
+                        OutlinedTextField(
+                            value = renameText,
+                            onValueChange = { renameText = it },
+                            label = { Text("File name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = {
+                                    onRenameClientFile(order, file.id, renameText.trim())
+                                    renameFileId = ""
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Save", fontWeight = FontWeight.ExtraBold)
+                            }
+                            TextButton(
+                                onClick = {
+                                    onDeleteClientFile(order, file.id)
+                                    renameFileId = ""
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                            }
                         }
                     }
                 }
+                if (order.clientFiles.size > visibleClientFiles.size) {
+                    InfoRow("More Files", "+${order.clientFiles.size - visibleClientFiles.size}")
+                }
             }
-            if (order.clientFiles.size > 5) InfoRow("More Files", "+${order.clientFiles.size - 5}")
         }
+    }
+}
+
+@Composable
+private fun ClientFileDropUploadArea(
+    order: StudioOrder,
+    enabled: Boolean = true,
+    onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val context = LocalContext.current
+    var isDropTarget by remember(order.id) { mutableStateOf(false) }
+    val dropTarget = remember(order.id, context, enabled, onUploadClientFile) {
+        object : DragAndDropTarget {
+            override fun onEntered(event: DragAndDropEvent) {
+                if (enabled && acceptsClientFileDrag(event)) isDropTarget = true
+            }
+
+            override fun onExited(event: DragAndDropEvent) {
+                isDropTarget = false
+            }
+
+            override fun onEnded(event: DragAndDropEvent) {
+                isDropTarget = false
+            }
+
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                isDropTarget = false
+                if (!enabled) return false
+                val uris = clientFileUrisFromEvent(event)
+                if (uris.isEmpty()) return false
+                runCatching { context.findActivity()?.requestDragAndDropPermissions(event.toAndroidDragEvent()) }
+                val uploadedCount = uris.count { uri ->
+                    uploadClientFileFromUri(
+                        context = context,
+                        order = order,
+                        uri = uri,
+                        onUploadClientFile = onUploadClientFile
+                    )
+                }
+                if (uploadedCount == 0) {
+                    Toast.makeText(context, "Selected file could not be read.", Toast.LENGTH_SHORT).show()
+                }
+                return uploadedCount > 0
+            }
+        }
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { event -> enabled && acceptsClientFileDrag(event) },
+                target = dropTarget
+            ),
+        shape = RoundedCornerShape(13.dp),
+        color = if (isDropTarget) StudioBlue.copy(alpha = 0.10f) else Color.Transparent,
+        border = BorderStroke(
+            width = if (isDropTarget) 1.dp else 0.dp,
+            color = if (isDropTarget) StudioBlue.copy(alpha = 0.55f) else Color.Transparent
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(if (isDropTarget) 10.dp else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content
+        )
     }
 }
 
@@ -1580,142 +3264,133 @@ private fun DesktopTodoCard(
 ) {
     var newTaskTitle by remember(order.id) { mutableStateOf("") }
     var newTaskPriority by remember(order.id) { mutableStateOf("Normal") }
-    var newTaskDueDays by remember(order.id) { mutableStateOf("") }
+    var newTaskHasDue by remember(order.id) { mutableStateOf(false) }
     var newTaskAssigneeId by remember(order.id) { mutableStateOf("") }
+    val openCount = order.todoItems.count { !it.isDone }
+        .takeIf { order.todoItems.isNotEmpty() }
+        ?: (order.todoCount - order.completedTodoCount).coerceAtLeast(0)
+    val doneCount = order.todoItems.count { it.isDone }
+        .takeIf { order.todoItems.isNotEmpty() }
+        ?: order.completedTodoCount
+    val overdueCount = order.todoItems.count { item ->
+        !item.isDone && item.dueAt?.before(Date()) == true
+    }
+    val selectedAssignee = teamMembers.firstOrNull { it.id == newTaskAssigneeId }
 
     DetailCard(title = "To Do") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            MetricTile(modifier = Modifier.weight(1f), label = "Open", value = (order.todoCount - order.completedTodoCount).coerceAtLeast(0).toString(), color = StudioBlue)
-            MetricTile(modifier = Modifier.weight(1f), label = "Done", value = order.completedTodoCount.toString(), color = StudioGreen)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = newTaskTitle,
-                onValueChange = { newTaskTitle = it },
-                label = { Text("Add a task...") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    val title = newTaskTitle.trim()
-                    if (title.isNotBlank()) {
-                        val patch = mutableMapOf<String, Any?>(
-                            "action" to "add",
-                            "title" to title,
-                            "priority" to newTaskPriority
-                        )
-                        val selectedAssignee = teamMembers.firstOrNull { it.id == newTaskAssigneeId }
-                        if (canAssignTasks && selectedAssignee != null) {
-                            patch["assignedToUid"] = selectedAssignee.id
-                            patch["assignedToEmail"] = selectedAssignee.email
-                        }
-                        todoDueDateFromDays(newTaskDueDays)?.let { patch["dueDate"] = it }
-                        onUpdateOrderFields(order, mapOf("todo" to patch))
-                        newTaskTitle = ""
-                        newTaskPriority = "Normal"
-                        newTaskDueDays = ""
-                        newTaskAssigneeId = ""
-                    }
-                },
-                shape = RoundedCornerShape(10.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text("+", fontWeight = FontWeight.ExtraBold)
-            }
-        }
-        ChoiceRow(
-            label = "Priority",
-            value = newTaskPriority,
-            options = listOf("Low", "Normal", "High", "Urgent"),
-            onSelect = { newTaskPriority = it }
-        )
-        if (canAssignTasks) {
-            TodoAssigneeMenu(
-                label = "Assign",
-                selectedMemberId = newTaskAssigneeId,
-                teamMembers = teamMembers,
-                onSelect = { newTaskAssigneeId = it?.id.orEmpty() }
-            )
-        }
-        OutlinedTextField(
-            value = newTaskDueDays,
-            onValueChange = { newTaskDueDays = it.filter { char -> char.isDigit() }.take(3) },
-            label = { Text("Due in days") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (order.todoItems.isEmpty()) {
-            DetailListRow("No tasks here", "", StudioGreen)
-        } else {
-            order.todoItems.take(5).forEach { item ->
-                DetailListRow(
-                    title = item.title.ifBlank { "To Do" },
-                    subtitle = listOf(
-                        if (item.isDone) "Done" else "Open",
-                        item.priority,
-                        item.dueAt?.let { shortDate(it) }.orEmpty(),
-                        taskAssigneeLabel(item, teamMembers)
-                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                    tone = if (item.isDone) StudioGreen else priorityColor(item.priority)
-                )
-                if (canAssignTasks) {
-                    TodoAssigneeMenu(
-                        label = "Assign",
-                        selectedMemberId = taskAssignee(item, teamMembers)?.id.orEmpty(),
-                        teamMembers = teamMembers,
-                        onSelect = { member ->
-                            onUpdateOrderFields(
-                                order,
-                                mapOf(
-                                    "todo" to mapOf(
-                                        "action" to "update",
-                                        "taskId" to item.id,
-                                        "assignedToUid" to member?.id.orEmpty(),
-                                        "assignedToEmail" to member?.email.orEmpty()
-                                    )
-                                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    TodoCountTile(modifier = Modifier.weight(1f), label = "Open", value = openCount, color = StudioBlue)
+                    TodoCountTile(modifier = Modifier.weight(1f), label = "Overdue", value = overdueCount, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TodoCountTile(modifier = Modifier.weight(1f), label = "Done", value = doneCount, color = StudioGreen)
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = newTaskTitle,
+                                onValueChange = { newTaskTitle = it },
+                                placeholder = { Text("Add a task...") },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    cursorColor = StudioBlue
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp)
                             )
+                            Button(
+                                onClick = {
+                                    val title = newTaskTitle.trim()
+                                    if (title.isNotBlank()) {
+                                        val patch = mutableMapOf<String, Any?>(
+                                            "action" to "add",
+                                            "title" to title,
+                                            "priority" to newTaskPriority
+                                        )
+                                        if (canAssignTasks && selectedAssignee != null) {
+                                            patch["assignedToUid"] = selectedAssignee.id
+                                            patch["assignedToEmail"] = selectedAssignee.email
+                                        }
+                                        if (newTaskHasDue) {
+                                            todoDueDateFromDays("1")?.let { patch["dueDate"] = it }
+                                        }
+                                        onUpdateOrderFields(order, mapOf("todo" to patch))
+                                        newTaskTitle = ""
+                                        newTaskPriority = "Normal"
+                                        newTaskHasDue = false
+                                        newTaskAssigneeId = ""
+                                    }
+                                },
+                                modifier = Modifier.size(width = 82.dp, height = 56.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("+", fontSize = 26.sp, fontWeight = FontWeight.Light)
+                            }
                         }
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "toggle", "taskId" to item.id, "isDone" to !item.isDone))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (item.isDone) "Reopen" else "Done", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "move", "taskId" to item.id, "move" to "up"))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Up", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "move", "taskId" to item.id, "move" to "down"))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Down", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "move", "taskId" to item.id, "move" to "top"))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Top", fontWeight = FontWeight.ExtraBold)
+                        TodoComposerSelectRow(
+                            label = "Assign",
+                            value = if (canAssignTasks) selectedAssignee?.label ?: "Unassigned" else "Unavailable",
+                            options = listOf("Unassigned") + teamMembers.filter { !it.isOwner }.map { it.label },
+                            enabled = canAssignTasks,
+                            onSelect = { selected ->
+                                newTaskAssigneeId = teamMembers.firstOrNull { it.label == selected }?.id.orEmpty()
+                            }
+                        )
+                        TodoComposerSelectRow(
+                            label = "Priority",
+                            value = newTaskPriority,
+                            options = listOf("Low", "Normal", "High", "Urgent"),
+                            enabled = true,
+                            onSelect = { newTaskPriority = it }
+                        )
+                        TodoDueSwitchRow(checked = newTaskHasDue, onCheckedChange = { newTaskHasDue = it })
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "move", "taskId" to item.id, "move" to "bottom"))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Bottom", fontWeight = FontWeight.ExtraBold)
+                if (order.todoItems.isEmpty()) {
+                    TodoEmptyState()
+                } else {
+                    val visibleTodoItems = order.todoItems.take(3)
+                    visibleTodoItems.forEach { item ->
+                        TodoCompactItemRow(
+                            item = item,
+                            teamMembers = teamMembers,
+                            onToggle = {
+                                onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "toggle", "taskId" to item.id, "isDone" to !item.isDone)))
+                            },
+                            onDelete = {
+                                onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "delete", "taskId" to item.id)))
+                            }
+                        )
                     }
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "delete", "taskId" to item.id))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                    if (order.todoItems.size > visibleTodoItems.size) {
+                        InfoRow("More Tasks", "+${order.todoItems.size - visibleTodoItems.size}")
                     }
                 }
             }
@@ -1724,68 +3399,641 @@ private fun DesktopTodoCard(
 }
 
 @Composable
-private fun DesktopWorkTimeCard(order: StudioOrder, onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit) {
-    var workTitle by remember(order.id) { mutableStateOf("Work session") }
-    val activeSession = order.workSessions.firstOrNull { it.endedAt == null }
-
-    DetailCard(title = "Work Time") {
-        MetricTile(
-            modifier = Modifier.fillMaxWidth(),
-            label = "Total Work Time",
-            value = durationLabel(order.workSessions.sumOf { it.durationSeconds }),
-            color = StudioBlue
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = workTitle,
-                onValueChange = { workTitle = it },
-                label = { Text("Work title...") },
-                singleLine = true,
-                enabled = activeSession == null,
-                modifier = Modifier.weight(1f)
+private fun TodoCountTile(modifier: Modifier, label: String, value: Int, color: Color) {
+    Surface(
+        modifier = modifier.height(84.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.22f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Button(
-                onClick = {
-                    if (activeSession == null) {
-                        onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "start", "title" to workTitle.trim().ifBlank { "Work session" })))
-                    } else {
-                        onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "stop", "sessionId" to activeSession.id)))
-                    }
-                },
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(if (activeSession == null) "Start" else "Stop", fontWeight = FontWeight.ExtraBold)
-            }
+            Text(
+                value.toString(),
+                color = color,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
-        if (order.workSessions.isEmpty()) {
-            DetailListRow("No work sessions yet.", "", MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            order.workSessions.take(4).forEach { session ->
-                DetailListRow(
-                    title = session.title.ifBlank { "Work session" },
-                    subtitle = listOf(
-                        session.startedAt?.let { shortDate(it) }.orEmpty(),
-                        if (session.endedAt == null) "Running" else durationLabel(session.durationSeconds),
-                        uk.co.eggcraft.studioflow.data.model.emailName(session.createdByEmail)
-                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                    tone = if (session.endedAt == null) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "continue", "sessionId" to session.id, "title" to session.title))) },
-                        enabled = activeSession == null && session.endedAt != null,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Continue", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = { onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "delete", "sessionId" to session.id))) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
-                    }
+    }
+}
+
+@Composable
+private fun TodoComposerSelectRow(
+    label: String,
+    value: String,
+    options: List<String>,
+    enabled: Boolean,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.width(84.dp)
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
+                shape = RoundedCornerShape(9.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.86f else 0.42f),
+                onClick = { if (enabled) expanded = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        value,
+                        modifier = Modifier.weight(1f),
+                        color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.distinct().forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option, fontWeight = if (option == value) FontWeight.ExtraBold else FontWeight.Normal) },
+                        onClick = {
+                            expanded = false
+                            onSelect(option)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodoDueSwitchRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            "Due",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.width(54.dp)
+        )
+        CompactTodoSwitch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun CompactTodoSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val activeColor = StudioBlue
+    val inactiveColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+    Surface(
+        modifier = Modifier.size(width = 44.dp, height = 26.dp),
+        shape = RoundedCornerShape(13.dp),
+        color = if (checked) activeColor else inactiveColor,
+        border = BorderStroke(1.dp, if (checked) activeColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
+        onClick = { onCheckedChange(!checked) }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (checked) Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                modifier = Modifier.size(20.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = Color.White,
+                shadowElevation = 1.dp
+            ) {}
+            if (!checked) Spacer(modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun TodoEmptyState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            modifier = Modifier.size(44.dp),
+            tint = StudioGreen.copy(alpha = 0.72f)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            "No tasks here",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+@Composable
+private fun TodoCompactItemRow(
+    item: StudioTodoItem,
+    teamMembers: List<StudioTeamMember>,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val tone = if (item.isDone) StudioGreen else priorityColor(item.priority)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(28.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = tone.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, tone.copy(alpha = 0.35f)),
+                onClick = onToggle
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.padding(5.dp),
+                    tint = tone
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    item.title.ifBlank { "To Do" },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    listOf(
+                        if (item.isDone) "Done" else "Open",
+                        item.priority,
+                        item.dueAt?.let { shortDate(it) }.orEmpty(),
+                        taskAssigneeLabel(item, teamMembers)
+                    ).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "No details" },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            TextButton(onClick = onDelete) {
+                Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopWorkTimeCard(order: StudioOrder, onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit) {
+    var workTitle by remember(order.id) { mutableStateOf("Work session") }
+
+    DetailCard(title = "Work Time") {
+        WorkTimeCardBody(
+            order = order,
+            workTitle = workTitle,
+            onWorkTitleChange = { workTitle = it },
+            onUpdateOrderFields = onUpdateOrderFields
+        )
+    }
+}
+
+@Composable
+private fun WorkTimeCardBody(
+    order: StudioOrder,
+    workTitle: String,
+    onWorkTitleChange: (String) -> Unit,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+) {
+    val activeSession = order.workSessions.firstOrNull { it.endedAt == null }
+    var nowMillis by remember(activeSession?.id) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(activeSession?.id) {
+        while (activeSession != null) {
+            nowMillis = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val totalSeconds = order.workSessions.sumOf { it.effectiveDurationSeconds(nowMillis) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(15.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            WorkTimeTotalPanel(totalSeconds = totalSeconds)
+            activeSession?.let { session ->
+                WorkTimeActivePanel(session = session, nowMillis = nowMillis)
+            }
+            WorkTimeComposerRow(
+                workTitle = workTitle,
+                activeSession = activeSession,
+                onWorkTitleChange = onWorkTitleChange,
+                onUpdateOrderFields = onUpdateOrderFields,
+                order = order
+            )
+            if (order.workSessions.isEmpty()) {
+                WorkTimeEmptyState()
+            } else {
+                WorkTimeSessionGroups(
+                    sessions = order.workSessions.take(6),
+                    activeSession = activeSession,
+                    nowMillis = nowMillis,
+                    onUpdateOrderFields = onUpdateOrderFields,
+                    order = order
+                )
+                if (order.workSessions.size > 6) {
+                    InfoRow("More Sessions", "+${order.workSessions.size - 6}")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkTimeTotalPanel(totalSeconds: Int) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = StudioBlue.copy(alpha = 0.10f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "Total Work Time",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                durationLabel(totalSeconds),
+                color = StudioBlue,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkTimeActivePanel(session: StudioWorkSession, nowMillis: Long) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = StudioGreen.copy(alpha = 0.10f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(28.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = Color.Transparent,
+                border = BorderStroke(2.dp, StudioGreen.copy(alpha = 0.85f))
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Timeline,
+                    contentDescription = null,
+                    modifier = Modifier.padding(5.dp),
+                    tint = StudioGreen
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    session.title.ifBlank { "Work session" },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Started ${workSessionTimeLabel(session.startedAt)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                durationLabel(session.effectiveDurationSeconds(nowMillis)),
+                color = StudioGreen,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkTimeComposerRow(
+    workTitle: String,
+    activeSession: StudioWorkSession?,
+    onWorkTitleChange: (String) -> Unit,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    order: StudioOrder
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        OutlinedTextField(
+            value = workTitle,
+            onValueChange = { onWorkTitleChange(it.take(80)) },
+            placeholder = { Text("Work title...") },
+            singleLine = true,
+            textStyle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                cursorColor = StudioBlue
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .height(54.dp)
+        )
+        WorkTimeActionButton(
+            label = if (activeSession == null) "Start" else "Stop",
+            icon = if (activeSession == null) Icons.Filled.PlayArrow else Icons.Filled.Stop,
+            tone = if (activeSession == null) StudioGreen else StudioRed,
+            onClick = {
+                if (activeSession == null) {
+                    onUpdateOrderFields(
+                        order,
+                        mapOf("workTime" to mapOf("action" to "start", "title" to workTitle.trim().ifBlank { "Work session" }))
+                    )
+                } else {
+                    onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "stop", "sessionId" to activeSession.id)))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun WorkTimeActionButton(label: String, icon: ImageVector, tone: Color, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .width(108.dp)
+            .height(50.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = tone,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(19.dp), tint = Color.White)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+@Composable
+private fun WorkTimeSessionGroups(
+    sessions: List<StudioWorkSession>,
+    activeSession: StudioWorkSession?,
+    nowMillis: Long,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    order: StudioOrder
+) {
+    val groups = sessions.groupBy { workSessionDateKey(it.startedAt) }
+    groups.forEach { (_, groupSessions) ->
+        val groupDate = workSessionDateLabel(groupSessions.firstOrNull()?.startedAt)
+        val groupTotal = groupSessions.sumOf { it.effectiveDurationSeconds(nowMillis) }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                groupDate,
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                durationLabel(groupTotal),
+                color = StudioBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+        groupSessions.forEach { session ->
+            WorkTimeSessionRow(
+                session = session,
+                activeSession = activeSession,
+                nowMillis = nowMillis,
+                onStop = {
+                    onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "stop", "sessionId" to session.id)))
+                },
+                onContinue = {
+                    onUpdateOrderFields(
+                        order,
+                        mapOf("workTime" to mapOf("action" to "continue", "sessionId" to session.id, "title" to session.title))
+                    )
+                },
+                onDelete = {
+                    onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "delete", "sessionId" to session.id)))
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkTimeSessionRow(
+    session: StudioWorkSession,
+    activeSession: StudioWorkSession?,
+    nowMillis: Long,
+    onStop: () -> Unit,
+    onContinue: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val isRunning = session.endedAt == null
+    val canContinue = !isRunning && activeSession == null
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(13.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(34.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = StudioGreen.copy(alpha = if (canContinue || isRunning) 0.14f else 0.08f),
+                onClick = { if (canContinue) onContinue() }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = if (canContinue) "Continue work session" else null,
+                    modifier = Modifier.padding(7.dp),
+                    tint = if (canContinue || isRunning) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    session.title.ifBlank { "Work session" },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    workSessionRangeLabel(session),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            WorkTimeDurationChip(durationLabel(session.effectiveDurationSeconds(nowMillis)))
+            if (isRunning) {
+                Surface(
+                    modifier = Modifier.size(34.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = StudioRed,
+                    onClick = onStop
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = "Stop work session",
+                        modifier = Modifier.padding(8.dp),
+                        tint = Color.White
+                    )
+                }
+            } else if (canContinue) {
+                Surface(
+                    modifier = Modifier.size(34.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = StudioGreen.copy(alpha = 0.14f),
+                    onClick = onContinue
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Continue work session",
+                        modifier = Modifier.padding(8.dp),
+                        tint = StudioGreen
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.size(34.dp))
+            }
+            Surface(
+                modifier = Modifier.size(34.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = Color.Transparent,
+                onClick = onDelete
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete work session",
+                    modifier = Modifier.padding(7.dp),
+                    tint = StudioRed
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkTimeDurationChip(label: String) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = StudioGreen.copy(alpha = 0.12f)
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            color = StudioGreen,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun WorkTimeEmptyState() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Filled.Timeline, contentDescription = null, modifier = Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("No work sessions yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -1898,10 +4146,13 @@ private fun DesktopScheduleAlertsCard(
         if (reminders.isEmpty()) {
             DetailListRow("No reminders yet.", "Add a quick reminder to keep this order moving.", MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            reminders.take(5).forEach { reminder ->
+            val visibleReminders = reminders.take(3)
+            visibleReminders.forEach { reminder ->
                 ScheduleReminderRow(order = order, reminder = reminder, onUpdateOrderFields = onUpdateOrderFields)
             }
-            if (reminders.size > 5) InfoRow("More Reminders", "+${reminders.size - 5}")
+            if (reminders.size > visibleReminders.size) {
+                InfoRow("More Reminders", "+${reminders.size - visibleReminders.size}")
+            }
         }
     }
 }
@@ -1954,12 +4205,16 @@ private fun DesktopHistoryLogCard(order: StudioOrder) {
         if (order.historyLog.isEmpty()) {
             DetailListRow("No changes recorded yet", "", MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            order.historyLog.take(8).forEach { item ->
+            val visibleHistoryItems = order.historyLog.take(3)
+            visibleHistoryItems.forEach { item ->
                 DetailListRow(
                     title = item.title,
                     subtitle = listOf(item.oldValue, item.newValue, shortDateOrDash(item.createdAt)).filter { it.isNotBlank() }.joinToString(" -> "),
                     tone = StudioBlue
                 )
+            }
+            if (order.historyLog.size > visibleHistoryItems.size) {
+                InfoRow("More Changes", "+${order.historyLog.size - visibleHistoryItems.size}")
             }
         }
     }
@@ -1990,124 +4245,153 @@ private fun CustomerContactEditCard(
         mutableStateOf(channelLabels.associateWith { label -> customFieldValue(order, communicationChannelCustomKey(label)) })
     }
 
-    DetailCard(title = "Customer & Contact Controls") {
-        OutlinedTextField(
-            value = customerName,
-            onValueChange = { customerName = it },
-            label = { Text("Customer Name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = designName,
-            onValueChange = { designName = it },
-            label = { Text("Design Name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = watchRef,
-            onValueChange = { watchRef = it },
-            label = { Text("Reference") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = designLink,
-            onValueChange = { designLink = it },
-            label = { Text("Preview / Design Link") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (workspaceSettings.communicationShowEmail || workspaceSettings.communicationShowTelephone) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                if (workspaceSettings.communicationShowEmail) {
-                    OutlinedTextField(
+    DetailCard(title = "Customer & Communication") {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CustomerInlineTextRow(
+                    label = "Customer Name",
+                    value = customerName,
+                    onValueChange = { customerName = it },
+                    singleLine = true
+                )
+                CustomerInlineTextRow(
+                    label = "Design Name",
+                    value = designName,
+                    onValueChange = { designName = it },
+                    singleLine = true
+                )
+                CustomerInlineTextRow(
+                    label = "Reference",
+                    value = watchRef,
+                    onValueChange = { watchRef = it },
+                    singleLine = true
+                )
+                if (designLink.isNotBlank()) {
+                    CustomerInlineTextRow(
+                        label = "Design Link",
+                        value = designLink,
+                        onValueChange = { designLink = it },
+                        singleLine = true
+                    )
+                }
+                if (workspaceSettings.communicationShowEmail && email.isNotBlank()) {
+                    CustomerInlineTextRow(
+                        label = "Email",
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Email") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        singleLine = true
+                    )
+                }
+                if (workspaceSettings.communicationShowAddress && address.isNotBlank()) {
+                    CustomerInlineTextRow(
+                        label = "Address",
+                        value = address,
+                        onValueChange = { address = it },
+                        minHeight = 72.dp
+                    )
+                }
+                if (configuredCustomFields.isNotEmpty()) {
+                    configuredCustomFields.forEach { fieldTitle ->
+                        CustomerInlineTextRow(
+                            label = fieldTitle,
+                            value = customFieldDrafts[fieldTitle].orEmpty(),
+                            onValueChange = { nextValue ->
+                                customFieldDrafts = customFieldDrafts.toMutableMap().also { it[fieldTitle] = nextValue }
+                            },
+                            singleLine = true
+                        )
+                    }
+                }
+                HorizontalRule()
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.Description,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = StudioBlue
+                    )
+                    Text(
+                        "Communication",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
                 if (workspaceSettings.communicationShowTelephone) {
-                    OutlinedTextField(
+                    CustomerInlineTextRow(
+                        label = "Telephone",
                         value = phone,
                         onValueChange = { phone = it },
-                        label = { Text("Phone") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        singleLine = true
+                    )
+                }
+                if (workspaceSettings.communicationShowChannel) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            FinanceRowLabel("Channel", modifier = Modifier.weight(0.34f))
+                            Row(
+                                modifier = Modifier
+                                    .weight(0.66f)
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                channelLabels.forEach { channel ->
+                                    CustomerChannelChip(
+                                        label = channel,
+                                        active = channels.any { it.equals(channel, ignoreCase = true) },
+                                        modifier = Modifier.widthIn(min = 82.dp, max = 124.dp)
+                                    ) {
+                                        channels = toggleListValue(channels, channel)
+                                    }
+                                }
+                            }
+                        }
+                        channelLabels
+                            .filter { label -> channels.any { it.equals(label, ignoreCase = true) } }
+                            .forEach { channel ->
+                                CommunicationChannelValueField(
+                                    channel = channel,
+                                    email = email,
+                                    phone = phone,
+                                    instagram = instagram,
+                                    address = address,
+                                    customValue = channelDrafts[channel].orEmpty(),
+                                    onEmail = { email = it },
+                                    onPhone = { phone = it },
+                                    onInstagram = { instagram = it },
+                                    onAddress = { address = it },
+                                    onCustom = { nextValue ->
+                                        channelDrafts = channelDrafts.toMutableMap().also { it[channel] = nextValue }
+                                    }
+                                )
+                            }
+                    }
+                }
+                if (workspaceSettings.communicationShowCustomerNotes) {
+                    Text(
+                        "Customer Notes",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    CustomerNotesBox(
+                        value = customerNotes,
+                        onValueChange = { customerNotes = it }
                     )
                 }
             }
-        }
-        if (workspaceSettings.communicationShowAddress) {
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it },
-                label = { Text("Address") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
-            )
-        }
-        if (configuredCustomFields.isNotEmpty()) {
-            HorizontalRule()
-            configuredCustomFields.forEach { fieldTitle ->
-                OutlinedTextField(
-                    value = customFieldDrafts[fieldTitle].orEmpty(),
-                    onValueChange = { nextValue ->
-                        customFieldDrafts = customFieldDrafts.toMutableMap().also { it[fieldTitle] = nextValue }
-                    },
-                    label = { Text(fieldTitle) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-        if (workspaceSettings.communicationShowChannel) {
-            Text("Communication Channels", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            channelLabels.chunked(3).forEach { rowChannels ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    rowChannels.forEach { channel ->
-                        ToggleChip(
-                            label = channel,
-                            active = channels.any { it.equals(channel, ignoreCase = true) },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            channels = toggleListValue(channels, channel)
-                        }
-                    }
-                    repeat(3 - rowChannels.size) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-            channelLabels.filter { label -> channels.any { it.equals(label, ignoreCase = true) } }.forEach { channel ->
-                CommunicationChannelValueField(
-                    channel = channel,
-                    email = email,
-                    phone = phone,
-                    instagram = instagram,
-                    address = address,
-                    customValue = channelDrafts[channel].orEmpty(),
-                    onEmail = { email = it },
-                    onPhone = { phone = it },
-                    onInstagram = { instagram = it },
-                    onAddress = { address = it },
-                    onCustom = { value -> channelDrafts = channelDrafts.toMutableMap().also { it[channel] = value } }
-                )
-            }
-        }
-        if (workspaceSettings.communicationShowCustomerNotes) {
-            OutlinedTextField(
-                value = customerNotes,
-                onValueChange = { customerNotes = it },
-                label = { Text("Customer Notes") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
-            )
         }
         Button(
             onClick = {
@@ -2139,7 +4423,103 @@ private fun CustomerContactEditCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
         ) {
-            Text("Save Customer & Contact", fontWeight = FontWeight.ExtraBold)
+            Text("Save Customer & Communication", fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+@Composable
+private fun CustomerInlineTextRow(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    singleLine: Boolean = false,
+    minHeight: Dp = 48.dp
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        FinanceRowLabel(label, modifier = Modifier.weight(0.38f))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            textStyle = TextStyle(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                cursorColor = StudioBlue
+            ),
+            modifier = Modifier
+                .weight(0.62f)
+                .height(minHeight)
+        )
+    }
+}
+
+@Composable
+private fun CustomerNotesBox(value: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = {
+            Text(
+                "Add customer note...",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        textStyle = TextStyle(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
+        ),
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            focusedBorderColor = Color.Transparent,
+            unfocusedBorderColor = Color.Transparent,
+            cursorColor = StudioBlue
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(132.dp)
+    )
+}
+
+@Composable
+private fun CustomerChannelChip(
+    label: String,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier.height(36.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = if (active) StudioBlue.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
+        border = BorderStroke(1.dp, if (active) StudioBlue.copy(alpha = 0.28f) else Color.Transparent),
+        onClick = onClick
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+            Text(
+                label,
+                color = if (active) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -2159,41 +4539,35 @@ private fun CommunicationChannelValueField(
     onCustom: (String) -> Unit
 ) {
     when (communicationChannelKind(channel)) {
-        CommunicationChannelKind.Email -> OutlinedTextField(
+        CommunicationChannelKind.Email -> CustomerInlineTextRow(
+            label = channel,
             value = email,
             onValueChange = onEmail,
-            label = { Text(channel) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            singleLine = true
         )
-        CommunicationChannelKind.Phone -> OutlinedTextField(
+        CommunicationChannelKind.Phone -> CustomerInlineTextRow(
+            label = channel,
             value = phone,
             onValueChange = onPhone,
-            label = { Text(channel) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            singleLine = true
         )
-        CommunicationChannelKind.Instagram -> OutlinedTextField(
+        CommunicationChannelKind.Instagram -> CustomerInlineTextRow(
+            label = channel,
             value = instagram,
             onValueChange = onInstagram,
-            label = { Text(channel) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            singleLine = true
         )
-        CommunicationChannelKind.Address -> OutlinedTextField(
+        CommunicationChannelKind.Address -> CustomerInlineTextRow(
+            label = channel,
             value = address,
             onValueChange = onAddress,
-            label = { Text(channel) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(84.dp)
+            minHeight = 72.dp
         )
-        CommunicationChannelKind.Custom -> OutlinedTextField(
+        CommunicationChannelKind.Custom -> CustomerInlineTextRow(
+            label = channel,
             value = customValue,
             onValueChange = onCustom,
-            label = { Text(channel) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            singleLine = true
         )
     }
 }
@@ -2555,20 +4929,59 @@ private fun SummaryCard(
     val value1 = summaryStepValue(order, workspaceSettings, step1)
     val value2 = summaryStepValue(order, workspaceSettings, step2)
     DetailCard(title = "Order Summary") {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricTile(
-                modifier = Modifier.weight(1f),
-                label = if (canSeeFinancial) "Order Value" else "Customer",
-                value = if (canSeeFinancial) money(order.orderValue) else order.displayCustomerName,
-                color = if (canSeeFinancial) StudioGreen else MaterialTheme.colorScheme.onSurface
-            )
-            MetricTile(modifier = Modifier.weight(1f), label = step1, value = value1, color = statusColor(value1))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    SummaryValueBlock(
+                        modifier = Modifier.weight(1.05f),
+                        label = if (canSeeFinancial) "Order Value" else "Customer",
+                        value = if (canSeeFinancial) money(order.orderValue) else order.displayCustomerName.ifBlank { "-" },
+                        valueColor = if (canSeeFinancial) StudioGreen else MaterialTheme.colorScheme.onSurface
+                    )
+                    Column(
+                        modifier = Modifier.weight(0.95f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SummaryStatusLine(label = step1, value = value1, tone = statusColor(value1))
+                        SummaryStatusLine(label = step2, value = value2, tone = statusColor(value2))
+                    }
+                }
+                HorizontalRule()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SummaryDateBlock(
+                        modifier = Modifier.weight(1f),
+                        label = "Placed On",
+                        value = shortDate(order.paymentDate),
+                        valueColor = MaterialTheme.colorScheme.onSurface
+                    )
+                    SummaryDateBlock(
+                        modifier = Modifier.weight(1f),
+                        label = "Delivery In",
+                        value = deliveryLabel(order),
+                        valueColor = deliveryColor(order)
+                    )
+                }
+                if (order.watchRef.isNotBlank()) {
+                    HorizontalRule()
+                    InfoRow("Watch Ref", order.watchRef)
+                }
+            }
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        InfoRow(step2, value2, statusColor(value2))
-        InfoRow("Placed On", shortDate(order.paymentDate))
-        InfoRow("Delivery In", deliveryLabel(order), deliveryColor(order))
-        if (order.watchRef.isNotBlank()) InfoRow("Watch Ref", order.watchRef)
     }
 }
 
@@ -2598,31 +5011,281 @@ private fun CustomerCard(order: StudioOrder, workspaceSettings: StudioWorkspaceS
 }
 
 @Composable
-private fun TimelineDeliveryCard(order: StudioOrder) {
+private fun TimelineDeliveryCard(
+    order: StudioOrder,
+    canEditWorkflow: Boolean,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+) {
     val context = LocalContext.current
+    var deliveryDays by remember(order.id, order.deliveryTime) { mutableStateOf(order.deliveryTime.coerceAtLeast(1)) }
+    var createdDateText by remember(order.id, order.paymentDate) { mutableStateOf(longDate(order.paymentDate)) }
+    val previewDueDate = remember(order.paymentDate, deliveryDays) {
+        Date(order.paymentDate.time + deliveryDays.coerceAtLeast(1) * DAY_MS)
+    }
+    fun saveTimeline(nextDays: Int = deliveryDays) {
+        val cleanDays = nextDays.coerceIn(1, 730)
+        deliveryDays = cleanDays
+        val details = mutableMapOf<String, Any?>("deliveryTime" to cleanDays)
+        dateInputToISODate(createdDateText)?.let { details["paymentDate"] = it }
+        onUpdateOrderFields(order, mapOf("details" to details))
+    }
+
     DetailCard(title = "Timeline & Delivery") {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricTile(modifier = Modifier.weight(1f), label = "Placed", value = shortDate(order.paymentDate), color = MaterialTheme.colorScheme.onSurface)
-            MetricTile(modifier = Modifier.weight(1f), label = "Due", value = shortDate(dueDate(order)), color = deliveryColor(order))
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Button(
-            onClick = { openDeliveryCalendarEvent(context, order) },
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp)
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
         ) {
-            Text("Add to Calendar", fontWeight = FontWeight.ExtraBold)
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    TimelineDateTile(
+                        modifier = Modifier.weight(1f),
+                        label = "Created Date",
+                        value = shortDate(order.paymentDate),
+                        accent = StudioBlue
+                    )
+                    TimelineDateTile(
+                        modifier = Modifier.weight(1f),
+                        label = "Delivery Due",
+                        value = shortDate(previewDueDate),
+                        accent = StudioRed
+                    )
+                }
+                TimelineRemainingPanel(order = order)
+                TimelineCalendarAction(onClick = { openDeliveryCalendarEvent(context, order) })
+                HorizontalRule()
+                TimelineDeliveryDaysRow(
+                    days = deliveryDays,
+                    canEdit = canEditWorkflow,
+                    onChange = { next -> saveTimeline(next) }
+                )
+                TimelineCreatedDateRow(
+                    value = createdDateText,
+                    canEdit = canEditWorkflow,
+                    onValueChange = { createdDateText = it },
+                    onSave = { saveTimeline() }
+                )
+            }
         }
-        Text(
-            "Creates an Android Calendar event from the created date to the delivery due date.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            lineHeight = 16.sp
+    }
+}
+
+@Composable
+private fun TimelineDateTile(modifier: Modifier, label: String, value: String, accent: Color) {
+    Surface(
+        modifier = modifier.height(86.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.TableChart,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                    tint = accent
+                )
+                Text(
+                    label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                value,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineRemainingPanel(order: StudioOrder) {
+    val tone = deliveryColor(order)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(88.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = tone.copy(alpha = 0.10f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(13.dp)
+        ) {
+            Surface(shape = RoundedCornerShape(18.dp), color = tone) {
+                Icon(
+                    imageVector = Icons.Filled.Timeline,
+                    contentDescription = null,
+                    modifier = Modifier.padding(7.dp).size(16.dp),
+                    tint = Color.White
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    "Time Remaining",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    deliveryLongLabel(order),
+                    color = tone,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineCalendarAction(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = StudioRed.copy(alpha = 0.10f),
+                onClick = onClick
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.TableChart,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = StudioRed
+                    )
+                    Text(
+                        "Add to Calendar",
+                        color = StudioRed,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+            Text(
+                "Creates an all-day Android Calendar event from the created date to the delivery due date.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineDeliveryDaysRow(days: Int, canEdit: Boolean, onChange: (Int) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        FinanceRowLabel("Delivery Time", modifier = Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TimelineStepperButton("+", enabled = canEdit) { onChange(days + 1) }
+                TimelineStepperButton("-", enabled = canEdit) { onChange(days - 1) }
+            }
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = StudioRed.copy(alpha = 0.10f)
+            ) {
+                Text(
+                    "${days.coerceAtLeast(1)} days",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = StudioRed,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineStepperButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.size(width = 30.dp, height = 24.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.82f else 0.36f),
+        onClick = { if (enabled) onClick() }
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineCreatedDateRow(
+    value: String,
+    canEdit: Boolean,
+    onValueChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        FinanceRowLabel("Created Date", modifier = Modifier.weight(0.42f))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = canEdit,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f),
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                disabledBorderColor = Color.Transparent,
+                cursorColor = StudioBlue
+            ),
+            modifier = Modifier
+                .weight(0.45f)
+                .height(48.dp)
         )
-        InfoRow("Delivery Time", "${order.deliveryTime.coerceAtLeast(1)} days")
-        InfoRow("Delivery In", deliveryLabel(order), deliveryColor(order))
-        InfoRow("Priority", order.priority.ifBlank { "Normal" }, priorityColor(order.priority))
-        InfoRow("Dispatched", yesNo(order.isDispatched))
+        TextButton(onClick = onSave, enabled = canEdit, modifier = Modifier.weight(0.25f)) {
+            Text("Save", fontWeight = FontWeight.ExtraBold)
+        }
     }
 }
 
@@ -2686,50 +5349,157 @@ private fun MaterialsInventoryCard(
     var invNotes by remember(order.id, order.invNotes) { mutableStateOf(order.invNotes) }
     val materialLabels = materialDefaultCheckLabels(workspaceSettings)
     val notesLabel = workspaceSettings.materialsNotesSupplierLabel.ifBlank { "Notes / Supplier" }
+    LaunchedEffect(canEditWorkflow, invNotes, order.invNotes) {
+        if (canEditWorkflow && invNotes != order.invNotes) {
+            delay(650)
+            onUpdateOrderFields(order, mapOf("details" to mapOf("invNotes" to invNotes)))
+        }
+    }
 
     DetailCard(title = "Materials & Inventory") {
-        materialLabels.forEachIndexed { index, label ->
-            val checked = materialDefaultToggleValue(order, index, label)
-            if (canEditWorkflow) {
-                YesNoChoiceRow(label, checked) {
-                    onUpdateOrderFields(order, materialDefaultTogglePayload(index, label, it))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(15.dp)
+            ) {
+                materialLabels.forEachIndexed { index, label ->
+                    MaterialsYesNoRow(
+                        label = label,
+                        value = materialDefaultToggleValue(order, index, label),
+                        enabled = canEditWorkflow,
+                        onChange = {
+                            onUpdateOrderFields(order, materialDefaultTogglePayload(index, label, it))
+                        }
+                    )
                 }
-            } else {
-                BooleanRow(label, checked)
-            }
-        }
-        if (workspaceSettings.materialsToggles.isNotEmpty()) {
-            HorizontalRule()
-            workspaceSettings.materialsToggles.forEach { label ->
-                val checked = order.customToggles["materials::$label"] == true
-                if (canEditWorkflow) {
-                    YesNoChoiceRow(label, checked) {
-                        onUpdateOrderFields(order, mapOf("details" to mapOf("materialsToggles" to mapOf(label to it))))
+                workspaceSettings.materialsToggles.forEach { label ->
+                    MaterialsYesNoRow(
+                        label = label,
+                        value = order.customToggles["materials::$label"] == true,
+                        enabled = canEditWorkflow,
+                        onChange = {
+                            onUpdateOrderFields(order, mapOf("details" to mapOf("materialsToggles" to mapOf(label to it))))
+                        }
+                    )
+                }
+                if (workspaceSettings.showMaterialsNotesSupplier) {
+                    HorizontalRule()
+                    Text(
+                        notesLabel,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    if (canEditWorkflow) {
+                        OutlinedTextField(
+                            value = invNotes,
+                            onValueChange = { invNotes = it.take(1500) },
+                            placeholder = { Text("Add notes or supplier details...") },
+                            textStyle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                cursorColor = StudioBlue
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(132.dp)
+                        )
+                    } else {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(112.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+                        ) {
+                            Text(
+                                order.invNotes.ifBlank { "No notes or supplier details." },
+                                modifier = Modifier.padding(14.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                lineHeight = 18.sp
+                            )
+                        }
                     }
-                } else {
-                    BooleanRow(label, checked)
                 }
             }
         }
-        if (workspaceSettings.showMaterialsNotesSupplier) {
-            HorizontalRule()
-            if (canEditWorkflow) {
-                OutlinedTextField(
-                    value = invNotes,
-                    onValueChange = { invNotes = it },
-                    label = { Text(notesLabel) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(92.dp)
-                )
-                TextButton(
-                    onClick = { onUpdateOrderFields(order, mapOf("details" to mapOf("invNotes" to invNotes))) }
-                ) {
-                    Text("Save $notesLabel", fontWeight = FontWeight.ExtraBold)
-                }
-            } else {
-                InfoRow(notesLabel, order.invNotes.ifBlank { "-" })
-            }
+    }
+}
+
+@Composable
+private fun MaterialsYesNoRow(
+    label: String,
+    value: Boolean,
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        MaterialsBinaryChip(
+            label = "Yes",
+            active = value,
+            activeColor = StudioGreen,
+            enabled = enabled,
+            onClick = { onChange(true) }
+        )
+        MaterialsBinaryChip(
+            label = "No",
+            active = !value,
+            activeColor = StudioRed,
+            enabled = enabled,
+            onClick = { onChange(false) }
+        )
+    }
+}
+
+@Composable
+private fun MaterialsBinaryChip(
+    label: String,
+    active: Boolean,
+    activeColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(66.dp)
+            .height(42.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = if (active) activeColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
+        border = BorderStroke(1.dp, if (active) activeColor.copy(alpha = 0.48f) else Color.Transparent),
+        onClick = { if (enabled) onClick() }
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                label,
+                color = if (active) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
         }
     }
 }
@@ -2762,14 +5532,13 @@ private fun FinancialCard(
     var paidAmount by remember(order.id, order.paidAmount) { mutableStateOf(decimalText(order.paidAmount)) }
     var remainingAmount by remember(order.id, order.remainingAmount) { mutableStateOf(decimalText(order.remainingAmount)) }
     var baseCost by remember(order.id, order.watchPurchasePrice) { mutableStateOf(decimalText(order.watchPurchasePrice)) }
-    var platformFee by remember(order.id, order.paymentFee) { mutableStateOf(decimalText(order.paymentFee)) }
     var deliveryCost by remember(order.id, order.deliveryCost) { mutableStateOf(decimalText(order.deliveryCost)) }
     var taxRate by remember(order.id, order.taxRate) { mutableStateOf(decimalText(order.taxRate)) }
     var paymentMethod by remember(order.id, order.paymentMethod) { mutableStateOf(order.paymentMethod.ifBlank { "Card" }) }
     val revenueTaxLabel = workspaceSettings.taxRuleNameRevenue.ifBlank { "Revenue" }
     val profitTaxLabel = workspaceSettings.taxRuleNameProfit.ifBlank { "Profit" }
-    var taxType by remember(order.id, order.taxType, revenueTaxLabel, profitTaxLabel) {
-        mutableStateOf(if (order.taxType == "Profit") profitTaxLabel else revenueTaxLabel)
+    var taxType by remember(order.id, order.taxType) {
+        mutableStateOf(if (order.taxType == "Profit") "Profit" else "Revenue")
     }
     val remainingItems = remember(workspaceSettings.financialRemainingItems) {
         normalizedFinancialItems(workspaceSettings.financialRemainingItems, "Pending")
@@ -2785,147 +5554,482 @@ private fun FinancialCard(
     }
     val finalProfit = financialFinalProfit(order, workspaceSettings)
     val outstandingPayment = order.remainingAmount + remainingItems.sumOf { financialCustomValue(order, "financialRemaining::", it.title) }
+    val fullPaymentReceived = outstandingPayment <= 0.009
+
+    fun saveFinance(markFullPayment: Boolean = false) {
+        val finance = mutableMapOf<String, Any?>(
+            "paidAmount" to parseDecimal(paidAmount, order.paidAmount),
+            "watchPurchasePrice" to parseDecimal(baseCost, order.watchPurchasePrice)
+        )
+        if (advancedEnabled) {
+            finance["remainingAmount"] = parseDecimal(remainingAmount, order.remainingAmount)
+            finance["deliveryCost"] = parseDecimal(deliveryCost, order.deliveryCost)
+            finance["taxRate"] = parseDecimal(taxRate, order.taxRate)
+            finance["taxType"] = taxType
+            finance["paymentMethod"] = paymentMethod.trim().ifBlank { "Card" }
+            finance["financialRemainingValues"] = remainingItems.associate { item ->
+                item.title to parseDecimal(customRemainingInputs[item.title].orEmpty(), financialCustomValue(order, "financialRemaining::", item.title))
+            }
+            finance["financialExpenseValues"] = expenseItems.associate { item ->
+                item.title to parseDecimal(customExpenseInputs[item.title].orEmpty(), financialCustomValue(order, "financialExpense::", item.title))
+            }
+            if (markFullPayment) {
+                finance["fullPaymentReceived"] = true
+                finance["financialRemainingValues"] = remainingItems.associate { it.title to 0.0 }
+            }
+        }
+        onUpdateOrderFields(order, mapOf("finance" to finance))
+    }
 
     DetailCard(title = "Financial Info") {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricTile(modifier = Modifier.weight(1f), label = "Paid", value = money(order.paidAmount), color = StudioGreen)
-            MetricTile(modifier = Modifier.weight(1f), label = "Remaining", value = money(outstandingPayment), color = StudioWarningOrange)
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        if (remainingItems.isNotEmpty()) {
-            remainingItems.forEach { item ->
-                InfoRow(item.title, money(financialCustomValue(order, "financialRemaining::", item.title)), StudioWarningOrange)
-            }
-        }
-        InfoRow("Payment Method", order.paymentMethod.ifBlank { "Card" })
-        if (workspaceSettings.financialShowBaseCost || !advancedEnabled) {
-            InfoRow(workspaceSettings.financialBaseCostLabel.ifBlank { "Cost (Base)" }, money(order.watchPurchasePrice), StudioRed)
-        }
-        expenseItems.forEach { item ->
-            InfoRow(item.title, money(financialCustomValue(order, "financialExpense::", item.title)), StudioRed)
-        }
-        InfoRow("Platform Fee", money(order.paymentFee), StudioRed)
-        InfoRow("Delivery Cost", money(order.deliveryCost), StudioRed)
-        InfoRow("Tax", "${money(order.taxAmount)} (${order.taxType.ifBlank { "Tax" }})", StudioRed)
-        InfoRow("Final Profit", money(finalProfit), if (finalProfit >= 0) StudioGreen else StudioRed)
-        if (canEditFinance) {
-            HorizontalRule()
-            Text("Finance Controls", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                MoneyField("Paid", paidAmount, { paidAmount = cleanDecimalInput(it) }, Modifier.weight(1f))
-                MoneyField("Remaining", remainingAmount, { remainingAmount = cleanDecimalInput(it) }, Modifier.weight(1f))
-            }
-            if (advancedEnabled && remainingItems.isNotEmpty()) {
-                remainingItems.forEach { item ->
-                    MoneyField(
-                        item.title,
-                        customRemainingInputs[item.title].orEmpty(),
-                        { value ->
-                            customRemainingInputs = customRemainingInputs.toMutableMap().also { map ->
-                                map[item.title] = cleanDecimalInput(value)
-                            }
-                        },
-                        Modifier.fillMaxWidth()
-                    )
-                }
-            }
-            if (workspaceSettings.financialShowBaseCost || !advancedEnabled) {
-                MoneyField(
-                    workspaceSettings.financialBaseCostLabel.ifBlank { "Cost (Base)" },
-                    baseCost,
-                    { baseCost = cleanDecimalInput(it) },
-                    Modifier.fillMaxWidth()
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FinanceMoneyInlineRow(
+                    label = "Paid",
+                    value = paidAmount,
+                    onValueChange = { paidAmount = cleanDecimalInput(it) },
+                    valueColor = StudioGreen,
+                    enabled = canEditFinance,
+                    onCommit = { saveFinance() }
                 )
-            }
-            if (advancedEnabled) {
-                expenseItems.forEach { item ->
-                    MoneyField(
-                        item.title,
-                        customExpenseInputs[item.title].orEmpty(),
-                        { value ->
-                            customExpenseInputs = customExpenseInputs.toMutableMap().also { map ->
-                                map[item.title] = cleanDecimalInput(value)
-                            }
-                        },
-                        Modifier.fillMaxWidth()
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    MoneyField("Platform Fee", platformFee, { platformFee = cleanDecimalInput(it) }, Modifier.weight(1f))
-                    MoneyField("Shipping Cost", deliveryCost, { deliveryCost = cleanDecimalInput(it) }, Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    MoneyField("Tax Rate %", taxRate, { taxRate = cleanDecimalInput(it) }, Modifier.weight(1f))
-                    OutlinedTextField(
-                        value = paymentMethod,
-                        onValueChange = { paymentMethod = it },
-                        label = { Text("Payment Method") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                ChoiceRow(
-                    label = "Tax Rule",
-                    value = taxType,
-                    options = listOf(revenueTaxLabel, profitTaxLabel),
-                    onSelect = { taxType = it }
+                FinanceMoneyInlineRow(
+                    label = "Remaining",
+                    value = remainingAmount,
+                    onValueChange = { remainingAmount = cleanDecimalInput(it) },
+                    valueColor = StudioGreen,
+                    enabled = canEditFinance && advancedEnabled,
+                    onCommit = { saveFinance() }
                 )
-            } else {
-                Text(
-                    "Free/Demo keeps advanced finance locked; Paid and Base Cost remain editable.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        val finance = mutableMapOf<String, Any?>(
-                            "paidAmount" to parseDecimal(paidAmount, order.paidAmount),
-                            "remainingAmount" to parseDecimal(remainingAmount, order.remainingAmount),
-                            "watchPurchasePrice" to parseDecimal(baseCost, order.watchPurchasePrice)
+                if (advancedEnabled && remainingItems.isNotEmpty()) {
+                    remainingItems.forEach { item ->
+                        FinanceMoneyInlineRow(
+                            label = item.title,
+                            value = customRemainingInputs[item.title].orEmpty(),
+                            onValueChange = { value ->
+                                customRemainingInputs = customRemainingInputs.toMutableMap().also { map ->
+                                    map[item.title] = cleanDecimalInput(value)
+                                }
+                            },
+                            valueColor = StudioWarningOrange,
+                            enabled = canEditFinance,
+                            onCommit = { saveFinance() }
                         )
-                        if (advancedEnabled) {
-                            finance["paymentFee"] = parseDecimal(platformFee, order.paymentFee)
-                            finance["deliveryCost"] = parseDecimal(deliveryCost, order.deliveryCost)
-                            finance["taxRate"] = parseDecimal(taxRate, order.taxRate)
-                            finance["taxType"] = if (taxType == profitTaxLabel) "Profit" else "Revenue"
-                            finance["paymentMethod"] = paymentMethod.trim().ifBlank { "Card" }
-                            finance["financialRemainingValues"] = remainingItems.associate { item ->
-                                item.title to parseDecimal(customRemainingInputs[item.title].orEmpty(), financialCustomValue(order, "financialRemaining::", item.title))
-                            }
-                            finance["financialExpenseValues"] = expenseItems.associate { item ->
-                                item.title to parseDecimal(customExpenseInputs[item.title].orEmpty(), financialCustomValue(order, "financialExpense::", item.title))
-                            }
+                    }
+                }
+                if (advancedEnabled) {
+                    FinanceYesNoInlineRow(
+                        label = "Full Payment\nReceived?",
+                        value = fullPaymentReceived,
+                        enabled = canEditFinance && !fullPaymentReceived,
+                        onChange = { selected ->
+                            if (selected) saveFinance(markFullPayment = true)
                         }
-                        onUpdateOrderFields(order, mapOf("finance" to finance))
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Save Finance", fontWeight = FontWeight.ExtraBold)
+                    )
+                    FinanceSelectInlineRow(
+                        label = "Payment Method",
+                        value = paymentMethod,
+                        options = listOf("Card", "Cash", "Bank Transfer", "PayPal", "Apple Pay", "Other"),
+                        enabled = canEditFinance,
+                        onSelect = { selected ->
+                            paymentMethod = selected
+                            onUpdateOrderFields(order, mapOf("finance" to mapOf("paymentMethod" to selected)))
+                        }
+                    )
                 }
-                TextButton(
-                    onClick = {
-                        onUpdateOrderFields(
-                            order,
-                            mapOf(
-                                "finance" to mapOf(
-                                    "fullPaymentReceived" to true,
-                                    "financialRemainingValues" to remainingItems.associate { it.title to 0.0 }
-                                )
-                            )
+                HorizontalRule()
+                if (workspaceSettings.financialShowBaseCost || !advancedEnabled) {
+                    FinanceMoneyInlineRow(
+                        label = workspaceSettings.financialBaseCostLabel.ifBlank { "Cost (Base)" },
+                        value = baseCost,
+                        onValueChange = { baseCost = cleanDecimalInput(it) },
+                        valueColor = StudioRed,
+                        enabled = canEditFinance,
+                        onCommit = { saveFinance() }
+                    )
+                }
+                if (advancedEnabled) {
+                    expenseItems.forEach { item ->
+                        FinanceMoneyInlineRow(
+                            label = item.title,
+                            value = customExpenseInputs[item.title].orEmpty(),
+                            onValueChange = { value ->
+                                customExpenseInputs = customExpenseInputs.toMutableMap().also { map ->
+                                    map[item.title] = cleanDecimalInput(value)
+                                }
+                            },
+                            valueColor = StudioRed,
+                            enabled = canEditFinance,
+                            onCommit = { saveFinance() }
                         )
-                    },
-                    enabled = advancedEnabled,
-                    modifier = Modifier.weight(1f)
+                    }
+                    FinanceDisplayInlineRow(
+                        label = "Platform Fee",
+                        value = money(order.paymentFee),
+                        valueColor = StudioRed.copy(alpha = 0.42f),
+                        muted = true
+                    )
+                    FinanceMoneyInlineRow(
+                        label = "Shipping Cost",
+                        value = deliveryCost,
+                        onValueChange = { deliveryCost = cleanDecimalInput(it) },
+                        valueColor = StudioRed,
+                        enabled = canEditFinance,
+                        onCommit = { saveFinance() }
+                    )
+                    HorizontalRule()
+                    FinanceSelectInlineRow(
+                        label = "VAT Rule",
+                        value = if (taxType == "Profit") profitTaxLabel else revenueTaxLabel,
+                        options = listOf(revenueTaxLabel, profitTaxLabel),
+                        enabled = canEditFinance,
+                        onSelect = { selected ->
+                            taxType = if (selected == profitTaxLabel) "Profit" else "Revenue"
+                            onUpdateOrderFields(
+                                order,
+                                mapOf("finance" to mapOf("taxType" to if (selected == profitTaxLabel) "Profit" else "Revenue"))
+                            )
+                        }
+                    )
+                    FinanceMoneyInlineRow(
+                        label = "VAT Rate (%)",
+                        value = taxRate,
+                        onValueChange = { taxRate = cleanDecimalInput(it) },
+                        valueColor = StudioRed,
+                        enabled = canEditFinance,
+                        showCurrency = false,
+                        dangerSurface = true,
+                        onCommit = { saveFinance() }
+                    )
+                    FinanceDisplayInlineRow(
+                        label = "VAT Amount",
+                        value = money(order.taxAmount),
+                        valueColor = StudioRed.copy(alpha = 0.38f),
+                        muted = true
+                    )
+                    HorizontalRule()
+                } else {
+                    Text(
+                        "Free/Demo keeps advanced finance locked; Paid and Base Cost remain editable.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                    HorizontalRule()
+                }
+                FinanceFinalProfitRow(finalProfit = finalProfit)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinanceMoneyInlineRow(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    valueColor: Color,
+    enabled: Boolean,
+    showCurrency: Boolean = true,
+    dangerSurface: Boolean = false,
+    onCommit: () -> Unit = {}
+) {
+    val currencySymbol = LocalCurrencySymbol.current
+    val decimalSeparator = LocalDecimalSeparator.current
+    val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
+    val focusManager = LocalFocusManager.current
+    var isFocused by remember { mutableStateOf(false) }
+    var skipNextBlurCommit by remember { mutableStateOf(false) }
+    fun commitAndClearFocus() {
+        onCommit()
+        skipNextBlurCommit = true
+        focusManager.clearFocus()
+    }
+    val displayValue = when {
+        hideSensitiveNumbers -> "••••"
+        isFocused -> value
+        else -> formattedDecimalInput(value, decimalSeparator)
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        FinanceRowLabel(label, modifier = Modifier.weight(0.42f))
+        OutlinedTextField(
+            value = displayValue,
+            onValueChange = { next -> if (!hideSensitiveNumbers) onValueChange(next) },
+            enabled = enabled && !hideSensitiveNumbers,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    commitAndClearFocus()
+                }
+            ),
+            textStyle = TextStyle(
+                color = valueColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold
+            ),
+            prefix = if (showCurrency) {
+                {
+                    Text(
+                        currencySymbol,
+                        color = valueColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            } else {
+                null
+            },
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = if (dangerSurface) StudioRed.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                unfocusedContainerColor = if (dangerSurface) StudioRed.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                disabledBorderColor = Color.Transparent,
+                cursorColor = valueColor,
+                focusedTextColor = valueColor,
+                unfocusedTextColor = valueColor,
+                disabledTextColor = valueColor.copy(alpha = 0.45f)
+            ),
+            modifier = Modifier
+                .weight(0.58f)
+                .height(48.dp)
+                .onFocusChanged { focusState ->
+                    if (isFocused && !focusState.isFocused) {
+                        if (skipNextBlurCommit) {
+                            skipNextBlurCommit = false
+                        } else {
+                            onCommit()
+                        }
+                    }
+                    if (!isFocused && focusState.isFocused && isZeroLikeDecimalInput(value)) {
+                        onValueChange("")
+                    }
+                    isFocused = focusState.isFocused
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
+                        commitAndClearFocus()
+                        true
+                    } else {
+                        false
+                    }
+                }
+        )
+    }
+}
+
+@Composable
+private fun FinanceDisplayInlineRow(
+    label: String,
+    value: String,
+    valueColor: Color,
+    muted: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        FinanceRowLabel(label, modifier = Modifier.weight(0.42f))
+        Surface(
+            modifier = Modifier
+                .weight(0.58f)
+                .height(48.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (muted) 0.32f else 0.75f)
+        ) {
+            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
+                Text(
+                    value,
+                    color = valueColor,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinanceSelectInlineRow(
+    label: String,
+    value: String,
+    options: List<String>,
+    enabled: Boolean,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        FinanceRowLabel(label, modifier = Modifier.weight(0.42f))
+        Box(modifier = Modifier.weight(0.58f)) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.75f else 0.38f),
+                onClick = { if (enabled) expanded = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Full Payment", fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        value,
+                        modifier = Modifier.weight(1f),
+                        color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.distinct().forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option, fontWeight = if (option == value) FontWeight.ExtraBold else FontWeight.Normal) },
+                        onClick = {
+                            expanded = false
+                            onSelect(option)
+                        }
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun FinanceYesNoInlineRow(
+    label: String,
+    value: Boolean,
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        FinanceRowLabel(label, modifier = Modifier.weight(0.58f))
+        Row(
+            modifier = Modifier.weight(0.42f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FinanceBinaryChip(
+                label = "Yes",
+                active = value,
+                activeColor = StudioGreen,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+                onClick = { onChange(true) }
+            )
+            FinanceBinaryChip(
+                label = "No",
+                active = !value,
+                activeColor = StudioRed,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+                onClick = { onChange(false) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FinanceBinaryChip(
+    label: String,
+    active: Boolean,
+    activeColor: Color,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier.height(42.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = if (active) activeColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, if (active) activeColor.copy(alpha = 0.42f) else Color.Transparent),
+        onClick = { if (enabled) onClick() }
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp)) {
+            Text(
+                label,
+                color = if (active) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun FinanceFinalProfitRow(finalProfit: Double) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Final Profit",
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+            money(finalProfit),
+            color = if (finalProfit >= 0) StudioGreen else StudioRed,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun FinanceRowLabel(label: String, modifier: Modifier = Modifier) {
+    Text(
+        label,
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 17.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 @Composable
@@ -3198,7 +6302,6 @@ private fun OperationsCard(
     var workTitle by remember(order.id) { mutableStateOf("Work session") }
     var renameFileId by remember(order.id) { mutableStateOf("") }
     var renameText by remember(order.id) { mutableStateOf("") }
-    val activeSession = order.workSessions.firstOrNull { it.endedAt == null }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             val fileName = displayNameForUri(context, uri)
@@ -3517,69 +6620,12 @@ private fun OperationsCard(
         if (allowed("cardWorkTime")) {
             HorizontalRule()
             Text("Work Time", fontWeight = FontWeight.ExtraBold)
-            InfoRow("Sessions", "${order.workSessionCount}")
-            InfoRow("Total", durationLabel(order.workSessions.sumOf { it.durationSeconds }))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = workTitle,
-                    onValueChange = { workTitle = it },
-                    label = { Text("Timer title") },
-                    singleLine = true,
-                    enabled = activeSession == null,
-                    modifier = Modifier.weight(1f)
-                )
-                Button(
-                    onClick = {
-                        if (activeSession == null) {
-                            onUpdateOrderFields(
-                                order,
-                                mapOf("workTime" to mapOf("action" to "start", "title" to workTitle.trim().ifBlank { "Work session" }))
-                            )
-                        } else {
-                            onUpdateOrderFields(
-                                order,
-                                mapOf("workTime" to mapOf("action" to "stop", "sessionId" to activeSession.id))
-                            )
-                        }
-                    },
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (activeSession == null) "Start" else "Stop", fontWeight = FontWeight.ExtraBold)
-                }
-            }
-            order.workSessions.take(3).forEach { session ->
-                DetailListRow(
-                    title = session.title.ifBlank { "Work session" },
-                    subtitle = listOf(
-                        session.startedAt?.let { shortDate(it) }.orEmpty(),
-                        if (session.endedAt == null) "Running" else durationLabel(session.durationSeconds),
-                        uk.co.eggcraft.studioflow.data.model.emailName(session.createdByEmail)
-                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                    tone = if (session.endedAt == null) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = {
-                            onUpdateOrderFields(
-                                order,
-                                mapOf("workTime" to mapOf("action" to "continue", "sessionId" to session.id, "title" to session.title))
-                            )
-                        },
-                        enabled = activeSession == null && session.endedAt != null,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Continue", fontWeight = FontWeight.ExtraBold)
-                    }
-                    TextButton(
-                        onClick = {
-                            onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "delete", "sessionId" to session.id)))
-                        },
-                        modifier = Modifier.weight(0.85f)
-                    ) {
-                        Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
-            }
+            WorkTimeCardBody(
+                order = order,
+                workTitle = workTitle,
+                onWorkTitleChange = { workTitle = it },
+                onUpdateOrderFields = onUpdateOrderFields
+            )
         }
         if (allowed("cardHistoryLog")) {
             HorizontalRule()
@@ -3603,35 +6649,63 @@ private fun OperationsCard(
 private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     val cardsUnlocked = LocalDetailCardsUnlocked.current
     val cardActions = LocalOrderCardActions.current
+    val headingEditorActions = LocalOrderHeadingEditorActions.current
     val useUnifiedBoardScroll = LocalUnifiedBoardVerticalScroll.current
     val headerCardId = cardActions?.cardId ?: orderDetailCardIdForTitle(title)
+    val headingEditorConfig = remember(headerCardId, headingEditorActions?.workspaceSettings) {
+        orderHeadingEditorConfig(headerCardId, headingEditorActions?.workspaceSettings)
+    }
     val cardColorName = cardActions?.layout?.cardColors?.get(cardActions.cardId).orEmpty()
     val cardTint = studioCardThemeColor(cardColorName)
     val headerAccent = cardTint ?: orderDetailCardAccent(headerCardId)
     val savedHeight = cardActions?.layout?.savedHeightFor(cardActions.cardId, cardActions.orderId)
     val density = LocalDensity.current
     val contentScrollState = rememberScrollState()
+    var renderedCardHeightDp by remember(title, cardActions?.orderId) { mutableStateOf<Int?>(null) }
     var dragBaseHeight by remember(title, cardActions?.orderId) { mutableStateOf<Int?>(null) }
     var dragHeightDelta by remember(title, cardActions?.orderId) { mutableStateOf(0f) }
     var dragBaseWidth by remember(title, cardActions?.orderId) { mutableStateOf<Int?>(null) }
     var dragWidthDelta by remember(title, cardActions?.orderId) { mutableStateOf(0f) }
-    val displayedHeight = dragBaseHeight?.let { baseHeight ->
-        (baseHeight + dragHeightDelta).coerceIn(160f, 900f).toInt()
-    } ?: savedHeight
+    var dragHadHeightChange by remember(title, cardActions?.orderId) { mutableStateOf(false) }
+    val minimumCardHeight = minimumRenderedCardHeight(headerCardId)
+    val desktopDefaultHeight = if (cardActions != null && !cardActions.isPhoneLayout) {
+        defaultRenderedCardHeight(cardActions.cardId)
+    } else {
+        null
+    }
+    val displayedHeight = (dragBaseHeight?.let { baseHeight ->
+        (baseHeight + dragHeightDelta).coerceIn(minimumCardHeight.toFloat(), 1200f).toInt()
+    } ?: savedHeight ?: desktopDefaultHeight)
+        ?.coerceAtLeast(minimumCardHeight)
     var menuOpen by remember(title) { mutableStateOf(false) }
+    var colorMenuOpen by remember(title) { mutableStateOf(false) }
     var collapsed by remember(title) { mutableStateOf(false) }
+    var headingEditorOpen by remember(title) { mutableStateOf(false) }
+    val dragHandleModifier = if (cardsUnlocked && cardActions != null) {
+        Modifier.dragAndDropSource { _ ->
+            cardActions.onCardDragStart(cardActions.cardId)
+            cardTransferData(cardActions.cardId)
+        }
+    } else {
+        Modifier
+    }
     val cardHeightModifier = when {
         collapsed -> Modifier
-        displayedHeight != null && useUnifiedBoardScroll -> Modifier.heightIn(min = displayedHeight.dp)
         displayedHeight != null -> Modifier.height(displayedHeight.dp)
         else -> Modifier
     }
     Surface(
-        modifier = cardHeightModifier,
+        modifier = cardHeightModifier.onSizeChanged { size ->
+            renderedCardHeightDp = with(density) { size.height.toDp().value }.roundToInt()
+        },
         shape = RoundedCornerShape(14.dp),
         color = cardTint?.copy(alpha = 0.13f) ?: MaterialTheme.colorScheme.surface,
-        tonalElevation = if (cardTint == null) 1.dp else 0.dp,
-        border = BorderStroke(1.dp, cardTint?.copy(alpha = 0.42f) ?: Color.Transparent)
+        tonalElevation = 0.dp,
+        shadowElevation = if (cardTint == null) 1.dp else 0.dp,
+        border = BorderStroke(
+            1.dp,
+            cardTint?.copy(alpha = 0.42f) ?: MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+        )
     ) {
         Column(
             modifier = Modifier.padding(15.dp),
@@ -3641,7 +6715,10 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                 Icon(
                     imageVector = Icons.Filled.DragHandle,
                     contentDescription = "Drag card",
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier
+                        .then(dragHandleModifier)
+                        .size(22.dp)
+                        .padding(2.dp),
                     tint = if (cardsUnlocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant
                 )
                 Surface(
@@ -3670,7 +6747,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = Color.Transparent,
-                        onClick = { if (cardsUnlocked) menuOpen = true }
+                        onClick = { menuOpen = true }
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MoreHoriz,
@@ -3678,123 +6755,67 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                             modifier = Modifier
                                 .padding(5.dp)
                                 .size(18.dp),
-                            tint = if (cardsUnlocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        val actions = cardActions
                         DropdownMenuItem(
-                            text = { Text(if (collapsed) "Expand card" else "Collapse card") },
+                            text = { Text("Hide Block") },
+                            leadingIcon = { Icon(Icons.Filled.VisibilityOff, contentDescription = null) },
+                            enabled = actions != null && cardsUnlocked,
                             onClick = {
-                                collapsed = !collapsed
+                                if (actions != null) {
+                                    actions.onSaveLayout(actions.layout.withCardVisibility(actions.cardId, false))
+                                }
                                 menuOpen = false
                             }
                         )
-                        if (cardsUnlocked && cardActions != null) {
-                            DropdownMenuItem(
-                                text = { Text("Hide block") },
-                                onClick = {
-                                    cardActions.onSaveLayout(cardActions.layout.withCardVisibility(cardActions.cardId, false))
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Move to previous column") },
-                                enabled = cardActions.columnIndex > 0,
-                                onClick = {
-                                    cardActions.onSaveLayout(
-                                        cardActions.layout.moveDesktopCardToColumnEnd(cardActions.cardId, cardActions.columnIndex - 1)
-                                    )
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Move to next column") },
-                                enabled = cardActions.columnIndex < cardActions.columnCount - 1,
-                                onClick = {
-                                    cardActions.onSaveLayout(
-                                        cardActions.layout.moveDesktopCardToColumnEnd(cardActions.cardId, cardActions.columnIndex + 1)
-                                    )
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Narrow column") },
-                                onClick = {
-                                    cardActions.onSaveLayout(cardActions.layout.adjustColumnWidth(cardActions.columnIndex, -40))
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Widen column") },
-                                onClick = {
-                                    cardActions.onSaveLayout(cardActions.layout.adjustColumnWidth(cardActions.columnIndex, 40))
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Reset column width") },
-                                onClick = {
-                                    cardActions.onSaveLayout(cardActions.layout.withDefaultColumnWidth(cardActions.columnIndex))
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Shorter card") },
-                                onClick = {
-                                    cardActions.onSaveLayout(
-                                        cardActions.layout.adjustCardHeight(cardActions.cardId, cardActions.orderId, -40)
-                                    )
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Taller card") },
-                                onClick = {
-                                    cardActions.onSaveLayout(
-                                        cardActions.layout.adjustCardHeight(cardActions.cardId, cardActions.orderId, 40)
-                                    )
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Auto height") },
-                                onClick = {
-                                    cardActions.onSaveLayout(
-                                        cardActions.layout.withCardAutoHeight(cardActions.cardId, cardActions.orderId)
-                                    )
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Reset card and column size") },
-                                onClick = {
-                                    cardActions.onSaveLayout(
-                                        cardActions.layout
-                                            .withCardAutoHeight(cardActions.cardId, cardActions.orderId)
-                                            .withDefaultColumnWidth(cardActions.columnIndex)
-                                    )
-                                    menuOpen = false
-                                }
-                            )
-                            val selectedColorName = cardActions.layout.cardColors[cardActions.cardId] ?: "Default"
-                            DropdownMenuItem(
-                                text = { Text("Color: Default") },
-                                leadingIcon = { CardColorSwatch("Default", selectedColorName == "Default") },
-                                onClick = {
-                                    cardActions.onSaveLayout(cardActions.layout.withCardColor(cardActions.cardId, "Default"))
-                                    menuOpen = false
-                                }
-                            )
-                            listOf("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink").forEach { colorName ->
-                                DropdownMenuItem(
-                                    text = { Text("Color: $colorName") },
-                                    leadingIcon = { CardColorSwatch(colorName, selectedColorName == colorName) },
-                                    onClick = {
-                                        cardActions.onSaveLayout(cardActions.layout.withCardColor(cardActions.cardId, colorName))
-                                        menuOpen = false
-                                    }
+                        DropdownMenuItem(
+                            text = { Text("Edit Block Headings") },
+                            leadingIcon = {
+                                Text(
+                                    "Aa",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            },
+                            enabled = headingEditorConfig != null,
+                            onClick = {
+                                if (headingEditorConfig != null) {
+                                    headingEditorOpen = true
+                                }
+                                menuOpen = false
                             }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        DropdownMenuItem(
+                            text = { Text("Color") },
+                            leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null) },
+                            trailingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                            enabled = actions != null && cardsUnlocked,
+                            onClick = {
+                                menuOpen = false
+                                colorMenuOpen = true
+                            }
+                        )
+                    }
+                    DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
+                        val actions = cardActions
+                        val selectedColorName = actions?.layout?.cardColors?.get(actions.cardId) ?: "Default"
+                        listOf("Default", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink").forEach { colorName ->
+                            DropdownMenuItem(
+                                text = { Text(colorName) },
+                                leadingIcon = { CardColorSwatch(colorName, selectedColorName == colorName) },
+                                enabled = actions != null && cardsUnlocked,
+                                onClick = {
+                                    if (actions != null) {
+                                        actions.onSaveLayout(actions.layout.withCardColor(actions.cardId, colorName))
+                                    }
+                                    colorMenuOpen = false
+                                }
+                            )
                         }
                     }
                 }
@@ -3813,12 +6834,19 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                     )
                 }
             } else {
-                if (displayedHeight != null && !useUnifiedBoardScroll) {
+                if (displayedHeight != null) {
+                    val fixedContentModifier = Modifier
+                        .weight(1f, fill = true)
+                        .fillMaxWidth()
+                        .then(
+                            if (useUnifiedBoardScroll) {
+                                Modifier.clip(RoundedCornerShape(10.dp))
+                            } else {
+                                Modifier.verticalScroll(contentScrollState)
+                            }
+                        )
                     Column(
-                        modifier = Modifier
-                            .weight(1f, fill = true)
-                            .fillMaxWidth()
-                            .verticalScroll(contentScrollState),
+                        modifier = fixedContentModifier,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         content()
@@ -3831,73 +6859,124 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                         content()
                     }
                 }
-                val resizeActions = if (cardsUnlocked) cardActions else null
+                val resizeActions = if (cardsUnlocked && cardActions != null) cardActions else null
                 val canResizeCard = resizeActions != null
+                val latestResizeActions by rememberUpdatedState(resizeActions)
+                val latestDisplayedHeight by rememberUpdatedState(displayedHeight)
+                val latestRenderedCardHeightDp by rememberUpdatedState(renderedCardHeightDp)
                 val resizeModifier = if (resizeActions != null) {
-                    Modifier.pointerInput(resizeActions.cardId, resizeActions.orderId, displayedHeight) {
-                        detectVerticalDragGestures(
+                    Modifier.pointerInput(resizeActions.cardId, resizeActions.orderId) {
+                        detectDragGestures(
                             onDragStart = {
-                                dragBaseHeight = displayedHeight ?: defaultCardHeight(resizeActions.cardId)
-                                dragHeightDelta = 0f
+                                val actions = latestResizeActions
+                                if (actions != null) {
+                                    dragBaseHeight = latestDisplayedHeight ?: latestRenderedCardHeightDp ?: defaultRenderedCardHeight(actions.cardId)
+                                    dragHeightDelta = 0f
+                                    dragHadHeightChange = false
+                                    actions.onCardResizeStart()
+                                }
                             },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                dragHeightDelta += with(density) { dragAmount.toDp().value }
+                            onDrag = { change, dragAmount ->
+                                val actions = latestResizeActions
+                                if (actions != null && dragBaseHeight != null) {
+                                    change.consume()
+                                    val verticalDelta = with(density) { dragAmount.y.toDp().value } * CardResizeDragSensitivity
+                                    if (abs(verticalDelta) > 0.1f) {
+                                        dragHadHeightChange = true
+                                    }
+                                    dragHeightDelta += verticalDelta
+                                }
                             },
                             onDragEnd = {
-                                val baseHeight = dragBaseHeight ?: displayedHeight ?: defaultCardHeight(resizeActions.cardId)
-                                val finalHeight = (baseHeight + dragHeightDelta).coerceIn(160f, 900f).toInt()
-                                resizeActions.onSaveLayout(
-                                    resizeActions.layout.withCardHeight(resizeActions.cardId, resizeActions.orderId, finalHeight)
-                                )
+                                val actions = latestResizeActions
+                                if (dragHadHeightChange || abs(dragHeightDelta) >= 1f) {
+                                    val cardId = actions?.cardId
+                                    val minimumHeight = minimumRenderedCardHeight(cardId)
+                                    val baseHeight = dragBaseHeight
+                                        ?: latestDisplayedHeight
+                                        ?: latestRenderedCardHeightDp
+                                        ?: cardId?.let(::defaultRenderedCardHeight)
+                                        ?: minimumHeight
+                                    val finalHeight = (baseHeight + dragHeightDelta).coerceIn(minimumHeight.toFloat(), 1200f).toInt()
+                                    if (actions != null) {
+                                        actions.onSaveLayout(
+                                            actions.layout.withCardHeight(actions.cardId, actions.orderId, finalHeight)
+                                        )
+                                    }
+                                }
                                 dragBaseHeight = null
                                 dragHeightDelta = 0f
+                                dragHadHeightChange = false
+                                actions?.onCardResizeFinish()
                             },
                             onDragCancel = {
+                                val actions = latestResizeActions
                                 dragBaseHeight = null
                                 dragHeightDelta = 0f
+                                dragHadHeightChange = false
+                                actions?.onCardResizeFinish()
                             }
                         )
                     }
                 } else {
                     Modifier
                 }
-                val cornerResizeModifier = if (resizeActions != null) {
-                    Modifier.pointerInput(resizeActions.cardId, resizeActions.orderId, displayedHeight, resizeActions.columnWidth) {
+                val columnResizeActions = if (resizeActions?.isPhoneLayout == false) resizeActions else null
+                val canResizeColumn = columnResizeActions != null
+                val latestColumnResizeActions by rememberUpdatedState(columnResizeActions)
+                val cornerResizeModifier = if (columnResizeActions != null) {
+                    Modifier.pointerInput(columnResizeActions.cardId, columnResizeActions.orderId) {
                         detectDragGestures(
                             onDragStart = {
-                                dragBaseHeight = displayedHeight ?: defaultCardHeight(resizeActions.cardId)
-                                dragHeightDelta = 0f
-                                dragBaseWidth = resizeActions.columnWidth
-                                dragWidthDelta = 0f
-                                resizeActions.onColumnResizeStart()
+                                val actions = latestColumnResizeActions
+                                if (actions != null) {
+                                    dragBaseHeight = latestDisplayedHeight ?: latestRenderedCardHeightDp ?: defaultRenderedCardHeight(actions.cardId)
+                                    dragHeightDelta = 0f
+                                    dragHadHeightChange = false
+                                    dragBaseWidth = actions.columnWidth
+                                    dragWidthDelta = 0f
+                                    actions.onColumnResizeStart()
+                                }
                             },
                             onDrag = { change, dragAmount ->
-                                change.consume()
-                                dragHeightDelta += with(density) { dragAmount.y.toDp().value }
-                                dragWidthDelta += with(density) { dragAmount.x.toDp().value }
-                                resizeActions.onColumnResizeBy(dragAmount.x)
+                                val actions = latestColumnResizeActions
+                                if (actions != null && dragBaseHeight != null) {
+                                    change.consume()
+                                    dragHeightDelta += with(density) { dragAmount.y.toDp().value } * CardResizeDragSensitivity
+                                    if (abs(dragAmount.y) > 0.1f) {
+                                        dragHadHeightChange = true
+                                    }
+                                    dragWidthDelta += with(density) { dragAmount.x.toDp().value } * CardResizeDragSensitivity
+                                    actions.onColumnResizeBy(dragAmount.x * CardResizeDragSensitivity)
+                                }
                             },
                             onDragEnd = {
-                                val baseHeight = dragBaseHeight ?: displayedHeight ?: defaultCardHeight(resizeActions.cardId)
-                                val finalHeight = (baseHeight + dragHeightDelta).coerceIn(160f, 900f).toInt()
-                                val baseWidth = dragBaseWidth ?: resizeActions.columnWidth
-                                val finalWidth = (baseWidth + dragWidthDelta).coerceIn(260f, 800f).roundToInt()
-                                resizeActions.onSaveLayout(
-                                    resizeActions.layout
-                                        .withCardHeight(resizeActions.cardId, resizeActions.orderId, finalHeight)
-                                        .withColumnWidth(resizeActions.columnIndex, finalWidth)
-                                )
-                                resizeActions.onColumnResizeFinish()
+                                val actions = latestColumnResizeActions
+                                if (actions != null) {
+                                    val minimumHeight = minimumRenderedCardHeight(actions.cardId)
+                                    val baseHeight = dragBaseHeight ?: latestDisplayedHeight ?: latestRenderedCardHeightDp ?: defaultRenderedCardHeight(actions.cardId)
+                                    val finalHeight = (baseHeight + dragHeightDelta).coerceIn(minimumHeight.toFloat(), 1200f).toInt()
+                                    val baseWidth = dragBaseWidth ?: actions.columnWidth
+                                    val finalWidth = (baseWidth + dragWidthDelta).coerceIn(260f, 800f).roundToInt()
+                                    actions.onSaveLayout(
+                                        actions.layout
+                                            .withCardHeight(actions.cardId, actions.orderId, finalHeight)
+                                            .withColumnWidth(actions.columnIndex, finalWidth)
+                                    )
+                                    actions.onColumnResizeFinish()
+                                }
                                 dragBaseHeight = null
                                 dragHeightDelta = 0f
+                                dragHadHeightChange = false
                                 dragBaseWidth = null
                                 dragWidthDelta = 0f
                             },
                             onDragCancel = {
-                                resizeActions.onColumnResizeFinish()
+                                val actions = latestColumnResizeActions
+                                actions?.onColumnResizeFinish()
                                 dragBaseHeight = null
                                 dragHeightDelta = 0f
+                                dragHadHeightChange = false
                                 dragBaseWidth = null
                                 dragWidthDelta = 0f
                             }
@@ -3909,20 +6988,20 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(24.dp),
+                        .height(if (canResizeCard) 44.dp else 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(86.dp)
+                            .fillMaxWidth()
                             .fillMaxHeight()
                             .then(resizeModifier),
                         contentAlignment = Alignment.Center
                     ) {
                         Surface(
                             modifier = Modifier
-                                .width(42.dp)
-                                .height(3.dp),
+                                .width(if (canResizeCard) 72.dp else 40.dp)
+                                .height(if (canResizeCard) 5.dp else 3.dp),
                             shape = RoundedCornerShape(999.dp),
                             color = when {
                                 dragBaseHeight != null && dragBaseWidth == null -> headerAccent.copy(alpha = 0.65f)
@@ -3939,7 +7018,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                         shape = RoundedCornerShape(8.dp),
                         color = when {
                             dragBaseHeight != null && dragBaseWidth != null -> headerAccent.copy(alpha = 0.16f)
-                            canResizeCard -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+                            canResizeColumn -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
                             else -> Color.Transparent
                         }
                     ) {
@@ -3949,19 +7028,733 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                             modifier = Modifier
                                 .padding(5.dp)
                                 .size(14.dp),
-                            tint = if (canResizeCard) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f) else Color.Transparent
+                            tint = if (canResizeColumn) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f) else Color.Transparent
                         )
                     }
                 }
             }
         }
     }
+    if (headingEditorOpen && headingEditorActions != null && headingEditorConfig != null) {
+        OrderBlockHeadingEditorDialog(
+            config = headingEditorConfig,
+            onDismiss = { headingEditorOpen = false },
+            onSave = { updates, message ->
+                headingEditorActions.onSave(updates, message)
+                headingEditorOpen = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun OrderBlockHeadingEditorDialog(
+    config: OrderHeadingEditorConfig,
+    onDismiss: () -> Unit,
+    onSave: (Map<String, Any?>, String) -> Unit
+) {
+    var groupValues by remember(config.title) {
+        mutableStateOf(config.groups.associate { it.key to it.items })
+    }
+    var fieldValues by remember(config.title) {
+        mutableStateOf(config.fields.associate { it.key to it.value })
+    }
+    var toggleValues by remember(config.title) {
+        mutableStateOf(config.toggles.associate { it.key to it.value })
+    }
+    val scrollState = rememberScrollState()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(config.title, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 540.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = config.subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp
+                )
+                config.fields.forEach { field ->
+                    OutlinedTextField(
+                        value = fieldValues[field.key].orEmpty(),
+                        onValueChange = { value -> fieldValues = fieldValues + (field.key to value) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(field.label) },
+                        singleLine = true
+                    )
+                }
+                config.toggles.forEach { toggle ->
+                    Surface(
+                        shape = RoundedCornerShape(13.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = toggle.label,
+                                modifier = Modifier.weight(1f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Switch(
+                                checked = toggleValues[toggle.key] ?: false,
+                                onCheckedChange = { checked -> toggleValues = toggleValues + (toggle.key to checked) }
+                            )
+                        }
+                    }
+                }
+                config.groups.forEach { group ->
+                    val items = groupValues[group.key].orEmpty()
+                    OrderHeadingEditorGroupView(
+                        group = group,
+                        items = items,
+                        onItemsChange = { next -> groupValues = groupValues + (group.key to next) }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val draft = OrderHeadingEditorDraft(
+                        groups = groupValues,
+                        fields = fieldValues,
+                        toggles = toggleValues
+                    )
+                    onSave(config.buildUpdates(draft), config.saveMessage)
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun OrderHeadingEditorGroupView(
+    group: OrderHeadingEditorGroup,
+    items: List<StudioHeadingItem>,
+    onItemsChange: (List<StudioHeadingItem>) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(15.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Text(group.title, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+            if (group.description.isNotBlank()) {
+                Text(group.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+            if (items.isEmpty()) {
+                Text(
+                    group.emptyText,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f), RoundedCornerShape(11.dp))
+                        .padding(11.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+            items.forEachIndexed { index, item ->
+                val canDelete = item.id != group.lockedFirstId && items.size > group.minimumCount
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "${index + 1}",
+                        modifier = Modifier
+                            .size(26.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                            .padding(top = 4.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    OutlinedTextField(
+                        value = item.title,
+                        onValueChange = { value ->
+                            onItemsChange(items.toMutableList().also { it[index] = item.copy(title = value) })
+                        },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    TextButton(
+                        enabled = index > 0,
+                        onClick = { onItemsChange(items.movedHeadingItem(index, index - 1)) }
+                    ) {
+                        Text("Up")
+                    }
+                    TextButton(
+                        enabled = index < items.lastIndex,
+                        onClick = { onItemsChange(items.movedHeadingItem(index, index + 1)) }
+                    ) {
+                        Text("Down")
+                    }
+                    TextButton(
+                        enabled = canDelete,
+                        onClick = { onItemsChange(items.toMutableList().also { it.removeAt(index) }) }
+                    ) {
+                        Text("Delete")
+                    }
+                }
+            }
+            TextButton(
+                onClick = {
+                    val title = group.addLabel.removePrefix("Add ").ifBlank { "Heading" }
+                    onItemsChange(
+                        items + StudioHeadingItem(
+                            id = newOrderHeadingId(title, items.size),
+                            title = "$title ${items.size + 1}"
+                        )
+                    )
+                }
+            ) {
+                Text(group.addLabel)
+            }
+        }
+    }
+}
+
+private fun orderHeadingEditorConfig(
+    cardId: OrderDetailCardId?,
+    settings: StudioWorkspaceSettings?
+): OrderHeadingEditorConfig? {
+    if (cardId == null || settings == null) return null
+    return when (cardId) {
+        OrderDetailCardId.Summary -> OrderHeadingEditorConfig(
+            title = "Edit Summary Headings",
+            subtitle = "Choose the two production status rows shown inside Order Summary.",
+            fields = listOf(
+                OrderHeadingEditorField("summaryStep1", "Summary row 1", settings.summaryStep1, "Design"),
+                OrderHeadingEditorField("summaryStep2", "Summary row 2", settings.summaryStep2, "Painting")
+            ),
+            saveMessage = "Order summary headings saved.",
+            buildUpdates = { draft ->
+                mapOf(
+                    "summaryStep1" to cleanOrderHeadingField(draft.fields["summaryStep1"], "Design"),
+                    "summaryStep2" to cleanOrderHeadingField(draft.fields["summaryStep2"], "Painting")
+                )
+            }
+        )
+        OrderDetailCardId.Financial -> OrderHeadingEditorConfig(
+            title = "Edit Financial Headings",
+            subtitle = "Add spending headings and extra remaining or pending headings for Financial Info.",
+            fields = listOf(
+                OrderHeadingEditorField("financialBaseCostLabel", "Base cost heading", settings.financialBaseCostLabel, "Cost (Base)")
+            ),
+            toggles = listOf(
+                OrderHeadingEditorToggle("financialShowBaseCost", "Show base cost field", settings.financialShowBaseCost)
+            ),
+            groups = listOf(
+                OrderHeadingEditorGroup(
+                    key = "expense",
+                    title = "Spending / Cost Headings",
+                    description = "Extra cost rows shown under the financial card.",
+                    addLabel = "Add Spending",
+                    emptyText = "No extra spending headings yet.",
+                    items = normalizedFinancialItems(settings.financialExpenseItems, "Cost")
+                ),
+                OrderHeadingEditorGroup(
+                    key = "remaining",
+                    title = "Remaining / Pending Headings",
+                    description = "Extra remaining or pending rows shown under the financial card.",
+                    addLabel = "Add Remaining",
+                    emptyText = "No extra remaining headings yet.",
+                    items = normalizedFinancialItems(settings.financialRemainingItems, "Pending")
+                )
+            ),
+            saveMessage = "Financial headings saved.",
+            buildUpdates = { draft ->
+                mapOf(
+                    "financialShowBaseCost" to (draft.toggles["financialShowBaseCost"] ?: true),
+                    "financialBaseCostLabel" to cleanOrderHeadingField(draft.fields["financialBaseCostLabel"], "Cost (Base)"),
+                    "financialExpenseItemsJSON" to genericHeadingItemsJsonForOrder(
+                        normalizedFinancialItems(draft.groups["expense"].orEmpty(), "Cost")
+                    ),
+                    "financialRemainingItemsJSON" to genericHeadingItemsJsonForOrder(
+                        normalizedFinancialItems(draft.groups["remaining"].orEmpty(), "Pending")
+                    )
+                )
+            }
+        )
+        OrderDetailCardId.Status -> OrderHeadingEditorConfig(
+            title = "Edit Production Status Headings",
+            subtitle = "Edit the status dropdown headings, extra Yes / No checks, and small order card badge labels.",
+            fields = listOf(
+                OrderHeadingEditorField("summaryStep1", "Summary row 1", settings.summaryStep1, "Design"),
+                OrderHeadingEditorField("summaryStep2", "Summary row 2", settings.summaryStep2, "Painting"),
+                OrderHeadingEditorField("orderListStep1", "Small card badge 1", settings.orderListStep1, settings.summaryStep1.ifBlank { "Design" }),
+                OrderHeadingEditorField("orderListStep2", "Small card badge 2", settings.orderListStep2, settings.summaryStep2.ifBlank { "Painting" }),
+                OrderHeadingEditorField("statusNotesSupplierLabel", "Notes / Supplier heading", settings.statusNotesSupplierLabel, "Notes / Supplier")
+            ),
+            toggles = listOf(
+                OrderHeadingEditorToggle("showStatusNotesSupplier", "Show Notes / Supplier field", settings.showStatusNotesSupplier)
+            ),
+            groups = listOf(
+                OrderHeadingEditorGroup(
+                    key = "steps",
+                    title = "Status Dropdown Headings",
+                    description = "These values appear in the production status dropdowns.",
+                    addLabel = "Add Step",
+                    emptyText = "At least one production step is required.",
+                    items = headingItemsFromTitles(settings.customSteps, "status-step"),
+                    minimumCount = 1
+                ),
+                OrderHeadingEditorGroup(
+                    key = "toggles",
+                    title = "Extra Yes / No Checks",
+                    description = "Optional switches shown in the Production Status card.",
+                    addLabel = "Add Yes / No",
+                    emptyText = "No extra Yes / No checks yet.",
+                    items = headingItemsFromTitles(settings.customToggles, "status-toggle")
+                )
+            ),
+            saveMessage = "Production status headings saved.",
+            buildUpdates = { draft ->
+                val stepTitles = normalizeOrderTitleList(draft.groups["steps"].orEmpty().map { it.title }, listOf("Design", "Painting"))
+                val summary1 = cleanOrderHeadingField(draft.fields["summaryStep1"], stepTitles.firstOrNull() ?: "Design")
+                val summary2 = cleanOrderHeadingField(draft.fields["summaryStep2"], stepTitles.getOrNull(1) ?: summary1)
+                mapOf(
+                    "customStepsJSON" to titleArrayJsonForOrder(stepTitles),
+                    "customTogglesJSON" to titleArrayJsonForOrder(draft.groups["toggles"].orEmpty().map { it.title }),
+                    "showStatusNotesSupplier" to (draft.toggles["showStatusNotesSupplier"] ?: false),
+                    "statusNotesSupplierLabel" to cleanOrderHeadingField(draft.fields["statusNotesSupplierLabel"], "Notes / Supplier"),
+                    "summaryStep1" to summary1,
+                    "summaryStep2" to summary2,
+                    "orderListStep1" to cleanOrderHeadingField(draft.fields["orderListStep1"], summary1),
+                    "orderListStep2" to cleanOrderHeadingField(draft.fields["orderListStep2"], summary2)
+                )
+            }
+        )
+        OrderDetailCardId.Customer -> OrderHeadingEditorConfig(
+            title = "Edit Customer & Communication Headings",
+            subtitle = "Edit customer custom fields, contact field visibility, and channel button names.",
+            toggles = listOf(
+                OrderHeadingEditorToggle("communicationShowTelephone", "Show telephone", settings.communicationShowTelephone),
+                OrderHeadingEditorToggle("communicationShowEmail", "Show email", settings.communicationShowEmail),
+                OrderHeadingEditorToggle("communicationShowAddress", "Show address", settings.communicationShowAddress),
+                OrderHeadingEditorToggle("communicationShowChannel", "Show channel buttons", settings.communicationShowChannel),
+                OrderHeadingEditorToggle("communicationShowCustomerNotes", "Show customer notes", settings.communicationShowCustomerNotes)
+            ),
+            groups = listOf(
+                OrderHeadingEditorGroup(
+                    key = "customFields",
+                    title = "Customer & Design Fields",
+                    description = "Extra text fields inside the Customer & Communication card.",
+                    addLabel = "Add Heading",
+                    emptyText = "No custom customer fields yet.",
+                    items = headingItemsFromTitles(settings.customFields, "customer-field")
+                ),
+                OrderHeadingEditorGroup(
+                    key = "channels",
+                    title = "Channel Button Names",
+                    description = "Names for Instagram, WhatsApp, TikTok or any other channel buttons.",
+                    addLabel = "Add Channel",
+                    emptyText = "No channel buttons yet.",
+                    items = headingItemsFromTitles(settings.communicationChannelLabels, "channel")
+                )
+            ),
+            saveMessage = "Customer and communication headings saved.",
+            buildUpdates = { draft ->
+                mapOf(
+                    "customFieldsJSON" to titleArrayJsonForOrder(draft.groups["customFields"].orEmpty().map { it.title }),
+                    "communicationShowTelephone" to (draft.toggles["communicationShowTelephone"] ?: true),
+                    "communicationShowEmail" to (draft.toggles["communicationShowEmail"] ?: true),
+                    "communicationShowAddress" to (draft.toggles["communicationShowAddress"] ?: true),
+                    "communicationShowChannel" to (draft.toggles["communicationShowChannel"] ?: true),
+                    "communicationShowCustomerNotes" to (draft.toggles["communicationShowCustomerNotes"] ?: true),
+                    "communicationChannelLabelsJSON" to stringArrayJsonForOrder(draft.groups["channels"].orEmpty().map { it.title })
+                )
+            }
+        )
+        OrderDetailCardId.Notes -> OrderHeadingEditorConfig(
+            title = "Edit Notes Headings",
+            subtitle = "Add, remove, or rename the special note fields shown inside Notes.",
+            groups = listOf(
+                OrderHeadingEditorGroup(
+                    key = "notes",
+                    title = "Special Note Fields",
+                    description = "The first Special Notes field is kept as the primary shared notes field.",
+                    addLabel = "Add Note Field",
+                    emptyText = "No special note fields yet.",
+                    items = normalizeSpecialNoteSectionsForOrder(settings.specialNoteSections),
+                    lockedFirstId = STUDIO_PRIMARY_SPECIAL_NOTE_ID,
+                    minimumCount = 1
+                )
+            ),
+            saveMessage = "Notes headings saved.",
+            buildUpdates = { draft ->
+                val json = specialNoteSectionsJsonForOrder(draft.groups["notes"].orEmpty())
+                mapOf("specialNoteSectionsJSON" to json, "specialNoteSectionsJSONV1" to json)
+            }
+        )
+        OrderDetailCardId.Materials -> OrderHeadingEditorConfig(
+            title = "Edit Materials Headings",
+            subtitle = "Edit default material checks, extra Yes / No checks, and the Notes / Supplier field.",
+            fields = listOf(
+                OrderHeadingEditorField("materialsNotesSupplierLabel", "Notes / Supplier heading", settings.materialsNotesSupplierLabel, "Notes / Supplier")
+            ),
+            toggles = listOf(
+                OrderHeadingEditorToggle("showMaterialsNotesSupplier", "Show Notes / Supplier field", settings.showMaterialsNotesSupplier)
+            ),
+            groups = listOf(
+                OrderHeadingEditorGroup(
+                    key = "defaultChecks",
+                    title = "Default Material Checks",
+                    description = "Main material rows shown in Materials & Inventory.",
+                    addLabel = "Add Material Check",
+                    emptyText = "At least one material check is required.",
+                    items = headingItemsFromTitles(settings.materialsDefaultChecks, "material-check"),
+                    minimumCount = 1
+                ),
+                OrderHeadingEditorGroup(
+                    key = "toggles",
+                    title = "Extra Yes / No Checks",
+                    description = "Optional switches shown in the Materials & Inventory card.",
+                    addLabel = "Add Yes / No",
+                    emptyText = "No extra Yes / No checks yet.",
+                    items = headingItemsFromTitles(settings.materialsToggles, "material-toggle")
+                )
+            ),
+            saveMessage = "Materials headings saved.",
+            buildUpdates = { draft ->
+                val defaultChecks = normalizeOrderTitleList(draft.groups["defaultChecks"].orEmpty().map { it.title }, listOf("Material Check 1"))
+                val padded = defaultChecks + listOf("Item", "Item", "Item", "Materials Ready")
+                mapOf(
+                    "materialsDefaultChecksJSON" to titleArrayJsonForOrder(defaultChecks),
+                    "invLabel1" to padded[0],
+                    "invLabel2" to padded[1],
+                    "invLabel3" to padded[2],
+                    "invLabel4" to padded[3],
+                    "materialsTogglesJSON" to titleArrayJsonForOrder(draft.groups["toggles"].orEmpty().map { it.title }),
+                    "showMaterialsNotesSupplier" to (draft.toggles["showMaterialsNotesSupplier"] ?: true),
+                    "materialsNotesSupplierLabel" to cleanOrderHeadingField(draft.fields["materialsNotesSupplierLabel"], "Notes / Supplier")
+                )
+            }
+        )
+        OrderDetailCardId.Schedule -> OrderHeadingEditorConfig(
+            title = "Edit Quick Reminder Headings",
+            subtitle = "Edit the shortcut titles shown in Schedule & Alerts. Existing timing and priority are preserved where possible.",
+            groups = listOf(
+                OrderHeadingEditorGroup(
+                    key = "reminders",
+                    title = "Quick Reminders",
+                    description = "Saved reminder shortcuts for the Schedule & Alerts card.",
+                    addLabel = "Add Reminder",
+                    emptyText = "No quick reminders yet.",
+                    items = settings.scheduleQuickReminders.map { StudioHeadingItem(it.id, it.title) }
+                )
+            ),
+            saveMessage = "Quick reminder headings saved.",
+            buildUpdates = { draft ->
+                mapOf(
+                    "scheduleQuickRemindersJSON" to quickReminderTemplatesJsonForOrder(
+                        draft.groups["reminders"].orEmpty(),
+                        settings.scheduleQuickReminders
+                    )
+                )
+            }
+        )
+        else -> null
+    }
+}
+
+private fun List<StudioHeadingItem>.movedHeadingItem(from: Int, to: Int): List<StudioHeadingItem> {
+    if (from !in indices || to !in indices || from == to) return this
+    return toMutableList().also { list ->
+        val item = list.removeAt(from)
+        list.add(to, item)
+    }
+}
+
+private fun newOrderHeadingId(label: String, index: Int): String {
+    val slug = label
+        .lowercase(Locale.UK)
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+        .ifBlank { "heading" }
+    return "android-$slug-${System.currentTimeMillis()}-$index".take(80)
+}
+
+private fun cleanOrderHeadingField(value: String?, fallback: String): String {
+    return value.orEmpty().trim().take(120).ifBlank { fallback }
+}
+
+private fun normalizeOrderTitleList(values: List<String>, fallback: List<String> = emptyList()): List<String> {
+    val cleaned = values
+        .map { it.trim().take(120) }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase(Locale.UK) }
+        .take(40)
+    return cleaned.ifEmpty { fallback }
+}
+
+private fun headingItemsFromTitles(values: List<String>, idPrefix: String): List<StudioHeadingItem> {
+    return normalizeOrderTitleList(values).mapIndexed { index, title ->
+        StudioHeadingItem("$idPrefix-$index-${title.lowercase(Locale.UK).take(18)}", title)
+    }
+}
+
+private fun normalizeHeadingItemsForOrder(values: List<StudioHeadingItem>): List<StudioHeadingItem> {
+    val cleaned = mutableListOf<StudioHeadingItem>()
+    values.forEachIndexed { index, item ->
+        val title = item.title.trim().take(120)
+        if (title.isBlank()) return@forEachIndexed
+        val id = item.id.trim().take(80).ifBlank { newOrderHeadingId(title, index) }
+        if (cleaned.none { existing -> existing.id.equals(id, ignoreCase = true) }) {
+            cleaned.add(StudioHeadingItem(id, title))
+        }
+    }
+    return cleaned.take(40)
+}
+
+private fun normalizeSpecialNoteSectionsForOrder(values: List<StudioHeadingItem>): List<StudioHeadingItem> {
+    val cleaned = normalizeHeadingItemsForOrder(values).toMutableList()
+    val primaryIndex = cleaned.indexOfFirst { it.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true) }
+    val primary = if (primaryIndex >= 0) {
+        cleaned.removeAt(primaryIndex).copy(id = STUDIO_PRIMARY_SPECIAL_NOTE_ID)
+    } else {
+        StudioHeadingItem(STUDIO_PRIMARY_SPECIAL_NOTE_ID, "Special Notes")
+    }
+    cleaned.add(0, primary.copy(title = primary.title.ifBlank { "Special Notes" }))
+    return cleaned.take(40)
+}
+
+private fun titleArrayJsonForOrder(values: List<String>): String {
+    return JSONArray().also { array ->
+        normalizeOrderTitleList(values).forEach { title ->
+            array.put(JSONObject().put("title", title))
+        }
+    }.toString()
+}
+
+private fun stringArrayJsonForOrder(values: List<String>): String {
+    return JSONArray().also { array ->
+        normalizeOrderTitleList(values).forEach { title -> array.put(title) }
+    }.toString()
+}
+
+private fun genericHeadingItemsJsonForOrder(values: List<StudioHeadingItem>): String {
+    return JSONArray().also { array ->
+        normalizeHeadingItemsForOrder(values).forEach { item ->
+            array.put(JSONObject().put("id", item.id).put("title", item.title))
+        }
+    }.toString()
+}
+
+private fun specialNoteSectionsJsonForOrder(values: List<StudioHeadingItem>): String {
+    return JSONArray().also { array ->
+        normalizeSpecialNoteSectionsForOrder(values).forEach { item ->
+            array.put(JSONObject().put("id", item.id).put("title", item.title))
+        }
+    }.toString()
+}
+
+private fun quickReminderTemplatesJsonForOrder(
+    values: List<StudioHeadingItem>,
+    existing: List<StudioQuickReminderTemplate>
+): String {
+    val byId = existing.associateBy { it.id }
+    val byTitle = existing.associateBy { it.title.trim().lowercase(Locale.UK) }
+    val normalized = normalizeHeadingItemsForOrder(values)
+    return JSONArray().also { array ->
+        normalized.forEachIndexed { index, item ->
+            val existingTemplate = byId[item.id] ?: byTitle[item.title.trim().lowercase(Locale.UK)]
+            val template = existingTemplate ?: StudioQuickReminderTemplate(
+                id = item.id.ifBlank { "quick-reminder-$index" },
+                title = item.title,
+                days = 1,
+                hours = 0,
+                priority = "Normal",
+                notify = true
+            )
+            array.put(
+                JSONObject()
+                    .put("id", item.id.ifBlank { template.id })
+                    .put("title", item.title)
+                    .put("days", template.days.coerceIn(0, 365))
+                    .put("hours", template.hours.coerceIn(0, 23))
+                    .put("priority", template.priority.ifBlank { "Normal" })
+                    .put("notify", template.notify)
+            )
+        }
+    }.toString()
+}
+
+private fun orderDetailCardLayoutFromSnapshotJSON(raw: String): OrderDetailCardLayout? {
+    val snapshot = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+    val columns = orderLayoutCardColumns(snapshot.opt("kartYerlesimi"))
+        ?: orderLayoutCardColumns(snapshot.opt("columns"))
+    val fallbackOrder = orderLayoutCardOrder(snapshot.opt("cardOrder")) ?: columns?.flatten()
+    val phoneOrder = orderLayoutCardOrder(snapshot.opt("phoneKartSirasi"))
+        ?: orderLayoutCardOrder(snapshot.opt("mobileCardOrder"))
+        ?: orderLayoutCardOrder(snapshot.opt("phoneCardOrder"))
+        ?: fallbackOrder
+    val normalizedColumns = columns ?: fallbackOrder?.let { orderLayoutColumnsFromOrder(it) }
+    val colors = orderLayoutCardStringMap(snapshot.opt("kartRenkleri")) +
+        orderLayoutCardStringMap(snapshot.opt("cardColors"))
+    val heights = orderLayoutCardIntMap(snapshot.opt("kartYukseklikleri")) +
+        orderLayoutCardIntMap(snapshot.opt("cardHeights"))
+    val orderHeights = orderLayoutOrderCardIntMap(snapshot.opt("orderKartYukseklikleri")) +
+        orderLayoutOrderCardIntMap(snapshot.opt("orderCardHeights"))
+
+    return OrderDetailCardLayout.normalized(
+        columns = normalizedColumns,
+        phoneOrder = phoneOrder,
+        columnWidths = orderLayoutIntList(snapshot.opt("sutunGenislikleri"))
+            ?: orderLayoutIntList(snapshot.opt("columnWidths"))
+            ?: emptyList(),
+        cardColors = colors,
+        cardHeights = heights,
+        orderCardHeights = orderHeights,
+        visibility = orderLayoutCardBoolMap(snapshot.opt("visibility"))
+    )
+}
+
+private fun orderLayoutColumnsFromOrder(cards: List<OrderDetailCardId>): List<List<OrderDetailCardId>> {
+    return listOf(
+        cards.take(2),
+        cards.drop(2).take(5),
+        cards.drop(7)
+    )
+}
+
+private fun orderLayoutArray(value: Any?): JSONArray? {
+    return when (value) {
+        is JSONArray -> value
+        is String -> runCatching { JSONArray(value) }.getOrNull()
+        else -> null
+    }
+}
+
+private fun orderLayoutObject(value: Any?): JSONObject? {
+    return when (value) {
+        is JSONObject -> value
+        is String -> runCatching { JSONObject(value) }.getOrNull()
+        else -> null
+    }
+}
+
+private fun orderLayoutCardOrder(value: Any?): List<OrderDetailCardId>? {
+    val array = orderLayoutArray(value) ?: return null
+    val seen = linkedSetOf<OrderDetailCardId>()
+    val cards = mutableListOf<OrderDetailCardId>()
+    for (index in 0 until array.length()) {
+        val card = OrderDetailCardId.fromRaw(array.optString(index))
+        if (card != null && seen.add(card)) cards.add(card)
+    }
+    return cards.ifEmpty { null }
+}
+
+private fun orderLayoutCardColumns(value: Any?): List<List<OrderDetailCardId>>? {
+    val array = orderLayoutArray(value) ?: return null
+    val columns = mutableListOf<List<OrderDetailCardId>>()
+    val seen = linkedSetOf<OrderDetailCardId>()
+    for (columnIndex in 0 until array.length()) {
+        val rawColumn = orderLayoutArray(array.opt(columnIndex))
+        val column = mutableListOf<OrderDetailCardId>()
+        if (rawColumn != null) {
+            for (cardIndex in 0 until rawColumn.length()) {
+                val card = OrderDetailCardId.fromRaw(rawColumn.optString(cardIndex))
+                if (card != null && seen.add(card)) column.add(card)
+            }
+        }
+        columns.add(column)
+    }
+    return columns.takeIf { it.isNotEmpty() }
+}
+
+private fun orderLayoutIntList(value: Any?): List<Int>? {
+    val array = orderLayoutArray(value) ?: return null
+    val values = mutableListOf<Int>()
+    for (index in 0 until array.length()) {
+        val number = when (val rawValue = array.opt(index)) {
+            is Number -> rawValue.toInt()
+            is String -> rawValue.toDoubleOrNull()?.toInt()
+            else -> null
+        }
+        if (number != null) values.add(number)
+    }
+    return values.ifEmpty { null }
+}
+
+private fun orderLayoutCardStringMap(value: Any?): Map<OrderDetailCardId, String> {
+    val objectValue = orderLayoutObject(value) ?: return emptyMap()
+    val result = mutableMapOf<OrderDetailCardId, String>()
+    objectValue.keys().forEach { key ->
+        val card = OrderDetailCardId.fromRaw(key)
+        val stringValue = objectValue.optString(key).trim()
+        if (card != null && stringValue.isNotBlank()) result[card] = stringValue
+    }
+    return result
+}
+
+private fun orderLayoutCardBoolMap(value: Any?): Map<OrderDetailCardId, Boolean> {
+    val objectValue = orderLayoutObject(value) ?: return emptyMap()
+    val result = mutableMapOf<OrderDetailCardId, Boolean>()
+    objectValue.keys().forEach { key ->
+        val card = OrderDetailCardId.fromRaw(key)
+        if (card != null) result[card] = objectValue.optBoolean(key, true)
+    }
+    return result
+}
+
+private fun orderLayoutCardIntMap(value: Any?): Map<OrderDetailCardId, Int> {
+    val objectValue = orderLayoutObject(value) ?: return emptyMap()
+    val result = mutableMapOf<OrderDetailCardId, Int>()
+    objectValue.keys().forEach { key ->
+        val card = OrderDetailCardId.fromRaw(key)
+        val number = orderLayoutNumberToInt(objectValue.opt(key))
+        if (card != null && number != null) result[card] = number
+    }
+    return result
+}
+
+private fun orderLayoutOrderCardIntMap(value: Any?): Map<String, Map<OrderDetailCardId, Int>> {
+    val objectValue = orderLayoutObject(value) ?: return emptyMap()
+    val result = mutableMapOf<String, Map<OrderDetailCardId, Int>>()
+    objectValue.keys().forEach { orderId ->
+        val heights = orderLayoutCardIntMap(objectValue.opt(orderId))
+        if (orderId.isNotBlank() && heights.isNotEmpty()) result[orderId] = heights
+    }
+    return result
+}
+
+private fun orderLayoutNumberToInt(value: Any?): Int? {
+    return when (value) {
+        is Number -> value.toInt()
+        is String -> value.toDoubleOrNull()?.toInt()
+        else -> null
+    }
 }
 
 private fun cardTransferData(cardId: OrderDetailCardId): DragAndDropTransferData {
     return DragAndDropTransferData(
         clipData = ClipData(
-            ClipDescription("StudioFlow card", arrayOf(StudioCardDragMime, ClipDescription.MIMETYPE_TEXT_PLAIN)),
+            ClipDescription("NivaDesk card", arrayOf(StudioCardDragMime, ClipDescription.MIMETYPE_TEXT_PLAIN)),
             ClipData.Item(cardId.raw)
         )
     )
@@ -4026,6 +7819,53 @@ private fun OrderDetailCardLayout.movePhoneCardAfter(
     )
 }
 
+private fun OrderDetailCardLayout.movePhoneCardBefore(
+    dragged: OrderDetailCardId,
+    target: OrderDetailCardId
+): OrderDetailCardLayout {
+    if (dragged == target) return this
+    val nextOrder = phoneOrder.toMutableList()
+    if (!nextOrder.remove(dragged)) nextOrder.add(dragged)
+    val targetIndex = nextOrder.indexOf(target).takeIf { it >= 0 } ?: 0
+    nextOrder.add(targetIndex.coerceIn(0, nextOrder.size), dragged)
+    return OrderDetailCardLayout.normalized(
+        columns = columns,
+        phoneOrder = nextOrder,
+        columnWidths = columnWidths,
+        cardColors = cardColors,
+        cardHeights = cardHeights,
+        orderCardHeights = orderCardHeights,
+        visibility = visibility
+    )
+}
+
+private fun OrderDetailCardLayout.movePhoneCardBy(
+    cardId: OrderDetailCardId,
+    delta: Int
+): OrderDetailCardLayout {
+    val currentIndex = phoneOrder.indexOf(cardId).takeIf { it >= 0 } ?: return this
+    return movePhoneCardToIndex(cardId, currentIndex + delta)
+}
+
+private fun OrderDetailCardLayout.movePhoneCardToIndex(
+    cardId: OrderDetailCardId,
+    targetIndex: Int
+): OrderDetailCardLayout {
+    val nextOrder = phoneOrder.toMutableList()
+    if (!nextOrder.remove(cardId)) return this
+    val cleanIndex = targetIndex.coerceIn(0, nextOrder.size)
+    nextOrder.add(cleanIndex, cardId)
+    return OrderDetailCardLayout.normalized(
+        columns = columns,
+        phoneOrder = nextOrder,
+        columnWidths = columnWidths,
+        cardColors = cardColors,
+        cardHeights = cardHeights,
+        orderCardHeights = orderCardHeights,
+        visibility = visibility
+    )
+}
+
 private fun OrderDetailCardLayout.moveDesktopCardAfter(
     dragged: OrderDetailCardId,
     targetColumn: Int,
@@ -4061,6 +7901,37 @@ private fun OrderDetailCardLayout.moveDesktopCardBefore(
     val column = nextColumns[targetColumn]
     val targetIndex = column.indexOf(target).takeIf { it >= 0 } ?: 0
     column.add(targetIndex.coerceIn(0, column.size), dragged)
+    return OrderDetailCardLayout.normalized(
+        columns = nextColumns,
+        phoneOrder = phoneOrder,
+        columnWidths = columnWidths,
+        cardColors = cardColors,
+        cardHeights = cardHeights,
+        orderCardHeights = orderCardHeights,
+        visibility = visibility
+    )
+}
+
+private fun OrderDetailCardLayout.moveDesktopCardWithinColumn(
+    cardId: OrderDetailCardId,
+    columnIndex: Int,
+    delta: Int
+): OrderDetailCardLayout {
+    val column = columns.getOrNull(columnIndex) ?: return this
+    val currentIndex = column.indexOf(cardId).takeIf { it >= 0 } ?: return this
+    return moveDesktopCardToColumnIndex(cardId, columnIndex, currentIndex + delta)
+}
+
+private fun OrderDetailCardLayout.moveDesktopCardToColumnIndex(
+    cardId: OrderDetailCardId,
+    targetColumn: Int,
+    targetIndex: Int
+): OrderDetailCardLayout {
+    val nextColumns = columns.map { it.toMutableList() }.toMutableList()
+    nextColumns.forEach { it.remove(cardId) }
+    while (nextColumns.size <= targetColumn) nextColumns.add(mutableListOf())
+    val column = nextColumns[targetColumn]
+    column.add(targetIndex.coerceIn(0, column.size), cardId)
     return OrderDetailCardLayout.normalized(
         columns = nextColumns,
         phoneOrder = phoneOrder,
@@ -4181,7 +8052,7 @@ private fun OrderDetailCardLayout.withDefaultColumnWidth(columnIndex: Int): Orde
 }
 
 private fun OrderDetailCardLayout.withDefaultColumnWidths(): OrderDetailCardLayout {
-    val widthCount = columns.size.coerceAtLeast(3)
+    val widthCount = columns.size.coerceAtLeast(OrderDetailCardId.DefaultColumns.size)
     return OrderDetailCardLayout.normalized(
         columns = columns,
         phoneOrder = phoneOrder,
@@ -4251,7 +8122,7 @@ private fun OrderDetailCardLayout.adjustCardHeight(
     orderId: String,
     delta: Int
 ): OrderDetailCardLayout {
-    val currentHeight = savedHeightFor(cardId, orderId) ?: defaultCardHeight(cardId)
+    val currentHeight = savedHeightFor(cardId, orderId) ?: defaultRenderedCardHeight(cardId)
     return withCardHeight(cardId, orderId, currentHeight + delta)
 }
 
@@ -4260,16 +8131,16 @@ private fun OrderDetailCardLayout.withCardHeight(
     orderId: String,
     height: Int
 ): OrderDetailCardLayout {
-    val cleanHeight = height.coerceIn(160, 900)
+    val cleanHeight = height.coerceIn(minimumRenderedCardHeight(cardId), 1200)
     val nextHeights = cardHeights.toMutableMap()
-    nextHeights[cardId] = cleanHeight
-
     val nextOrderHeights = orderCardHeights.toMutableMap()
     val cleanOrderId = orderId.trim()
     if (cleanOrderId.isNotBlank()) {
         val perOrder = nextOrderHeights[cleanOrderId]?.toMutableMap() ?: mutableMapOf()
         perOrder[cardId] = cleanHeight
         nextOrderHeights[cleanOrderId] = perOrder
+    } else {
+        nextHeights[cardId] = cleanHeight
     }
 
     return OrderDetailCardLayout.normalized(
@@ -4316,12 +8187,45 @@ private fun OrderDetailCardLayout.withCardAutoHeight(
 private fun defaultCardHeight(cardId: OrderDetailCardId): Int {
     return when (cardId) {
         OrderDetailCardId.Preview -> 430
-        OrderDetailCardId.Customer -> 320
-        OrderDetailCardId.Delivery -> 330
-        OrderDetailCardId.Todo -> 360
+        OrderDetailCardId.Summary -> 260
+        OrderDetailCardId.Customer -> 620
+        OrderDetailCardId.Materials -> 430
+        OrderDetailCardId.Priority -> 200
+        OrderDetailCardId.Delivery -> 520
+        OrderDetailCardId.Notes -> 220
+        OrderDetailCardId.ClientFiles -> 360
+        OrderDetailCardId.Todo -> 520
+        OrderDetailCardId.WorkTime -> 520
         OrderDetailCardId.HistoryLog -> 360
-        OrderDetailCardId.Financial -> 380
-        else -> 260
+        OrderDetailCardId.Financial -> 640
+        OrderDetailCardId.Status -> 260
+        OrderDetailCardId.Shipping -> 260
+        OrderDetailCardId.Schedule -> 390
+    }
+}
+
+private fun defaultRenderedCardHeight(cardId: OrderDetailCardId): Int {
+    return defaultCardHeight(cardId).coerceAtLeast(minimumRenderedCardHeight(cardId))
+}
+
+private fun minimumRenderedCardHeight(cardId: OrderDetailCardId?): Int {
+    return when (cardId) {
+        OrderDetailCardId.Preview -> 300
+        OrderDetailCardId.Summary -> 250
+        OrderDetailCardId.Customer -> 430
+        OrderDetailCardId.Materials -> 390
+        OrderDetailCardId.Priority -> 220
+        OrderDetailCardId.Delivery -> 420
+        OrderDetailCardId.Notes -> 220
+        OrderDetailCardId.ClientFiles -> 310
+        OrderDetailCardId.Todo -> 380
+        OrderDetailCardId.WorkTime -> 390
+        OrderDetailCardId.Financial -> 640
+        OrderDetailCardId.Status -> 260
+        OrderDetailCardId.Shipping -> 260
+        OrderDetailCardId.Schedule -> 360
+        OrderDetailCardId.HistoryLog -> 240
+        null -> 160
     }
 }
 
@@ -4443,6 +8347,217 @@ private fun OrderDetailCardLayout.toWorkspaceSnapshotJSON(): String {
         .toString()
 }
 
+private fun savedCardLayoutProfilesForCurrentUser(
+    existingJSON: String,
+    userId: String,
+    currentSnapshotJSON: String
+): List<SavedCardLayoutProfile> {
+    if (userId.isBlank()) return emptyList()
+    val profiles = runCatching { JSONArray(existingJSON) }.getOrDefault(JSONArray())
+    var currentProfile: JSONObject? = null
+    for (index in 0 until profiles.length()) {
+        val profile = profiles.optJSONObject(index) ?: continue
+        if (profile.optString("userId") == userId) {
+            currentProfile = profile
+            break
+        }
+    }
+
+    val savedArray = currentProfile?.opt("savedProfiles")?.let(::orderLayoutArray)
+    val savedProfiles = mutableListOf<SavedCardLayoutProfile>()
+    if (savedArray != null) {
+        for (index in 0 until savedArray.length()) {
+            val profile = savedArray.optJSONObject(index) ?: continue
+            val snapshot = profile.optString("snapshotJSON").trim()
+            if (snapshot.isBlank()) continue
+            savedProfiles.add(
+                SavedCardLayoutProfile(
+                    id = uuidStringOrNew(profile.optString("id")),
+                    name = profile.optString("name").trim().ifBlank { "Profile ${index + 1}" },
+                    snapshotJSON = snapshot
+                )
+            )
+        }
+    }
+
+    val fallbackSnapshot = currentProfile
+        ?.optString("snapshotJSON")
+        ?.trim()
+        ?.ifBlank { currentSnapshotJSON }
+        ?: currentSnapshotJSON
+    return normalizedSavedCardLayoutProfiles(
+        profiles = savedProfiles.ifEmpty {
+            listOf(
+                SavedCardLayoutProfile(
+                    id = UUID.randomUUID().toString(),
+                    name = "Profile 1",
+                    snapshotJSON = fallbackSnapshot
+                )
+            )
+        },
+        fallbackSnapshotJSON = fallbackSnapshot
+    )
+}
+
+private fun normalizedSavedCardLayoutProfiles(
+    profiles: List<SavedCardLayoutProfile>,
+    fallbackSnapshotJSON: String
+): List<SavedCardLayoutProfile> {
+    val clean = profiles
+        .take(20)
+        .mapIndexedNotNull { index, profile ->
+            val snapshot = profile.snapshotJSON.trim().ifBlank { fallbackSnapshotJSON.trim() }
+            if (snapshot.isBlank()) return@mapIndexedNotNull null
+            SavedCardLayoutProfile(
+                id = uuidStringOrNew(profile.id),
+                name = profile.name.trim().ifBlank { "Profile ${index + 1}" }.take(48),
+                snapshotJSON = snapshot
+            )
+        }
+    return clean.ifEmpty {
+        fallbackSnapshotJSON.trim().takeIf { it.isNotBlank() }?.let { snapshot ->
+            listOf(
+                SavedCardLayoutProfile(
+                    id = UUID.randomUUID().toString(),
+                    name = "Profile 1",
+                    snapshotJSON = snapshot
+                )
+            )
+        } ?: emptyList()
+    }
+}
+
+private fun teamCardLayoutProfilesForDisplay(
+    existingJSON: String,
+    currentUserId: String
+): List<TeamCardLayoutProfile> {
+    val profiles = runCatching { JSONArray(existingJSON) }.getOrDefault(JSONArray())
+    val result = mutableListOf<TeamCardLayoutProfile>()
+    val seen = linkedSetOf<String>()
+    for (index in 0 until profiles.length()) {
+        val profile = profiles.optJSONObject(index) ?: continue
+        val userId = profile.optString("userId").trim()
+        val snapshot = profile.optString("snapshotJSON").trim()
+        if (userId.isBlank() || snapshot.isBlank() || !seen.add(userId)) continue
+        val displayName = profile.optString("displayName").trim()
+            .ifBlank { profile.optString("email").trim() }
+            .ifBlank { userId }
+        val email = profile.optString("email").trim()
+        val role = profile.optString("role").trim().ifBlank { "member" }
+        val subtitle = listOf(email, role.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.UK) else it.toString() })
+            .filter { it.isNotBlank() }
+            .joinToString(" • ")
+        result.add(
+            TeamCardLayoutProfile(
+                userId = userId,
+                displayName = displayName,
+                subtitle = subtitle.ifBlank { role },
+                snapshotJSON = snapshot,
+                isMine = currentUserId.isNotBlank() && userId == currentUserId
+            )
+        )
+    }
+    return result.sortedWith(
+        compareByDescending<TeamCardLayoutProfile> { it.isMine }
+            .thenBy { it.displayName.lowercase(Locale.UK) }
+    )
+}
+
+private fun upsertSavedCardLayoutProfilesJSON(
+    existingJSON: String,
+    userId: String,
+    workspace: StudioWorkspace?,
+    savedProfiles: List<SavedCardLayoutProfile>,
+    activeSnapshotJSON: String,
+    syncSourceUserId: String = ""
+): String? {
+    if (userId.isBlank()) return null
+    val profiles = runCatching { JSONArray(existingJSON) }.getOrDefault(JSONArray())
+    var targetIndex = -1
+    var targetProfile: JSONObject? = null
+    for (index in 0 until profiles.length()) {
+        val profile = profiles.optJSONObject(index) ?: continue
+        if (profile.optString("userId") == userId) {
+            targetIndex = index
+            targetProfile = profile
+            break
+        }
+    }
+
+    val profile = targetProfile ?: JSONObject()
+    profile.put("id", uuidStringOrNew(profile.optString("id")))
+    profile.put("userId", userId)
+    if (profile.optString("displayName").isBlank()) {
+        profile.put("displayName", workspace?.accountDisplayName.orEmpty())
+    }
+    if (profile.optString("email").isBlank()) {
+        profile.put("email", workspace?.ownerEmail.orEmpty())
+    }
+    profile.put("role", workspace?.role.orEmpty())
+    profile.put("snapshotJSON", activeSnapshotJSON)
+    val cleanSyncSource = syncSourceUserId.trim().takeIf { it.isNotBlank() && it != userId }
+    if (cleanSyncSource == null) {
+        profile.remove("syncSourceUserId")
+    } else {
+        profile.put("syncSourceUserId", cleanSyncSource)
+    }
+    profile.put("updatedAt", System.currentTimeMillis() / 1000.0)
+
+    val savedArray = JSONArray()
+    normalizedSavedCardLayoutProfiles(savedProfiles, activeSnapshotJSON).forEach { savedProfile ->
+        savedArray.put(
+            JSONObject()
+                .put("id", uuidStringOrNew(savedProfile.id))
+                .put("name", savedProfile.name)
+                .put("snapshotJSON", savedProfile.snapshotJSON)
+        )
+    }
+    profile.put("savedProfiles", savedArray)
+
+    if (targetIndex >= 0) {
+        profiles.put(targetIndex, profile)
+    } else {
+        profiles.put(profile)
+    }
+    return profiles.toString()
+}
+
+private fun currentWorkspaceProfileSyncSourceUserId(
+    existingJSON: String,
+    currentUserId: String
+): String {
+    if (currentUserId.isBlank()) return ""
+    val profiles = runCatching { JSONArray(existingJSON) }.getOrDefault(JSONArray())
+    for (index in 0 until profiles.length()) {
+        val profile = profiles.optJSONObject(index) ?: continue
+        if (profile.optString("userId") == currentUserId) {
+            return profile.optString("syncSourceUserId").trim()
+        }
+    }
+    return ""
+}
+
+private fun currentWorkspaceProfileSnapshotJSON(
+    existingJSON: String,
+    currentUserId: String
+): String {
+    if (currentUserId.isBlank()) return ""
+    val profiles = runCatching { JSONArray(existingJSON) }.getOrDefault(JSONArray())
+    for (index in 0 until profiles.length()) {
+        val profile = profiles.optJSONObject(index) ?: continue
+        if (profile.optString("userId") == currentUserId) {
+            return profile.optString("snapshotJSON").trim()
+        }
+    }
+    return ""
+}
+
+private fun uuidStringOrNew(raw: String): String {
+    val clean = raw.trim()
+    return runCatching { UUID.fromString(clean).toString() }.getOrNull()
+        ?: UUID.randomUUID().toString()
+}
+
 private fun upsertWorkspaceUserProfileJSON(
     existingJSON: String,
     userId: String,
@@ -4455,7 +8570,9 @@ private fun upsertWorkspaceUserProfileJSON(
     for (index in 0 until profiles.length()) {
         val profile = profiles.optJSONObject(index) ?: continue
         if (profile.optString("userId") == userId) {
+            profile.put("id", uuidStringOrNew(profile.optString("id")))
             profile.put("snapshotJSON", snapshotJSON)
+            profile.remove("syncSourceUserId")
             profile.put("updatedAt", System.currentTimeMillis() / 1000.0)
             profiles.put(index, profile)
             updated = true
@@ -4465,6 +8582,7 @@ private fun upsertWorkspaceUserProfileJSON(
     if (!updated) {
         profiles.put(
             JSONObject()
+                .put("id", UUID.randomUUID().toString())
                 .put("userId", userId)
                 .put("displayName", workspace?.accountDisplayName.orEmpty())
                 .put("email", workspace?.ownerEmail.orEmpty())
@@ -4478,18 +8596,90 @@ private fun upsertWorkspaceUserProfileJSON(
 }
 
 @Composable
-private fun MetricTile(modifier: Modifier = Modifier, label: String, value: String, color: Color) {
+private fun SummaryValueBlock(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    valueColor: Color
+) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
-        Column(modifier = Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Text(
-                value,
-                color = color,
-                fontSize = 16.sp,
+                text = label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value.ifBlank { "-" },
+                color = valueColor,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryStatusLine(label: String, value: String, tone: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        StatusPill(value, tone)
+    }
+}
+
+@Composable
+private fun SummaryDateBlock(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    valueColor: Color
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(13.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value.ifBlank { "-" },
+                color = valueColor,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -4719,6 +8909,42 @@ private fun readBytesForUri(context: Context, uri: Uri): ByteArray? {
     }.getOrNull()
 }
 
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+}
+
+private fun acceptsClientFileDrag(event: DragAndDropEvent): Boolean {
+    val androidEvent = event.toAndroidDragEvent()
+    if (androidEvent.clipDescription?.hasMimeType(ClipDescription.MIMETYPE_TEXT_URILIST) == true) {
+        return true
+    }
+    return clientFileUrisFromEvent(event).isNotEmpty()
+}
+
+private fun clientFileUrisFromEvent(event: DragAndDropEvent): List<Uri> {
+    val clipData = event.toAndroidDragEvent().clipData ?: return emptyList()
+    return (0 until clipData.itemCount).mapNotNull { index ->
+        clipData.getItemAt(index).uri
+    }
+}
+
+private fun uploadClientFileFromUri(
+    context: Context,
+    order: StudioOrder,
+    uri: Uri,
+    onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit
+): Boolean {
+    val bytes = readBytesForUri(context, uri) ?: return false
+    val fileName = displayNameForUri(context, uri)
+    val contentType = context.contentResolver.getType(uri).orEmpty()
+    onUploadClientFile(order, bytes, fileName, contentType)
+    return true
+}
+
 private fun isClientFileImage(contentType: String, fileName: String): Boolean {
     val cleanType = contentType.lowercase()
     val extension = fileName.substringAfterLast(".", "").lowercase()
@@ -4728,7 +8954,7 @@ private fun isClientFileImage(contentType: String, fileName: String): Boolean {
 private fun openDeliveryCalendarEvent(context: Context, order: StudioOrder) {
     val start = order.paymentDate.time
     val end = dueDate(order).time + DAY_MS
-    val title = "StudioFlow: ${order.displayCustomerName}"
+    val title = "NivaDesk: ${order.displayCustomerName}"
     val description = listOfNotNull(
         order.designName.takeIf { it.isNotBlank() },
         "Order value: ${order.orderValue}",
@@ -4941,18 +9167,43 @@ private fun cleanDecimalInput(value: String): String {
     val filtered = value.filter { it.isDigit() || it == '.' }
     val firstDot = filtered.indexOf('.')
     return if (firstDot < 0) {
-        filtered.take(9)
+        val digits = filtered.take(9)
+        digits.trimStart('0').ifBlank { if (digits.isNotEmpty()) "0" else "" }
     } else {
-        filtered.take(firstDot + 1) + filtered.drop(firstDot + 1).filter { it != '.' }.take(2)
+        val whole = filtered.take(firstDot).take(9)
+        val cleanWhole = whole.trimStart('0').ifBlank { "0" }
+        val fraction = filtered.drop(firstDot + 1).filter { it != '.' }.take(2)
+        "$cleanWhole.$fraction"
     }
 }
 
 private fun parseDecimal(value: String, fallback: Double): Double {
-    return value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: fallback
+    val clean = value.trim().replace(",", "")
+    if (clean.isBlank() || clean == ".") return 0.0
+    return clean.toDoubleOrNull()?.coerceAtLeast(0.0) ?: fallback
+}
+
+private fun isZeroLikeDecimalInput(value: String): Boolean {
+    return value.trim().replace(",", "").toDoubleOrNull() == 0.0
+}
+
+private fun formattedDecimalInput(value: String, decimalSeparator: String): String {
+    val clean = value.trim().replace(",", "")
+    if (clean.isBlank() || clean == ".") return ""
+    val parsed = clean.toDoubleOrNull() ?: return value
+    val formatted = String.format(Locale.UK, "%,.2f", parsed)
+    return if (decimalSeparator == ",") {
+        formatted.replace(",", "_").replace(".", ",").replace("_", ".")
+    } else {
+        formatted
+    }
 }
 
 @Composable
 private fun money(value: Double): String {
+    if (LocalHideSensitiveNumbers.current) {
+        return privateCurrencyText(LocalCurrencySymbol.current)
+    }
     val formatted = String.format(Locale.UK, "%,.2f", value)
     return LocalCurrencySymbol.current + if (LocalDecimalSeparator.current == ",") {
         formatted.replace(",", "_").replace(".", ",").replace("_", ".")
@@ -4963,6 +9214,23 @@ private fun money(value: Double): String {
 
 private fun shortDate(date: Date): String {
     return SimpleDateFormat("dd/MM/yy", Locale.UK).format(date)
+}
+
+private fun longDate(date: Date): String {
+    return SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date)
+}
+
+private fun dateInputToISODate(value: String): String? {
+    val clean = value.trim()
+    val patterns = listOf("dd/MM/yyyy", "dd/MM/yy", "yyyy-MM-dd")
+    patterns.forEach { pattern ->
+        val formatter = SimpleDateFormat(pattern, Locale.UK).apply { isLenient = false }
+        val parsed = runCatching { formatter.parse(clean) }.getOrNull()
+        if (parsed != null) {
+            return SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(parsed)
+        }
+    }
+    return null
 }
 
 private fun shortDateOrDash(date: Date?): String {
@@ -4990,6 +9258,30 @@ private fun durationLabel(seconds: Int): String {
     }
 }
 
+private fun StudioWorkSession.effectiveDurationSeconds(nowMillis: Long): Int {
+    if (endedAt != null) return durationSeconds.coerceAtLeast(0)
+    val liveSeconds = startedAt?.let { ((nowMillis - it.time) / 1000L).coerceAtLeast(0L).toInt() } ?: 0
+    return durationSeconds.coerceAtLeast(liveSeconds)
+}
+
+private fun workSessionTimeLabel(date: Date?): String {
+    return date?.let { SimpleDateFormat("HH:mm", Locale.UK).format(it) } ?: "--:--"
+}
+
+private fun workSessionDateKey(date: Date?): String {
+    return date?.let { SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(it) } ?: "no-date"
+}
+
+private fun workSessionDateLabel(date: Date?): String {
+    return date?.let { SimpleDateFormat("d MMM yyyy", Locale.UK).format(it) } ?: "No date"
+}
+
+private fun workSessionRangeLabel(session: StudioWorkSession): String {
+    val started = workSessionTimeLabel(session.startedAt)
+    val ended = session.endedAt?.let(::workSessionTimeLabel) ?: "Running"
+    return "$started -> $ended"
+}
+
 private fun dueDate(order: StudioOrder): Date {
     return Date(order.paymentDate.time + order.deliveryTime.coerceAtLeast(1) * DAY_MS)
 }
@@ -5003,11 +9295,65 @@ private fun deliveryLabel(order: StudioOrder): String {
     }
 }
 
+private fun deliveryLongLabel(order: StudioOrder): String {
+    val days = order.remainingDays
+    return when {
+        days > 0 -> "$days days"
+        days == 0 -> "Today"
+        else -> "${-days} days late"
+    }
+}
+
 private fun deliveryColor(order: StudioOrder): Color {
     val days = order.remainingDays
     return when {
         days < 0 -> StudioRed
-        days <= 7 -> StudioWarningOrange
+        days <= 7 -> StudioRed
+        days <= 14 -> StudioWarningOrange
+        else -> StudioGreen
+    }
+}
+
+private fun nextHeaderScheduleReminder(order: StudioOrder): StudioScheduleReminder? {
+    val now = System.currentTimeMillis()
+    return order.scheduleReminders
+        .filterNot { it.status.equals("Done", ignoreCase = true) }
+        .sortedWith(
+            compareBy<StudioScheduleReminder> { reminder ->
+                val dueAt = reminder.dueAt?.time ?: Long.MAX_VALUE
+                if (dueAt < now) 0 else 1
+            }.thenBy { it.dueAt?.time ?: Long.MAX_VALUE }
+        )
+        .firstOrNull()
+}
+
+private fun scheduleRelativeLabel(reminder: StudioScheduleReminder): String {
+    if (reminder.status.equals("Done", ignoreCase = true)) return "Done"
+    val dueAt = reminder.dueAt ?: return "-"
+    val seconds = (dueAt.time - System.currentTimeMillis()) / 1000L
+    if (seconds < 0) {
+        val hours = (-seconds) / 3600L
+        return when {
+            hours < 1 -> "Due now"
+            hours < 24 -> "Overdue ${hours}h"
+            else -> "Overdue ${(hours / 24L).coerceAtLeast(1L)}d"
+        }
+    }
+    val hours = seconds / 3600L
+    return when {
+        hours < 1 -> "Due soon"
+        hours < 24 -> "In ${hours}h"
+        else -> "In ${(hours / 24L).coerceAtLeast(1L)}d"
+    }
+}
+
+private fun scheduleStatusColor(reminder: StudioScheduleReminder): Color {
+    if (reminder.status.equals("Done", ignoreCase = true)) return StudioGreen
+    val dueAt = reminder.dueAt ?: return Color.Gray
+    val hours = (dueAt.time - System.currentTimeMillis()) / (60.0 * 60.0 * 1000.0)
+    return when {
+        hours < 0 -> StudioRed
+        hours <= 24.0 -> StudioWarningOrange
         else -> StudioBlue
     }
 }
@@ -5058,7 +9404,7 @@ private fun shareOrderPdf(
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
-            putExtra(Intent.EXTRA_SUBJECT, "${order.displayCustomerName} StudioFlow PDF")
+            putExtra(Intent.EXTRA_SUBJECT, "${order.displayCustomerName} NivaDesk PDF")
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -5124,7 +9470,7 @@ private fun createOrderPdfFile(
         canvas = page.canvas
         y = margin
         paintPageBackground()
-        canvas.drawText("StudioFlow order export", margin, y, mutedPaint)
+        canvas.drawText("NivaDesk order export", margin, y, mutedPaint)
         y += 24f
     }
 
@@ -5162,7 +9508,7 @@ private fun createOrderPdfFile(
     }
 
     paintPageBackground()
-    canvas.drawText("StudioFlow Order", margin, y, titlePaint)
+    canvas.drawText("NivaDesk Order", margin, y, titlePaint)
     y += 28f
     canvas.drawText(order.displayCustomerName, margin, y, sectionPaint)
     y += 18f
@@ -5332,7 +9678,7 @@ private fun createOrderPdfFile(
     drawSection("Company Invoice Numbers", invoiceRows)
 
     ensureSpace(28f)
-    canvas.drawText("StudioFlow Android export respects the PDF settings for this workspace.", margin, y + 12f, mutedPaint)
+    canvas.drawText("NivaDesk Android export respects the PDF settings for this workspace.", margin, y + 12f, mutedPaint)
     document.finishPage(page)
 
     val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
@@ -5362,7 +9708,7 @@ private fun pdfDate(date: Date): String {
 private fun pdfSafeFileName(value: String): String {
     return value
         .trim()
-        .ifBlank { "StudioFlow_Order" }
+        .ifBlank { "NivaDesk_Order" }
         .replace(Regex("[^A-Za-z0-9._-]+"), "_")
         .take(80)
 }

@@ -91,7 +91,7 @@ function createStripeBillingFunctions({
     const key = normalizeBillingItemKey(request.data?.itemKey || request.data?.planKey || request.data?.addonKey);
     const item = STRIPE_BILLING_ITEMS[key];
     if (!item) {
-      throw new HttpsError("invalid-argument", "A valid StudioFlow billing item key is required.");
+      throw new HttpsError("invalid-argument", "A valid NivaDesk billing item key is required.");
     }
     return item;
   }
@@ -163,7 +163,7 @@ function createStripeBillingFunctions({
 
     const customer = await stripe.customers.create({
       email: userRecord?.email || companyData.ownerEmail || undefined,
-      name: companyData.name || companyData.companyName || userRecord?.displayName || "StudioFlow Workspace",
+      name: companyData.name || companyData.companyName || userRecord?.displayName || "NivaDesk Workspace",
       metadata: {
         workspaceId: companyId,
         ownerUid: String(companyData.ownerUid || uid),

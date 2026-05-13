@@ -19,6 +19,9 @@ import GoogleSignIn
 #if os(iOS)
 import UIKit
 #endif
+#if os(macOS)
+import AppKit
+#endif
 
 private func studioNormalizedTeamRole(_ role: String, fallback: String = "member") -> String {
     let compact = role
@@ -212,9 +215,9 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
     var displayName: String {
         switch self {
         case .demo: return "Free Demo"
-        case .lifetimeLite: return "StudioFlow Lite"
-        case .proMonthly: return "StudioFlow Pro"
-        case .teamMonthly: return "StudioFlow Team"
+        case .lifetimeLite: return "NivaDesk Lite"
+        case .proMonthly: return "NivaDesk Pro"
+        case .teamMonthly: return "NivaDesk Team"
         }
     }
 
@@ -618,8 +621,10 @@ class AuthViewModel: ObservableObject {
     @Published var isLoggedIn = false
     @Published var errorMessage = ""
     @Published var isLoading = false
+    @Published private(set) var interfaceSessionId = UUID()
     @Published private(set) var currentUserId: String? = nil
     @Published private(set) var currentCompanyId: String? = nil
+    @Published private(set) var isWorkspaceReady: Bool = false
     @Published var currentBillingPlan: StudioBillingPlan = .teamMonthly
     @Published var billingPlanSource: String = "legacy"
     @Published var billingUpdatedAt: Date? = nil
@@ -675,8 +680,8 @@ class AuthViewModel: ObservableObject {
     private func billingPlanDeniedMessage(reason: String, requiredPlan: String = "") -> String {
         switch reason {
         case "feature_not_in_plan":
-            if requiredPlan == "team_monthly" { return "This feature is available on the StudioFlow Team monthly plan." }
-            return "This feature is available on the StudioFlow Pro or Team monthly plan."
+            if requiredPlan == "team_monthly" { return "This feature is available on the NivaDesk Team monthly plan." }
+            return "This feature is available on the NivaDesk Pro or Team monthly plan."
         case "plan_limit_reached":
             return "This plan has reached its team member limit. Upgrade the workspace plan before adding more people."
         case "storage_limit_reached":
@@ -746,9 +751,13 @@ class AuthViewModel: ObservableObject {
                 guard let self else { return }
 
                 guard let user else {
+                    if self.isLoggedIn || self.currentUserId != nil {
+                        self.interfaceSessionId = UUID()
+                    }
                     self.stopRealtimeWorkspaceListeners()
                     self.currentUserId = nil
                     self.currentCompanyId = nil
+                    self.isWorkspaceReady = false
                     self.isLoggedIn = false
                     self.isLocalUnlockSatisfied = true
                     self.localUnlockMessage = ""
@@ -756,8 +765,13 @@ class AuthViewModel: ObservableObject {
                     return
                 }
 
+                let isSameResolvedUser = self.currentUserId == user.uid && self.isWorkspaceReady && self.currentCompanyId != nil
+                if self.currentUserId != user.uid {
+                    self.interfaceSessionId = UUID()
+                    self.currentCompanyId = nil
+                    self.isWorkspaceReady = false
+                }
                 self.currentUserId = user.uid
-                self.currentCompanyId = user.uid
                 self.accountEmail = user.email ?? ""
                 self.accountDisplayName = user.displayName ?? ""
                 self.accountPhotoURL = user.photoURL?.absoluteString ?? self.googleProfilePhotoURL
@@ -769,6 +783,8 @@ class AuthViewModel: ObservableObject {
                 } else {
                     self.isLocalUnlockSatisfied = !self.isLocalUnlockEnabled
                 }
+
+                guard !isSameResolvedUser else { return }
 
                 self.ensureCompanyDocument(for: user) { [weak self] _ in
                     Task { @MainActor in
@@ -883,10 +899,18 @@ class AuthViewModel: ObservableObject {
             return
         }
         GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController, completion: finishWithResult)
+        #elseif os(macOS)
+        guard let presentingWindow = Self.currentKeyWindow() else {
+            isLoading = false
+            bypassNextLocalUnlockAfterInteractiveSignIn = false
+            errorMessage = "Google Sign-In could not find a window to present from."
+            return
+        }
+        GIDSignIn.sharedInstance.signIn(withPresenting: presentingWindow, completion: finishWithResult)
         #else
         isLoading = false
         bypassNextLocalUnlockAfterInteractiveSignIn = false
-        errorMessage = "Google Sign-In is enabled for iPhone and iPad in this build. Please use email/password on macOS for now."
+        errorMessage = "Google Sign-In is not supported on this platform yet."
         #endif
         #else
         errorMessage = "Google Sign-In package is not added yet. Add https://github.com/google/GoogleSignIn-iOS in Xcode first."
@@ -970,7 +994,7 @@ class AuthViewModel: ObservableObject {
             companyPayload["ownerDisplayName"] = cleanDisplayName
             companyPayload["name"] = cleanCompanyName
             companyPayload["companyName"] = cleanCompanyName
-            companyPayload["appName"] = "StudioFlow"
+            companyPayload["appName"] = "NivaDesk"
             companyPayload["memberUids"] = FieldValue.arrayUnion([companyId])
             companyPayload["members"] = [
                 user.uid: [
@@ -1075,11 +1099,11 @@ class AuthViewModel: ObservableObject {
     func unlockWithDeviceSecurity() {
         let context = LAContext()
         var authError: NSError?
-        let reason = "Unlock StudioFlow"
+        let reason = "Unlock NivaDesk"
 
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
             isLocalUnlockSatisfied = true
-            localUnlockMessage = authError?.localizedDescription ?? "Device security is not available. StudioFlow was unlocked."
+            localUnlockMessage = authError?.localizedDescription ?? "Device security is not available. NivaDesk was unlocked."
             return
         }
 
@@ -1091,7 +1115,7 @@ class AuthViewModel: ObservableObject {
                     self.isLocalUnlockSatisfied = true
                     self.localUnlockMessage = ""
                 } else {
-                    self.localUnlockMessage = error?.localizedDescription ?? "Could not unlock StudioFlow."
+                    self.localUnlockMessage = error?.localizedDescription ?? "Could not unlock NivaDesk."
                 }
             }
         }
@@ -1234,7 +1258,7 @@ class AuthViewModel: ObservableObject {
         }
 
         guard currentPlanEntitlements.teamAccessEnabled else {
-            profileErrorMessage = "Team access is available on the StudioFlow Team monthly plan."
+            profileErrorMessage = "Team access is available on the NivaDesk Team monthly plan."
             return
         }
 
@@ -1452,7 +1476,7 @@ class AuthViewModel: ObservableObject {
         }
 
         guard currentPlanEntitlements.teamAccessEnabled else {
-            profileErrorMessage = "Custom roles require StudioFlow Team."
+            profileErrorMessage = "Custom roles require NivaDesk Team."
             completion?(false)
             return
         }
@@ -1847,7 +1871,7 @@ class AuthViewModel: ObservableObject {
         }
 
         guard currentPlanEntitlements.teamAccessEnabled else {
-            profileErrorMessage = "Team access is available on the StudioFlow Team monthly plan."
+            profileErrorMessage = "Team access is available on the NivaDesk Team monthly plan."
             return
         }
 
@@ -2113,8 +2137,10 @@ class AuthViewModel: ObservableObject {
         do {
             stopRealtimeWorkspaceListeners()
             try Auth.auth().signOut()
+            interfaceSessionId = UUID()
             currentUserId = nil
             currentCompanyId = nil
+            isWorkspaceReady = false
             isLoggedIn = false
             isLocalUnlockSatisfied = true
             localUnlockMessage = ""
@@ -2137,6 +2163,12 @@ class AuthViewModel: ObservableObject {
     }
     #endif
 
+    #if os(macOS)
+    private static func currentKeyWindow() -> NSWindow? {
+        NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { $0.isVisible }
+    }
+    #endif
+
     private func clearProfileState() {
         accountEmail = ""
         accountDisplayName = ""
@@ -2148,9 +2180,11 @@ class AuthViewModel: ObservableObject {
         teamMembers = []
         availableWorkspaces = []
         joinRequests = []
+        customTeamRoles = []
         isCompanyOwner = false
         currentWorkspaceRole = "owner"
         currentWorkspaceRoleLabel = "Owner"
+        currentWorkspaceAccess = studioDefaultMemberAccess()
         currentBillingPlan = .teamMonthly
         billingPlanSource = "legacy"
         billingUpdatedAt = nil
@@ -2203,6 +2237,11 @@ class AuthViewModel: ObservableObject {
     }
 
     private func activateCompany(_ companyId: String, user: User, message: String?) {
+        let isChangingWorkspace = currentCompanyId != companyId
+        if isChangingWorkspace {
+            isWorkspaceReady = false
+        }
+
         currentUserId = user.uid
         currentCompanyId = companyId
         accountEmail = user.email ?? ""
@@ -2222,6 +2261,7 @@ class AuthViewModel: ObservableObject {
         startRealtimeWorkspaceListeners(for: user, companyId: companyId)
 
         isProfileLoading = false
+        isWorkspaceReady = true
         if let message { profileMessage = message }
         loadAccountProfile()
     }
@@ -2919,7 +2959,7 @@ class AuthViewModel: ObservableObject {
                 let data = snapshot?.data() ?? [:]
                 var payload: [String: Any] = [
                     "companyId": companyId,
-                    "appName": "StudioFlow",
+                    "appName": "NivaDesk",
                     "memberUids": FieldValue.arrayUnion([companyId]),
                     "memberRoles": [companyId: "owner"],
                     "updatedAt": FieldValue.serverTimestamp()
@@ -2956,7 +2996,7 @@ class AuthViewModel: ObservableObject {
                 "ownerEmail": email,
                 "ownerDisplayName": displayName,
                 "ownerPhotoURL": photoURL,
-                "appName": "StudioFlow",
+                "appName": "NivaDesk",
                 "memberUids": FieldValue.arrayUnion([companyId]),
                 "memberRoles": [companyId: "owner"],
                 "updatedAt": FieldValue.serverTimestamp(),

@@ -104,19 +104,17 @@ struct LoginView: View {
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 25) {
-                        Image(systemName: "hexagon.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(studioWarningOrange)
-                            .padding(.bottom, 10)
-
-                        Text("StudioFlow")
-                            .font(.system(size: 28, weight: .bold))
+                        Image("NivaDeskLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 280, maxHeight: 78)
+                            .padding(.bottom, 8)
+                            .accessibilityLabel("NivaDesk")
 
                         Text(isLoginMode ? "Sign in to your workspace" : "Create a new workspace")
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
 
-                        #if os(iOS)
                         Button {
                             authVM.signInWithGoogle()
                         } label: {
@@ -150,8 +148,6 @@ struct LoginView: View {
                                 .fill(Color.primary.opacity(0.12))
                                 .frame(height: 1)
                         }
-
-                        #endif
 
                         VStack(spacing: 15) {
                             TextField("Email Address", text: $email)

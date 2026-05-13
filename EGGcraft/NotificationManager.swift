@@ -98,7 +98,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
             "platform": platformName,
             "language": language,
             "enabled": true,
-            "appName": "EGGcraft Studio Manager",
+            "appName": "NivaDesk",
             "updatedAt": FieldValue.serverTimestamp()
         ]
 

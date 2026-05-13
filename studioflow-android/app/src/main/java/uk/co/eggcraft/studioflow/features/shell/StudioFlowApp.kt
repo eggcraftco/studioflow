@@ -3,6 +3,7 @@ package uk.co.eggcraft.studioflow.features.shell
 import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,11 +40,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.launch
+import uk.co.eggcraft.studioflow.R
 import uk.co.eggcraft.studioflow.features.auth.LoginScreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
@@ -56,6 +68,8 @@ fun StudioFlowApp(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val credentialManager = remember(context) { CredentialManager.create(context) }
     val securityPrefs = remember(context) {
         context.getSharedPreferences(LocalSecurityPrefs, Context.MODE_PRIVATE)
     }
@@ -70,7 +84,7 @@ fun StudioFlowApp(
             localUnlockSatisfied = true
             localUnlockMessage = ""
         } else {
-            localUnlockMessage = "Could not unlock StudioFlow. Use your device screen lock to continue."
+            localUnlockMessage = "Could not unlock NivaDesk. Use your device screen lock to continue."
         }
     }
 
@@ -78,18 +92,50 @@ fun StudioFlowApp(
         val keyguardManager = context.getSystemService(KeyguardManager::class.java)
         if (keyguardManager?.isDeviceSecure == true) {
             val intent = keyguardManager.createConfirmDeviceCredentialIntent(
-                "Unlock StudioFlow",
+                "Unlock NivaDesk",
                 "Use fingerprint, face unlock, PIN, pattern or password to continue."
             )
             if (intent != null) {
                 unlockLauncher.launch(intent)
             } else {
                 localUnlockSatisfied = true
-                localUnlockMessage = "Device security is not available. StudioFlow was unlocked."
+                localUnlockMessage = "Device security is not available. NivaDesk was unlocked."
             }
         } else {
             localUnlockSatisfied = true
-            localUnlockMessage = "Device screen lock is not set on this Android device. StudioFlow was unlocked."
+            localUnlockMessage = "Device screen lock is not set on this Android device. NivaDesk was unlocked."
+        }
+    }
+
+    fun startGoogleSignIn() {
+        coroutineScope.launch {
+            viewModel.beginExternalSignIn()
+            val tokenResult = runCatching {
+                requestGoogleIdToken(context, credentialManager, filterAuthorizedAccounts = true)
+            }.recoverCatching { error ->
+                if (error.isNoCredentialFailure()) {
+                    requestGoogleIdToken(context, credentialManager, filterAuthorizedAccounts = false)
+                } else {
+                    throw error
+                }
+            }.recoverCatching { error ->
+                if (error.isNoCredentialFailure()) {
+                    requestSignInWithGoogleIdToken(context, credentialManager)
+                } else {
+                    throw error
+                }
+            }
+
+            tokenResult
+                .onSuccess { idToken -> viewModel.signInWithGoogleIdToken(idToken) }
+                .onFailure { error ->
+                    val message = when (error) {
+                        is GetCredentialCancellationException -> "Google Sign-In was cancelled."
+                        is NoCredentialException -> "No Google account is available on this Android device. Add a Google account in Android Settings, then try again."
+                        else -> error.message ?: "Could not sign in with Google."
+                    }
+                    viewModel.failExternalSignIn(message)
+                }
         }
     }
 
@@ -140,7 +186,8 @@ fun StudioFlowApp(
         state.user == null -> LoginScreen(
             signingIn = state.signingIn,
             errorMessage = state.errorMessage,
-            onSignIn = viewModel::signIn
+            onSignIn = viewModel::signIn,
+            onGoogleSignIn = { startGoogleSignIn() }
         )
         requireDeviceUnlock && !localUnlockSatisfied -> LocalUnlockScreen(
             message = localUnlockMessage,
@@ -161,11 +208,14 @@ fun StudioFlowApp(
             onCreateOrder = viewModel::createOrder,
             onAssignOrder = viewModel::assignOrder,
             onUpdateOrderFields = viewModel::updateOrderFields,
+            onSaveOrderCardLayout = viewModel::saveOrderCardLayout,
+            onResetOrderCardLayout = viewModel::resetOrderCardLayout,
             onUploadClientFile = viewModel::uploadClientFile,
             onUploadPreviewImage = viewModel::uploadPreviewImage,
             onRefreshLiveTracking = viewModel::refreshLiveTracking,
             onRenameClientFile = viewModel::renameClientFile,
             onDeleteClientFile = viewModel::deleteClientFile,
+            onDeleteOrder = viewModel::deleteOrder,
             onUpdateWorkspaceSettings = viewModel::updateWorkspaceSettings,
             onUpdateWorkspaceBillingPlan = viewModel::updateWorkspaceBillingPlan,
             onRecalculateFinancialSettings = viewModel::saveAndRecalculateFinancialSettings,
@@ -211,7 +261,7 @@ private fun LocalUnlockScreen(
                 modifier = Modifier.size(58.dp)
             )
             Spacer(modifier = Modifier.height(18.dp))
-            Text("Unlock StudioFlow", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Unlock NivaDesk", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "Use fingerprint, face unlock or your Android screen lock to continue.",
@@ -250,5 +300,63 @@ private fun StudioLoadingScreen() {
         contentAlignment = Alignment.Center
     ) {
         CircularProgressIndicator()
+    }
+}
+
+private suspend fun requestGoogleIdToken(
+    context: Context,
+    credentialManager: CredentialManager,
+    filterAuthorizedAccounts: Boolean
+): String {
+    val activityContext = context.findActivity() ?: context
+    val serverClientId = context.getString(R.string.default_web_client_id)
+    require(serverClientId.isNotBlank()) { "Google Sign-In is not configured for this Android build." }
+
+    val googleIdOption = GetGoogleIdOption.Builder()
+        .setFilterByAuthorizedAccounts(filterAuthorizedAccounts)
+        .setServerClientId(serverClientId)
+        .setAutoSelectEnabled(filterAuthorizedAccounts)
+        .build()
+    val request = GetCredentialRequest.Builder()
+        .addCredentialOption(googleIdOption)
+        .build()
+    return extractGoogleIdToken(credentialManager.getCredential(activityContext, request).credential)
+}
+
+private suspend fun requestSignInWithGoogleIdToken(
+    context: Context,
+    credentialManager: CredentialManager
+): String {
+    val activityContext = context.findActivity() ?: context
+    val serverClientId = context.getString(R.string.default_web_client_id)
+    require(serverClientId.isNotBlank()) { "Google Sign-In is not configured for this Android build." }
+
+    val googleSignInOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
+    val request = GetCredentialRequest.Builder()
+        .addCredentialOption(googleSignInOption)
+        .build()
+
+    return extractGoogleIdToken(credentialManager.getCredential(activityContext, request).credential)
+}
+
+private fun extractGoogleIdToken(credential: androidx.credentials.Credential): String {
+    if (credential is CustomCredential &&
+        credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+    ) {
+        return GoogleIdTokenCredential.createFrom(credential.data).idToken
+    }
+
+    error("Google Sign-In returned an unsupported credential.")
+}
+
+private fun Throwable.isNoCredentialFailure(): Boolean {
+    return this is NoCredentialException || message?.contains("No credentials", ignoreCase = true) == true
+}
+
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
     }
 }

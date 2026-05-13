@@ -3,10 +3,12 @@ package uk.co.eggcraft.studioflow.features.orders
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,14 +31,21 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -52,16 +62,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.net.URL
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -69,8 +85,11 @@ import kotlinx.coroutines.withContext
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
+import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.emailName
+import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import uk.co.eggcraft.studioflow.features.shell.privateCurrencyText
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
@@ -81,11 +100,15 @@ fun OrdersScreen(
     state: StudioFlowUiState,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onSaveOrderCardLayout: (StudioOrder, String) -> Unit,
+    onResetOrderCardLayout: (StudioOrder) -> Unit,
     onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit,
     onUploadPreviewImage: (StudioOrder, ByteArray, String, String) -> Unit,
     onRefreshLiveTracking: (StudioOrder) -> Unit,
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit,
+    onDeleteOrder: (StudioOrder) -> Unit,
+    onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
 ) {
     val workspace = state.workspace
@@ -104,6 +127,19 @@ fun OrdersScreen(
         mutableStateOf(orderSortModeFromKey(ordersPrefs.getString(OrdersSortKey, OrderSortMode.Smart.key)))
     }
     var selectedOrderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var orderListVisible by rememberSaveable(workspace?.id, state.user?.uid) {
+        mutableStateOf(state.workspaceSettings.ordersSidebarVisible)
+    }
+    val cloudListWidth = state.workspaceSettings.ordersSidebarWidth.toFloat()
+    var wideListWidthPreference by rememberSaveable(workspace?.id, state.user?.uid) {
+        val localWidth = ordersPrefs.getFloat(OrdersListWidthKey, Float.NaN)
+        val initialWidth = if (!cloudListWidth.isNaN() && cloudListWidth > 0f) cloudListWidth else localWidth
+        mutableStateOf(initialWidth)
+    }
+    var resizingOrderList by remember { mutableStateOf(false) }
+    var resizeBaseListWidth by remember { mutableStateOf(0f) }
+    var resizeListDeltaDp by remember { mutableStateOf(0f) }
+    var selectedOrderIds by remember(workspace?.id, state.user?.uid) { mutableStateOf(emptySet<String>()) }
     val selectedOrder = selectedOrderId?.let { id -> state.orders.firstOrNull { it.id == id } }
     val currentUserId = state.user?.uid.orEmpty()
     val currentUserEmail = state.user?.email.orEmpty()
@@ -118,6 +154,26 @@ fun OrdersScreen(
     val onSortModeSelected: (OrderSortMode) -> Unit = { mode ->
         selectedSortMode = mode
         ordersPrefs.edit().putString(OrdersSortKey, mode.key).apply()
+    }
+    LaunchedEffect(workspace?.id, state.user?.uid, cloudListWidth, resizingOrderList) {
+        if (!resizingOrderList && !cloudListWidth.isNaN() && cloudListWidth > 0f) {
+            wideListWidthPreference = cloudListWidth
+            ordersPrefs.edit().putFloat(OrdersListWidthKey, cloudListWidth).apply()
+        }
+    }
+    LaunchedEffect(workspace?.id, state.user?.uid, state.workspaceSettings.ordersSidebarVisible) {
+        orderListVisible = state.workspaceSettings.ordersSidebarVisible
+    }
+    fun saveOrderListVisibility(visible: Boolean, listWidth: Float) {
+        orderListVisible = visible
+        onUpdateWorkspaceSettings(
+            mapOf(
+                "ordersSidebarVisible" to visible,
+                "ordersSidebarWidth" to listWidth.coerceIn(260f, 760f).toDouble(),
+                "workspaceSidebarLayoutUpdatedAt" to System.currentTimeMillis()
+            ),
+            if (visible) "Order list shown." else "Order list hidden."
+        )
     }
     val visibleOrders = remember(
         state.orders,
@@ -142,6 +198,7 @@ fun OrdersScreen(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWide = maxWidth >= 900.dp
         val containerWidth = maxWidth
+        val density = LocalDensity.current
         LaunchedEffect(isWide, visibleOrders, selectedOrderId) {
             if (!isWide) return@LaunchedEffect
             val stillVisible = visibleOrders.any { it.id == selectedOrderId }
@@ -150,35 +207,95 @@ fun OrdersScreen(
             }
         }
         if (isWide) {
+            val defaultListWidth = if (containerWidth >= 1360.dp) 430f else 390f
+            val minListWidth = 320f
+            val maxListWidth = (containerWidth.value * 0.56f).coerceIn(minListWidth, 760f)
+            val listPaneWidth = (if (wideListWidthPreference.isNaN()) defaultListWidth else wideListWidthPreference)
+                .coerceIn(minListWidth, maxListWidth)
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                OrderListPane(
-                    state = state,
-                    visibleOrders = visibleOrders,
-                    selectedOrderId = selectedOrderId,
-                    searchText = searchText,
-                    onSearchTextChange = onSearchTextChange,
-                    selectedFilter = selectedFilter,
-                    selectedSortMode = selectedSortMode,
-                    filterMenuOpen = filterMenuOpen,
-                    onFilterMenuOpenChange = { filterMenuOpen = it },
-                    onFilterSelected = onFilterSelected,
-                    onSortModeSelected = onSortModeSelected,
-                    onOpenOrder = { selectedOrderId = it.id },
-                    wideLayout = true,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(if (containerWidth >= 1360.dp) 430.dp else 390.dp)
-                )
-                Surface(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight(),
-                    color = MaterialTheme.colorScheme.outlineVariant
-                ) {}
+                if (orderListVisible) {
+                    OrderListPane(
+                        state = state,
+                        visibleOrders = visibleOrders,
+                        selectedOrderId = selectedOrderId,
+                        searchText = searchText,
+                        onSearchTextChange = onSearchTextChange,
+                        selectedFilter = selectedFilter,
+                        selectedSortMode = selectedSortMode,
+                        filterMenuOpen = filterMenuOpen,
+                        onFilterMenuOpenChange = { filterMenuOpen = it },
+                        onFilterSelected = onFilterSelected,
+                        onSortModeSelected = onSortModeSelected,
+                        onOpenOrder = { selectedOrderId = it.id },
+                        selectedOrderIds = selectedOrderIds,
+                        onToggleOrderSelection = { order ->
+                            selectedOrderIds = if (order.id in selectedOrderIds) {
+                                selectedOrderIds - order.id
+                            } else {
+                                selectedOrderIds + order.id
+                            }
+                        },
+                        onAssignOrder = onAssignOrder,
+                        onUpdateOrderFields = onUpdateOrderFields,
+                        onDeleteOrder = { order ->
+                            if (selectedOrderId == order.id) selectedOrderId = visibleOrders.firstOrNull { it.id != order.id }?.id
+                            selectedOrderIds = selectedOrderIds - order.id
+                            onDeleteOrder(order)
+                        },
+                        onOpenCustomerFromOrder = onOpenCustomerFromOrder,
+                        onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                        wideLayout = true,
+                        onToggleListVisibility = { saveOrderListVisibility(false, listPaneWidth) },
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(listPaneWidth.dp)
+                    )
+                    OrderListResizeHandle(
+                        active = resizingOrderList,
+                        onResizeStart = {
+                            resizingOrderList = true
+                            resizeBaseListWidth = listPaneWidth
+                            resizeListDeltaDp = 0f
+                        },
+                        onResizeBy = { dragPixels ->
+                            val deltaDp = with(density) { dragPixels.toDp().value }
+                            resizeListDeltaDp += deltaDp
+                            wideListWidthPreference = (resizeBaseListWidth + resizeListDeltaDp)
+                                .coerceIn(minListWidth, maxListWidth)
+                        },
+                        onResizeEnd = {
+                            resizingOrderList = false
+                            val savedWidth = if (wideListWidthPreference.isNaN()) listPaneWidth else wideListWidthPreference
+                            val syncedWidth = savedWidth.coerceIn(minListWidth, maxListWidth)
+                            ordersPrefs.edit()
+                                .putFloat(OrdersListWidthKey, syncedWidth)
+                                .apply()
+                            onUpdateWorkspaceSettings(
+                                mapOf(
+                                    "ordersSidebarWidth" to syncedWidth.toDouble(),
+                                    "ordersSidebarVisible" to true
+                                ),
+                                "Order list width synced."
+                            )
+                            resizeBaseListWidth = 0f
+                            resizeListDeltaDp = 0f
+                        },
+                        onResizeCancel = {
+                            resizingOrderList = false
+                            resizeBaseListWidth = 0f
+                            resizeListDeltaDp = 0f
+                        }
+                    )
+                } else {
+                    OrderListRevealRail(
+                        visibleCount = visibleOrders.size,
+                        onShow = { saveOrderListVisibility(true, listPaneWidth) }
+                    )
+                }
                 if (selectedOrder != null) {
                     OrderDetailScreen(
                         order = selectedOrder,
@@ -189,6 +306,8 @@ fun OrdersScreen(
                         onBack = { selectedOrderId = null },
                         onAssignOrder = onAssignOrder,
                         onUpdateOrderFields = onUpdateOrderFields,
+                        onSaveOrderCardLayout = onSaveOrderCardLayout,
+                        onResetOrderCardLayout = onResetOrderCardLayout,
                         onUploadClientFile = onUploadClientFile,
                         onUploadPreviewImage = onUploadPreviewImage,
                         onRefreshLiveTracking = onRefreshLiveTracking,
@@ -213,6 +332,8 @@ fun OrdersScreen(
                 onBack = { selectedOrderId = null },
                 onAssignOrder = onAssignOrder,
                 onUpdateOrderFields = onUpdateOrderFields,
+                onSaveOrderCardLayout = onSaveOrderCardLayout,
+                onResetOrderCardLayout = onResetOrderCardLayout,
                 onUploadClientFile = onUploadClientFile,
                 onUploadPreviewImage = onUploadPreviewImage,
                 onRefreshLiveTracking = onRefreshLiveTracking,
@@ -235,6 +356,23 @@ fun OrdersScreen(
                 onFilterSelected = onFilterSelected,
                 onSortModeSelected = onSortModeSelected,
                 onOpenOrder = { selectedOrderId = it.id },
+                selectedOrderIds = selectedOrderIds,
+                onToggleOrderSelection = { order ->
+                    selectedOrderIds = if (order.id in selectedOrderIds) {
+                        selectedOrderIds - order.id
+                    } else {
+                        selectedOrderIds + order.id
+                    }
+                },
+                onAssignOrder = onAssignOrder,
+                onUpdateOrderFields = onUpdateOrderFields,
+                onDeleteOrder = { order ->
+                    if (selectedOrderId == order.id) selectedOrderId = null
+                    selectedOrderIds = selectedOrderIds - order.id
+                    onDeleteOrder(order)
+                },
+                onOpenCustomerFromOrder = onOpenCustomerFromOrder,
+                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                 wideLayout = false,
                 modifier = Modifier.fillMaxSize()
             )
@@ -256,7 +394,15 @@ private fun OrderListPane(
     onFilterSelected: (OrderFilter) -> Unit,
     onSortModeSelected: (OrderSortMode) -> Unit,
     onOpenOrder: (StudioOrder) -> Unit,
+    selectedOrderIds: Set<String>,
+    onToggleOrderSelection: (StudioOrder) -> Unit,
+    onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onDeleteOrder: (StudioOrder) -> Unit,
+    onOpenCustomerFromOrder: (StudioOrder) -> Unit,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     wideLayout: Boolean,
+    onToggleListVisibility: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -279,6 +425,12 @@ private fun OrderListPane(
                 )
                 Surface(shape = RoundedCornerShape(10.dp), color = StudioBlue.copy(alpha = 0.12f)) {
                     Icon(Icons.Filled.Tune, contentDescription = "List controls", tint = StudioBlue, modifier = Modifier.padding(12.dp).size(18.dp))
+                }
+                if (onToggleListVisibility != null) {
+                    OrderListVisibilityButton(
+                        visible = true,
+                        onClick = onToggleListVisibility
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -323,37 +475,68 @@ private fun OrderListPane(
                         Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     DropdownMenu(expanded = filterMenuOpen, onDismissRequest = { onFilterMenuOpenChange(false) }) {
                         DropdownMenuItem(
-                            text = { Text("Filters", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                            enabled = false,
-                            onClick = {}
-                        )
-                        OrderFilter.entries.forEach { filter ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (selectedFilter == filter) {
-                                            "[x] ${filter.menuLabel(state.orders, state.user?.uid.orEmpty(), state.user?.email.orEmpty())}"
-                                        } else {
-                                            filter.menuLabel(state.orders, state.user?.uid.orEmpty(), state.user?.email.orEmpty())
-                                        }
-                                    )
-                                },
-                                onClick = {
-                                    onFilterSelected(filter)
-                                    onFilterMenuOpenChange(false)
-                                }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Sort by", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            text = {
+                                Text(
+                                    "Sort orders",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
                             enabled = false,
                             onClick = {}
                         )
                         OrderSortMode.entries.forEach { mode ->
+                            val selected = selectedSortMode == mode
                             DropdownMenuItem(
-                                text = { Text(if (selectedSortMode == mode) "[x] ${mode.label}" else mode.label) },
+                                leadingIcon = {
+                                    if (selected) {
+                                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
+                                    } else {
+                                        Box(modifier = Modifier.size(18.dp))
+                                    }
+                                },
+                                text = {
+                                    Text(
+                                        mode.label,
+                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold
+                                    )
+                                },
                                 onClick = {
                                     onSortModeSelected(mode)
+                                    onFilterMenuOpenChange(false)
+                                }
+                            )
+                        }
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Filters",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            enabled = false,
+                            onClick = {}
+                        )
+                        OrderFilter.entries.forEach { filter ->
+                            val selected = selectedFilter == filter
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    if (selected) {
+                                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
+                                    } else {
+                                        Box(modifier = Modifier.size(18.dp))
+                                    }
+                                },
+                                text = {
+                                    Text(
+                                        filter.menuLabel(state.orders, state.user?.uid.orEmpty(), state.user?.email.orEmpty()),
+                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold
+                                    )
+                                },
+                                onClick = {
+                                    onFilterSelected(filter)
                                     onFilterMenuOpenChange(false)
                                 }
                             )
@@ -390,12 +573,182 @@ private fun OrderListPane(
             items(visibleOrders, key = { it.id }) { order ->
                 OrderListCard(
                     order = order,
+                    workspace = state.workspace,
+                    workspaceSettings = state.workspaceSettings,
                     teamMembers = state.teamMembers,
                     selected = selectedOrderId == order.id,
-                    onOpenOrder = { onOpenOrder(order) }
+                    multiSelected = order.id in selectedOrderIds,
+                    selectionMode = selectedOrderIds.isNotEmpty(),
+                    wideLayout = wideLayout,
+                    onOpenOrder = { onOpenOrder(order) },
+                    onToggleOrderSelection = { onToggleOrderSelection(order) },
+                    onAssignOrder = { member -> onAssignOrder(order, member) },
+                    onUpdateOrderFields = { payload -> onUpdateOrderFields(order, payload) },
+                    onDeleteOrder = { onDeleteOrder(order) },
+                    onOpenCustomer = { onOpenCustomerFromOrder(order) },
+                    onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun OrderListVisibilityButton(
+    visible: Boolean,
+    onClick: () -> Unit
+) {
+    val label = if (visible) "Hide orders list" else "Show orders list"
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = StudioBlue.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, StudioBlue.copy(alpha = 0.18f)),
+        onClick = onClick
+    ) {
+        Icon(
+            imageVector = if (visible) Icons.AutoMirrored.Filled.KeyboardArrowLeft else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = label,
+            tint = StudioBlue,
+            modifier = Modifier.padding(12.dp).size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun OrderListRevealRail(
+    visibleCount: Int,
+    onShow: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(52.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surface)
+            .border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+            )
+            .padding(top = 16.dp, bottom = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OrderListVisibilityButton(
+            visible = false,
+            onClick = onShow
+        )
+        Text(
+            text = "Orders",
+            modifier = Modifier.rotate(-90f).padding(top = 18.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Surface(
+            shape = CircleShape,
+            color = StudioBlue.copy(alpha = 0.12f)
+        ) {
+            Text(
+                text = visibleCount.toString(),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                color = StudioBlue,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrderListResizeHandle(
+    active: Boolean,
+    onResizeStart: () -> Unit,
+    onResizeBy: (Float) -> Unit,
+    onResizeEnd: () -> Unit,
+    onResizeCancel: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .width(28.dp)
+            .fillMaxHeight()
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { onResizeStart() },
+                    onDragEnd = { onResizeEnd() },
+                    onDragCancel = { onResizeCancel() },
+                    onDrag = { change, dragAmount ->
+                        onResizeBy(dragAmount.x)
+                        change.consume()
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(if (active) 4.dp else 2.dp)
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(999.dp),
+            color = if (active) {
+                StudioBlue.copy(alpha = 0.72f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.86f)
+            }
+        ) {}
+    }
+}
+
+@Composable
+private fun OrderSortToggleRow(
+    selectedSortMode: OrderSortMode,
+    onSortModeSelected: (OrderSortMode) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OrderSortToggleButton(
+            label = "Smart",
+            selected = selectedSortMode == OrderSortMode.Smart,
+            onClick = { onSortModeSelected(OrderSortMode.Smart) },
+            modifier = Modifier.weight(1f)
+        )
+        OrderSortToggleButton(
+            label = "Recent",
+            selected = selectedSortMode == OrderSortMode.Recent,
+            onClick = { onSortModeSelected(OrderSortMode.Recent) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun OrderSortToggleButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) StudioBlue.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            1.dp,
+            if (selected) StudioBlue.copy(alpha = 0.28f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        ),
+        onClick = onClick
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            color = if (selected) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 13.sp,
+            maxLines = 1
+        )
     }
 }
 
@@ -436,7 +789,7 @@ private fun StudioTopBar(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = workspace?.name ?: "StudioFlow",
+                text = workspace?.name ?: "NivaDesk",
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -484,91 +837,387 @@ private fun CompactPill(text: String, active: Boolean) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OrderListCard(
     order: StudioOrder,
+    workspace: StudioWorkspace?,
+    workspaceSettings: StudioWorkspaceSettings,
     teamMembers: List<StudioTeamMember>,
     selected: Boolean = false,
+    multiSelected: Boolean,
+    selectionMode: Boolean,
+    wideLayout: Boolean,
+    onToggleOrderSelection: () -> Unit,
+    onAssignOrder: (StudioTeamMember?) -> Unit,
+    onUpdateOrderFields: (Map<String, Any?>) -> Unit,
+    onDeleteOrder: () -> Unit,
+    onOpenCustomer: () -> Unit,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onOpenOrder: () -> Unit
 ) {
     val assignee = assigneeLabel(order, teamMembers)
-    val cardTone = when {
-        order.status == "Cancelled" -> MaterialTheme.colorScheme.surface.copy(alpha = 0.70f)
-        order.priority == "Urgent" -> StudioRed.copy(alpha = 0.08f)
-        order.priority == "High" -> StudioWarningOrange.copy(alpha = 0.08f)
-        else -> MaterialTheme.colorScheme.surface
+    val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
+    var contextMenuOpen by remember { mutableStateOf(false) }
+    var assignMenuOpen by remember { mutableStateOf(false) }
+    var detailsMenuOpen by remember { mutableStateOf(false) }
+    var confirmDeleteOpen by remember { mutableStateOf(false) }
+    val cardShape = RoundedCornerShape(20.dp)
+    val cardTone = if (selected) {
+        Color(0xFFDCEBFF)
+    } else {
+        MaterialTheme.colorScheme.surface
     }
     val borderTone = when {
         selected -> StudioBlue
         order.priority == "Urgent" -> StudioRed.copy(alpha = 0.28f)
         order.priority == "High" -> StudioWarningOrange.copy(alpha = 0.28f)
-        else -> Color.Transparent
+        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
     }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpenOrder)
-            .alpha(if (order.status == "Cancelled") 0.62f else 1f),
-        shape = RoundedCornerShape(20.dp),
-        color = cardTone,
-        border = BorderStroke(1.dp, borderTone),
-        tonalElevation = 1.dp
-    ) {
-        BoxWithConstraints {
-            val compact = maxWidth < 390.dp
-            Row(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PreviewBox(order = order, compact = compact)
-                Spacer(modifier = Modifier.width(if (compact) 12.dp else 18.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onOpenOrder,
+                    onLongClick = {
+                        if (wideLayout) onOpenOrder()
+                        contextMenuOpen = true
+                    }
+                )
+                .pointerInput(order.id) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                if (wideLayout) onOpenOrder()
+                                contextMenuOpen = true
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
+                .alpha(if (order.status == "Cancelled") 0.62f else 1f),
+            shape = cardShape,
+            color = cardTone,
+            border = BorderStroke(if (selected || multiSelected) 2.dp else 1.dp, if (multiSelected) StudioBlue else borderTone),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            BoxWithConstraints(modifier = Modifier.background(cardTone)) {
+                val compact = maxWidth < 390.dp
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = if (compact) 106.dp else 118.dp)
+                        .padding(horizontal = if (compact) 18.dp else 20.dp, vertical = if (compact) 16.dp else 18.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = order.displayCustomerName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = if (compact) 17.sp else 20.sp,
-                            modifier = Modifier.weight(1f, fill = true)
+                    if (selectionMode || multiSelected) {
+                        OrderSelectionDot(selected = multiSelected)
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                    if (workspaceSettings.orderCardShowPreviewImage) {
+                        PreviewBox(order = order, compact = compact)
+                        Spacer(modifier = Modifier.width(if (compact) 12.dp else 18.dp))
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = order.displayCustomerName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = if (compact) 17.sp else 20.sp,
+                                modifier = Modifier.weight(1f, fill = true)
+                            )
+                            if (!compact) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                AssigneeMiniBadge(order = order, teamMembers = teamMembers)
+                            }
+                            if (workspaceSettings.orderCardShowDeliveryTime && !order.isClosed && !order.isDispatched) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                DeliveryBadge(order = order, compact = compact)
+                            }
+                        }
+                        if (assignee.isNotBlank()) {
+                            AssignedRow(label = assignee)
+                        }
+                        if (workspaceSettings.orderCardShowDesignName) {
+                            IconDetailRow(
+                                icon = Icons.Filled.Palette,
+                                label = order.designName.ifBlank { order.watchRef.ifBlank { "-" } }
+                            )
+                        }
+                        IconDetailRow(
+                            icon = Icons.Filled.DateRange,
+                            label = shortDate(order)
                         )
-                        if (!compact) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            AssigneeMiniBadge(order = order, teamMembers = teamMembers)
-                        }
-                        if (!order.isClosed && !order.isDispatched) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            DeliveryBadge(order = order, compact = compact)
+                        if (workspaceSettings.orderCardShowUpcomingSchedule) {
+                            upcomingScheduleLabel(order)?.let { label ->
+                                IconDetailRow(icon = Icons.Filled.DateRange, label = label)
+                            }
                         }
                     }
-                    if (assignee.isNotBlank()) {
-                        AssignedRow(label = assignee)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(
+                        modifier = Modifier.heightIn(min = if (compact) 86.dp else 96.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        if (workspaceSettings.orderCardShowStatusBadges) {
+                            Column(verticalArrangement = Arrangement.spacedBy(7.dp), horizontalAlignment = Alignment.End) {
+                                StatusLine(label = "DESI", value = order.designStatus, compact = compact)
+                                StatusLine(label = "PAIN", value = order.status, compact = compact)
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.height(1.dp))
+                        }
+                        if (workspaceSettings.orderCardShowOrderValue && workspace?.canSeeFinancialData == true) {
+                            Text(
+                                text = moneyAmount(order.paidAmount, hideSensitiveNumbers),
+                                color = if (order.status == "Cancelled") MaterialTheme.colorScheme.onSurfaceVariant else StudioGreen,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = if (compact) 17.sp else 19.sp
+                            )
+                        }
                     }
-                    IconDetailRow(
-                        icon = Icons.Filled.Palette,
-                        label = order.designName.ifBlank { order.watchRef.ifBlank { "-" } }
-                    )
-                    IconDetailRow(
-                        icon = Icons.Filled.DateRange,
-                        label = shortDate(order)
-                    )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    StatusLine(label = "DESI", value = order.designStatus, compact = compact)
-                    StatusLine(label = "PAIN", value = order.status, compact = compact)
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = moneyAmount(order.paidAmount),
-                        color = if (order.status == "Cancelled") MaterialTheme.colorScheme.onSurfaceVariant else StudioGreen,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = if (compact) 17.sp else 19.sp
-                    )
+            }
+        }
+        OrderListContextMenu(
+            expanded = contextMenuOpen,
+            order = order,
+            workspace = workspace,
+            workspaceSettings = workspaceSettings,
+            teamMembers = teamMembers,
+            multiSelected = multiSelected,
+            assignMenuOpen = assignMenuOpen,
+            detailsMenuOpen = detailsMenuOpen,
+            wideLayout = wideLayout,
+            onDismiss = {
+                contextMenuOpen = false
+                assignMenuOpen = false
+                detailsMenuOpen = false
+            },
+            onToggleSelection = {
+                onToggleOrderSelection()
+                contextMenuOpen = false
+            },
+            onToggleAssignMenu = {
+                assignMenuOpen = !assignMenuOpen
+                if (assignMenuOpen) detailsMenuOpen = false
+            },
+            onAssign = { member ->
+                onAssignOrder(member)
+                contextMenuOpen = false
+                assignMenuOpen = false
+            },
+            onToggleDetailsMenu = {
+                detailsMenuOpen = !detailsMenuOpen
+                if (detailsMenuOpen) assignMenuOpen = false
+            },
+            onToggleCardSetting = { key, value ->
+                val updates = mutableMapOf<String, Any?>(
+                    key to value,
+                    "orderCardSettingsUpdatedAt" to System.currentTimeMillis()
+                )
+                if (key == "orderCardShowPreviewImage" && wideLayout) {
+                    val delta = if (value) 72.0 else -72.0
+                    updates["ordersSidebarWidth"] = (workspaceSettings.ordersSidebarWidth + delta).coerceIn(260.0, 760.0)
+                    updates["ordersSidebarVisible"] = true
                 }
+                onUpdateWorkspaceSettings(updates, "Order card details saved.")
+            },
+            onOpenCustomer = {
+                onOpenCustomer()
+                contextMenuOpen = false
+            },
+            onMarkDone = {
+                onUpdateOrderFields(orderStatusPayload(order, "Done"))
+                contextMenuOpen = false
+            },
+            onCancelOrder = {
+                onUpdateOrderFields(orderStatusPayload(order, "Cancelled"))
+                contextMenuOpen = false
+            },
+            onRequestDelete = {
+                contextMenuOpen = false
+                confirmDeleteOpen = true
+            }
+        )
+        if (confirmDeleteOpen) {
+            AlertDialog(
+                onDismissRequest = { confirmDeleteOpen = false },
+                title = { Text("Delete order?") },
+                text = { Text("Delete \"${order.displayCustomerName}\"? This cannot be undone.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmDeleteOpen = false
+                            onDeleteOrder()
+                        }
+                    ) {
+                        Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDeleteOpen = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrderListContextMenu(
+    expanded: Boolean,
+    order: StudioOrder,
+    workspace: StudioWorkspace?,
+    workspaceSettings: StudioWorkspaceSettings,
+    teamMembers: List<StudioTeamMember>,
+    multiSelected: Boolean,
+    assignMenuOpen: Boolean,
+    detailsMenuOpen: Boolean,
+    wideLayout: Boolean,
+    onDismiss: () -> Unit,
+    onToggleSelection: () -> Unit,
+    onToggleAssignMenu: () -> Unit,
+    onAssign: (StudioTeamMember?) -> Unit,
+    onToggleDetailsMenu: () -> Unit,
+    onToggleCardSetting: (String, Boolean) -> Unit,
+    onOpenCustomer: () -> Unit,
+    onMarkDone: () -> Unit,
+    onCancelOrder: () -> Unit,
+    onRequestDelete: () -> Unit
+) {
+    val canOpenCustomer = canOpenCustomerForOrder(workspace, order)
+    val canAssign = canManageOrderAssignments(workspace)
+    val canEditStatus = canEditOrderStatusFromList(workspace)
+    val canDelete = canDeleteOrderFromList(workspace)
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text("Open Customer") },
+            enabled = canOpenCustomer,
+            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+            onClick = onOpenCustomer
+        )
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text(if (multiSelected) "Deselect" else "Select") },
+            leadingIcon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
+            onClick = onToggleSelection
+        )
+        DropdownMenuItem(
+            text = { Text("Assign Project") },
+            enabled = canAssign,
+            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+            trailingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
+            onClick = onToggleAssignMenu
+        )
+        if (assignMenuOpen && canAssign) {
+            DropdownMenuItem(
+                text = { Text(if (order.assignedToUid.isBlank()) "[x] Unassigned" else "Unassigned") },
+                onClick = { onAssign(null) }
+            )
+            teamMembers.filter { !it.isOwner }.forEach { member ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (order.assignedToUid == member.id) {
+                                "[x] ${member.label}"
+                            } else {
+                                member.label
+                            }
+                        )
+                    },
+                    onClick = { onAssign(member) }
+                )
+            }
+        }
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Order Card Details") },
+            leadingIcon = { Icon(Icons.Filled.Tune, contentDescription = null) },
+            trailingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
+            onClick = onToggleDetailsMenu
+        )
+        if (detailsMenuOpen) {
+            OrderCardDetailToggleRow("Preview Image", workspaceSettings.orderCardShowPreviewImage) {
+                onToggleCardSetting("orderCardShowPreviewImage", !workspaceSettings.orderCardShowPreviewImage)
+            }
+            OrderCardDetailToggleRow("Delivery Time", workspaceSettings.orderCardShowDeliveryTime) {
+                onToggleCardSetting("orderCardShowDeliveryTime", !workspaceSettings.orderCardShowDeliveryTime)
+            }
+            OrderCardDetailToggleRow("Design Name", workspaceSettings.orderCardShowDesignName) {
+                onToggleCardSetting("orderCardShowDesignName", !workspaceSettings.orderCardShowDesignName)
+            }
+            if (workspace?.canSeeFinancialData == true) {
+                OrderCardDetailToggleRow("Order Value", workspaceSettings.orderCardShowOrderValue) {
+                    onToggleCardSetting("orderCardShowOrderValue", !workspaceSettings.orderCardShowOrderValue)
+                }
+            }
+            OrderCardDetailToggleRow("Upcoming Schedule", workspaceSettings.orderCardShowUpcomingSchedule) {
+                onToggleCardSetting("orderCardShowUpcomingSchedule", !workspaceSettings.orderCardShowUpcomingSchedule)
+            }
+            OrderCardDetailToggleRow("Production Status", workspaceSettings.orderCardShowStatusBadges) {
+                onToggleCardSetting("orderCardShowStatusBadges", !workspaceSettings.orderCardShowStatusBadges)
+            }
+        }
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Mark as Done") },
+            enabled = canEditStatus,
+            leadingIcon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
+            onClick = onMarkDone
+        )
+        DropdownMenuItem(
+            text = { Text("Cancel Order") },
+            enabled = canEditStatus,
+            leadingIcon = { Icon(Icons.Filled.Cancel, contentDescription = null) },
+            onClick = onCancelOrder
+        )
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Delete", color = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
+            enabled = canDelete,
+            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
+            onClick = onRequestDelete
+        )
+    }
+}
+
+@Composable
+private fun OrderCardDetailToggleRow(label: String, enabled: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = {
+            Text(
+                if (enabled) "[x]" else "[ ]",
+                color = if (enabled) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.ExtraBold
+            )
+        },
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun OrderSelectionDot(selected: Boolean) {
+    Surface(
+        shape = CircleShape,
+        color = if (selected) StudioBlue else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, if (selected) StudioBlue else MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Text("✓", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -623,12 +1272,16 @@ private fun PreviewBox(order: StudioOrder, compact: Boolean = false) {
 }
 
 @Composable
-private fun DeliveryBadge(order: StudioOrder, compact: Boolean = false) {
+private fun DeliveryBadge(
+    order: StudioOrder,
+    compact: Boolean = false
+) {
     val days = order.remainingDays
     val tone = when {
         days < 0 -> StudioRed
-        days <= 7 -> StudioWarningOrange
-        else -> StudioBlue
+        days <= 7 -> StudioRed
+        days <= 14 -> StudioWarningOrange
+        else -> StudioGreen
     }
     val label = when {
         days > 0 -> "${days}d"
@@ -759,7 +1412,48 @@ private fun statusTone(status: String): Color {
     }
 }
 
-private fun moneyAmount(value: Double): String {
+private fun orderStatusPayload(order: StudioOrder, status: String): Map<String, Any?> {
+    val nextExtraStatuses = order.extraStatuses.keys.associateWith { status }
+    return mapOf(
+        "designStatus" to status,
+        "paintingStatus" to status,
+        "details" to mapOf("extraStatuses" to nextExtraStatuses)
+    )
+}
+
+private fun canOpenCustomerForOrder(workspace: StudioWorkspace?, order: StudioOrder): Boolean {
+    val cleanName = order.displayCustomerName.trim()
+    return workspace?.memberAccess?.customers == true &&
+        cleanName.isNotBlank() &&
+        !cleanName.equals("New Project", ignoreCase = true)
+}
+
+private fun canManageOrderAssignments(workspace: StudioWorkspace?): Boolean {
+    if (workspace == null || !workspace.memberAccess.orders) return false
+    return workspace.isOwner || workspace.memberAccess.manageProjectAssignments
+}
+
+private fun canEditOrderStatusFromList(workspace: StudioWorkspace?): Boolean {
+    if (workspace == null || !workspace.memberAccess.orders) return false
+    val role = workspace.role.lowercase(Locale.UK)
+    return workspace.isOwner || role in setOf("admin", "member", "workflow", "workflowonly", "workflow_only")
+}
+
+private fun canDeleteOrderFromList(workspace: StudioWorkspace?): Boolean {
+    if (workspace == null || !workspace.memberAccess.orders) return false
+    val role = workspace.role.lowercase(Locale.UK)
+    return workspace.isOwner || role in setOf("admin", "member")
+}
+
+private fun upcomingScheduleLabel(order: StudioOrder): String? {
+    val reminder = order.scheduleReminders.firstOrNull { !it.status.equals("Done", ignoreCase = true) }
+        ?: return null
+    val due = reminder.dueAt?.let { shortDateForDate(it) }.orEmpty()
+    return listOf(reminder.title, due).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotBlank() }
+}
+
+private fun moneyAmount(value: Double, hideNumbers: Boolean = false): String {
+    if (hideNumbers) return privateCurrencyText("£")
     return "£" + String.format(Locale.UK, "%,.2f", value)
 }
 
@@ -779,32 +1473,32 @@ private fun shortDate(order: StudioOrder): String {
     return SimpleDateFormat("dd/MM/yy", Locale.UK).format(order.paymentDate)
 }
 
+private fun shortDateForDate(date: Date): String {
+    return SimpleDateFormat("dd/MM/yy", Locale.UK).format(date)
+}
+
 private enum class OrderFilter(val label: String, val key: String) {
     All("All", "all"),
     Active("Active", "active"),
-    AssignedToMe("Assigned to me", "assigned_to_me"),
-    Unassigned("Unassigned", "unassigned"),
-    WaitingCustomer("Waiting Customer", "waiting_customer"),
-    InProduction("In Production", "in_production"),
-    ReadyToShip("Ready to Ship", "ready_to_ship"),
-    Late("Late", "late"),
-    HighPriority("High Priority", "high_priority"),
-    Completed("Completed", "completed"),
-    Cancelled("Cancelled", "cancelled");
+    WaitingCustomer("Waiting Customer", "waitingCustomer"),
+    InProduction("In Production", "inProduction"),
+    ThisWeek("This Week", "thisWeek"),
+    LateOrders("Late Orders", "lateOrders"),
+    UnpaidBalance("Unpaid Balance", "unpaidBalance"),
+    ReadyToShip("Ready to Ship", "readyToShip"),
+    Completed("Completed", "completed");
 
     fun matches(order: StudioOrder, currentUserId: String = "", currentUserEmail: String = ""): Boolean {
         return when (this) {
             All -> true
-            Active -> !orderIsCompleted(order) && !orderIsCancelled(order)
-            AssignedToMe -> orderAssignedToCurrentUser(order, currentUserId, currentUserEmail)
-            Unassigned -> order.assignedToUid.isBlank() && order.assignedToEmail.isBlank()
+            Active -> !orderIsClosed(order)
             WaitingCustomer -> orderNeedsCustomerReply(order)
             InProduction -> orderIsInProduction(order)
+            ThisWeek -> orderIsDueThisWeek(order)
+            LateOrders -> orderIsLate(order)
+            UnpaidBalance -> orderHasUnpaidBalance(order)
             ReadyToShip -> orderIsReadyToShip(order)
-            Late -> orderIsLate(order)
-            HighPriority -> order.priority.contains("high", ignoreCase = true) || order.priority.contains("urgent", ignoreCase = true)
             Completed -> orderIsCompleted(order)
-            Cancelled -> orderIsCancelled(order)
         }
     }
 
@@ -815,33 +1509,28 @@ private enum class OrderFilter(val label: String, val key: String) {
 
 private enum class OrderSortMode(val label: String, val key: String) {
     Smart("Smart", "smart"),
-    DeliveryDue("Delivery due", "delivery_due"),
-    Recent("Recent", "recent"),
-    Customer("Customer", "customer"),
-    OrderValue("Order value", "order_value");
+    Recent("Recent", "recent");
 
     fun sort(orders: List<StudioOrder>): List<StudioOrder> {
         return when (this) {
             Smart -> orders.sortedWith(
-                compareBy<StudioOrder> { smartOrderRank(it) }
-                    .thenBy { orderDeliveryDueDate(it) }
-                    .thenByDescending { it.orderValue }
-                    .thenBy { it.displayCustomerName.lowercase(Locale.ROOT) }
-            )
-            DeliveryDue -> orders.sortedWith(
-                compareBy<StudioOrder> { orderIsCompleted(it) || orderIsCancelled(it) }
-                    .thenBy { orderDeliveryDueDate(it) }
-                    .thenBy { it.displayCustomerName.lowercase(Locale.ROOT) }
+                compareBy<StudioOrder> { smartOrderSortBucket(it) }
+                    .thenBy { if (orderIsActiveForSmartSorting(it)) orderDaysUntilDue(it) else 0 }
+                    .thenByDescending { it.paymentDate }
             )
             Recent -> orders.sortedByDescending { it.paymentDate }
-            Customer -> orders.sortedBy { it.displayCustomerName.lowercase(Locale.ROOT) }
-            OrderValue -> orders.sortedByDescending { it.orderValue }
         }
     }
 }
 
 private fun orderFilterFromKey(key: String?): OrderFilter {
-    return OrderFilter.entries.firstOrNull { it.key == key } ?: OrderFilter.All
+    return when (key) {
+        "waiting_customer" -> OrderFilter.WaitingCustomer
+        "in_production" -> OrderFilter.InProduction
+        "ready_to_ship" -> OrderFilter.ReadyToShip
+        "late" -> OrderFilter.LateOrders
+        else -> OrderFilter.entries.firstOrNull { it.key == key } ?: OrderFilter.All
+    }
 }
 
 private fun orderSortModeFromKey(key: String?): OrderSortMode {
@@ -888,24 +1577,12 @@ private fun orderSearchTokens(order: StudioOrder, members: List<StudioTeamMember
         .filter { it.isNotBlank() }
 }
 
-private fun smartOrderRank(order: StudioOrder): Int {
-    return when {
-        orderIsCancelled(order) -> 90
-        orderIsCompleted(order) -> 80
-        orderIsLate(order) -> 0
-        order.remainingDays in 0..7 && !order.isDispatched -> 10
-        orderIsReadyToShip(order) -> 20
-        orderIsInProduction(order) -> 30
-        orderNeedsCustomerReply(order) -> 40
-        order.priority.contains("urgent", ignoreCase = true) -> 45
-        else -> 50
-    }
+private fun smartOrderSortBucket(order: StudioOrder): Int {
+    return if (orderIsActiveForSmartSorting(order)) 0 else 1
 }
 
-private fun orderAssignedToCurrentUser(order: StudioOrder, currentUserId: String, currentUserEmail: String): Boolean {
-    val cleanEmail = currentUserEmail.trim().lowercase(Locale.ROOT)
-    return currentUserId.isNotBlank() && order.assignedToUid == currentUserId ||
-        cleanEmail.isNotBlank() && order.assignedToEmail.trim().lowercase(Locale.ROOT) == cleanEmail
+private fun orderIsActiveForSmartSorting(order: StudioOrder): Boolean {
+    return !orderIsClosed(order) && !order.isDispatched
 }
 
 private fun orderPrimaryStatus(order: StudioOrder): String {
@@ -914,22 +1591,57 @@ private fun orderPrimaryStatus(order: StudioOrder): String {
 
 private fun orderIsCancelled(order: StudioOrder): Boolean {
     val status = orderPrimaryStatus(order)
-    return status.contains("cancelled") || status.contains("canceled") || status.contains("refunded")
+    return status == "cancel" ||
+        status == "cancelled" ||
+        status == "canceled" ||
+        status == "refunded" ||
+        status.contains("cancelled") ||
+        status.contains("canceled") ||
+        status.contains("cancel order") ||
+        status.contains("order cancelled") ||
+        status.contains("order canceled") ||
+        status.contains("refunded")
 }
 
 private fun orderIsCompleted(order: StudioOrder): Boolean {
     if (order.isDelivered) return true
     val status = orderPrimaryStatus(order)
-    return status == "done" || status == "completed" || status == "delivered" || status.contains("complete")
+    return status == "done" ||
+        status == "completed" ||
+        status == "delivered" ||
+        status.contains("complete") ||
+        status.contains("delivered")
+}
+
+private fun orderIsClosed(order: StudioOrder): Boolean {
+    return orderIsCompleted(order) || orderIsCancelled(order)
 }
 
 private fun orderIsLate(order: StudioOrder): Boolean {
-    return !orderIsCompleted(order) && !orderIsCancelled(order) && !order.isDispatched && orderDeliveryDueDate(order) < Date()
+    return !orderIsClosed(order) && !order.isDispatched && orderDaysUntilDue(order) < 0
+}
+
+private fun orderIsDueThisWeek(order: StudioOrder): Boolean {
+    if (orderIsClosed(order)) return false
+    val due = startOfDay(orderDeliveryDueDate(order))
+    val weekStart = startOfWeek(Date())
+    val weekEnd = Date(weekStart.time + 7 * OrdersDayMs)
+    return !due.before(weekStart) && due.before(weekEnd)
+}
+
+private fun orderHasUnpaidBalance(order: StudioOrder): Boolean {
+    return order.remainingAmount > 0.009 ||
+        orderTextTokens(order).any { text ->
+            text.contains("waiting for payment") ||
+                text.contains("waiting for deposit") ||
+                text.contains("awaiting payment")
+        }
 }
 
 private fun orderNeedsCustomerReply(order: StudioOrder): Boolean {
     val terms = listOf(
         "waiting for customer",
+        "customer waiting",
         "needs reply",
         "reply needed",
         "waiting for approval",
@@ -948,7 +1660,8 @@ private fun orderIsReadyToShip(order: StudioOrder): Boolean {
         "ready for collection",
         "delivery ready",
         "packed",
-        "packaging ready"
+        "packaging ready",
+        "box ready"
     )
     return orderTextTokens(order).any { text -> readyTerms.any { text.contains(it) } }
 }
@@ -962,8 +1675,16 @@ private fun orderIsInProduction(order: StudioOrder): Boolean {
         "making",
         "sourcing",
         "quality check",
+        "ready for review",
+        "revision needed",
+        "repair",
+        "testing",
         "revision",
         "draft",
+        "editing",
+        "sewing",
+        "casting",
+        "polishing",
         "preparation"
     )
     val texts = orderTextTokens(order)
@@ -993,7 +1714,32 @@ private fun orderDeliveryDueDate(order: StudioOrder): Date {
     return Date(order.paymentDate.time + order.deliveryTime.coerceAtLeast(1) * OrdersDayMs)
 }
 
+private fun orderDaysUntilDue(order: StudioOrder): Int {
+    val due = startOfDay(orderDeliveryDueDate(order))
+    val today = startOfDay(Date())
+    return ((due.time - today.time) / OrdersDayMs).toInt()
+}
+
+private fun startOfDay(date: Date): Date {
+    return Calendar.getInstance().apply {
+        time = date
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.time
+}
+
+private fun startOfWeek(date: Date): Date {
+    return Calendar.getInstance().apply {
+        time = startOfDay(date)
+        val mondayOffset = (get(Calendar.DAY_OF_WEEK) + 5) % 7
+        add(Calendar.DAY_OF_YEAR, -mondayOffset)
+    }.time
+}
+
 private const val OrdersSearchKey = "orders_search"
 private const val OrdersFilterKey = "orders_filter"
 private const val OrdersSortKey = "orders_sort"
+private const val OrdersListWidthKey = "orders_list_width_dp"
 private const val OrdersDayMs = 24L * 60L * 60L * 1000L

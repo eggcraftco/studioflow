@@ -2,8 +2,10 @@ package uk.co.eggcraft.studioflow.data.firebase
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
@@ -52,11 +54,17 @@ class StudioFlowRepository(
         auth.signInWithEmailAndPassword(email.trim(), password).await()
     }
 
+    suspend fun signInWithGoogleIdToken(idToken: String) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential).await()
+    }
+
     fun signOut() {
         auth.signOut()
     }
 
     suspend fun loadWorkspace(user: FirebaseUser): StudioWorkspace {
+        ensureWorkspaceForUser(user)
         val userDoc = db.collection("users").document(user.uid).get().await()
         var companyId = userDoc.getString("activeCompanyId").orEmpty().ifEmpty { user.uid }
         var companyDoc = db.collection("companies").document(companyId).get().await()
@@ -68,21 +76,23 @@ class StudioFlowRepository(
         val userData = userDoc.data.orEmpty()
         val ownerUid = stringValue(data["ownerUid"], companyId)
         val ownerEmail = stringValue(data["ownerEmail"], user.email.orEmpty())
+        val customRoles = customRoles(data)
         val member = (data["members"] as? Map<*, *>)?.get(user.uid) as? Map<*, *>
-        val role = if (user.uid == ownerUid || user.uid == companyId) {
+        val rawRole = if (user.uid == ownerUid || user.uid == companyId) {
             "owner"
         } else {
-            memberRole(data, user.uid)
+            memberRoleValue(data, user.uid, customRoles)
         }
+        val role = effectiveMemberRole(rawRole, customRoles)
         val plan = StudioBillingPlan.fromRaw(data["billingPlan"] as? String)
         return StudioWorkspace(
             id = companyId,
             name = stringValue(data["name"], stringValue(data["companyName"], "My Studio")),
             ownerUid = ownerUid,
             role = role,
-            roleLabel = roleLabel(role),
+            roleLabel = customRoles.firstOrNull { it.id == rawRole }?.name ?: roleLabel(role),
             billingPlan = plan,
-            memberAccess = memberAccess(data, user.uid, role == "owner"),
+            memberAccess = memberAccess(data, user.uid, role == "owner", rawRole, customRoles),
             accountDisplayName = stringValue(
                 member?.get("displayName"),
                 stringValue(userData["displayName"], stringValue(data["ownerDisplayName"], user.displayName.orEmpty()))
@@ -93,6 +103,81 @@ class StudioFlowRepository(
             ),
             ownerEmail = ownerEmail
         )
+    }
+
+    private suspend fun ensureWorkspaceForUser(user: FirebaseUser) {
+        val uid = user.uid
+        val email = user.email.orEmpty()
+        val displayName = user.displayName.orEmpty()
+        val photoUrl = user.photoUrl?.toString().orEmpty()
+        val userRef = db.collection("users").document(uid)
+        val companyRef = db.collection("companies").document(uid)
+
+        val userDoc = userRef.get().await()
+        val userPayload = mutableMapOf<String, Any>(
+            "uid" to uid,
+            "email" to email,
+            "displayName" to displayName,
+            "photoURL" to photoUrl,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (userDoc.getString("activeCompanyId").isNullOrBlank()) {
+            userPayload["activeCompanyId"] = uid
+        }
+        userRef.set(userPayload, SetOptions.merge()).await()
+
+        val companyDoc = companyRef.get().await()
+        val ownerMember = mapOf(
+            "uid" to uid,
+            "email" to email,
+            "displayName" to displayName,
+            "photoURL" to photoUrl,
+            "role" to "owner",
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+
+        if (companyDoc.exists()) {
+            val data = companyDoc.data.orEmpty()
+            val payload = mutableMapOf<String, Any>(
+                "companyId" to uid,
+                "appName" to "NivaDesk",
+                "memberUids" to FieldValue.arrayUnion(uid),
+                "memberRoles" to mapOf(uid to "owner"),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            if (stringValue(data["ownerUid"], "").isBlank()) payload["ownerUid"] = uid
+            if (stringValue(data["ownerEmail"], "").isBlank()) payload["ownerEmail"] = email
+            if (stringValue(data["ownerDisplayName"], "").isBlank()) payload["ownerDisplayName"] = displayName
+            if (stringValue(data["ownerPhotoURL"], "").isBlank()) payload["ownerPhotoURL"] = photoUrl
+            val members = data["members"] as? Map<*, *>
+            if (members?.get(uid) == null) payload["members"] = mapOf(uid to ownerMember)
+            companyRef.set(payload, SetOptions.merge()).await()
+            return
+        }
+
+        companyRef.set(
+            mapOf(
+                "companyId" to uid,
+                "ownerUid" to uid,
+                "ownerEmail" to email,
+                "ownerDisplayName" to displayName,
+                "ownerPhotoURL" to photoUrl,
+                "appName" to "NivaDesk",
+                "memberUids" to FieldValue.arrayUnion(uid),
+                "memberRoles" to mapOf(uid to "owner"),
+                "members" to mapOf(uid to ownerMember),
+                "name" to "My Studio",
+                "companyName" to "My Studio",
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp(),
+                "billingPlan" to StudioBillingPlan.Demo.raw,
+                "billingPlanName" to StudioBillingPlan.Demo.title,
+                "billingPlanSource" to "new_workspace_default",
+                "billingStorageLimitMB" to StudioBillingPlan.Demo.storageLimitMb,
+                "billingTeamMemberLimit" to StudioBillingPlan.Demo.teamMemberLimit
+            ),
+            SetOptions.merge()
+        ).await()
     }
 
     fun workspaceSettingsFlow(
@@ -234,6 +319,44 @@ class StudioFlowRepository(
                 }
             )
             .await()
+    }
+
+    suspend fun deleteOrder(workspace: StudioWorkspace, order: StudioOrder) {
+        functions.getHttpsCallable("deleteWebOrder")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "orderId" to order.id
+                )
+            )
+            .await()
+    }
+
+    suspend fun saveOrderCardLayout(workspace: StudioWorkspace, order: StudioOrder, snapshotJSON: String): String {
+        val result = functions.getHttpsCallable("saveSwiftWorkspaceCardProfile")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "orderId" to order.id,
+                    "snapshotJSON" to snapshotJSON
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("message") as? String ?: "This order layout was saved."
+    }
+
+    suspend fun resetOrderCardLayout(workspace: StudioWorkspace, order: StudioOrder): String {
+        val result = functions.getHttpsCallable("resetOrderWorkspaceCardLayout")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "orderId" to order.id
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("message") as? String ?: "This order now uses the shared card layout."
     }
 
     suspend fun uploadClientFile(
@@ -761,46 +884,43 @@ class StudioFlowRepository(
             (email.isNotEmpty() && order.assignedToEmail.trim().lowercase() == email)
     }
 
-    private fun memberRole(data: Map<String, Any>, uid: String): String {
+    private fun memberRoleValue(
+        data: Map<String, Any>,
+        uid: String,
+        customRoles: List<StudioCustomRole>
+    ): String {
         val members = data["members"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val member = members[uid] as? Map<*, *>
-        return normalizeRole(stringValue(member?.get("role"), "member"))
+        val memberCustomRoles = data["memberCustomRoles"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val rawCustomRole = stringValue(member?.get("customRoleId"), stringValue(memberCustomRoles[uid], ""))
+        if (customRoles.any { it.id == rawCustomRole }) return rawCustomRole
+
+        val memberRoles = data["memberRoles"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        return normalizeRoleForTeamAccess(stringValue(member?.get("role"), stringValue(memberRoles[uid], "member")))
     }
 
-    private fun memberAccess(data: Map<String, Any>, uid: String, owner: Boolean): WorkspaceMemberAccess {
+    private fun effectiveMemberRole(rawRole: String, customRoles: List<StudioCustomRole>): String {
+        return customRoles.firstOrNull { it.id == rawRole }?.baseRole ?: normalizeRole(rawRole)
+    }
+
+    private fun memberAccess(
+        data: Map<String, Any>,
+        uid: String,
+        owner: Boolean,
+        rawRole: String,
+        customRoles: List<StudioCustomRole>
+    ): WorkspaceMemberAccess {
         if (owner) return WorkspaceMemberAccess()
+        customRoles.firstOrNull { it.id == rawRole }?.let { return it.access }
+
         val members = data["members"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val member = members[uid] as? Map<*, *>
-        val access = member?.get("access") as? Map<*, *> ?: emptyMap<Any, Any>()
-        return WorkspaceMemberAccess(
-            orders = boolValue(access["orders"], true),
-            dashboard = boolValue(access["dashboard"], true),
-            schedule = boolValue(access["schedule"], true),
-            customers = boolValue(access["customers"], true),
-            quickReply = boolValue(access["quickReply"], true),
-            settings = boolValue(access["settings"], true),
-            teamAccess = boolValue(access["teamAccess"], true),
-            clientFiles = boolValue(access["clientFiles"], true),
-            financialInfo = boolValue(access["financialInfo"], true),
-            exportData = boolValue(access["exportData"], true),
-            assignedProjectsOnly = boolValue(access["assignedProjectsOnly"], false),
-            manageProjectAssignments = boolValue(access["manageProjectAssignments"], false),
-            cardPreview = boolValue(access["cardPreview"], true),
-            cardSummary = boolValue(access["cardSummary"], true),
-            cardCustomer = boolValue(access["cardCustomer"], true),
-            cardMaterials = boolValue(access["cardMaterials"], true),
-            cardPriority = boolValue(access["cardPriority"], true),
-            cardDelivery = boolValue(access["cardDelivery"], true),
-            cardNotes = boolValue(access["cardNotes"], true),
-            cardClientFiles = boolValue(access["cardClientFiles"], true),
-            cardTodo = boolValue(access["cardTodo"], true),
-            cardWorkTime = boolValue(access["cardWorkTime"], true),
-            cardFinancial = boolValue(access["cardFinancial"], true),
-            cardStatus = boolValue(access["cardStatus"], true),
-            cardShipping = boolValue(access["cardShipping"], true),
-            cardSchedule = boolValue(access["cardSchedule"], true),
-            cardHistoryLog = boolValue(access["cardHistoryLog"], true)
-        )
+        val rootAccess = (data["memberAccess"] as? Map<*, *>)?.get(uid) as? Map<*, *> ?: emptyMap<Any, Any>()
+        val inlineAccess = member?.get("access") as? Map<*, *> ?: emptyMap<Any, Any>()
+        val mergedAccess = defaultAccessMapForRole(rawRole).toMutableMap()
+        inlineAccess.forEach { (key, value) -> mergedAccess[key.toString()] = value }
+        rootAccess.forEach { (key, value) -> mergedAccess[key.toString()] = value }
+        return accessFromMap(mergedAccess)
     }
 }
 
@@ -851,6 +971,8 @@ private fun workspaceSettings(
         quickReplyRules = jsonQuickReplyTemplateItems(data["customRulesJSON"], fallback.quickReplyRules),
         businessType = stringValue(data["businessType"], fallback.businessType),
         businessDescriptionPrompt = stringValue(data["businessDescriptionPrompt"], fallback.businessDescriptionPrompt),
+        businessOnboardingCompleted = data.containsKey("businessOnboardingCompletedAt") ||
+            boolValue(data["businessOnboardingCompleted"], fallback.businessOnboardingCompleted),
         activeStatuses = jsonStringList(data["activeStatusesJSON"], fallback.activeStatuses),
         customSteps = jsonTitleList(data["customStepsJSON"], fallback.customSteps),
         customToggles = jsonTitleList(data["customTogglesJSON"], fallback.customToggles),
@@ -922,6 +1044,14 @@ private fun workspaceSettings(
             data["uploadSafetyMaxFileSizeMBV1"] ?: data["uploadSafetyMaxFileSizeMB"],
             fallback.uploadSafetyMaxFileSizeMB
         ).coerceIn(1, 50),
+        orderCardShowPreviewImage = boolValue(data["orderCardShowPreviewImage"], fallback.orderCardShowPreviewImage),
+        orderCardShowDeliveryTime = boolValue(data["orderCardShowDeliveryTime"], fallback.orderCardShowDeliveryTime),
+        orderCardShowDesignName = boolValue(data["orderCardShowDesignName"], fallback.orderCardShowDesignName),
+        orderCardShowOrderValue = boolValue(data["orderCardShowOrderValue"], fallback.orderCardShowOrderValue),
+        orderCardShowUpcomingSchedule = boolValue(data["orderCardShowUpcomingSchedule"], fallback.orderCardShowUpcomingSchedule),
+        orderCardShowStatusBadges = boolValue(data["orderCardShowStatusBadges"], fallback.orderCardShowStatusBadges),
+        ordersSidebarWidth = doubleValue(data["ordersSidebarWidth"], fallback.ordersSidebarWidth).coerceIn(260.0, 760.0),
+        ordersSidebarVisible = boolValue(data["ordersSidebarVisible"], fallback.ordersSidebarVisible),
         workspaceUserProfilesJSON = workspaceUserProfilesJSON,
         sharedWorkspaceSnapshotJSON = sharedWorkspaceSnapshotJSON,
         orderCardLayout = orderCardLayoutFromWorkspaceSettings(data, userId, ownerUid)
@@ -944,12 +1074,14 @@ private fun orderCardLayoutFromWorkspaceSettings(
 
 private fun workspaceProfileSnapshot(value: Any?, userId: String, ownerUid: String): JSONObject? {
     val profiles = jsonArrayValue(value) ?: return null
-    val candidates = List(profiles.length()) { index -> profiles.optJSONObject(index) }
-        .filterNotNull()
-        .filter { it.optString("snapshotJSON").isNotBlank() }
-    val ownProfile = candidates.firstOrNull { userId.isNotBlank() && it.optString("userId") == userId }
+    val allProfiles = List(profiles.length()) { index -> profiles.optJSONObject(index) }.filterNotNull()
+    val candidates = allProfiles.filter { it.optString("snapshotJSON").isNotBlank() }
+    val ownProfile = allProfiles.firstOrNull { userId.isNotBlank() && it.optString("userId") == userId }
+    val ownSnapshotProfile = candidates.firstOrNull { userId.isNotBlank() && it.optString("userId") == userId }
+    val syncSourceId = ownProfile?.optString("syncSourceUserId")?.trim().orEmpty()
+    val syncedProfile = candidates.firstOrNull { syncSourceId.isNotBlank() && it.optString("userId") == syncSourceId }
     val ownerProfile = candidates.firstOrNull { ownerUid.isNotBlank() && it.optString("userId") == ownerUid }
-    return jsonObjectValue((ownProfile ?: ownerProfile)?.optString("snapshotJSON"))
+    return jsonObjectValue((syncedProfile ?: ownSnapshotProfile ?: ownerProfile)?.optString("snapshotJSON"))
 }
 
 private fun layoutFromWorkspaceSnapshot(snapshot: JSONObject): OrderDetailCardLayout {
@@ -1453,6 +1585,19 @@ private fun customRoles(data: Map<String, Any>): List<StudioCustomRole> {
             baseRole = normalizeRole(stringValue(raw["baseRole"], "member")),
             access = accessFromMap(raw["access"] as? Map<*, *> ?: emptyMap<Any, Any>())
         )
+    }
+}
+
+private fun defaultAccessMapForRole(roleValue: String): Map<String, Any?> {
+    return if (normalizeRole(roleValue) == "workflow") {
+        mapOf(
+            "dashboard" to false,
+            "financialInfo" to false,
+            "teamAccess" to false,
+            "cardFinancial" to false
+        )
+    } else {
+        emptyMap()
     }
 }
 

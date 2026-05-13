@@ -27,87 +27,59 @@ export function OrderQuickFilterBar({
   filters?: typeof ORDER_QUICK_FILTERS;
   language?: string | null;
 }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const selectedFilter = filters.find(item => item.id === filter) ?? filters[0] ?? ORDER_QUICK_FILTERS[0];
   const selectedCount = quickFilterCount(orders, filter);
   const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
-    if (!mobileMenuOpen) return;
+    if (!filterMenuOpen) return;
 
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMobileMenuOpen(false);
+      if (event.key === "Escape") setFilterMenuOpen(false);
     }
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [mobileMenuOpen]);
+  }, [filterMenuOpen]);
 
   function chooseSort(nextSortMode: OrderSortMode) {
     onSortModeChange(nextSortMode);
+    setFilterMenuOpen(false);
   }
 
   function chooseFilter(nextFilter: OrderQuickFilterId) {
     onFilterChange(nextFilter);
-    setMobileMenuOpen(false);
+    setFilterMenuOpen(false);
   }
 
   return (
-    <div className="order-filter-card" aria-label={t("Order Filters")}>
+    <div className={filterMenuOpen ? "order-filter-card is-open" : "order-filter-card"} aria-label={t("Order Filters")}>
       <div className="order-filter-topline">
         <span className="order-filter-icon" aria-hidden="true">☰</span>
         <div>
           <small>{t("Order Filters")}</small>
-          <strong>{t(selectedFilter.label)} · {sortMode === "smart" ? t("Smart") : t("Recent")}</strong>
+          <strong>{t(selectedFilter.label)} {" • "} {sortMode === "smart" ? t("Smart") : t("Recent")}</strong>
         </div>
         <span className="order-filter-count">{selectedCount}</span>
+        <span className="order-filter-chevron" aria-hidden="true">⌄</span>
       </div>
-
-      <div className="order-filter-sort" role="group" aria-label={t("Order sort")}>
-        <button
-          type="button"
-          className={sortMode === "smart" ? "is-active" : ""}
-          onClick={() => onSortModeChange("smart")}
-        >
-          {t("Smart")}
-        </button>
-        <button
-          type="button"
-          className={sortMode === "recent" ? "is-active" : ""}
-          onClick={() => onSortModeChange("recent")}
-        >
-          {t("Recent")}
-        </button>
-      </div>
-
-      <select
-        className="order-filter-select"
-        value={filter}
-        onChange={event => onFilterChange(event.target.value as OrderQuickFilterId)}
-        aria-label={t("Order quick filter")}
-      >
-        {filters.map(item => (
-          <option key={item.id} value={item.id}>
-            {t(item.label)} ({quickFilterCount(orders, item.id)})
-          </option>
-        ))}
-      </select>
 
       <button
         className="order-filter-mobile-hit"
         type="button"
         aria-label={t("Open order filters")}
-        aria-expanded={mobileMenuOpen}
-        onClick={() => setMobileMenuOpen(open => !open)}
+        aria-expanded={filterMenuOpen}
+        onClick={() => setFilterMenuOpen(open => !open)}
       />
 
-      {mobileMenuOpen ? (
+      {filterMenuOpen ? (
         <>
           <button
             className="order-filter-mobile-scrim"
             type="button"
             aria-label={t("Close order filters")}
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={() => setFilterMenuOpen(false)}
           />
           <div className="order-filter-mobile-menu" role="menu" aria-label={t("Order filters")}>
             <button className="order-filter-menu-row" type="button" role="menuitemradio" aria-checked={sortMode === "smart"} onClick={() => chooseSort("smart")}>

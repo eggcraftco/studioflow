@@ -11,9 +11,9 @@ import kotlin.math.ceil
 
 enum class StudioBillingPlan(val raw: String, val title: String, val teamMemberLimit: Int, val storageLimitMb: Int) {
     Demo("demo", "Free Demo", 1, 50),
-    LifetimeLite("lifetime_lite", "StudioFlow Lite", 1, 250),
-    ProMonthly("pro_monthly", "StudioFlow Pro", 1, 10240),
-    TeamMonthly("team_monthly", "StudioFlow Team", 10, 51200);
+    LifetimeLite("lifetime_lite", "NivaDesk Lite", 1, 250),
+    ProMonthly("pro_monthly", "NivaDesk Pro", 1, 10240),
+    TeamMonthly("team_monthly", "NivaDesk Team", 10, 51200);
 
     companion object {
         fun fromRaw(value: String?): StudioBillingPlan {
@@ -148,11 +148,16 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
 
     companion object {
         val DefaultColumns: List<List<OrderDetailCardId>> = listOf(
-            listOf(Preview, Summary),
-            listOf(Customer, Materials, Delivery, Notes, ClientFiles),
-            listOf(Priority, Todo, WorkTime, Financial, Status, Shipping, Schedule, HistoryLog)
+            listOf(Preview, Summary, Customer),
+            listOf(Notes, ClientFiles, Status),
+            listOf(Todo, WorkTime, Schedule),
+            listOf(Delivery, HistoryLog, Financial),
+            listOf(Shipping, Materials, Priority)
         )
-        val DefaultOrder: List<OrderDetailCardId> = DefaultColumns.flatten()
+        val DefaultOrder: List<OrderDetailCardId> = listOf(
+            Preview, Summary, Customer, Materials, Delivery, Notes, ClientFiles,
+            Priority, Todo, WorkTime, Financial, Status, Shipping, Schedule, HistoryLog
+        )
 
         fun fromRaw(value: String?): OrderDetailCardId? {
             val clean = value?.trim().orEmpty()
@@ -187,7 +192,7 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
 data class OrderDetailCardLayout(
     val columns: List<List<OrderDetailCardId>> = OrderDetailCardId.DefaultColumns,
     val phoneOrder: List<OrderDetailCardId> = OrderDetailCardId.DefaultOrder,
-    val columnWidths: List<Int> = listOf(350, 350, 350),
+    val columnWidths: List<Int> = List(OrderDetailCardId.DefaultColumns.size) { 350 },
     val cardColors: Map<OrderDetailCardId, String> = emptyMap(),
     val cardHeights: Map<OrderDetailCardId, Int> = emptyMap(),
     val orderCardHeights: Map<String, Map<OrderDetailCardId, Int>> = emptyMap(),
@@ -197,7 +202,7 @@ data class OrderDetailCardLayout(
 
     companion object {
         private const val MinCardHeight = 160
-        private const val MaxCardHeight = 900
+        private const val MaxCardHeight = 1200
 
         fun normalized(
             columns: List<List<OrderDetailCardId>>?,
@@ -208,6 +213,7 @@ data class OrderDetailCardLayout(
             orderCardHeights: Map<String, Map<OrderDetailCardId, Int>> = emptyMap(),
             visibility: Map<OrderDetailCardId, Boolean> = emptyMap()
         ): OrderDetailCardLayout {
+            val minimumColumnCount = OrderDetailCardId.DefaultColumns.size
             val seenColumns = linkedSetOf<OrderDetailCardId>()
             val cleanColumns = columns
                 ?.map { column ->
@@ -225,7 +231,7 @@ data class OrderDetailCardLayout(
                 val missing = OrderDetailCardId.DefaultOrder.filterNot { it in seenColumns }
                 if (missing.isNotEmpty()) cleanColumns[cleanColumns.lastIndex] = cleanColumns.last() + missing
             }
-            while (cleanColumns.size < 3) cleanColumns.add(emptyList())
+            while (cleanColumns.size < minimumColumnCount) cleanColumns.add(emptyList())
 
             val normalizedPhoneOrder = buildList {
                 val seenPhone = linkedSetOf<OrderDetailCardId>()
@@ -237,7 +243,7 @@ data class OrderDetailCardLayout(
             val cleanWidths = columnWidths
                 .map { it.coerceIn(260, 800) }
                 .toMutableList()
-            while (cleanWidths.size < cleanColumns.size.coerceAtLeast(3)) cleanWidths.add(350)
+            while (cleanWidths.size < cleanColumns.size.coerceAtLeast(minimumColumnCount)) cleanWidths.add(350)
 
             val cleanVisibility = OrderDetailCardId.DefaultOrder.associateWith { true }.toMutableMap()
             cleanVisibility.putAll(visibility)
@@ -301,6 +307,7 @@ data class StudioWorkspaceSettings(
     ),
     val businessType: String = "Photography Studio",
     val businessDescriptionPrompt: String = "This business offers professional photography services for individuals, families, events, brands, and products.\nCustomers should provide their name, contact details, preferred date, location, type of shoot, style preferences, deadline, and any special requests.\nThe process includes enquiry, consultation, quote, deposit payment, shoot planning, editing, client review, final delivery and follow-up.",
+    val businessOnboardingCompleted: Boolean = false,
     val activeStatuses: List<String> = listOf("Not Yet", "In Progress", "Pending", "Ready", "Done", "Cancelled", "Design", "Painting", "Shipped"),
     val customSteps: List<String> = listOf("Design", "Painting"),
     val customToggles: List<String> = emptyList(),
@@ -370,6 +377,14 @@ data class StudioWorkspaceSettings(
     val showCardHistoryLog: Boolean = true,
     val uploadSafetyRequirePolicyAcceptance: Boolean = true,
     val uploadSafetyMaxFileSizeMB: Int = 10,
+    val orderCardShowPreviewImage: Boolean = true,
+    val orderCardShowDeliveryTime: Boolean = true,
+    val orderCardShowDesignName: Boolean = true,
+    val orderCardShowOrderValue: Boolean = true,
+    val orderCardShowUpcomingSchedule: Boolean = true,
+    val orderCardShowStatusBadges: Boolean = true,
+    val ordersSidebarWidth: Double = 380.0,
+    val ordersSidebarVisible: Boolean = true,
     val workspaceUserProfilesJSON: String = "",
     val sharedWorkspaceSnapshotJSON: String = "",
     val orderCardLayout: OrderDetailCardLayout = OrderDetailCardLayout()

@@ -54,7 +54,9 @@ import java.util.Calendar
 import java.util.Locale
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
+import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import uk.co.eggcraft.studioflow.features.shell.privateCurrencyText
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
@@ -72,10 +74,11 @@ fun DashboardScreen(
     val stats = remember(state.orders, period) { DashboardStats.from(state.orders, period) }
     val currency = state.workspaceSettings.selectedCurrency.ifBlank { "£" }
     val decimalSeparator = state.workspaceSettings.selectedDecimalSeparator
+    val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
     val widgetVisibility = DashboardWidgetVisibility.from(state.workspaceSettings)
     val compareEnabled = compareMode != DashboardCompareMode.None && period.supportsYearCompare
-    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility) {
-        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility)
+    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers) {
+        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers)
     }
 
     LazyColumn(
@@ -216,13 +219,13 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("This Year", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                        Text(money(stats.thisYearNetProfit, currency, decimalSeparator), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(money(stats.thisYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     }
-                    SummaryRow("Last Year", money(stats.lastYearNetProfit, currency, decimalSeparator))
+                    SummaryRow("Last Year", money(stats.lastYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers))
                     SummaryRow("Growth", growthLabel(stats.thisYearNetProfit, stats.lastYearNetProfit))
                     if (compareEnabled) {
                         stats.comparisonSeries(compareMode).forEach { series ->
-                            SummaryRow(series.label, money(series.total, currency, decimalSeparator))
+                            SummaryRow(series.label, money(series.total, currency, decimalSeparator, hideSensitiveNumbers))
                         }
                     }
                 }
@@ -602,7 +605,8 @@ private fun dashboardSummaryCards(
     stats: DashboardStats,
     currency: String,
     decimalSeparator: String,
-    visibility: DashboardWidgetVisibility
+    visibility: DashboardWidgetVisibility,
+    hideNumbers: Boolean
 ): List<DashboardSummaryCardSpec> {
     val rolledCost = stats.baseCost +
         (if (!visibility.dashShowFee) stats.platformFee else 0.0) +
@@ -610,30 +614,31 @@ private fun dashboardSummaryCards(
         (if (!visibility.dashShowTax) stats.tax else 0.0)
     return buildList {
         if (visibility.dashShowRevenue) {
-            add(DashboardSummaryCardSpec("Revenue", money(stats.revenue, currency, decimalSeparator), currency, StudioBlue, null))
+            add(DashboardSummaryCardSpec("Revenue", money(stats.revenue, currency, decimalSeparator, hideNumbers), currency, StudioBlue, null))
         }
         if (visibility.dashShowPending) {
-            add(DashboardSummaryCardSpec("Pending", money(stats.pending, currency, decimalSeparator), "", StudioWarningOrange, Icons.Filled.Schedule))
+            add(DashboardSummaryCardSpec("Pending", money(stats.pending, currency, decimalSeparator, hideNumbers), "", StudioWarningOrange, Icons.Filled.Schedule))
         }
         if (visibility.dashShowCost) {
-            add(DashboardSummaryCardSpec("Cost", money(rolledCost, currency, decimalSeparator), "", StudioRed, Icons.Filled.ShoppingCart))
+            add(DashboardSummaryCardSpec("Cost", money(rolledCost, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.ShoppingCart))
         }
         if (visibility.dashShowFee) {
-            add(DashboardSummaryCardSpec("Platform Fee", money(stats.platformFee, currency, decimalSeparator), "", StudioRed, Icons.Filled.Percent))
+            add(DashboardSummaryCardSpec("Platform Fee", money(stats.platformFee, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.Percent))
         }
         if (visibility.dashShowShipping) {
-            add(DashboardSummaryCardSpec("Shipping", money(stats.shipping, currency, decimalSeparator), "", StudioRed, Icons.Filled.LocalShipping))
+            add(DashboardSummaryCardSpec("Shipping", money(stats.shipping, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.LocalShipping))
         }
         if (visibility.dashShowTax) {
-            add(DashboardSummaryCardSpec("Tax Amount", money(stats.tax, currency, decimalSeparator), "", StudioRed, Icons.Filled.AccountBalance))
+            add(DashboardSummaryCardSpec("Tax Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
         }
         if (visibility.dashShowProfit) {
-            add(DashboardSummaryCardSpec("Net Profit", money(stats.netProfit, currency, decimalSeparator), "", StudioGreen, Icons.Filled.Done))
+            add(DashboardSummaryCardSpec("Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
         }
     }
 }
 
-private fun money(value: Double, currency: String, decimalSeparator: String): String {
+private fun money(value: Double, currency: String, decimalSeparator: String, hideNumbers: Boolean): String {
+    if (hideNumbers) return privateCurrencyText(currency)
     val formatted = String.format(Locale.UK, "%,.2f", value)
     return currency + if (decimalSeparator == ",") {
         formatted.replace(",", "_").replace(".", ",").replace("_", ".")

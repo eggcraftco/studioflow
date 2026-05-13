@@ -81,6 +81,36 @@ class StudioFlowViewModel(
         }
     }
 
+    fun beginExternalSignIn() {
+        mutableState.update { it.copy(signingIn = true, errorMessage = "") }
+    }
+
+    fun failExternalSignIn(message: String) {
+        mutableState.update {
+            it.copy(
+                signingIn = false,
+                loading = false,
+                errorMessage = message.ifBlank { "Could not sign in with Google." }
+            )
+        }
+    }
+
+    fun signInWithGoogleIdToken(idToken: String) {
+        if (idToken.isBlank()) {
+            failExternalSignIn("Google Sign-In could not return a valid token.")
+            return
+        }
+        viewModelScope.launch {
+            mutableState.update { it.copy(signingIn = true, errorMessage = "") }
+            runCatching { repository.signInWithGoogleIdToken(idToken) }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(signingIn = false, loading = false, errorMessage = error.message ?: "Could not sign in with Google.")
+                    }
+                }
+        }
+    }
+
     fun signOut() {
         repository.signOut()
     }
@@ -102,6 +132,52 @@ class StudioFlowViewModel(
             runCatching { repository.updateOrderFields(workspace, order, payload) }
                 .onFailure { error ->
                     mutableState.update { it.copy(errorMessage = error.message ?: "Could not update project.") }
+                }
+        }
+    }
+
+    fun deleteOrder(order: StudioOrder) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
+            runCatching { repository.deleteOrder(workspace, order) }
+                .onSuccess {
+                    mutableState.update { it.copy(settingsMessage = "Order deleted.") }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not delete this order.") }
+                }
+        }
+    }
+
+    fun saveOrderCardLayout(order: StudioOrder, snapshotJSON: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
+            runCatching { repository.saveOrderCardLayout(workspace, order, snapshotJSON) }
+                .onSuccess { message ->
+                    mutableState.update { it.copy(settingsSaving = false, settingsMessage = message) }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not save this order layout.")
+                    }
+                }
+        }
+    }
+
+    fun resetOrderCardLayout(order: StudioOrder) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
+            runCatching { repository.resetOrderCardLayout(workspace, order) }
+                .onSuccess { message ->
+                    mutableState.update { it.copy(settingsSaving = false, settingsMessage = message) }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not rejoin the shared layout.")
+                    }
                 }
         }
     }

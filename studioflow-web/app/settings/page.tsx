@@ -2157,10 +2157,6 @@ function AccountSection({
       setError("Your workspace role cannot edit Workspace Logo.");
       return;
     }
-    if (!canUploadLogo) {
-      setError("Workspace logo upload is available on Monthly Pro and Team plans.");
-      return;
-    }
     if (requirePolicy && !policyAccepted) {
       setPendingLogoFile(file);
       setStatus("");
@@ -2168,6 +2164,20 @@ function AccountSection({
       return;
     }
     void uploadLogo(file, policyAccepted || !requirePolicy);
+  }
+
+  function openLogoPicker() {
+    setStatus("");
+    setError("");
+    if (!settings) {
+      setError("Workspace settings are still loading.");
+      return;
+    }
+    if (!canEditLogo) {
+      setError("Your workspace role cannot edit Workspace Logo.");
+      return;
+    }
+    logoInputRef.current?.click();
   }
 
   async function handleAcceptPolicyAndUpload() {
@@ -2339,14 +2349,17 @@ function AccountSection({
                 ref={logoInputRef}
                 type="file"
                 accept={WORKSPACE_LOGO_ACCEPT}
-                hidden
-                onChange={event => handleLogoFile(event.target.files?.[0])}
+                className="visually-hidden-file"
+                onClick={event => {
+                  event.currentTarget.value = "";
+                }}
+                onChange={event => handleLogoFile(event.currentTarget.files?.[0])}
               />
               <button
                 className="button"
                 type="button"
-                disabled={!canEditLogo || !canUploadLogo || uploadingLogo || !settings}
-                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadingLogo || !settings}
+                onClick={openLogoPicker}
               >
                 {uploadingLogo ? "Uploading..." : logoUrl ? "Replace Logo" : "Upload Logo"}
               </button>
@@ -2361,7 +2374,7 @@ function AccountSection({
                 </button>
               ) : null}
             </div>
-            {!canUploadLogo ? <p className="muted-copy">Workspace logo upload is available on Monthly Pro and Team plans.</p> : null}
+            {!canUploadLogo ? <p className="muted-copy">Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.</p> : null}
             {!canEditLogo ? <p className="muted-copy">Your current workspace role cannot edit Workspace Logo.</p> : null}
             {status ? <p className="success-copy">{status}</p> : null}
             {error ? <p className="layout-error">{error}</p> : null}

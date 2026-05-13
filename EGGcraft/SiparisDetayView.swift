@@ -1414,7 +1414,8 @@ struct SiparisDetayView: View {
         .background(orderDetailAutosaveObservers)
         .onAppear { yukleSutunGenislikleri(); yukleHafiza(); ensureSharedWorkspaceSnapshot(); loadWorkspaceProfiles(); loadWorkspaceUserProfiles(); migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded(); startWorkspaceProfilesCloudListener(); startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); refreshSharedClientFilesInbox(); if siparis.taxRate == 0 { siparis.taxRate = defaultTaxRate }; otomatikKesintiHesapla() }
         .onOpenURL { url in
-            if url.scheme?.lowercased() == "studioflow" {
+            let scheme = url.scheme?.lowercased() ?? ""
+            if scheme == "studioflow" || scheme == "nivadesk" {
                 refreshSharedClientFilesInbox()
                 if !sharedClientFilesInbox.isEmpty {
                     clientFileMessage = t("Shared file is ready. Open the correct order and tap Add here.", lang: seciliDil)
@@ -4604,7 +4605,7 @@ struct SiparisDetayView: View {
 
     private func addAppleReminder(for item: OrderToDoItem) {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            toDoMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            toDoMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
             return
         }
         #if canImport(EventKit)
@@ -5812,7 +5813,7 @@ struct SiparisDetayView: View {
             }
 
             let content = UNMutableNotificationContent()
-            content.title = self.lt("EGGcraft reminder")
+            content.title = self.lt("NivaDesk reminder")
             let customer = self.siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
             let localizedItemTitle = self.lt(item.title)
             content.body = customer.isEmpty ? localizedItemTitle : "\(customer): \(localizedItemTitle)"
@@ -5872,7 +5873,7 @@ struct SiparisDetayView: View {
 
     private func addAppleReminder(for item: ScheduleAlertItem) {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            scheduleMessage = lt("Reminder saved, but Apple Reminder could not be added.") + " " + t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            scheduleMessage = lt("Reminder saved, but Apple Reminder could not be added.") + " " + t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
             return
         }
         #if canImport(EventKit)
@@ -7681,7 +7682,7 @@ struct SiparisDetayView: View {
 
     private func saveAppleCalendarEvent() {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            calendarMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            calendarMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
             return
         }
         calendarMessage = "Updating Apple Calendar..."
@@ -7717,7 +7718,7 @@ struct SiparisDetayView: View {
 
     private func removeAppleCalendarEvent() {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            calendarMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            calendarMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
             return
         }
         guard let eventId = appleCalendarEventId else { return }
@@ -7752,7 +7753,7 @@ struct SiparisDetayView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             if !authVM.currentPlanEntitlements.calendarRemindersEnabled {
-                Label(t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil), systemImage: "lock.fill")
+                Label(t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil), systemImage: "lock.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(studioWarningOrange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -10238,6 +10239,7 @@ struct DetayKarti<Content: View>: View {
     @State private var minimumBoy: Double = 200
     @State private var lastMeasuredMinimumBoy: Double? = nil
     @State private var dragHandleHovering: Bool = false
+    @State private var showCardOptionsPopover: Bool = false
     
     private let minKartBoyu: Double = 160
     private let previewMinBoyu: Double = 220
@@ -10330,6 +10332,13 @@ struct DetayKarti<Content: View>: View {
     
     private var etkiliMinimumBoy: Double { minimumHeightOverride ?? minimumBoy }
     private var etkiliYukseklik: Double { max(etkiliMinimumBoy, yukseklik ?? etkiliMinimumBoy) }
+    private var shouldAutoAdjustHeightForContent: Bool {
+        #if os(macOS)
+        return false
+        #else
+        return autoAdjustHeightOnContentChange
+        #endif
+    }
     private func hesaplananMinimumBoy(icerikBoyu: Double) -> Double { if kartTipi == .preview { return previewMinBoyu }; let hesap = icerikBoyu + ustBaslikAlani + altTutamacAlani + guvenlikPayi; return max(minKartBoyu, ceil(hesap)) }
     private func sinirliYukseklik(_ deger: Double) -> Double { max(etkiliMinimumBoy, deger) }
     private func sinirliGenislik(_ deger: Double) -> Double { min(max(deger, 250), 800) }
@@ -10430,6 +10439,48 @@ struct DetayKarti<Content: View>: View {
         Divider()
 
         if canCustomizeThisCard {
+            #if os(macOS)
+            Button {
+                onColorChange("Default")
+            } label: {
+                Label(t("Default", lang: seciliDil), systemImage: "circle")
+            }
+            Button {
+                onColorChange("Red")
+            } label: {
+                Label(t("Red", lang: seciliDil), systemImage: "circle.fill")
+            }
+            Button {
+                onColorChange("Orange")
+            } label: {
+                Label(t("Orange", lang: seciliDil), systemImage: "circle.fill")
+            }
+            Button {
+                onColorChange("Yellow")
+            } label: {
+                Label(t("Yellow", lang: seciliDil), systemImage: "circle.fill")
+            }
+            Button {
+                onColorChange("Green")
+            } label: {
+                Label(t("Green", lang: seciliDil), systemImage: "circle.fill")
+            }
+            Button {
+                onColorChange("Blue")
+            } label: {
+                Label(t("Blue", lang: seciliDil), systemImage: "circle.fill")
+            }
+            Button {
+                onColorChange("Purple")
+            } label: {
+                Label(t("Purple", lang: seciliDil), systemImage: "circle.fill")
+            }
+            Button {
+                onColorChange("Pink")
+            } label: {
+                Label(t("Pink", lang: seciliDil), systemImage: "circle.fill")
+            }
+            #else
             Menu("🎨 " + t("Color", lang: seciliDil)) {
                 Button("⚪️ " + t("Default", lang: seciliDil)) { onColorChange("Default") }
                 Button("🔴 " + t("Red", lang: seciliDil)) { onColorChange("Red") }
@@ -10440,8 +10491,9 @@ struct DetayKarti<Content: View>: View {
                 Button("🟣 " + t("Purple", lang: seciliDil)) { onColorChange("Purple") }
                 Button("🩷 " + t("Pink", lang: seciliDil)) { onColorChange("Pink") }
             }
+            #endif
         } else {
-            Label(t("Card moving, resizing and colours are available from StudioFlow Lite.", lang: seciliDil), systemImage: "lock.fill")
+            Label(t("Card moving, resizing and colours are available from NivaDesk Lite.", lang: seciliDil), systemImage: "lock.fill")
         }
     }
 
@@ -10541,7 +10593,24 @@ struct DetayKarti<Content: View>: View {
         return provider
     }
 
+    @ViewBuilder
     private var desktopDragHandle: some View {
+        #if os(macOS)
+        desktopDragHandleContent
+            .onDrag {
+                makeCardDragProvider()
+            }
+        #else
+        desktopDragHandleContent
+            .onDrag {
+                makeCardDragProvider()
+            } preview: {
+                silikKartDragPreview
+            }
+        #endif
+    }
+
+    private var desktopDragHandleContent: some View {
         Image(systemName: "line.3.horizontal")
             .foregroundColor(dragHandleHovering ? Color.blue.opacity(0.95) : Color.gray.opacity(0.58))
             .font(.system(size: 17, weight: .semibold))
@@ -10576,11 +10645,40 @@ struct DetayKarti<Content: View>: View {
                     PlatformCursor.arrowSet()
                 }
             }
-            .onDrag {
-                makeCardDragProvider()
-            } preview: {
-                silikKartDragPreview
+    }
+
+    @ViewBuilder
+    private var cardOptionsControl: some View {
+        #if os(macOS)
+        Button {
+            showCardOptionsPopover.toggle()
+        } label: {
+            cardOptionsIcon
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showCardOptionsPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                kartContextMenuActions
             }
+            .padding(12)
+            .frame(width: 260, alignment: .leading)
+        }
+        #else
+        Menu {
+            kartContextMenuActions
+        } label: {
+            cardOptionsIcon
+        }
+        .menuStyle(.borderlessButton)
+        #endif
+    }
+
+    private var cardOptionsIcon: some View {
+        Image(systemName: "ellipsis.circle")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.gray.opacity(0.75))
+            .padding(6)
+            .contentShape(Rectangle())
     }
 
     var body: some View {
@@ -10606,21 +10704,14 @@ struct DetayKarti<Content: View>: View {
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
+                #if !os(macOS)
                 .contextMenu {
                     kartContextMenuActions
                 }
+                #endif
 
                 // iPad'de uzun basma yerine net bir menü hedefi olsun.
-                Menu {
-                    kartContextMenuActions
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.gray.opacity(0.75))
-                        .padding(6)
-                        .contentShape(Rectangle())
-                }
-                .menuStyle(.borderlessButton)
+                cardOptionsControl
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -10635,12 +10726,14 @@ struct DetayKarti<Content: View>: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 10)
                         .background(WorkspacePanSurface())
+                        #if !os(macOS)
                         .background(
                             GeometryReader { geo in
                                 Color.clear.preference(key: IcerikBoyuKey.self, value: Double(geo.size.height))
                             }
                         )
-                } else if autoAdjustHeightOnContentChange {
+                        #endif
+                } else if shouldAutoAdjustHeightForContent {
                     VStack(alignment: .leading, spacing: 15) { content }
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
@@ -10680,11 +10773,13 @@ struct DetayKarti<Content: View>: View {
                         )
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
+                        #if !os(macOS)
                         .background(
                             GeometryReader { _ in
                                 Color.clear.preference(key: IcerikBoyuKey.self, value: minimumHeightOverride ?? minKartBoyu)
                             }
                         )
+                        #endif
                 }
             }
             
@@ -10718,6 +10813,7 @@ struct DetayKarti<Content: View>: View {
                 )
             }
         }
+        #if !os(macOS)
         .onPreferenceChange(IcerikBoyuKey.self) { boy in
             DispatchQueue.main.async {
                 // Some cards, such as History / Log, contain an internal ScrollView whose height is
@@ -10729,9 +10825,12 @@ struct DetayKarti<Content: View>: View {
                     let oncekiMinimum = lastMeasuredMinimumBoy
                     let mevcutYukseklik = yukseklik ?? fixedMinimum
                     let tolerans = 4.0
+                    let minimumDegisti = abs(minimumBoy - fixedMinimum) > 0.5 || (oncekiMinimum.map { abs($0 - fixedMinimum) > 0.5 } ?? true)
 
-                    minimumBoy = fixedMinimum
-                    lastMeasuredMinimumBoy = fixedMinimum
+                    if minimumDegisti {
+                        minimumBoy = fixedMinimum
+                        lastMeasuredMinimumBoy = fixedMinimum
+                    }
 
                     if let currentHeight = yukseklik {
                         if currentHeight < fixedMinimum - 0.5 {
@@ -10756,6 +10855,7 @@ struct DetayKarti<Content: View>: View {
                 let mevcutYukseklik = yukseklik ?? minimumBoy
                 let tolerans = 4.0
                 var hedefYukseklik: Double? = nil
+                let minimumDegisti = abs(minimumBoy - yeniMinimum) > 0.5 || (oncekiMinimum.map { abs($0 - yeniMinimum) > 0.5 } ?? true)
 
                 // İçerik büyüdüğünde kart her zaman içeriği sığdıracak kadar uzar.
                 if mevcutYukseklik < yeniMinimum - 0.5 {
@@ -10771,8 +10871,14 @@ struct DetayKarti<Content: View>: View {
                     }
                 }
 
-                minimumBoy = yeniMinimum
-                lastMeasuredMinimumBoy = yeniMinimum
+                if !minimumDegisti, hedefYukseklik == nil, yukseklik != nil {
+                    return
+                }
+
+                if minimumDegisti {
+                    minimumBoy = yeniMinimum
+                    lastMeasuredMinimumBoy = yeniMinimum
+                }
 
                 if let hedefYukseklik, abs((yukseklik ?? -1) - hedefYukseklik) > 0.5 {
                     withAnimation(.snappy) {
@@ -10788,6 +10894,7 @@ struct DetayKarti<Content: View>: View {
                 }
             }
         }
+        #endif
         .frame(height: etkiliYukseklik, alignment: .top)
         .background(WorkspacePanSurface())
         .background(bgColor) // 🌟 KARTIN DİNAMİK ARKA PLANI 🌟
@@ -10861,7 +10968,7 @@ struct OrderPDFView: View { let siparis: Siparis; var previewImage: PlatformImag
                        !otherNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         pdfRow(title: t("Other Note", lang: seciliDil) + ":", value: otherNote)
                     }
-                } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showMaterials { VStack(alignment: .leading, spacing: 12) { Text(t("Materials & Inventory", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: invLbl1 + ":", value: t(siparis.invBool1 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl2 + ":", value: t(siparis.invBool2 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl3 + ":", value: t(siparis.invBool3 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl4 + ":", value: t(siparis.invBool4 ? "Yes" : "No", lang: seciliDil)); if !siparis.invNotes.isEmpty { Divider().padding(.vertical, 4); Text(t("Notes / Supplier", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.invNotes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showContact { VStack(alignment: .leading, spacing: 12) { Text(t("Contact & Notes", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Email", lang: seciliDil) + ":", value: siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress); Divider().padding(.vertical, 4); Text(t("Special Notes", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.notes.isEmpty ? t("No special notes provided.", lang: seciliDil) : siparis.notes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPreview { VStack(alignment: .leading, spacing: 12) { Text(t("Preview", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); if let nsImage = previewImage { Image(platformImage: nsImage).resizable().scaledToFit().frame(maxHeight: 200, alignment: .leading).cornerRadius(8) } else { Text(t("No preview image provided.", lang: seciliDil)).font(.system(size: 12)).padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } } } }.frame(maxWidth: .infinity); VStack(alignment: .leading, spacing: 25) { if showFinCustomer || showFinInternal { VStack(alignment: .leading, spacing: 12) { Text(t("Financial Info", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { if showFinCustomer { pdfRow(title: t("Paid", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: ondalik))", valueColor: .green); pdfRow(title: t("Remaining", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.remainingAmount, ondalik: ondalik))", valueColor: studioWarningOrange); if showPaymentMethod { pdfRow(title: t("Payment Method", lang: seciliDil) + ":", value: t(siparis.paymentMethod, lang: seciliDil)) } }; if showFinCustomer && showFinInternal { Divider().padding(.vertical, 2) }; if showFinInternal { pdfRow(title: t("Platform Fee", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paymentFee, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Watch Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.watchPurchasePrice, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Shipping Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.deliveryCost, ondalik: ondalik))", valueColor: .red); let displayTaxType = siparis.taxType == "Revenue" ? taxNameRev : taxNamePro; pdfRow(title: t("Tax Amount", lang: seciliDil) + " (" + displayTaxType + "):", value: "\(sembol)\(formatFiyat(siparis.taxAmount, ondalik: ondalik))", valueColor: .red); Divider().padding(.vertical, 2); pdfRow(title: t("Final Profit", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.netKar - siparis.taxAmount, ondalik: ondalik))", valueColor: .green) } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showStatus { VStack(alignment: .leading, spacing: 12) { Text(t("Production Status", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Delivery Time", lang: seciliDil) + ":", value: "\(siparis.deliveryTime) \(t("days", lang: seciliDil))"); ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in if index == 0 { pdfRow(title: "\(step.title):", value: t(siparis.designStatus, lang: seciliDil)) } else if index == 1 { pdfRow(title: "\(step.title):", value: t(siparis.status, lang: seciliDil)) } else { pdfRow(title: "\(step.title):", value: t(siparis.extraStatuses?[step.title] ?? "Not Yet", lang: seciliDil)) } }; if !customTogglesList.isEmpty { Divider().padding(.vertical, 2); ForEach(customTogglesList, id: \.id) { toggle in pdfRow(title: t(toggle.title, lang: seciliDil) + ":", value: t((siparis.customToggles?[toggle.title] == true) ? "Yes" : "No", lang: seciliDil)) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showShipping { VStack(alignment: .leading, spacing: 12) { Text(t("Shipping & Tracking", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Dispatched", lang: seciliDil) + ":", value: t(siparis.isDispatched ? "Yes" : "No", lang: seciliDil)); pdfRow(title: t("Courier", lang: seciliDil) + ":", value: siparis.courier.isEmpty ? "-" : siparis.courier); pdfRow(title: t("Tracking No.", lang: seciliDil) + ":", value: siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } } }.frame(maxWidth: .infinity) }; Spacer(); Divider(); Text(t("Generated automatically from Studio Manager", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray).frame(maxWidth: .infinity, alignment: .center).padding(.top, 5) }.padding(40).frame(width: 595, height: 842).background(Color.white) }
+                } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showMaterials { VStack(alignment: .leading, spacing: 12) { Text(t("Materials & Inventory", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: invLbl1 + ":", value: t(siparis.invBool1 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl2 + ":", value: t(siparis.invBool2 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl3 + ":", value: t(siparis.invBool3 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl4 + ":", value: t(siparis.invBool4 ? "Yes" : "No", lang: seciliDil)); if !siparis.invNotes.isEmpty { Divider().padding(.vertical, 4); Text(t("Notes / Supplier", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.invNotes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showContact { VStack(alignment: .leading, spacing: 12) { Text(t("Contact & Notes", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Email", lang: seciliDil) + ":", value: siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress); Divider().padding(.vertical, 4); Text(t("Special Notes", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.notes.isEmpty ? t("No special notes provided.", lang: seciliDil) : siparis.notes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPreview { VStack(alignment: .leading, spacing: 12) { Text(t("Preview", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); if let nsImage = previewImage { Image(platformImage: nsImage).resizable().scaledToFit().frame(maxHeight: 200, alignment: .leading).cornerRadius(8) } else { Text(t("No preview image provided.", lang: seciliDil)).font(.system(size: 12)).padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } } } }.frame(maxWidth: .infinity); VStack(alignment: .leading, spacing: 25) { if showFinCustomer || showFinInternal { VStack(alignment: .leading, spacing: 12) { Text(t("Financial Info", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { if showFinCustomer { pdfRow(title: t("Paid", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: ondalik))", valueColor: .green); pdfRow(title: t("Remaining", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.remainingAmount, ondalik: ondalik))", valueColor: studioWarningOrange); if showPaymentMethod { pdfRow(title: t("Payment Method", lang: seciliDil) + ":", value: t(siparis.paymentMethod, lang: seciliDil)) } }; if showFinCustomer && showFinInternal { Divider().padding(.vertical, 2) }; if showFinInternal { pdfRow(title: t("Platform Fee", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paymentFee, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Watch Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.watchPurchasePrice, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Shipping Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.deliveryCost, ondalik: ondalik))", valueColor: .red); let displayTaxType = siparis.taxType == "Revenue" ? taxNameRev : taxNamePro; pdfRow(title: t("Tax Amount", lang: seciliDil) + " (" + displayTaxType + "):", value: "\(sembol)\(formatFiyat(siparis.taxAmount, ondalik: ondalik))", valueColor: .red); Divider().padding(.vertical, 2); pdfRow(title: t("Final Profit", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.netKar - siparis.taxAmount, ondalik: ondalik))", valueColor: .green) } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showStatus { VStack(alignment: .leading, spacing: 12) { Text(t("Production Status", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Delivery Time", lang: seciliDil) + ":", value: "\(siparis.deliveryTime) \(t("days", lang: seciliDil))"); ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in if index == 0 { pdfRow(title: "\(step.title):", value: t(siparis.designStatus, lang: seciliDil)) } else if index == 1 { pdfRow(title: "\(step.title):", value: t(siparis.status, lang: seciliDil)) } else { pdfRow(title: "\(step.title):", value: t(siparis.extraStatuses?[step.title] ?? "Not Yet", lang: seciliDil)) } }; if !customTogglesList.isEmpty { Divider().padding(.vertical, 2); ForEach(customTogglesList, id: \.id) { toggle in pdfRow(title: t(toggle.title, lang: seciliDil) + ":", value: t((siparis.customToggles?[toggle.title] == true) ? "Yes" : "No", lang: seciliDil)) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showShipping { VStack(alignment: .leading, spacing: 12) { Text(t("Shipping & Tracking", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Dispatched", lang: seciliDil) + ":", value: t(siparis.isDispatched ? "Yes" : "No", lang: seciliDil)); pdfRow(title: t("Courier", lang: seciliDil) + ":", value: siparis.courier.isEmpty ? "-" : siparis.courier); pdfRow(title: t("Tracking No.", lang: seciliDil) + ":", value: siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } } }.frame(maxWidth: .infinity) }; Spacer(); Divider(); Text(t("Generated automatically from NivaDesk", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray).frame(maxWidth: .infinity, alignment: .center).padding(.top, 5) }.padding(40).frame(width: 595, height: 842).background(Color.white) }
     private func pdfRow(title: String, value: String, valueColor: Color = .primary) -> some View { HStack(alignment: .top, spacing: 5) { Text(title).font(.system(size: 12, weight: .bold)).frame(width: 115, alignment: .leading); Text(value).font(.system(size: 12)).foregroundColor(valueColor).frame(maxWidth: .infinity, alignment: .leading) } }
 }
 
@@ -10989,7 +11096,7 @@ struct ToDoPDFPageView: View {
             Spacer(minLength: 0)
 
             Divider()
-            Text(t("Generated automatically from Studio Manager", lang: seciliDil))
+            Text(t("Generated automatically from NivaDesk", lang: seciliDil))
                 .font(.system(size: 10))
                 .foregroundColor(.gray)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -11151,7 +11258,7 @@ struct HistoryLogPDFPageView: View {
             Spacer(minLength: 0)
 
             Divider()
-            Text(t("Generated automatically from Studio Manager", lang: seciliDil))
+            Text(t("Generated automatically from NivaDesk", lang: seciliDil))
                 .font(.system(size: 10))
                 .foregroundColor(.gray)
                 .frame(maxWidth: .infinity, alignment: .center)

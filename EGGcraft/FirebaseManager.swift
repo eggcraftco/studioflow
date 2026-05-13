@@ -291,8 +291,8 @@ class FirebaseManager: ObservableObject {
     private func planDeniedMessage(reason: String, requiredPlan: String = "") -> String {
         switch reason {
         case "feature_not_in_plan":
-            if requiredPlan == "team_monthly" { return "This feature is available on the StudioFlow Team monthly plan." }
-            return "This feature is available on the StudioFlow Pro or Team monthly plan."
+            if requiredPlan == "team_monthly" { return "This feature is available on the NivaDesk Team monthly plan." }
+            return "This feature is available on the NivaDesk Pro or Team monthly plan."
         case "storage_limit_reached":
             return "Upload blocked: this workspace has reached its plan storage limit."
         case "plan_limit_reached":

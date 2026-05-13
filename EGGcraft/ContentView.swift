@@ -245,6 +245,7 @@ struct ContentView: View {
     @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
     @AppStorage("businessOnboardingCompletedCompanyIdsJSON") private var businessOnboardingCompletedCompanyIdsJSON: String = "[]"
     @State private var businessOnboardingGateOpen: Bool = false
+    @State private var businessOnboardingCompletedInCloud: Bool = false
     @AppStorage("activeStatusesJSON") private var activeStatusesJSON: String = "[\"New\",\"Not Yet\",\"In Progress\",\"Done\",\"Cancelled\"]"
     @AppStorage("customFieldsJSON") private var customFieldsJSON: String = ""
     @AppStorage("customTogglesJSON") private var customTogglesJSON: String = ""
@@ -358,7 +359,6 @@ struct ContentView: View {
         return firebaseManager.siparisler.filter { orderIsAssignedToCurrentWorkspaceMember($0) }
     }
 
-    private var cleanedAppLogoUrl: String { appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var cleanedAccountPhotoUrl: String { authVM.accountPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var topAccountInitials: String {
@@ -810,6 +810,7 @@ struct ContentView: View {
     private var shouldShowBusinessOnboarding: Bool {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard authVM.isLoggedIn, !companyId.isEmpty, businessOnboardingGateOpen else { return false }
+        guard !businessOnboardingCompletedInCloud else { return false }
         guard firebaseManager.siparisler.isEmpty else { return false }
         return !completedBusinessOnboardingCompanyIds.contains(companyId)
     }
@@ -1010,11 +1011,27 @@ struct ContentView: View {
 
             if canAccessSettings {
                 Button {
+                    settingsStartSection = "Account"
+                    aktifSekme = "Settings"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
+                }
+
+                Button {
                     aktifSekme = "Settings"
                     phoneShowsOrderDetail = false
                 } label: {
                     Label(t("Settings", lang: seciliDil), systemImage: "gearshape")
                 }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                authVM.logout()
+            } label: {
+                Label(t("Sign Out", lang: seciliDil), systemImage: "arrow.right.square")
             }
         } label: {
             Image(systemName: "line.3.horizontal")
@@ -1034,26 +1051,7 @@ struct ContentView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                if !cleanedAppLogoUrl.isEmpty, let logoURL = URL(string: cleanedAppLogoUrl) {
-                    AsyncImage(url: logoURL) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView().controlSize(.small)
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: 150, maxHeight: 34, alignment: .leading)
-                        case .failure:
-                            fallbackLogoView
-                        @unknown default:
-                            fallbackLogoView
-                        }
-                    }
-                    .id(cleanedAppLogoUrl)
-                } else {
-                    fallbackLogoView
-                }
+                headerWorkspaceLogoView
             }
             .frame(minWidth: 120, maxWidth: 170, alignment: .leading)
             .contentShape(Rectangle())
@@ -1064,15 +1062,39 @@ struct ContentView: View {
         .clipped()
     }
 
-    private var fallbackLogoView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "hexagon.fill")
-                .font(.system(size: 24))
-                .foregroundColor(studioWarningOrange)
-            Text(t("Studio", lang: seciliDil))
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.primary)
+    @ViewBuilder
+    private var headerWorkspaceLogoView: some View {
+        let cleanedLogo = appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanedLogo.isEmpty, let url = URL(string: cleanedLogo) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    fallbackLogoView
+                        .opacity(0.35)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 160, maxHeight: 34, alignment: .leading)
+                        .accessibilityLabel(t("Workspace Logo", lang: seciliDil))
+                case .failure:
+                    fallbackLogoView
+                @unknown default:
+                    fallbackLogoView
+                }
+            }
+            .id(cleanedLogo)
+        } else {
+            fallbackLogoView
         }
+    }
+
+    private var fallbackLogoView: some View {
+        Image("NivaDeskLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: 160, maxHeight: 34, alignment: .leading)
+            .accessibilityLabel("NivaDesk")
     }
 
     private var topStatsView: some View {
@@ -1147,17 +1169,27 @@ struct ContentView: View {
 
     @ViewBuilder
     private var topAccountAvatarIfAvailable: some View {
-        if !cleanedAccountPhotoUrl.isEmpty, canAccessSettings {
-            Button {
-                settingsStartSection = "Account"
-                aktifSekme = "Settings"
-            } label: {
-                AccountAvatarImage(urlString: cleanedAccountPhotoUrl, initials: topAccountInitials, size: 38)
+        Menu {
+            if canAccessSettings {
+                Button {
+                    settingsStartSection = "Account"
+                    aktifSekme = "Settings"
+                } label: {
+                    Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
+                }
             }
-            .buttonStyle(.plain)
-            .help(t("Account", lang: seciliDil))
-            .accessibilityLabel(t("Account", lang: seciliDil))
+
+            Button(role: .destructive) {
+                authVM.logout()
+            } label: {
+                Label(t("Sign Out", lang: seciliDil), systemImage: "arrow.right.square")
+            }
+        } label: {
+            AccountAvatarImage(urlString: cleanedAccountPhotoUrl, initials: topAccountInitials, size: 38)
         }
+        .buttonStyle(.plain)
+        .help(t("Account", lang: seciliDil))
+        .accessibilityLabel(t("Account", lang: seciliDil))
     }
 
     private var newOrderButton: some View {
@@ -1584,7 +1616,13 @@ struct ContentView: View {
                 seciliSiparis = nil
                 seciliSiparisGorunumKey = nil
             }
-            if aktifSekme == "Orders", seciliSiparis == nil, let ilk = aramaSonuclari.first {
+            #if os(macOS)
+            let shouldAutoSelectFirstOrder = false
+            #else
+            let shouldAutoSelectFirstOrder = true
+            #endif
+
+            if shouldAutoSelectFirstOrder, aktifSekme == "Orders", seciliSiparis == nil, let ilk = aramaSonuclari.first {
                 seciliSiparis = ilk
                 seciliSiparisGorunumKey = orderSelectionKey(ilk)
                 lastSelectedOrderId = orderSelectionKey(ilk)
@@ -1729,7 +1767,8 @@ struct ContentView: View {
     }
 
     private func handleStudioFlowDeepLink(_ url: URL) {
-        guard url.scheme?.lowercased() == "studioflow" else { return }
+        let scheme = url.scheme?.lowercased() ?? ""
+        guard scheme == "studioflow" || scheme == "nivadesk" else { return }
         let host = url.host?.lowercased() ?? ""
         let path = url.path.lowercased()
         guard host == "client-files" || path.contains("client-files") else { return }
@@ -2087,7 +2126,7 @@ struct ContentView: View {
                     .font(.system(size: 24, weight: .bold))
                     .multilineTextAlignment(.center)
 
-                Text(t("Create your first order, or run the business setup again if you want StudioFlow to prepare workflow steps, fields and labels for you.", lang: seciliDil))
+                Text(t("Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you.", lang: seciliDil))
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -2150,7 +2189,7 @@ struct ContentView: View {
                             .font(.system(size: isPhoneLayout ? 28 : 34, weight: .bold))
                             .multilineTextAlignment(.center)
 
-                        Text(t("Choose your business type first. StudioFlow can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.", lang: seciliDil))
+                        Text(t("Choose your business type first. NivaDesk can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.", lang: seciliDil))
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -2175,7 +2214,7 @@ struct ContentView: View {
                                     .font(.system(size: 13, weight: .bold))
                             }
 
-                            Text(t("You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you leave this empty, StudioFlow will use the standard template for the selected business type.", lang: seciliDil))
+                            Text(t("You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you leave this empty, NivaDesk will use the standard template for the selected business type.", lang: seciliDil))
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                                 .lineSpacing(3)
@@ -2239,7 +2278,7 @@ struct ContentView: View {
                             .buttonStyle(.plain)
 
                             Button {
-                                markBusinessOnboardingCompletedForCurrentCompany()
+                                markBusinessOnboardingCompletedForCurrentCompany(action: "skip")
                             } label: {
                                 Text(t("Skip for now", lang: seciliDil))
                                     .font(.system(size: 13, weight: .semibold))
@@ -2342,7 +2381,7 @@ struct ContentView: View {
         let text = smart ? (businessType + "\n" + businessDescriptionPrompt).lowercased() : businessType.lowercased()
         let preset = onboardingPreset(for: text)
         applyBusinessOnboardingPreset(preset)
-        markBusinessOnboardingCompletedForCurrentCompany()
+        markBusinessOnboardingCompletedForCurrentCompany(action: smart ? "smart" : "standard")
     }
 
     private func applyBusinessOnboardingPreset(_ preset: BusinessOnboardingPreset) {
@@ -2458,7 +2497,7 @@ struct ContentView: View {
             ], merge: true)
     }
 
-    private func markBusinessOnboardingCompletedForCurrentCompany() {
+    private func markBusinessOnboardingCompletedForCurrentCompany(action: String = "skip") {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !companyId.isEmpty else { return }
 
@@ -2469,6 +2508,16 @@ struct ContentView: View {
            let encoded = String(data: data, encoding: .utf8) {
             businessOnboardingCompletedCompanyIdsJSON = encoded
         }
+
+        businessOnboardingCompletedInCloud = true
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(companyId)
+            .setData([
+                "businessOnboardingCompletedAt": FieldValue.serverTimestamp(),
+                "businessOnboardingCompletedAction": action,
+                "businessOnboardingCompletedBy": authVM.currentUserId ?? ""
+            ], merge: true)
     }
 
     private func resetBusinessOnboardingForCurrentCompany() {
@@ -2482,6 +2531,16 @@ struct ContentView: View {
            let encoded = String(data: data, encoding: .utf8) {
             businessOnboardingCompletedCompanyIdsJSON = encoded
         }
+
+        businessOnboardingCompletedInCloud = false
+        Firestore.firestore()
+            .collection("companySettings")
+            .document(companyId)
+            .setData([
+                "businessOnboardingCompletedAt": FieldValue.delete(),
+                "businessOnboardingCompletedAction": FieldValue.delete(),
+                "businessOnboardingCompletedBy": FieldValue.delete()
+            ], merge: true)
     }
 
     private func onboardingPreset(for text: String) -> BusinessOnboardingPreset {
@@ -2799,6 +2858,11 @@ struct ContentView: View {
                 }
 
                 guard let data = snapshot?.data() else { return }
+
+                let cloudOnboardingCompleted = data["businessOnboardingCompletedAt"] != nil
+                if businessOnboardingCompletedInCloud != cloudOnboardingCompleted {
+                    businessOnboardingCompletedInCloud = cloudOnboardingCompleted
+                }
 
                 func applyString(_ key: String, _ setter: (String) -> Void, _ current: String) {
                     if let cloudValue = data[key] as? String, cloudValue != current {
@@ -5089,7 +5153,7 @@ struct AccountProfileView: View {
         .onChange(of: authVM.accountEmail) { _, newValue in
             emailDraft = newValue
         }
-        .confirmationDialog(t("Sign out of StudioFlow?", lang: seciliDil), isPresented: $signOutConfirmationVisible, titleVisibility: .visible) {
+        .confirmationDialog(t("Sign out of NivaDesk?", lang: seciliDil), isPresented: $signOutConfirmationVisible, titleVisibility: .visible) {
             Button(t("Sign Out", lang: seciliDil), role: .destructive) {
                 authVM.logout()
             }
@@ -5157,7 +5221,7 @@ struct AccountProfileView: View {
     private var sectionHeaderSubtitle: String {
         switch sectionMode {
         case .account:
-            return "Manage your StudioFlow profile, company details and sign-in security."
+            return "Manage your NivaDesk profile, company details and sign-in security."
         case .planAccess:
             return "Manage your plan, limits and feature access."
         case .teamAccess:
@@ -5478,7 +5542,7 @@ struct AccountProfileView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(t("App Store Purchases", lang: seciliDil))
                         .font(.system(size: 14, weight: .bold))
-                    Text(t("Connect real App Store products to StudioFlow plans.", lang: seciliDil))
+                    Text(t("Connect real App Store products to NivaDesk plans.", lang: seciliDil))
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -6030,7 +6094,7 @@ struct AccountProfileView: View {
                 }
                 .toggleStyle(.switch)
 
-                Text(t("When enabled, StudioFlow asks for Face ID, Touch ID or your device passcode whenever the app opens with an existing session.", lang: seciliDil))
+                Text(t("When enabled, NivaDesk asks for Face ID, Touch ID or your device passcode whenever the app opens with an existing session.", lang: seciliDil))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -6135,7 +6199,7 @@ struct AccountProfileView: View {
             } else {
                 planLockedNotice(
                     title: "Team access is locked",
-                    message: "Team members, roles and shared workspace access are available on the StudioFlow Team monthly plan.",
+                    message: "Team members, roles and shared workspace access are available on the NivaDesk Team monthly plan.",
                     icon: "person.2.slash.fill"
                 )
             }
@@ -7894,7 +7958,7 @@ struct SchedulePlannerView: View {
     private var schedulePlanNoticeText: String {
         switch authVM.currentBillingPlan {
         case .demo:
-            return t("Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            return t("Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
         case .lifetimeLite:
             return t("Lite includes personal weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.", lang: seciliDil)
         case .proMonthly:
@@ -9011,7 +9075,7 @@ struct SchedulePlannerView: View {
     private func addAppleReminder(for order: Siparis) {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
             reminderAlertTitle = t("Plan upgrade needed", lang: seciliDil)
-            reminderAlertMessage = t("Apple Calendar and Reminders are available from StudioFlow Lite.", lang: seciliDil)
+            reminderAlertMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
             reminderAlertCanOpenSettings = false
             showReminderAlert = true
             return
@@ -9023,7 +9087,7 @@ struct SchedulePlannerView: View {
         let titleParts = [customer, design].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let reminderTitle = titleParts.joined(separator: " • ") + " - " + t("Order due", lang: seciliDil)
         let notes = [
-            "StudioFlow",
+            "NivaDesk",
             t("Schedule", lang: seciliDil) + ": " + scheduleRangeText(for: order),
             t("Status", lang: seciliDil) + ": " + t(scheduleStatusLabel(for: order), lang: seciliDil)
         ].joined(separator: "\n")

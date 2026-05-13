@@ -7,7 +7,16 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>NSExtensionActivationRule</key>
-			<string>TRUEPREDICATE</string>
+			<dict>
+				<key>NSExtensionActivationSupportsAttachmentsWithMinCount</key>
+				<integer>1</integer>
+				<key>NSExtensionActivationSupportsAttachmentsWithMaxCount</key>
+				<integer>20</integer>
+				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
+				<integer>20</integer>
+				<key>NSExtensionActivationSupportsImageWithMaxCount</key>
+				<integer>20</integer>
+			</dict>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>

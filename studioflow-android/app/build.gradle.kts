@@ -38,8 +38,11 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.credentials:credentials:1.2.0-rc01")
+    implementation("androidx.credentials:credentials-play-services-auth:1.2.0-rc01")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
 
