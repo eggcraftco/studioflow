@@ -649,7 +649,7 @@ function LanguageLabelsSection({
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy">{t("This saves to the same app-compatible language key used by StudioFlow: seciliDil.")}</p>
+        <p className="muted-copy">{t("This saves to the same app-compatible language key used by NivaDesk: seciliDil.")}</p>
       </section>
     </div>
   );
@@ -1009,9 +1009,9 @@ function WorkflowSettingsSection({ workspace }: { workspace: WorkspaceContext })
     <div className="settings-card-stack">
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Locked" title={canEditRole ? "Workflow customization starts with StudioFlow Lite" : "Workflow settings are read-only"} />
+          <CardTitle icon="lock" eyebrow="Locked" title={canEditRole ? "Workflow customization starts with NivaDesk Lite" : "Workflow settings are read-only"} />
           <p className="muted-copy">
-            {canEditRole ? "Demo / Free workspaces can view these settings, but saving workflow block changes is available from StudioFlow Lite." : "Your current workspace role cannot edit workflow settings."}
+            {canEditRole ? "Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Lite." : "Your current workspace role cannot edit workflow settings."}
           </p>
         </section>
       ) : null}
@@ -1960,7 +1960,7 @@ function AccountSection({
   const t = (text: string) => studioT(text, accountLanguage);
   const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
   const googlePhotoUrl = user?.providerData.find(provider => provider.providerId === "google.com")?.photoURL?.trim() ?? "";
-  const accountInitials = (displayName || accountEmail || userEmail || "StudioFlow")
+  const accountInitials = (displayName || accountEmail || userEmail || "NivaDesk")
     .split(/[\s@._-]+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -2099,7 +2099,7 @@ function AccountSection({
   }
 
   async function handleSignOut() {
-    const confirmed = window.confirm("Sign out of StudioFlow on this browser?");
+    const confirmed = window.confirm("Sign out of NivaDesk on this browser?");
     if (!confirmed) return;
     setSigningOut(true);
     setProfileStatus("");
@@ -2746,7 +2746,7 @@ function WooCommerceIntegrationSection({ workspace }: { workspace: WorkspaceCont
         <CardTitle icon="checklist" eyebrow="What you need to do" title="WooCommerce webhook steps" />
         <div className="settings-rule-list">
           <IntegrationInfoRow number="1" title="Open WooCommerce webhooks" detail="In WordPress, open WooCommerce > Settings > Advanced > Webhooks." />
-          <IntegrationInfoRow number="2" title="Create a new webhook" detail="Create a new webhook for StudioFlow orders." />
+          <IntegrationInfoRow number="2" title="Create a new webhook" detail="Create a new webhook for NivaDesk orders." />
           <IntegrationInfoRow number="3" title="Set it active" detail="Set Status to Active and Topic to Order created." />
           <IntegrationInfoRow number="4" title="Paste the Delivery URL" detail="Paste the copied Delivery URL, save the webhook, then place a test order." />
         </div>
@@ -2932,7 +2932,7 @@ function DataManagementSection({
           </button>
         </div>
 
-        <p className="muted-copy">Export Backup uses the same JSON structure as the Swift app. Web JSON Backup keeps the raw web archive. Import accepts both formats and adds the selected StudioFlow backup into the current workspace without clearing existing data.</p>
+        <p className="muted-copy">Export Backup uses the same JSON structure as the Swift app. Web JSON Backup keeps the raw web archive. Import accepts both formats and adds the selected NivaDesk backup into the current workspace without clearing existing data.</p>
         {!canImport ? <p className="muted-copy">Your current workspace role cannot import backup files.</p> : null}
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
@@ -3237,7 +3237,7 @@ function TeamAccessSection({
           <span>{workspace.roleLabel}</span>
         </div>
         {!hasTeamPlan ? (
-          <p className="muted-copy">Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires StudioFlow Team.</p>
+          <p className="muted-copy">Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.</p>
         ) : null}
         {!isOwner ? (
           <p className="muted-copy">Only workspace owners can approve join requests, change roles or remove members.</p>
@@ -3255,7 +3255,7 @@ function TeamAccessSection({
           <div className="team-access-workspace-row">
             <span className="team-access-icon team-access-icon-owner" aria-hidden="true">♛</span>
             <div>
-              <strong>{workspace.name || "EGGcraft"}</strong>
+              <strong>{workspace.name || "NivaDesk"}</strong>
               <div className="team-access-inline-meta">
                 <span className="studio-pill team-access-owner-pill">{workspace.roleLabel}</span>
                 <small>{isOwner ? "You own this workspace" : "Shared with you"}</small>
@@ -3279,7 +3279,7 @@ function TeamAccessSection({
           <div className="team-access-workspace-option">
             <span className="team-access-icon team-access-icon-owner" aria-hidden="true">♛</span>
             <div>
-              <strong>{workspace.name || "EGGcraft"}</strong>
+              <strong>{workspace.name || "NivaDesk"}</strong>
               <small>{workspace.roleLabel}</small>
             </div>
             <span className="studio-pill success">Current</span>
@@ -3321,7 +3321,7 @@ function TeamAccessSection({
               <button className="button secondary team-access-copy-button" type="button" onClick={() => copyText(workspace.id, "Company ID copied")}>⧉ Copy</button>
             </div>
           ) : (
-            <p className="muted-copy">{isOwner ? "Upgrade to StudioFlow Team to approve new members." : "Only the workspace owner can invite and approve new members."}</p>
+            <p className="muted-copy">{isOwner ? "Upgrade to NivaDesk Team to approve new members." : "Only the workspace owner can invite and approve new members."}</p>
           )}
         </section>
       </div>
@@ -3381,7 +3381,7 @@ function TeamAccessSection({
                       {actioning === declineKey ? "Declining..." : "Decline"}
                     </button>
                   </div>
-                  {!hasTeamPlan ? <p className="muted-copy">Approving new team members requires StudioFlow Team. Decline remains available for cleanup.</p> : null}
+                  {!hasTeamPlan ? <p className="muted-copy">Approving new team members requires NivaDesk Team. Decline remains available for cleanup.</p> : null}
                 </article>
               );
             })}
@@ -3413,7 +3413,7 @@ function TeamAccessSection({
             )}
           />
         ) : (
-          <p className="muted-copy">Only the workspace owner on StudioFlow Team can create custom role profiles.</p>
+          <p className="muted-copy">Only the workspace owner on NivaDesk Team can create custom role profiles.</p>
         )}
       </section>
 
@@ -3499,12 +3499,13 @@ function AboutSection({ workspace }: { workspace: WorkspaceContext }) {
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="notes" eyebrow="About" title="StudioFlow by EGGcraft" />
+        <CardTitle icon="notes" eyebrow="About" title="NivaDesk" />
         <div className="about-app-panel">
           <span className="about-app-mark" aria-hidden="true">⬢</span>
           <div>
-            <strong>Studio Manager</strong>
+            <strong>NivaDesk</strong>
             <p>Version 1.0.0</p>
+            <p>An EGGcraft brand for studio workspace management.</p>
           </div>
         </div>
         <div className="settings-divider" />
@@ -3519,7 +3520,7 @@ function AboutSection({ workspace }: { workspace: WorkspaceContext }) {
           <InfoTile label="Company ID" value={workspace.id} />
           <InfoTile label="Web portal" value="Next.js + Firebase" />
         </div>
-        <p className="muted-copy">StudioFlow keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.</p>
+        <p className="muted-copy">NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.</p>
       </section>
     </div>
   );

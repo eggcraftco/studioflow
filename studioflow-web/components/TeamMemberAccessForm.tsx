@@ -73,7 +73,7 @@ export function AddTeamMemberForm({ disabled = false, saving = false, onAdd }: A
       <MemberAccessEditor access={access} disabled={disabled || saving} saving={saving} onChange={setAccess} />
       <div className="settings-button-row">
         <button className="button" type="submit" disabled={!canSubmit}>{saving ? "Adding..." : "Add member"}</button>
-        <span className="muted-inline">The user must already have a StudioFlow/Firebase account.</span>
+        <span className="muted-inline">The user must already have a NivaDesk/Firebase account.</span>
       </div>
     </form>
   );

@@ -17,6 +17,58 @@ import {
 } from "@/lib/publicSite/i18n";
 import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import {
+  getPrivacyPolicyLastUpdatedLabel,
+  getPrivacyPolicySections,
+  PRIVACY_POLICY_LAST_UPDATED,
+  type PrivacyPolicySection,
+  type PrivacyPolicySubsection
+} from "@/lib/publicSite/privacyPolicy";
+import {
+  getTermsPolicyLastUpdatedLabel,
+  getTermsPolicySections,
+  TERMS_POLICY_LAST_UPDATED
+} from "@/lib/publicSite/termsPolicy";
+import {
+  COOKIE_POLICY_LAST_UPDATED,
+  getCookiePolicyLastUpdatedLabel,
+  getCookiePolicySections
+} from "@/lib/publicSite/cookiePolicy";
+import {
+  ACCOUNT_DELETION_POLICY_LAST_UPDATED,
+  getAccountDeletionPolicyLastUpdatedLabel,
+  getAccountDeletionPolicySections
+} from "@/lib/publicSite/accountDeletionPolicy";
+import {
+  getRefundCancellationPolicyLastUpdatedLabel,
+  getRefundCancellationPolicySections,
+  REFUND_CANCELLATION_POLICY_LAST_UPDATED
+} from "@/lib/publicSite/refundCancellationPolicy";
+import {
+  getSecurityOverviewLastUpdatedLabel,
+  getSecurityOverviewSections,
+  SECURITY_OVERVIEW_LAST_UPDATED
+} from "@/lib/publicSite/securityOverview";
+import {
+  getSubprocessorsLastUpdatedLabel,
+  getSubprocessorsSections,
+  SUBPROCESSORS_LAST_UPDATED
+} from "@/lib/publicSite/subprocessors";
+import {
+  DATA_PROCESSING_AGREEMENT_LAST_UPDATED,
+  getDataProcessingAgreementLastUpdatedLabel,
+  getDataProcessingAgreementSections
+} from "@/lib/publicSite/dataProcessingAgreement";
+import {
+  ACCEPTABLE_USE_POLICY_LAST_UPDATED,
+  getAcceptableUsePolicyLastUpdatedLabel,
+  getAcceptableUsePolicySections
+} from "@/lib/publicSite/acceptableUsePolicy";
+import {
+  getSupportContactLastUpdatedLabel,
+  getSupportContactSections,
+  SUPPORT_CONTACT_LAST_UPDATED
+} from "@/lib/publicSite/supportContact";
+import {
   createStripeCheckoutSession,
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
@@ -296,26 +348,6 @@ const FAQS: InfoSection[] = [
   { titleKey: "faq.q5.title", bodyKey: "faq.q5.body" }
 ];
 
-const PRIVACY_SECTIONS: InfoSection[] = [
-  { titleKey: "privacy.s1.title", bodyKey: "privacy.s1.body" },
-  { titleKey: "privacy.s2.title", bodyKey: "privacy.s2.body" },
-  { titleKey: "privacy.s3.title", bodyKey: "privacy.s3.body" },
-  { titleKey: "privacy.s4.title", bodyKey: "privacy.s4.body" }
-];
-
-const TERMS_SECTIONS: InfoSection[] = [
-  { titleKey: "terms.s1.title", bodyKey: "terms.s1.body" },
-  { titleKey: "terms.s2.title", bodyKey: "terms.s2.body" },
-  { titleKey: "terms.s3.title", bodyKey: "terms.s3.body" },
-  { titleKey: "terms.s4.title", bodyKey: "terms.s4.body" }
-];
-
-const CONTACT_SECTIONS: InfoSection[] = [
-  { titleKey: "contact.s1.title", bodyKey: "contact.s1.body" },
-  { titleKey: "contact.s2.title", bodyKey: "contact.s2.body" },
-  { titleKey: "contact.s3.title", bodyKey: "contact.s3.body" }
-];
-
 function usePublicScrollReveal(routeKey: string) {
   useEffect(() => {
     const revealTargets = Array.from(document.querySelectorAll<HTMLElement>(
@@ -439,13 +471,18 @@ function useOrderCardAssembly() {
 
 function PublicLanguageSelector() {
   const { language, languages, setLanguage, t } = usePublicSiteLanguage();
+  const handleLanguageChange = (value: string) => {
+    setLanguage(value as StudioLanguage);
+  };
+
   return (
     <label className="public-language-select">
       <span>{t("language.label")}</span>
       <select
         aria-label={t("language.selectorLabel")}
         value={language}
-        onChange={event => setLanguage(event.target.value as StudioLanguage)}
+        onChange={event => handleLanguageChange(event.target.value)}
+        onInput={event => handleLanguageChange(event.currentTarget.value)}
       >
         {languages.map(option => (
           <option key={option} value={option}>{option}</option>
@@ -462,11 +499,7 @@ function PublicHeader() {
     <header className="public-header">
       <div className="public-shell public-header-inner">
         <Link href="/" className="public-brand" aria-label={t("brand.homeAria")}>
-          <span className="public-mark">SF</span>
-          <span>
-            <strong>{t("brand.name")}</strong>
-            <small>{t("brand.byline")}</small>
-          </span>
+          <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" />
         </Link>
 
         <nav className="public-nav-links" aria-label={t("nav.publicPages")}>
@@ -494,17 +527,48 @@ function PublicFooter() {
   return (
     <footer className="public-footer">
       <div className="public-shell public-footer-inner">
-        <div>
-          <strong>{t("brand.full")}</strong>
+        <div className="public-footer-brand-block">
+          <img className="public-footer-logo" src="/brand/nivadesk-logo.png" alt={t("brand.full")} />
           <p>{t("brand.footerDescription")}</p>
+          <div className="public-footer-contact">
+            <span>{t("footer.company")}</span>
+            <a href="mailto:nivadesk@gmail.com">nivadesk@gmail.com</a>
+          </div>
         </div>
-        <nav aria-label={t("nav.footer")}>
-          <Link href="/features">{t("nav.features")}</Link>
-          <Link href="/pricing">{t("nav.pricing")}</Link>
-          <Link href="/privacy">{t("nav.privacy")}</Link>
-          <Link href="/terms">{t("nav.terms")}</Link>
-          <Link href="/contact">{t("nav.contact")}</Link>
-        </nav>
+        <div className="public-footer-groups" aria-label={t("nav.footer")}>
+          <section className="public-footer-group">
+            <h3>{t("footer.product")}</h3>
+            <nav aria-label={t("footer.product")}>
+              <Link href="/features">{t("nav.features")}</Link>
+              <Link href="/pricing">{t("nav.pricing")}</Link>
+              <Link href="/faq">{t("nav.faq")}</Link>
+            </nav>
+          </section>
+          <section className="public-footer-group">
+            <h3>{t("footer.legal")}</h3>
+            <nav aria-label={t("footer.legal")}>
+              <Link href="/privacy">{t("nav.privacy")}</Link>
+              <Link href="/terms">{t("nav.terms")}</Link>
+              <Link href="/cookies">{t("nav.cookies")}</Link>
+              <Link href="/acceptable-use">{t("nav.acceptableUse")}</Link>
+              <Link href="/data-processing-agreement">{t("nav.dataProcessingAgreement")}</Link>
+              <Link href="/subprocessors">{t("nav.subprocessors")}</Link>
+              <Link href="/security">{t("nav.security")}</Link>
+            </nav>
+          </section>
+          <section className="public-footer-group">
+            <h3>{t("footer.support")}</h3>
+            <nav aria-label={t("footer.support")}>
+              <Link href="/contact">{t("nav.contact")}</Link>
+              <Link href="/account-deletion">{t("nav.accountDeletion")}</Link>
+              <Link href="/refund-cancellation">{t("nav.refundCancellation")}</Link>
+            </nav>
+          </section>
+        </div>
+        <div className="public-footer-meta">
+          <span>{t("footer.address")}</span>
+          <span>{t("footer.rights")}</span>
+        </div>
       </div>
     </footer>
   );
@@ -1174,7 +1238,7 @@ export function PublicSignupPage() {
             <p>{t("signup.body")}</p>
             <div className="public-hero-actions">
               <Link href={user ? "/dashboard" : "/login"} className="public-button large">
-                {user ? t("cta.openPortal") : t("cta.loginToStudioFlow")}
+                {user ? t("cta.openPortal") : t("cta.loginToNivaDesk")}
               </Link>
               <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
             </div>
@@ -1305,35 +1369,394 @@ function PublicInfoPage({
   );
 }
 
-export function PublicPrivacyPage() {
+function PublicLegalParagraph({ text }: { text: string }) {
+  return <p className={text.includes("\n") ? "public-legal-preline" : undefined}>{text}</p>;
+}
+
+function PublicLegalSubsection({ subsection }: { subsection: PrivacyPolicySubsection }) {
   return (
-    <PublicInfoPage
-      eyebrowKey="privacy.eyebrow"
-      titleKey="privacy.title"
-      bodyKey="privacy.body"
-      sections={PRIVACY_SECTIONS}
-    />
+    <div className="public-legal-subsection">
+      {subsection.title ? <h3>{subsection.title}</h3> : null}
+      {subsection.paragraphs?.map(paragraph => (
+        <PublicLegalParagraph key={paragraph} text={paragraph} />
+      ))}
+      {subsection.bullets ? (
+        <ul>
+          {subsection.bullets.map(item => <li key={item}>{item}</li>)}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function PublicLegalSection({ section }: { section: PrivacyPolicySection }) {
+  return (
+    <article className="public-card public-legal-card">
+      <h2>{section.title}</h2>
+      {section.paragraphs?.map(paragraph => (
+        <PublicLegalParagraph key={paragraph} text={paragraph} />
+      ))}
+      {section.bullets ? (
+        <ul>
+          {section.bullets.map(item => <li key={item}>{item}</li>)}
+        </ul>
+      ) : null}
+      {section.subsections?.map((subsection, index) => (
+        <PublicLegalSubsection
+          key={`${section.title}-${subsection.title || index}`}
+          subsection={subsection}
+        />
+      ))}
+    </article>
+  );
+}
+
+export function PublicPrivacyPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const privacyPolicySections = getPrivacyPolicySections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("privacy.eyebrow")}</span>
+            <h1>{t("privacy.title")}</h1>
+            <p>{t("privacy.body")}</p>
+            <p className="public-legal-updated">
+              {getPrivacyPolicyLastUpdatedLabel(language)}: {PRIVACY_POLICY_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {privacyPolicySections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
   );
 }
 
 export function PublicTermsPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const termsPolicySections = getTermsPolicySections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("terms.eyebrow")}</span>
+            <h1>{t("terms.title")}</h1>
+            <p>{t("terms.body")}</p>
+            <p className="public-legal-updated">
+              {getTermsPolicyLastUpdatedLabel(language)}: {TERMS_POLICY_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {termsPolicySections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
   return (
-    <PublicInfoPage
-      eyebrowKey="terms.eyebrow"
-      titleKey="terms.title"
-      bodyKey="terms.body"
-      sections={TERMS_SECTIONS}
-    />
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicCookiePage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const cookiePolicySections = getCookiePolicySections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("cookies.eyebrow")}</span>
+            <h1>{t("cookies.title")}</h1>
+            <p>{t("cookies.body")}</p>
+            <p className="public-legal-updated">
+              {getCookiePolicyLastUpdatedLabel(language)}: {COOKIE_POLICY_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {cookiePolicySections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicAccountDeletionPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const accountDeletionPolicySections = getAccountDeletionPolicySections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("accountDeletion.eyebrow")}</span>
+            <h1>{t("accountDeletion.title")}</h1>
+            <p>{t("accountDeletion.body")}</p>
+            <p className="public-legal-updated">
+              {getAccountDeletionPolicyLastUpdatedLabel(language)}: {ACCOUNT_DELETION_POLICY_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {accountDeletionPolicySections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicRefundCancellationPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const refundCancellationPolicySections = getRefundCancellationPolicySections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("refundCancellation.eyebrow")}</span>
+            <h1>{t("refundCancellation.title")}</h1>
+            <p>{t("refundCancellation.body")}</p>
+            <p className="public-legal-updated">
+              {getRefundCancellationPolicyLastUpdatedLabel(language)}: {REFUND_CANCELLATION_POLICY_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {refundCancellationPolicySections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicSecurityPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const securityOverviewSections = getSecurityOverviewSections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("security.eyebrow")}</span>
+            <h1>{t("security.title")}</h1>
+            <p>{t("security.body")}</p>
+            <p className="public-legal-updated">
+              {getSecurityOverviewLastUpdatedLabel(language)}: {SECURITY_OVERVIEW_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {securityOverviewSections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicSubprocessorsPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const subprocessorsSections = getSubprocessorsSections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("subprocessors.eyebrow")}</span>
+            <h1>{t("subprocessors.title")}</h1>
+            <p>{t("subprocessors.body")}</p>
+            <p className="public-legal-updated">
+              {getSubprocessorsLastUpdatedLabel(language)}: {SUBPROCESSORS_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {subprocessorsSections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicDataProcessingAgreementPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const dataProcessingAgreementSections = getDataProcessingAgreementSections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("dataProcessingAgreement.eyebrow")}</span>
+            <h1>{t("dataProcessingAgreement.title")}</h1>
+            <p>{t("dataProcessingAgreement.body")}</p>
+            <p className="public-legal-updated">
+              {getDataProcessingAgreementLastUpdatedLabel(language)}: {DATA_PROCESSING_AGREEMENT_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {dataProcessingAgreementSections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicAcceptableUsePage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const acceptableUsePolicySections = getAcceptableUsePolicySections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("acceptableUse.eyebrow")}</span>
+            <h1>{t("acceptableUse.title")}</h1>
+            <p>{t("acceptableUse.body")}</p>
+            <p className="public-legal-updated">
+              {getAcceptableUsePolicyLastUpdatedLabel(language)}: {ACCEPTABLE_USE_POLICY_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {acceptableUsePolicySections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
   );
 }
 
 export function PublicContactPage() {
+  const Page = () => {
+    const { language, t } = usePublicSiteLanguage();
+    const supportContactSections = getSupportContactSections(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{t("contact.eyebrow")}</span>
+            <h1>{t("contact.title")}</h1>
+            <p>{t("contact.body")}</p>
+            <p className="public-legal-updated">
+              {getSupportContactLastUpdatedLabel(language)}: {SUPPORT_CONTACT_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell public-legal-document">
+            {supportContactSections.map(section => (
+              <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
   return (
-    <PublicInfoPage
-      eyebrowKey="contact.eyebrow"
-      titleKey="contact.title"
-      bodyKey="contact.body"
-      sections={CONTACT_SECTIONS}
-    />
+    <PublicShell>
+      <Page />
+    </PublicShell>
   );
 }

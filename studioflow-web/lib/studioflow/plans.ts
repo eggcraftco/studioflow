@@ -47,7 +47,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   },
   lifetime_lite: {
     plan: "lifetime_lite",
-    title: "StudioFlow Lite",
+    title: "NivaDesk Lite",
     purchaseModel: "One-Time Purchase",
     orderLimit: null,
     customerLimit: null,
@@ -68,7 +68,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   },
   pro_monthly: {
     plan: "pro_monthly",
-    title: "StudioFlow Pro",
+    title: "NivaDesk Pro",
     purchaseModel: "Monthly Subscription",
     orderLimit: null,
     customerLimit: null,
@@ -89,7 +89,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   },
   team_monthly: {
     plan: "team_monthly",
-    title: "StudioFlow Team",
+    title: "NivaDesk Team",
     purchaseModel: "Monthly Subscription",
     orderLimit: null,
     customerLimit: null,

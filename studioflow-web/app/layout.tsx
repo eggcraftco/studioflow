@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "StudioFlow by EGGcraft",
+  metadataBase: new URL("https://nivadesk.co"),
+  title: "NivaDesk",
   description: "Premium studio management for artists, custom studios and order-based creative businesses.",
   robots: isStagingPreview
     ? {

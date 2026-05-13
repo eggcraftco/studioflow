@@ -508,7 +508,7 @@ export default function DashboardPage() {
                   />
                 ) : (
                   <div className="dashboard-chart-locked">
-                    <CardTitle icon="lock" eyebrow={t("Advanced finance locked")} title={t("Net profit analysis is available from StudioFlow Lite.")} />
+                    <CardTitle icon="lock" eyebrow={t("Advanced finance locked")} title={t("Net profit analysis is available from NivaDesk Lite.")} />
                   </div>
                 )}
               </section>

@@ -1004,7 +1004,7 @@ function CustomerFormModal({
           <div>
             <p className="orders-kicker">{mode === "create" ? "New Customer" : "Edit Customer"}</p>
             <h2>{mode === "create" ? "Add customer" : customerDisplayName(form.name)}</h2>
-            <p>These fields match the StudioFlow app customer profile.</p>
+            <p>These fields match the NivaDesk app customer profile.</p>
           </div>
           <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>Close</button>
         </div>
