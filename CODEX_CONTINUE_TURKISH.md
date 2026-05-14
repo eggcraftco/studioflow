@@ -395,6 +395,84 @@ Sadece source dosyalarını commit et. `.next`, cache, env ve dependency dosyala
 	   - 2026-05-11 Android Production Status + Financial Info parity pass: Production Status kartı artık workspace `customStepsJSON` ilk iki label'ını Design/Painting olarak, ekstra step'leri `extraStatuses`, custom yes/no toggle'ları `customToggles`, opsiyonel notes/supplier alanını `customFields.status::notesSupplier` olarak gösterip kaydediyor. Settings > Workflow Steps içine `Show Status Notes / Supplier` ve label editörü eklendi. Financial Settings içine Mac/Web heading detayları eklendi: `financialShowBaseCost`, `financialBaseCostLabel`, `financialRemainingItemsJSON`, `financialExpenseItemsJSON`. Android Financial Info kartı telefon/tablet/desktop'ta custom Pending/Remaining ve Cost satırlarını gösteriyor; edit yetkisi varsa `finance.financialRemainingValues` ve `finance.financialExpenseValues` map'leriyle Mac uyumlu `financialRemaining::<title>` / `financialExpense::<title>` custom field formatına kaydediyor. Backend `updateWebOrder` aynı yeni finance map'lerini kabul edecek şekilde güncellendi ve deploy edildi; `Full Payment` custom Pending satırlarını sıfırlarken onların tutarını Paid'e ekleyerek Mac davranışını takip ediyor. Doğrulama: `node --check functions/index.js` geçti; `firebase deploy --only functions:updateWebOrder` başarılı; Android `:app:assembleDebug` geçti; APK Pixel 8, Pixel Tablet, Large Desktop'a kuruldu/açıldı; üç cihaz AndroidRuntime/StudioFlow logcat temiz. Canlı finance/status verileri değişmesin diye QA sırasında save/full payment/toggle aksiyonlarına basılmadı.
 	   - 2026-05-11 Android Order Summary / Priority / PDF Export parity pass: Order Summary kartı artık Mac/Web gibi workspace `summaryStep1` / `summaryStep2` ayarlarını ve `customSteps` label'larını kullanıyor; hardcoded Design/Painting özeti yerine seçili summary step değerlerini gösteriyor. Priority / Risk kartı kendi içinde editlenebilir hale geldi; risk değerleri backend `updateWebOrder` ile uyumlu `None`, `Waiting`, `Blocked`, `Overdue` listesine çekildi ve Workflow Controls da aynı listeyi kullanıyor. Telefon, tablet ve desktop order detail içine native `Export PDF` eklendi: telefonda detay üst barında `PDF`, geniş ekranda header `Actions > Export PDF`. PDF, Settings > PDF Export Settings toggle'larını, company invoice numbers alanlarını, customer/contact/preview/materials/priority/financial/payment/internal/status/shipping bölümlerini ve workspace currency/decimal ayarını okuyor; Android FileProvider ile cache'teki PDF'i sistem share sheet'e veriyor. Doğrulama: Android `:app:assembleDebug` geçti; APK Pixel 8, Pixel Tablet, Large Desktop'a kuruldu/açıldı; üç cihaz AndroidRuntime/StudioFlow logcat temiz. Canlı sipariş değişmesin diye Priority/Risk save ve Full Payment QA sırasında basılmadı; PDF action build/manifest/share-provider seviyesinde doğrulandı.
 
+## 2026-05-14 kısa devam özeti
+
+Bu bölüm başka MacBook/Codex başlığında hızlı devam için en güncel kısa özettir.
+
+### En son çözülen kritik konu: Mac giriş donması
+
+- Mac uygulaması girişten hemen sonra donuyordu.
+- Donma hem bilgisayar şifresiyle Local Unlock yapılınca hem de Sign Out sonrası eski hesapla mail/şifre girişinde oluyordu.
+- Kullanıcının gözlemi doğru çıktı: sorun sipariş kartı açılınca değil, giriş/auth geçişinde tetikleniyordu.
+- Muhtemel kök sebep: Google ile giriş desteği eklenirken auth state değişimi, Local Unlock ve workspace/Firebase listener başlangıcı aynı anda/erken çalışmaya başlamıştı.
+- Düzeltme:
+  - `EGGcraft/AuthViewModel.swift`
+    - `isWorkspaceReady` eklendi.
+    - Kullanıcı Firebase Auth ile doğrulansa bile `currentCompanyId` workspace çözülene kadar hazır sayılmıyor.
+    - Kullanıcı değişince `currentCompanyId = nil`, `isWorkspaceReady = false` yapılıyor.
+    - `activateCompany(...)` sonunda workspace hazır hale getiriliyor.
+  - `EGGcraft/EGGcraftApp.swift`
+    - Local Unlock sonrası direkt `ContentView` açmak yerine workspace hazır değilse `WorkspaceLoadingView` gösteriliyor.
+    - `syncFirebaseWorkspace()` artık sadece `isLoggedIn + isLocalUnlockSatisfied + isWorkspaceReady + currentCompanyId` olduğunda FirebaseManager listener başlatıyor.
+  - `EGGcraft/ContentView.swift`
+    - Mac’te ilk siparişi otomatik seçip detay ekranını açma davranışı kapatıldı; bu ana sebep değil ama eski hesaplarda ilk render yükünü azaltan ek koruma.
+- Doğrulama:
+  - macOS Debug build geçti: `BUILD SUCCEEDED`.
+  - Debug app kısa süre çalıştırıldı, CPU 0.0 kaldı; önceki 100% CPU donma döngüsü görünmedi.
+  - Kullanıcı “tamam olayı çözdün” dedi.
+
+### NivaDesk marka geçişi
+
+- Uygulama adı artık NivaDesk olarak ilerliyor.
+- EGGcraft sadece arka şirket/alt açıklama bağlamında kalacak; ürün UI içinde ana marka NivaDesk olmalı.
+- Plan adları NivaDesk Lite / NivaDesk Pro / NivaDesk Team olarak güncelleniyor.
+- URL hedefi `nivadesk.co`.
+- Logo kaynakları kullanıcı tarafından `/Volumes/Studio_4TB/NivaDesk/final2.png`, `final3 copy.png`, `final4.png`, `final4png` gibi dosyalarla verildi.
+- Xcode asset tarafında NivaDesk logo/app icon çalışmaları başladı:
+  - `EGGcraft/Assets.xcassets/NivaDeskLogo.imageset/`
+  - `EGGcraft/Assets.xcassets/NivaDeskWorkspaceIcon.imageset/`
+  - AppIcon PNG’leri değişmiş durumda.
+- Header davranışı:
+  - Sol üstte varsayılan marka olarak NivaDesk logo/lockup görünmeli.
+  - Kullanıcı Settings > Account > Workspace Logo bölümünden kendi logosunu yüklerse header’daki logo onun yüklediği logo olmalı.
+  - Logo kaldırılırsa tekrar varsayılan NivaDesk logosuna dönmeli.
+  - Bu davranış Mac, web, Android tablet/desktop/phone için aynı olmalı.
+
+### Google giriş / hesap sistemi
+
+- Web’de Google ile hesap oluşturma/giriş var.
+- Apple ürünlerinde de Google ile giriş desteklenmeli; Google ile kayıt olan kullanıcı şifre bilmeden aynı Google hesabıyla girebilmeli.
+- Mac tarafında Google Sign-In için `AuthViewModel.signInWithGoogle()` içinde `currentKeyWindow()` ile macOS presenting window desteği eklendi.
+- `EGGcraftApp.swift` içindeki `.onOpenURL` GoogleSignIn handle’ı artık sadece iOS ile sınırlı değil.
+- Android tarafında kullanıcı “Google ile devam et” deyince `no credentials available` hatası almıştı. Bu konu hâlâ ayrıca kontrol edilmeli:
+  - Firebase Android OAuth client / SHA-1 / SHA-256
+  - Android Google Identity Services credential ayarları
+  - `google-services.json`
+  - package name `uk.co.eggcraft.studioflow`
+
+### Son platform çalışma yönü
+
+- Kullanıcı Android tarafında Mac/Web’deki tüm detayların phone/tablet/large desktop’a taşınmasını istiyor.
+- Android order detail board tarafında büyük ilerleme var:
+  - Tablet/desktop Mac-style çok kolonlu board.
+  - Kart sürükleme, kolonlara taşıma, genişlik/yükseklik senkronu büyük ölçüde çalışıyor.
+  - Alt resize çubuğu çalışıyor ama geçmişte hız/ölçek/senkron hassasiyetleri düzeltilmişti; tekrar dokunurken Mac/Web davranışıyla karşılaştır.
+  - Kart minimum yüksekliği: Android kartlar içerik kaybolacak kadar küçülmemeli; Mac/Web minimum content height mantığına uyumlu olmalı.
+- Web tarafında son açık/istenenlerden bazıları:
+  - Order Filters menüsü Mac gibi tek kapalı buton halinde olmalı; Smart/Recent ve All seçimi menü açılınca görünmeli.
+  - Kart alt resize çizgilerinin web’de görünürlüğü kontrol edilmeli.
+  - Profil avatarı yoksa sağ üstte profil initials gösterilmeli.
+  - Sağ üst profil menüsünde Account ve Sign Out olmalı.
+- Mac tarafında son kritik auth donması çözüldü; tekrar giriş/logout testlerinde önce bu akış korunmalı.
+
+### Yeni Codex başlığında ilk yapılacaklar
+
+1. Önce `PROJECT_CONTEXT.md`, `CHANGELOG_STUDIOFLOW.md`, `CODEX_CONTINUE_TURKISH.md` oku.
+2. `git status --short` ile kirli dosyaları gör; kullanıcı değişikliklerini geri alma.
+3. Mac giriş/auth tarafına dokunursan `isWorkspaceReady` sırasını bozma.
+4. Platform parity işlerinde önce Mac/Web mevcut davranışını araştır, sonra Android/Web/Mac’e küçük patch uygula.
+5. Raporlarken mutlaka “neyi kontrol edeceğim” maddeleri yaz.
+
 ## Cevap formatı
 
 Her işten sonra kısa raporla:
