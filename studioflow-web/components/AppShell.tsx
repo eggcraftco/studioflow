@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -48,6 +48,76 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/quick-reply": "quickReply",
   "/settings": "settings"
 };
+
+
+type FirstProjectGuideStep = 1 | 2 | 3 | 4 | 5 | 6;
+
+type FirstProjectGuideState = {
+  step: FirstProjectGuideStep;
+  orderId?: string;
+  completed?: boolean;
+};
+
+const FIRST_PROJECT_GUIDE_EVENT = "studioflow-web-first-project-guide-updated";
+const FIRST_PROJECT_GUIDE_TEST_EMAIL = "studioflow.guide.test@eggcraft.co.uk";
+
+function firstProjectGuideStorageKey(userId: string, workspaceId: string) {
+  return `studioflow-web-first-project-guide-v1:${userId}:${workspaceId}`;
+}
+
+function readFirstProjectGuideState(userId: string, workspaceId: string, email?: string | null): FirstProjectGuideState {
+  const key = firstProjectGuideStorageKey(userId, workspaceId);
+  try {
+    window.localStorage.setItem("studioflow-web-first-project-guide-active-key", key);
+  } catch {
+    // Continue without the active-key cache.
+  }
+
+  if (email?.trim().toLowerCase() === FIRST_PROJECT_GUIDE_TEST_EMAIL) {
+    // For the test account, reset to step 1 only once per browser session
+    // (so navigation / refresh within a session keeps the user's progress).
+    const sessionFlagKey = `studioflow-web-first-project-guide-test-session:${userId}:${workspaceId}`;
+    try {
+      const alreadyInitialized = window.sessionStorage.getItem(sessionFlagKey) === "1";
+      if (!alreadyInitialized) {
+        window.sessionStorage.setItem(sessionFlagKey, "1");
+        const fresh: FirstProjectGuideState = { step: 1 };
+        try { window.localStorage.setItem(key, JSON.stringify(fresh)); } catch { /* ignore */ }
+        try {
+          window.dispatchEvent(new CustomEvent(FIRST_PROJECT_GUIDE_EVENT, { detail: fresh }));
+        } catch { /* ignore */ }
+        return fresh;
+      }
+    } catch {
+      // Fall through to normal read if sessionStorage is unavailable.
+    }
+  }
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return { step: 1 };
+    const decoded = JSON.parse(raw) as Partial<FirstProjectGuideState>;
+    if (decoded.completed) return { step: 6, orderId: decoded.orderId, completed: true };
+    const step = Number(decoded.step);
+    if (step >= 1 && step <= 6) {
+      return { step: step as FirstProjectGuideStep, orderId: typeof decoded.orderId === "string" ? decoded.orderId : undefined };
+    }
+  } catch {
+    // The guide is local-only; if storage is unavailable, start from the first step for this session.
+  }
+  return { step: 1 };
+}
+
+function writeFirstProjectGuideState(userId: string, workspaceId: string, next: FirstProjectGuideState, email?: string | null) {
+  try {
+    const key = firstProjectGuideStorageKey(userId, workspaceId);
+    window.localStorage.setItem(key, JSON.stringify(next));
+    window.localStorage.setItem("studioflow-web-first-project-guide-active-key", key);
+  } catch {
+    // Keep the guide in memory if localStorage is unavailable.
+  }
+  window.dispatchEvent(new CustomEvent(FIRST_PROJECT_GUIDE_EVENT, { detail: next }));
+}
 
 const AppShellMountedContext = createContext(false);
 
@@ -300,6 +370,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const { hideNumbers, toggleHideNumbers } = usePricePrivacy();
   const pathname = usePathname();
   const router = useRouter();
+  const addProjectButtonRef = useRef<HTMLButtonElement | null>(null);
   const wideWorkspace = pathname === "/orders" ||
     pathname.startsWith("/orders/") ||
     pathname === "/customers" ||
@@ -325,6 +396,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [onboardingPrompt, setOnboardingPrompt] = useState(workspaceOnboardingPromptSeed("Photography Studio"));
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingError, setOnboardingError] = useState("");
+  const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -543,6 +615,30 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handleEscape);
   }, [mobileNavOpen]);
 
+  useEffect(() => {
+    if (!user || !workspace) {
+      setFirstProjectGuide(null);
+      return;
+    }
+
+    setFirstProjectGuide(readFirstProjectGuideState(user.uid, workspace.id, user.email));
+
+    function handleGuideUpdate(event: Event) {
+      const next = (event as CustomEvent<FirstProjectGuideState>).detail;
+      if (!next) return;
+      setFirstProjectGuide(next);
+    }
+
+    window.addEventListener(FIRST_PROJECT_GUIDE_EVENT, handleGuideUpdate);
+    return () => window.removeEventListener(FIRST_PROJECT_GUIDE_EVENT, handleGuideUpdate);
+  }, [user, workspace?.id]);
+
+  function updateFirstProjectGuide(next: FirstProjectGuideState) {
+    if (!user || !workspace) return;
+    setFirstProjectGuide(next);
+    writeFirstProjectGuideState(user.uid, workspace.id, next, user.email);
+  }
+
   const canSeeToolbarFinance = Boolean(
     workspace &&
     memberCanAccess(workspace, "dashboard") &&
@@ -571,6 +667,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   );
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
+  const isFirstProjectGuideTestUser =
+    user?.email?.trim().toLowerCase() === FIRST_PROJECT_GUIDE_TEST_EMAIL;
   const showWorkspaceOnboarding = Boolean(
     user &&
     workspace &&
@@ -578,7 +676,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     !settings.businessOnboardingCompleted &&
     financeOrders.length === 0 &&
     memberCanAccess(workspace, "settings") &&
-    roleCanSetUpWorkspace(workspace.role)
+    roleCanSetUpWorkspace(workspace.role) &&
+    !isFirstProjectGuideTestUser
+  );
+  const showFirstProjectAddGuide = Boolean(
+    firstProjectGuide &&
+    !firstProjectGuide.completed &&
+    firstProjectGuide.step === 1 &&
+    canCreateToolbarOrder &&
+    pathname.startsWith("/orders")
   );
 
   useEffect(() => {
@@ -614,7 +720,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     setCreatingOrder(true);
     try {
       const result = await createOrderFromWeb(workspace);
-      handleOrderCreated(result.orderId || "");
+      const newOrderId = result.orderId || "";
+      if (firstProjectGuide && !firstProjectGuide.completed && firstProjectGuide.step === 1 && newOrderId) {
+        updateFirstProjectGuide({ step: 2, orderId: newOrderId });
+      }
+      handleOrderCreated(newOrderId);
     } catch (createError) {
       setOrderCreateError(createError instanceof Error ? createError.message : t("Could not create the project. Please try again."));
     } finally {
@@ -771,15 +881,28 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               ) : null}
             </span>
             {canCreateToolbarOrder ? (
-              <button
-                className="button native-add-order"
-                type="button"
-                disabled={creatingOrder}
-                title={t("Add Project")}
-                onClick={handleAddOrder}
-              >
-                <span>{creatingOrder ? t("Creating...") : `+ ${t("Add Project")}`}</span>
-              </button>
+              <span className="web-first-guide-add-wrap">
+                <button
+                  ref={addProjectButtonRef}
+                  className={["button native-add-order", showFirstProjectAddGuide ? "web-first-guide-target" : ""].filter(Boolean).join(" ")}
+                  type="button"
+                  disabled={creatingOrder}
+                  title={t("Add Project")}
+                  onClick={handleAddOrder}
+                >
+                  <span>{creatingOrder ? t("Creating...") : `+ ${t("Add Project")}`}</span>
+                </button>
+                {showFirstProjectAddGuide ? (
+                  <WebFirstProjectGuideBubble
+                    targetRef={addProjectButtonRef}
+                    eyebrow={`${t("Step")} 1 / 6`}
+                    title={t("Start with Add Project")}
+                    message={t("Use Add Project to create your first workspace project. We will keep the guide simple and show one card at a time.")}
+                    onSkip={() => updateFirstProjectGuide({ step: 6, completed: true })}
+                    skipLabel={t("Skip")}
+                  />
+                ) : null}
+              </span>
             ) : null}
             <span className="toolbar-avatar-wrap">
               <button
@@ -842,5 +965,136 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         </div>
       </main>
     </AppShellMountedContext.Provider>
+  );
+}
+
+
+type WebFirstProjectGuideBubbleProps = {
+  eyebrow: string;
+  title: string;
+  message: string;
+  nextLabel?: string;
+  skipLabel?: string;
+  onNext?: () => void;
+  onSkip?: () => void;
+  targetRef?: RefObject<HTMLElement | null>;
+};
+
+function WebFirstProjectGuideBubble({ eyebrow, title, message, nextLabel, skipLabel, onNext, onSkip, targetRef }: WebFirstProjectGuideBubbleProps) {
+  const [bubbleStyle, setBubbleStyle] = useState<CSSProperties | null>(null);
+
+  useEffect(() => {
+    if (!targetRef) return;
+    let frame = 0;
+    function update() {
+      const el = targetRef?.current;
+      if (!el) {
+        frame = window.requestAnimationFrame(update);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        frame = window.requestAnimationFrame(update);
+        return;
+      }
+      const vw = window.innerWidth || document.documentElement.clientWidth || 1024;
+      const width = Math.min(340, Math.max(280, vw - 32));
+      const left = Math.max(16, Math.min(rect.right - width, vw - width - 16));
+      const top = rect.bottom + 14;
+      setBubbleStyle({ left, top, width });
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [targetRef]);
+
+  if (!bubbleStyle) return null;
+
+  return (
+    <span className="web-first-guide-bubble" role="note" style={bubbleStyle}>
+      <span className="web-first-guide-eyebrow">{eyebrow}</span>
+      <strong>{title}</strong>
+      <span>{message}</span>
+      <span className="web-first-guide-actions">
+        {onSkip ? <button type="button" onClick={onSkip}>{skipLabel || "Skip"}</button> : null}
+        {onNext ? <button type="button" className="primary" onClick={onNext}>{nextLabel || "Next"}</button> : null}
+      </span>
+      <style jsx global>{`
+        .web-first-guide-add-wrap {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+        .web-first-guide-target {
+          position: relative;
+          z-index: 45;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.26), 0 0 0 8px rgba(37, 99, 235, 0.13), 0 18px 40px rgba(37, 99, 235, 0.24) !important;
+          outline: 3px solid rgba(37, 99, 235, 0.86) !important;
+          outline-offset: 4px;
+        }
+        .web-first-guide-bubble {
+          position: fixed;
+          z-index: 9999;
+          display: grid;
+          gap: 8px;
+          padding: 16px;
+          border-radius: 22px;
+          border: 3px solid rgba(37, 99, 235, 0.9);
+          background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.98));
+          color: #0f172a;
+          box-shadow: 0 24px 70px rgba(37, 99, 235, 0.24), 0 0 0 8px rgba(37, 99, 235, 0.12);
+          text-align: left;
+          white-space: normal;
+        }
+        .web-first-guide-bubble::before {
+          content: "";
+          position: absolute;
+          top: -10px;
+          right: 28px;
+          width: 18px;
+          height: 18px;
+          transform: rotate(45deg);
+          border-left: 3px solid rgba(37, 99, 235, 0.9);
+          border-top: 3px solid rgba(37, 99, 235, 0.9);
+          background: rgba(239, 246, 255, 0.98);
+        }
+        .web-first-guide-eyebrow {
+          width: fit-content;
+          padding: 4px 10px;
+          border-radius: 999px;
+          background: rgba(37, 99, 235, 0.13);
+          color: #1d4ed8;
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .web-first-guide-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 4px;
+        }
+        .web-first-guide-actions button {
+          border: 1px solid rgba(37, 99, 235, 0.2);
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.86);
+          color: #1d4ed8;
+          cursor: pointer;
+          font-weight: 800;
+          padding: 8px 12px;
+        }
+        .web-first-guide-actions button.primary {
+          background: #2563eb;
+          color: white;
+          border-color: #2563eb;
+        }
+      `}</style>
+    </span>
   );
 }

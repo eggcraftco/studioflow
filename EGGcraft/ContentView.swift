@@ -33,6 +33,154 @@ private func studioRoleForContentView(_ role: String, fallback: String = "member
     }
 }
 
+
+
+struct StudioFirstRunGuideBubble: View {
+    let stepText: String
+    let title: String
+    let message: String
+    let primaryTitle: String?
+    let secondaryTitle: String
+    let onPrimary: (() -> Void)?
+    let onSkip: () -> Void
+
+    var body: some View {
+        bubbleContainer
+            .padding(18)
+            .frame(width: 340, alignment: .leading)
+            .background(bubbleBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(bubbleOuterStroke)
+            .overlay(bubbleInnerStroke)
+            .shadow(color: Color.blue.opacity(0.28), radius: 18, x: 0, y: 0)
+            .shadow(color: Color.black.opacity(0.18), radius: 26, x: 0, y: 16)
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .onHover { hovering in
+                if hovering { setArrowCursor() }
+            }
+    }
+
+    private var bubbleContainer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            headerRow
+            titleText
+            messageText
+            buttonRow
+        }
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 8) {
+            Text(stepText)
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundColor(.white)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(Color.blue)
+                .clipShape(Capsule())
+
+            Spacer()
+
+            Button(action: onSkip) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering { setArrowCursor() }
+            }
+        }
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundColor(.primary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var messageText: some View {
+        Text(message)
+            .font(.system(size: 13.5, weight: .medium))
+            .foregroundColor(.secondary)
+            .lineSpacing(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var buttonRow: some View {
+        HStack(spacing: 10) {
+            if let primaryTitle, let onPrimary {
+                Button(primaryTitle, action: onPrimary)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .onHover { hovering in
+                        if hovering { setArrowCursor() }
+                    }
+            }
+
+            Button(secondaryTitle, action: onSkip)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .onHover { hovering in
+                    if hovering { setArrowCursor() }
+                }
+        }
+        .padding(.top, 2)
+    }
+
+
+    private func setArrowCursor() {
+        #if os(macOS)
+        NSCursor.arrow.set()
+        #endif
+    }
+
+    private var bubbleBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(.regularMaterial)
+            .overlay(Color.blue.opacity(0.045))
+    }
+
+    private var bubbleOuterStroke: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Color.blue.opacity(0.95), lineWidth: 3)
+    }
+
+    private var bubbleInnerStroke: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(Color.white.opacity(0.45), lineWidth: 1)
+            .padding(4)
+    }
+}
+
+struct StudioFirstRunGuideHighlight: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.blue, lineWidth: 5)
+                        .shadow(color: Color.blue.opacity(0.65), radius: 18, x: 0, y: 0)
+                        .shadow(color: Color.blue.opacity(0.35), radius: 28, x: 0, y: 0)
+                        .padding(-8)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+extension View {
+    func studioFirstRunGuideHighlight(_ isActive: Bool) -> some View {
+        modifier(StudioFirstRunGuideHighlight(isActive: isActive))
+    }
+}
+
 enum SiparisHizliFiltre: String, CaseIterable, Identifiable {
     case all
     case active
@@ -222,10 +370,27 @@ struct ContentView: View {
     @State private var showPlanAccessAlert: Bool = false
     @State private var planAccessAlertTitle: String = ""
     @State private var planAccessAlertMessage: String = ""
+    @State private var macFirstProjectGuideCompleted: Bool = false
+    @State private var macFirstProjectGuideStep: Int = 0
+    @State private var macFirstProjectGuideActive: Bool = false
+    @State private var macFirstProjectGuideLoadedScope: String = ""
 
     private var minOrdersSidebarWidth: Double { showOrderPreviewImages ? 360 : 300 }
     private let maxOrdersSidebarWidth: Double = 720
     private var defaultOrdersSidebarWidth: Double { showOrderPreviewImages ? 380 : 320 }
+
+    private var shouldShowMacFirstProjectGuide: Bool {
+        #if os(macOS)
+        return macFirstProjectGuideActive && !macFirstProjectGuideCompleted && !shouldShowBusinessOnboarding && canEditWorkflowFields
+        #else
+        return false
+        #endif
+    }
+
+    private var isMacFirstProjectGuideTestAccount: Bool {
+        authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "studioflow.guide.test@eggcraft.co.uk"
+    }
+
 
     @AppStorage("appTheme") private var appTheme: String = "System"
     @AppStorage("appLogoUrl") private var appLogoUrl: String = ""
@@ -277,6 +442,11 @@ struct ContentView: View {
     @AppStorage("showCardShipping") private var showCardShipping = true
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true
+    @AppStorage("showCardSchedule") private var showCardSchedule = true
+    @AppStorage("showCardHistoryLog") private var showCardHistoryLog = true
+    @AppStorage("showCardClientFiles") private var showCardClientFiles = true
+    @AppStorage("showCardToDo") private var showCardToDo = true
+    @AppStorage("showCardWorkTime") private var showCardWorkTime = true
 
     var aktifTema: ColorScheme? { if appTheme == "Light" { return .light }; if appTheme == "Dark" { return .dark }; return nil }
     var colorScheme: ColorScheme { aktifTema ?? systemColorScheme }
@@ -960,6 +1130,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("+ \(t("Add Project", lang: seciliDil))")
+        .studioFirstRunGuideHighlight(shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 0)
     }
 
     private var phoneMainMenuButton: some View {
@@ -1205,6 +1376,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("+ \(t("Add Project", lang: seciliDil))")
+        .studioFirstRunGuideHighlight(shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 0)
     }
 
     var body: some View {
@@ -1268,6 +1440,23 @@ struct ContentView: View {
                                         let siparisKey = orderSelectionKey(siparis)
                                         SiparisKarti(siparis: siparis, isSelected: siparisKey == seciliSiparisGorunumKey, isMultiSelected: isSiparisBulkSelected(siparis), showMultiSelection: !selectedOrderIds.isEmpty, showPreviewImage: showOrderPreviewImages, showDeliveryTime: orderCardShowDeliveryTime, showDesignName: orderCardShowDesignName, showOrderValue: orderCardShowOrderValue && canSeeFinancialData, showUpcomingSchedule: orderCardShowUpcomingSchedule, showStatusBadges: orderCardShowStatusBadges, showCustomerShortcut: canAccessCustomers, assignedMemberLabel: assignedMemberLabel(for: siparis), assignedMemberPhotoURL: assignedMemberPhotoURL(for: siparis), lblIsimsiz: t("New Project", lang: seciliDil), summaryStep1: orderListStep1, summaryStep2: orderListStep2, customStepsJSON: customStepsJSON, sembol: seciliParaBirimi, seciliDil: seciliDil, seciliOndalik: seciliOndalik) {
                                             openCustomerForOrder(siparis)
+                                        }
+                                        .studioFirstRunGuideHighlight(shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 1 && siparisKey == seciliSiparisGorunumKey)
+                                        .overlay(alignment: .bottom) {
+                                            if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 1 && siparisKey == seciliSiparisGorunumKey {
+                                                StudioFirstRunGuideBubble(
+                                                    stepText: "2 / 6",
+                                                    title: t("Project card", lang: seciliDil),
+                                                    message: t("This small card represents the project you just created. You can select projects from this list and open their workspace on the right.", lang: seciliDil),
+                                                    primaryTitle: t("Next", lang: seciliDil),
+                                                    secondaryTitle: t("Skip", lang: seciliDil),
+                                                    onPrimary: continueMacFirstProjectGuideFromProjectCard,
+                                                    onSkip: completeMacFirstProjectGuide
+                                                )
+                                                .padding(.top, 12)
+                                                .offset(y: 210)
+                                                .zIndex(999)
+                                            }
                                         }
                                         .id(orderScrollId(siparis))
                                         .onTapGesture {
@@ -1528,6 +1717,9 @@ struct ContentView: View {
         #endif
         .background(bgMain)
         .preferredColorScheme(aktifTema)
+        .overlay(alignment: .topTrailing) {
+            macFirstProjectGuideOverlay
+        }
         .onOpenURL { url in
             handleStudioFlowDeepLink(url)
         }
@@ -1570,18 +1762,24 @@ struct ContentView: View {
             enforceWorkspaceRoleAccess()
             scheduleSharedClientFileInboxCheck()
             refreshCloudSyncIndicatorForOfflineState()
+            refreshMacFirstProjectGuideForCurrentAccount()
         }
         .onDisappear { stopCompanySettingsListener() }
+        .onChange(of: authVM.currentUserId) { _, _ in
+            refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
+        }
         .onChange(of: authVM.currentCompanyId) { _, _ in
             syncFirebaseManagerWithAuthCompany()
             startCompanySettingsListener()
             scheduleBusinessOnboardingGate()
             enforceWorkspaceRoleAccess()
+            refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
         }
         .onChange(of: firebaseManager.currentCompanyId) { _, _ in
             startCompanySettingsListener()
             scheduleBusinessOnboardingGate()
             enforceWorkspaceRoleAccess()
+            refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
         }
         .onChange(of: authVM.currentWorkspaceRole) { _, _ in
             syncFirebaseManagerWithAuthCompany()
@@ -3138,6 +3336,151 @@ struct ContentView: View {
             ], merge: true)
     }
 
+    @ViewBuilder
+    private var macFirstProjectGuideOverlay: some View {
+        if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 0 {
+            StudioFirstRunGuideBubble(
+                stepText: "1 / 6",
+                title: t("Start with Add Project", lang: seciliDil),
+                message: t("Click the green Add Project button to create your first project.", lang: seciliDil),
+                primaryTitle: nil,
+                secondaryTitle: t("Skip", lang: seciliDil),
+                onPrimary: nil,
+                onSkip: completeMacFirstProjectGuide
+            )
+            .padding(.top, 74)
+            .padding(.trailing, 22)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private var macFirstProjectGuideStorageScope: String {
+        let userId = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? (authVM.currentCompanyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            : firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userId.isEmpty, !companyId.isEmpty else { return "" }
+        return "\(userId)__\(companyId)"
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "@", with: "_")
+    }
+
+    private func macFirstProjectGuideDefaultsKey(_ suffix: String, scope: String? = nil) -> String {
+        let resolvedScope = scope ?? macFirstProjectGuideStorageScope
+        return "studioFlowMacFirstProjectGuide_\(resolvedScope)_\(suffix)_V2"
+    }
+
+    private func loadMacFirstProjectGuideState(forceReload: Bool = false) {
+        #if os(macOS)
+        let scope = macFirstProjectGuideStorageScope
+        guard !scope.isEmpty else { return }
+        guard forceReload || macFirstProjectGuideLoadedScope != scope else { return }
+        let defaults = UserDefaults.standard
+        if forceReload && isMacFirstProjectGuideTestAccount {
+            macFirstProjectGuideCompleted = false
+            macFirstProjectGuideStep = 0
+            macFirstProjectGuideActive = true
+            defaults.set(false, forKey: macFirstProjectGuideDefaultsKey("completed", scope: scope))
+            defaults.set(0, forKey: macFirstProjectGuideDefaultsKey("step", scope: scope))
+            defaults.set(true, forKey: macFirstProjectGuideDefaultsKey("active", scope: scope))
+        } else {
+            macFirstProjectGuideCompleted = defaults.bool(forKey: macFirstProjectGuideDefaultsKey("completed", scope: scope))
+            macFirstProjectGuideStep = defaults.integer(forKey: macFirstProjectGuideDefaultsKey("step", scope: scope))
+            macFirstProjectGuideActive = defaults.bool(forKey: macFirstProjectGuideDefaultsKey("active", scope: scope))
+        }
+        macFirstProjectGuideLoadedScope = scope
+        #endif
+    }
+
+    private func saveMacFirstProjectGuideState() {
+        #if os(macOS)
+        let scope = macFirstProjectGuideStorageScope
+        guard !scope.isEmpty else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(macFirstProjectGuideCompleted, forKey: macFirstProjectGuideDefaultsKey("completed", scope: scope))
+        defaults.set(macFirstProjectGuideStep, forKey: macFirstProjectGuideDefaultsKey("step", scope: scope))
+        defaults.set(macFirstProjectGuideActive, forKey: macFirstProjectGuideDefaultsKey("active", scope: scope))
+        macFirstProjectGuideLoadedScope = scope
+        NotificationCenter.default.post(
+            name: Notification.Name("StudioFlowMacFirstProjectGuideStateChanged"),
+            object: nil,
+            userInfo: ["scope": scope, "step": macFirstProjectGuideStep]
+        )
+        #endif
+    }
+
+    private func refreshMacFirstProjectGuideForCurrentAccount(forceReload: Bool = false) {
+        #if os(macOS)
+        loadMacFirstProjectGuideState(forceReload: forceReload)
+        beginMacFirstProjectGuideIfNeeded()
+        #endif
+    }
+
+    private func beginMacFirstProjectGuideIfNeeded() {
+        #if os(macOS)
+        if isMacFirstProjectGuideTestAccount {
+            macFirstProjectGuideCompleted = false
+            guard canEditWorkflowFields else { return }
+            guard !shouldShowBusinessOnboarding else { return }
+        } else {
+            guard !macFirstProjectGuideCompleted else { return }
+            guard canEditWorkflowFields else { return }
+            guard !shouldShowBusinessOnboarding else { return }
+            guard firebaseManager.siparisler.isEmpty else { return }
+        }
+        if !macFirstProjectGuideActive {
+            macFirstProjectGuideActive = true
+            macFirstProjectGuideStep = 0
+            saveMacFirstProjectGuideState()
+        }
+        #endif
+    }
+
+    private func prepareMacFirstProjectGuideAfterAddProject() {
+        #if os(macOS)
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 0 else { return }
+        showCardPreview = false
+        showCardSummary = false
+        showCardCustomer = true
+        showCardDelivery = false
+        showCardCommunication = false
+        showCardNotes = false
+        showCardFinancial = false
+        showCardStatus = false
+        showCardShipping = false
+        showCardCustomerNotes = false
+        showCardMaterials = false
+        showCardPriority = false
+        showCardSchedule = false
+        showCardHistoryLog = false
+        showCardClientFiles = false
+        showCardToDo = false
+        showCardWorkTime = false
+        macFirstProjectGuideStep = 1
+        saveMacFirstProjectGuideState()
+        #endif
+    }
+
+    private func continueMacFirstProjectGuideFromProjectCard() {
+        #if os(macOS)
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 1 else { return }
+        withAnimation(.snappy) {
+            macFirstProjectGuideStep = 2
+        }
+        saveMacFirstProjectGuideState()
+        #endif
+    }
+
+    private func completeMacFirstProjectGuide() {
+        macFirstProjectGuideCompleted = true
+        macFirstProjectGuideActive = false
+        macFirstProjectGuideStep = 0
+        saveMacFirstProjectGuideState()
+    }
+
     private func yeniSiparisEkle() {
         guard canEditWorkflowFields else { return }
         guard authVM.canCreateMoreOrders(currentCount: firebaseManager.siparisler.count) else {
@@ -3151,6 +3494,7 @@ struct ContentView: View {
         withAnimation {
             var yeni = Siparis()
             yeni.companyId = firebaseManager.currentCompanyId
+            prepareMacFirstProjectGuideAfterAddProject()
             yeni.customerName = t("New Project", lang: seciliDil)
             yeni.historyLog = [
                 OrderHistoryLogItem(
@@ -3161,7 +3505,12 @@ struct ContentView: View {
                     newValue: t("Created", lang: seciliDil)
                 )
             ]
-            firebaseManager.addSiparis(yeni)
+            if let created = firebaseManager.addSiparis(yeni) {
+                seciliSiparis = created
+                seciliSiparisGorunumKey = orderSelectionKey(created)
+                lastSelectedOrderId = orderSelectionKey(created)
+                orderSelectionShouldScroll = true
+            }
             aktifSekme = "Orders"
             orderListFocused = true
         }

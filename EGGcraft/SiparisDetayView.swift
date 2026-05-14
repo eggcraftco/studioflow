@@ -735,8 +735,326 @@ struct SiparisDetayView: View {
     @AppStorage("orderDetailHeaderShowUpcomingSchedule") private var orderDetailHeaderShowUpcomingSchedule: Bool = true
     @AppStorage("orderDetailHeaderShowOrderValue") private var orderDetailHeaderShowOrderValue: Bool = true
     @AppStorage("workspaceCardsLockedV1") private var workspaceCardsLocked: Bool = false
+    @State private var macFirstProjectGuideCompleted: Bool = false
+    @State private var macFirstProjectGuideStep: Int = 0
+    @State private var macFirstProjectGuideActive: Bool = false
+    @State private var macFirstProjectGuideLoadedScope: String = ""
+    @State private var showCardLayoutLockedByPlanAlert: Bool = false
 
     private func lt(_ text: String) -> String { siparisDetayText(text, lang: seciliDil) }
+
+    private var shouldShowMacFirstProjectGuide: Bool {
+        #if os(macOS)
+        return macFirstProjectGuideActive && !macFirstProjectGuideCompleted
+        #else
+        return false
+        #endif
+    }
+
+    private var macFirstProjectGuideStorageScope: String {
+        let userId = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userId.isEmpty, !companyId.isEmpty else { return "" }
+        return "\(userId)__\(companyId)"
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "@", with: "_")
+    }
+
+    private func macFirstProjectGuideDefaultsKey(_ suffix: String, scope: String? = nil) -> String {
+        let resolvedScope = scope ?? macFirstProjectGuideStorageScope
+        return "studioFlowMacFirstProjectGuide_\(resolvedScope)_\(suffix)_V2"
+    }
+
+    private func loadMacFirstProjectGuideState(forceReload: Bool = false) {
+        #if os(macOS)
+        let scope = macFirstProjectGuideStorageScope
+        guard !scope.isEmpty else { return }
+        guard forceReload || macFirstProjectGuideLoadedScope != scope else { return }
+        let defaults = UserDefaults.standard
+        macFirstProjectGuideCompleted = defaults.bool(forKey: macFirstProjectGuideDefaultsKey("completed", scope: scope))
+        macFirstProjectGuideStep = defaults.integer(forKey: macFirstProjectGuideDefaultsKey("step", scope: scope))
+        macFirstProjectGuideActive = defaults.bool(forKey: macFirstProjectGuideDefaultsKey("active", scope: scope))
+        macFirstProjectGuideLoadedScope = scope
+        #endif
+    }
+
+    private func saveMacFirstProjectGuideState() {
+        #if os(macOS)
+        let scope = macFirstProjectGuideStorageScope
+        guard !scope.isEmpty else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(macFirstProjectGuideCompleted, forKey: macFirstProjectGuideDefaultsKey("completed", scope: scope))
+        defaults.set(macFirstProjectGuideStep, forKey: macFirstProjectGuideDefaultsKey("step", scope: scope))
+        defaults.set(macFirstProjectGuideActive, forKey: macFirstProjectGuideDefaultsKey("active", scope: scope))
+        macFirstProjectGuideLoadedScope = scope
+        NotificationCenter.default.post(
+            name: Notification.Name("StudioFlowMacFirstProjectGuideStateChanged"),
+            object: nil,
+            userInfo: ["scope": scope, "step": macFirstProjectGuideStep]
+        )
+        #endif
+    }
+
+    private func completeMacFirstProjectGuide() {
+        loadMacFirstProjectGuideState()
+        macFirstProjectGuideCompleted = true
+        macFirstProjectGuideActive = false
+        macFirstProjectGuideStep = 0
+        showWidgetMenu = false
+        saveMacFirstProjectGuideState()
+    }
+
+    private func arrangeMacFirstProjectGuideCustomerCardLayoutIfNeeded() {
+        #if os(macOS)
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, (macFirstProjectGuideStep == 1 || macFirstProjectGuideStep == 2) else { return }
+
+        while kartYerlesimi.count < 2 { kartYerlesimi.append([]) }
+
+        for index in kartYerlesimi.indices {
+            kartYerlesimi[index].removeAll { $0 == .customer }
+        }
+
+        kartYerlesimi[0].insert(.customer, at: 0)
+
+        while sutunGenislikleri.count < kartYerlesimi.count { sutunGenislikleri.append(350) }
+        if sutunGenislikleri.indices.contains(0), sutunGenislikleri[0] < 350 {
+            sutunGenislikleri[0] = 350
+        }
+        if sutunGenislikleri.indices.contains(1), sutunGenislikleri[1] < 320 {
+            sutunGenislikleri[1] = 340
+        }
+        #endif
+    }
+
+    private func enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: Bool = true) {
+        #if os(macOS)
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, (macFirstProjectGuideStep == 1 || macFirstProjectGuideStep == 2) else { return }
+
+        let alreadyCustomerOnly = showCardCustomer &&
+            !showCardPreview && !showCardSummary && !showCardDelivery && !showCardCommunication &&
+            !showCardNotes && !showCardFinancial && !showCardStatus && !showCardShipping &&
+            !showCardSchedule && !showCardHistoryLog && !showCardClientFiles && !showCardToDo &&
+            !showCardWorkTime && !showCardCustomerNotes && !showCardMaterials && !showCardPriority
+
+        workspaceCardsLocked = false
+        arrangeMacFirstProjectGuideCustomerCardLayoutIfNeeded()
+        // Rehber kartı sadece görünürlük / konum yönlendirir.
+        // Kullanıcının daha önce elle ayarladığı kart yüksekliklerini burada değiştirmiyoruz;
+        // aksi halde alt tutamaçla yapılan yukarı-aşağı resize ayarları bozuluyordu.
+
+        guard !alreadyCustomerOnly else {
+            yenileCalismaAlaniHitbox(delay: 0.01)
+            if persist { persistWorkspaceCustomizationChange() }
+            return
+        }
+
+        isApplyingWorkspaceLayout = true
+        showCardPreview = false
+        showCardSummary = false
+        showCardCustomer = true
+        showCardDelivery = false
+        showCardCommunication = false
+        showCardNotes = false
+        showCardFinancial = false
+        showCardStatus = false
+        showCardShipping = false
+        showCardSchedule = false
+        showCardHistoryLog = false
+        showCardClientFiles = false
+        showCardToDo = false
+        showCardWorkTime = false
+        showCardCustomerNotes = false
+        showCardMaterials = false
+        showCardPriority = false
+        DispatchQueue.main.async { isApplyingWorkspaceLayout = false }
+
+        yenileCalismaAlaniHitbox(delay: 0.01)
+        if persist {
+            persistWorkspaceCustomizationChange()
+        }
+        #endif
+    }
+
+    private func arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded() {
+        #if os(macOS)
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 4 || macFirstProjectGuideStep == 5 || macFirstProjectGuideStep == 6 else { return }
+
+        while kartYerlesimi.count < 2 { kartYerlesimi.append([]) }
+        for index in kartYerlesimi.indices {
+            kartYerlesimi[index].removeAll { $0 == .financial }
+        }
+        if !kartYerlesimi[0].contains(.customer) {
+            kartYerlesimi[0].insert(.customer, at: 0)
+        }
+        kartYerlesimi[1].insert(.financial, at: 0)
+        while sutunGenislikleri.count < kartYerlesimi.count { sutunGenislikleri.append(350) }
+        if sutunGenislikleri.indices.contains(0), sutunGenislikleri[0] < 350 { sutunGenislikleri[0] = 350 }
+        if sutunGenislikleri.indices.contains(1), sutunGenislikleri[1] < 350 { sutunGenislikleri[1] = 350 }
+        // Financial Info kartının kayıtlı yüksekliğine dokunma.
+        // Rehber balonu overlay olarak konumlanır; kartın manuel resize değeri korunur.
+        yenileCalismaAlaniHitbox(delay: 0.01)
+        #endif
+    }
+
+    private func continueMacFirstProjectGuideFromCustomerCard() {
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 2 else { return }
+        enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: true)
+        withAnimation(.snappy) {
+            macFirstProjectGuideStep = 3
+        }
+        saveMacFirstProjectGuideState()
+    }
+
+    private func continueMacFirstProjectGuideAfterFinancialInfoEnabled() {
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 4 else { return }
+        arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded()
+        withAnimation(.snappy) {
+            macFirstProjectGuideStep = 5
+            showWidgetMenu = false
+        }
+        saveMacFirstProjectGuideState()
+        persistWorkspaceCustomizationChange()
+    }
+
+    private func continueMacFirstProjectGuideToFinancialCardActions() {
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 5 else { return }
+        arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded()
+        withAnimation(.snappy) {
+            macFirstProjectGuideStep = 6
+        }
+        saveMacFirstProjectGuideState()
+    }
+
+    private func completeMacFirstProjectGuideFromFinancialCardActions() {
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 6 else { return }
+        applyMacFirstProjectGuideFinalThreeColumnLayout()
+        withAnimation(.snappy) {
+            macFirstProjectGuideCompleted = true
+            macFirstProjectGuideActive = false
+            macFirstProjectGuideStep = 0
+        }
+        saveMacFirstProjectGuideState()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            applyMacFirstProjectGuideFinalThreeColumnLayout()
+        }
+    }
+
+    private func applyMacFirstProjectGuideFinalThreeColumnLayout() {
+        #if os(macOS)
+        workspaceCardsLocked = false
+
+        isApplyingWorkspaceLayout = true
+        showCardPreview = false
+        showCardSummary = false
+        showCardCustomer = true
+        showCardDelivery = false
+        showCardCommunication = false
+        showCardNotes = false
+        showCardFinancial = true
+        showCardStatus = false
+        showCardShipping = false
+        showCardSchedule = false
+        showCardHistoryLog = false
+        showCardClientFiles = false
+        showCardToDo = false
+        showCardWorkTime = false
+        showCardCustomerNotes = false
+        showCardMaterials = false
+        showCardPriority = false
+
+        kartYerlesimi = [
+            [.customer],
+            [.financial],
+            []
+        ]
+
+        while sutunGenislikleri.count < 3 { sutunGenislikleri.append(350) }
+        if sutunGenislikleri.count > 3 {
+            sutunGenislikleri = Array(sutunGenislikleri.prefix(3))
+        }
+        for index in sutunGenislikleri.indices {
+            sutunGenislikleri[index] = min(max(sutunGenislikleri[index], 320), 520)
+        }
+
+        DispatchQueue.main.async { isApplyingWorkspaceLayout = false }
+        kaydetSutunGenislikleri()
+        kaydetKartYerlesimi()
+        persistWorkspaceCustomizationChange()
+        yenileCalismaAlaniHitbox(delay: 0.01)
+        #endif
+    }
+
+    private func completeMacFirstProjectGuideFromFinancialCard() {
+        loadMacFirstProjectGuideState()
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 5 else { return }
+        // Keep the guided starter workspace minimal. Do not open every card automatically.
+        // Users can later enable any other cards from Actions > Customize.
+        arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded()
+        compactVisibleWorkspaceCardsIntoFirstThreeColumns()
+        withAnimation(.snappy) {
+            macFirstProjectGuideCompleted = true
+            macFirstProjectGuideActive = false
+            macFirstProjectGuideStep = 0
+        }
+        saveMacFirstProjectGuideState()
+        kaydetKartYerlesimi()
+        kaydetSutunGenislikleri()
+        persistWorkspaceCustomizationChange()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            compactVisibleWorkspaceCardsIntoFirstThreeColumns()
+            persistWorkspaceCustomizationChange()
+        }
+    }
+
+    private func compactVisibleWorkspaceCardsIntoFirstThreeColumns() {
+        #if os(macOS)
+        let preferredOrder: [KartTipi] = [
+            .preview, .summary, .customer, .delivery, .materials, .priority,
+            .notes, .clientFiles, .todo, .workTime,
+            .financial, .status, .shipping, .schedule, .historyLog, .customerNotes
+        ]
+
+        let currentlyVisible = Set(allCardsFlatUnique.filter { isCardVisible($0) })
+        let orderedVisible = preferredOrder.filter { currentlyVisible.contains($0) }
+        guard !orderedVisible.isEmpty else { return }
+
+        var columns: [[KartTipi]] = [[], [], []]
+        for (index, card) in orderedVisible.enumerated() {
+            columns[index % 3].append(card)
+        }
+
+        // Preserve any unknown/future card values, but still keep them inside the first 3 columns.
+        let known = Set(orderedVisible)
+        let extraVisibleCards = allCardsFlatUnique.filter { currentlyVisible.contains($0) && !known.contains($0) }
+        for card in extraVisibleCards {
+            let targetIndex = columns.enumerated().min(by: { $0.element.count < $1.element.count })?.offset ?? 0
+            columns[targetIndex].append(card)
+        }
+
+        isApplyingWorkspaceLayout = true
+        kartYerlesimi = columns
+        if sutunGenislikleri.count < 3 {
+            while sutunGenislikleri.count < 3 { sutunGenislikleri.append(350) }
+        } else if sutunGenislikleri.count > 3 {
+            sutunGenislikleri = Array(sutunGenislikleri.prefix(3))
+        }
+        for index in sutunGenislikleri.indices {
+            sutunGenislikleri[index] = Swift.min(Swift.max(sutunGenislikleri[index], CGFloat(320)), CGFloat(520))
+        }
+        DispatchQueue.main.async { isApplyingWorkspaceLayout = false }
+        kaydetKartYerlesimi()
+        kaydetSutunGenislikleri()
+        yenileCalismaAlaniHitbox(delay: 0.01)
+        #endif
+    }
 
     private func workspaceAccessAllows(_ key: String) -> Bool {
         authVM.currentWorkspaceAccess[key] ?? true
@@ -1089,7 +1407,34 @@ struct SiparisDetayView: View {
         #else
         orderDetailHeaderContent
             .popover(isPresented: $showWidgetMenu, arrowEdge: .bottom) {
-                customizePopoverContent
+                ScrollViewReader { scrollProxy in
+                    ZStack(alignment: .topTrailing) {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            customizePopoverContent
+                        }
+                        .frame(width: CGFloat(540), height: CGFloat(680), alignment: .topLeading)
+                        .onAppear {
+                            scrollCustomizePopoverToFinancialIfNeeded(scrollProxy)
+                        }
+
+                        if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 4 {
+                            StudioFirstRunGuideBubble(
+                                stepText: "4 / 6",
+                                title: t("Turn on Financial Info", lang: seciliDil),
+                                message: t("Enable the Financial Info card here. It will appear in the project workspace.", lang: seciliDil),
+                                primaryTitle: nil,
+                                secondaryTitle: t("Skip", lang: seciliDil),
+                                onPrimary: nil,
+                                onSkip: completeMacFirstProjectGuide
+                            )
+                            .padding(.top, 16)
+                            .padding(.trailing, 16)
+                            .zIndex(999)
+                        }
+                    }
+                    .frame(width: CGFloat(540), height: CGFloat(680), alignment: .topLeading)
+                    .zIndex(999)
+                }
             }
         #endif
     }
@@ -1109,6 +1454,22 @@ struct SiparisDetayView: View {
             cardLayoutLockButton
             orderDetailActionsMenu
         }
+        .overlay(alignment: .topTrailing) {
+            if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 3 {
+                StudioFirstRunGuideBubble(
+                    stepText: "4 / 6",
+                    title: t("Open Actions", lang: seciliDil),
+                    message: t("Click Actions in the top-right corner, then choose Customize.", lang: seciliDil),
+                    primaryTitle: nil,
+                    secondaryTitle: t("Skip", lang: seciliDil),
+                    onPrimary: nil,
+                    onSkip: completeMacFirstProjectGuide
+                )
+                .padding(.top, 44)
+                .zIndex(999)
+            }
+        }
+        .zIndex(999)
         .padding(.horizontal, isPhoneLayout ? 12 : 20)
         .padding(.vertical, isPhoneLayout ? 7 : 14)
         .background(colorScheme == .dark ? Color(white: 0.08) : Color.white.opacity(0.92))
@@ -1236,8 +1597,34 @@ struct SiparisDetayView: View {
         }
     }
 
+    private var canToggleCardLayoutLock: Bool {
+        authVM.currentPlanEntitlements.cardCustomizationEnabled
+    }
+
+    private var cardLayoutAppearsLocked: Bool {
+        workspaceCardsLocked || !canToggleCardLayoutLock
+    }
+
+    private func enforceCardLayoutLockForCurrentPlan() {
+        guard !canToggleCardLayoutLock, workspaceCardsLocked == false else { return }
+        workspaceCardsLocked = true
+        draggedKart = nil
+        CardDragCoordinator.shared.endSession()
+    }
+
     private var cardLayoutLockButton: some View {
         Button {
+            guard canToggleCardLayoutLock else {
+                withAnimation(.snappy) {
+                    workspaceCardsLocked = true
+                    draggedKart = nil
+                }
+                CardDragCoordinator.shared.endSession()
+                PlatformCursor.arrowSet()
+                showCardLayoutLockedByPlanAlert = true
+                return
+            }
+
             withAnimation(.snappy) {
                 workspaceCardsLocked.toggle()
                 draggedKart = nil
@@ -1246,42 +1633,47 @@ struct SiparisDetayView: View {
             PlatformCursor.arrowSet()
         } label: {
             if isPhoneLayout {
-                Image(systemName: workspaceCardsLocked ? "lock.fill" : "lock.open.fill")
+                Image(systemName: cardLayoutAppearsLocked ? "lock.fill" : "lock.open.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(canToggleCardLayoutLock ? .secondary : .orange)
                     .frame(width: 34, height: 34)
-                    .background(Color.primary.opacity(0.055))
+                    .background((canToggleCardLayoutLock ? Color.primary : Color.orange).opacity(canToggleCardLayoutLock ? 0.055 : 0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.primary.opacity(workspaceCardsLocked ? 0.14 : 0.08), lineWidth: 1)
+                            .stroke((canToggleCardLayoutLock ? Color.primary : Color.orange).opacity(cardLayoutAppearsLocked ? 0.22 : 0.08), lineWidth: 1)
                     )
             } else {
                 HStack(spacing: 7) {
-                    Image(systemName: workspaceCardsLocked ? "lock.fill" : "lock.open.fill")
-                    Text(t(workspaceCardsLocked ? "Cards Locked" : "Cards Unlocked", lang: seciliDil))
+                    Image(systemName: cardLayoutAppearsLocked ? "lock.fill" : "lock.open.fill")
+                    Text(t(cardLayoutAppearsLocked ? "Cards Locked" : "Cards Unlocked", lang: seciliDil))
                 }
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.055))
-                .foregroundColor(.secondary)
+                .background((canToggleCardLayoutLock ? Color.primary : Color.orange).opacity(canToggleCardLayoutLock ? 0.055 : 0.12))
+                .foregroundColor(canToggleCardLayoutLock ? .secondary : .orange)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.primary.opacity(workspaceCardsLocked ? 0.14 : 0.08), lineWidth: 1)
+                        .stroke((canToggleCardLayoutLock ? Color.primary : Color.orange).opacity(cardLayoutAppearsLocked ? 0.22 : 0.08), lineWidth: 1)
                 )
             }
         }
         .buttonStyle(.plain)
-        .help(t(workspaceCardsLocked ? "Unlock cards" : "Lock cards", lang: seciliDil))
-        .accessibilityLabel(t(workspaceCardsLocked ? "Unlock cards" : "Lock cards", lang: seciliDil))
+        .help(t(canToggleCardLayoutLock ? (cardLayoutAppearsLocked ? "Unlock cards" : "Lock cards") : "Card layout customisation is locked on Free Demo.", lang: seciliDil))
+        .accessibilityLabel(t(cardLayoutAppearsLocked ? "Cards Locked" : "Cards Unlocked", lang: seciliDil))
     }
 
     private var orderDetailActionsMenu: some View {
         Menu {
             Button {
                 showWidgetMenu = true
+                loadMacFirstProjectGuideState()
+                if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 3 {
+                    macFirstProjectGuideStep = 4
+                    saveMacFirstProjectGuideState()
+                }
             } label: {
                 Label(t("Customize", lang: seciliDil), systemImage: "slider.horizontal.3")
             }
@@ -1312,6 +1704,7 @@ struct SiparisDetayView: View {
                 .cornerRadius(8)
             }
         }
+        .studioFirstRunGuideHighlight(shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 3)
         .menuStyle(.borderlessButton)
     }
 
@@ -1412,7 +1805,7 @@ struct SiparisDetayView: View {
             }
         }
         .background(orderDetailAutosaveObservers)
-        .onAppear { yukleSutunGenislikleri(); yukleHafiza(); ensureSharedWorkspaceSnapshot(); loadWorkspaceProfiles(); loadWorkspaceUserProfiles(); migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded(); startWorkspaceProfilesCloudListener(); startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); refreshSharedClientFilesInbox(); if siparis.taxRate == 0 { siparis.taxRate = defaultTaxRate }; otomatikKesintiHesapla() }
+        .onAppear { loadMacFirstProjectGuideState(forceReload: true); yukleSutunGenislikleri(); yukleHafiza(); enforceCardLayoutLockForCurrentPlan(); ensureSharedWorkspaceSnapshot(); loadWorkspaceProfiles(); loadWorkspaceUserProfiles(); migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded(); startWorkspaceProfilesCloudListener(); startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); refreshSharedClientFilesInbox(); if siparis.taxRate == 0 { siparis.taxRate = defaultTaxRate }; otomatikKesintiHesapla(); enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: true); arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded() }
         .onOpenURL { url in
             let scheme = url.scheme?.lowercased() ?? ""
             if scheme == "studioflow" || scheme == "nivadesk" {
@@ -1422,7 +1815,14 @@ struct SiparisDetayView: View {
                 }
             }
         }
-        .onChange(of: siparis.id) { _, _ in startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); otomatikKesintiHesapla() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("StudioFlowMacFirstProjectGuideStateChanged"))) { _ in
+            loadMacFirstProjectGuideState(forceReload: true)
+            enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: false)
+            arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded()
+            yenileCalismaAlaniHitbox(delay: 0.01)
+        }
+        .onChange(of: siparis.id) { _, _ in startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); otomatikKesintiHesapla(); enforceCardLayoutLockForCurrentPlan(); loadMacFirstProjectGuideState(forceReload: true); enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: false); arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded() }
+        .onChange(of: authVM.currentBillingPlan) { _, _ in enforceCardLayoutLockForCurrentPlan() }
         .onChange(of: siparis.customFields?[orderWorkspaceLayoutKey]) { _, _ in loadWorkspaceForCurrentOrderIfNeeded() }
         .onChange(of: siparis.paymentDate) { _, yeniTarih in if taxMilestoneEnabled { let milat = Date(timeIntervalSince1970: taxMilestoneDate); let yeniTip = yeniTarih >= milat ? "Revenue" : "Profit"; if siparis.taxType != yeniTip { siparis.taxType = yeniTip; otomatikKesintiHesapla() } } }
         .onChange(of: siparis.status) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Order Status", oldValue: oldValue, newValue: newValue) }
@@ -1457,6 +1857,11 @@ struct SiparisDetayView: View {
             Button(t("OK", lang: seciliDil), role: .cancel) { }
         } message: {
             Text(uploadSafetyErrorMessage)
+        }
+        .alert(t("Cards are locked", lang: seciliDil), isPresented: $showCardLayoutLockedByPlanAlert) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(t("Card layout customisation is locked on Free Demo. You can use the cards, but moving, resizing and colour/layout changes are available from Lite and above.", lang: seciliDil))
         }
         .sheet(item: $pdfShareItem) { item in
             #if os(iOS)
@@ -1650,6 +2055,19 @@ struct SiparisDetayView: View {
         }
     }
 
+    private func customizePopoverScrollID(for kart: KartTipi) -> String {
+        "workspace-block-\(kart.rawValue)"
+    }
+
+    private func scrollCustomizePopoverToFinancialIfNeeded(_ proxy: ScrollViewProxy) {
+        guard shouldShowMacFirstProjectGuide, macFirstProjectGuideStep == 4 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(customizePopoverScrollID(for: .financial), anchor: .center)
+            }
+        }
+    }
+
     private var customizePopoverContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
@@ -1787,27 +2205,10 @@ struct SiparisDetayView: View {
                 }
 
                 VStack(spacing: 10) {
-                    workspaceBlockToggleRow(kart: .preview)
-                    workspaceBlockToggleRow(kart: .summary)
-                    workspaceBlockToggleRow(kart: .customer)
-                    workspaceBlockToggleRow(kart: .materials)
-                    workspaceBlockToggleRow(kart: .priority)
-                    workspaceBlockToggleRow(kart: .delivery)
-                    workspaceBlockToggleRow(kart: .notes)
-                    if canAccessClientFiles {
-                        workspaceBlockToggleRow(kart: .clientFiles)
+                    ForEach(alphabeticalWorkspaceBlockCards) { kart in
+                        workspaceBlockToggleRow(kart: kart)
+                            .id(customizePopoverScrollID(for: kart))
                     }
-                    workspaceBlockToggleRow(kart: .todo)
-                    workspaceBlockToggleRow(kart: .workTime)
-                    if canAccessFinancialInfo {
-                        workspaceBlockToggleRow(kart: .financial)
-                    }
-                    workspaceBlockToggleRow(kart: .status)
-                    workspaceBlockToggleRow(kart: .shipping)
-                    if workspaceAccessAllows("schedule") {
-                        workspaceBlockToggleRow(kart: .schedule)
-                    }
-                    workspaceBlockToggleRow(kart: .historyLog)
                 }
             }
         }
@@ -1825,6 +2226,44 @@ struct SiparisDetayView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.06), lineWidth: 1)
             )
+    }
+
+    private var alphabeticalWorkspaceBlockCards: [KartTipi] {
+        let cards: [KartTipi] = [
+            .preview,
+            .summary,
+            .customer,
+            .materials,
+            .priority,
+            .delivery,
+            .notes,
+            .clientFiles,
+            .todo,
+            .workTime,
+            .financial,
+            .status,
+            .shipping,
+            .schedule,
+            .historyLog
+        ]
+
+        return cards
+            .filter { kart in
+                switch kart {
+                case .clientFiles:
+                    return canAccessClientFiles
+                case .financial:
+                    return canAccessFinancialInfo
+                case .schedule:
+                    return workspaceAccessAllows("schedule")
+                default:
+                    return true
+                }
+            }
+            .sorted { first, second in
+                workspaceBlockTitle(for: first)
+                    .localizedCaseInsensitiveCompare(workspaceBlockTitle(for: second)) == .orderedAscending
+            }
     }
 
     private func workspaceBlockTitle(for kart: KartTipi) -> String {
@@ -1975,7 +2414,18 @@ struct SiparisDetayView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05), lineWidth: 1)
+                .stroke(
+                    (shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 4 && kart == .financial)
+                    ? Color.blue
+                    : Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05),
+                    lineWidth: (shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 4 && kart == .financial) ? 3 : 1
+                )
+        )
+        .shadow(
+            color: (shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 4 && kart == .financial) ? Color.blue.opacity(0.32) : .clear,
+            radius: (shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 4 && kart == .financial) ? 12 : 0,
+            x: 0,
+            y: 0
         )
     }
 
@@ -2155,6 +2605,13 @@ struct SiparisDetayView: View {
                     ForEach(workspaceColumnIndicesForDisplay(), id: \.self) { colIndex in
                         workspaceColumnView(colIndex: colIndex, viewportHeight: geo.size.height)
 
+                        if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 2 && colIndex == 0 {
+                            Spacer()
+                                .frame(width: 14)
+                            macFirstProjectGuideCustomerInfoColumn(viewportHeight: geo.size.height)
+                                .zIndex(50)
+                        }
+
                         if colIndex < workspaceLastVisibleColumnIndexForDisplay() {
                             SutunAyirici(width: getBinding(for: colIndex)) {
                                 saveWidths()
@@ -2247,16 +2704,58 @@ struct SiparisDetayView: View {
         return kartYerlesimi[colIndex].filter { isCardVisible($0) }
     }
 
+    private func macFirstProjectGuideCustomerInfoColumn(viewportHeight: CGFloat) -> some View {
+        let columnHeight = Swift.max(viewportHeight - CGFloat(60), CGFloat(520))
+
+        return VStack(alignment: .leading, spacing: 0) {
+            StudioFirstRunGuideBubble(
+                stepText: "3 / 6",
+                title: t("Customer & Communication", lang: seciliDil),
+                message: t("This is where customer name, design name, email, phone and address are kept for the project.", lang: seciliDil),
+                primaryTitle: t("Next", lang: seciliDil),
+                secondaryTitle: t("Skip", lang: seciliDil),
+                onPrimary: continueMacFirstProjectGuideFromCustomerCard,
+                onSkip: completeMacFirstProjectGuide
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
+        .frame(width: CGFloat(340), alignment: .topLeading)
+        .frame(minHeight: columnHeight, alignment: .topLeading)
+    }
+
+
+    private var macFirstProjectGuideFinancialCardBubble: some View {
+        StudioFirstRunGuideBubble(
+            stepText: "5 / 6",
+            title: t("Financial Info is now open", lang: seciliDil),
+            message: t("This card is where paid amount, costs, remaining balance and profit are tracked for the project.", lang: seciliDil),
+            primaryTitle: t("Next", lang: seciliDil),
+            secondaryTitle: t("Skip", lang: seciliDil),
+            onPrimary: continueMacFirstProjectGuideToFinancialCardActions,
+            onSkip: completeMacFirstProjectGuide
+        )
+        .frame(width: CGFloat(300), alignment: .leading)
+        // Keep the guide bubble below the plan / availability notice so the
+        // user can still understand that Financial Info is a gated card state.
+        .padding(.top, 220)
+        .padding(.leading, 20)
+        .zIndex(999)
+        .allowsHitTesting(true)
+    }
+
     @ViewBuilder
     private func workspaceColumnView(colIndex: Int, viewportHeight: CGFloat) -> some View {
         let cards = visibleCards(in: colIndex)
         let isEmptyDropTarget = showWorkspaceEmptyDropTargets && draggedKart != nil && cards.isEmpty
-        let minColumnHeight = max(viewportHeight - 60, 520)
+        let minColumnHeight = Swift.max(viewportHeight - 60, CGFloat(520))
         let visibleCardHeights = cards.reduce(CGFloat(0)) { total, kart in
             total + CGFloat(kartYukseklikleri[kart.rawValue] ?? varsayilanKartYuksekligi(for: kart))
         }
-        let visibleGapHeights = CGFloat(max(cards.count - 1, 0)) * 20
-        let bottomPanHeight = max(80, minColumnHeight - visibleCardHeights - visibleGapHeights)
+        let visibleGapHeights = CGFloat(Swift.max(cards.count - 1, 0)) * 20
+        let bottomPanHeight = Swift.max(CGFloat(80), minColumnHeight - visibleCardHeights - visibleGapHeights)
 
         if draggedKart == nil {
             workspaceColumnContent(cards: cards, colIndex: colIndex, bottomPanHeight: bottomPanHeight)
@@ -2406,9 +2905,11 @@ struct SiparisDetayView: View {
             toplam + CGFloat(getWidth(for: index))
         }
 
+        let guideColumnWidth: CGFloat = (shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 2) ? 354 : 0
         let toplamGenislik =
             toplamKolonGenisligi +
             CGFloat(max(0, hesaplanacakKolonSayisi - 1)) * ayiriciGenisligi +
+            guideColumnWidth +
             padding
 
         let kolonYukseklikleri = aktifKolonIndexleri.map { index -> CGFloat in
@@ -2516,7 +3017,12 @@ struct SiparisDetayView: View {
     private func visibilityBinding(for kart: KartTipi) -> Binding<Bool> {
         Binding(
             get: { isCardVisible(kart) },
-            set: { newValue in setCardVisible(kart, newValue) }
+            set: { newValue in
+                setCardVisible(kart, newValue)
+                if kart == .financial && newValue {
+                    continueMacFirstProjectGuideAfterFinancialInfoEnabled()
+                }
+            }
         )
     }
 
@@ -2744,6 +3250,7 @@ struct SiparisDetayView: View {
         if sutunGenislikleri.indices.contains(2) { savedColRight = sutunGenislikleri[2] }
 
         isApplyingWorkspaceLayout = false
+        enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: false)
         yenileCalismaAlaniHitbox(delay: 0.02)
     }
 
@@ -3911,11 +4418,21 @@ struct SiparisDetayView: View {
             switch kart {
             case .preview: previewKarti(colIndex: colIndex)
             case .summary: summaryKarti(colIndex: colIndex)
-            case .customer: customerKarti(colIndex: colIndex)
+            case .customer:
+                customerKarti(colIndex: colIndex)
+                    .studioFirstRunGuideHighlight(shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 2)
+                    .zIndex((shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 2) ? 70 : 0)
             case .delivery: deliveryKarti(colIndex: colIndex)
             case .communication: communicationKarti(colIndex: colIndex)
             case .notes: notesKarti(colIndex: colIndex)
-            case .financial: financialKarti(colIndex: colIndex)
+            case .financial:
+                financialKarti(colIndex: colIndex)
+                    .overlay(alignment: .topLeading) {
+                        if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 5 {
+                            macFirstProjectGuideFinancialCardBubble
+                        }
+                    }
+                    .zIndex((shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 5) ? 80 : 0)
             case .status: statusKarti(colIndex: colIndex)
             case .shipping: shippingKarti(colIndex: colIndex)
             case .schedule: scheduleKarti(colIndex: colIndex)
@@ -3931,7 +4448,7 @@ struct SiparisDetayView: View {
     }
 
     private func planLockedKarti(for kart: KartTipi, colIndex: Int) -> some View {
-        return DetayKarti(
+        DetayKarti(
             title: workspaceBlockTitle(for: kart),
             iconName: cardHeaderIcon(for: kart),
             kartTipi: kart,
@@ -3955,6 +4472,12 @@ struct SiparisDetayView: View {
                 compact: false
             )
         }
+        .overlay(alignment: .topLeading) {
+            if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 5 && kart == .financial {
+                macFirstProjectGuideFinancialCardBubble
+            }
+        }
+        .zIndex((shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 5 && kart == .financial) ? 80 : 0)
     }
 
     private func lockedFeatureUpsellCard(
@@ -7856,6 +8379,8 @@ struct SiparisDetayView: View {
             draggedKart: $draggedKart,
             uiTetikleyici: uiTetikleyici,
             kartRengi: getKartColor(kart: .customer),
+            forceLayoutUnlocked: shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 2,
+            guideHighlightActive: shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 2,
             onHeightChangeEnd: kaydetKartYukseklikleri,
             onWidthChangeEnd: saveWidths,
             onHide: { setCardVisibleWithUndo(.customer, false) },
@@ -8441,6 +8966,11 @@ struct SiparisDetayView: View {
             draggedKart: $draggedKart,
             uiTetikleyici: uiTetikleyici,
             kartRengi: getKartColor(kart: .financial),
+            forceLayoutUnlocked: shouldShowMacFirstProjectGuide && (macFirstProjectGuideStep == 5 || macFirstProjectGuideStep == 6),
+            guideHighlightActive: shouldShowMacFirstProjectGuide && (macFirstProjectGuideStep == 5 || macFirstProjectGuideStep == 6),
+            guideOptionsHighlightActive: shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 6,
+            guideOptionsBubbleActive: shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 6,
+            onGuideOptionsDone: completeMacFirstProjectGuideFromFinancialCardActions,
             onHeightChangeEnd: kaydetKartYukseklikleri,
             onWidthChangeEnd: saveWidths,
             onHide: { setCardVisibleWithUndo(.financial, false) },
@@ -10224,6 +10754,11 @@ struct DetayKarti<Content: View>: View {
     var kartRengi: String // 🎨 KARTIN AKTİF RENGİ
     var minimumHeightOverride: Double? = nil
     var autoAdjustHeightOnContentChange: Bool = true
+    var forceLayoutUnlocked: Bool = false
+    var guideHighlightActive: Bool = false
+    var guideOptionsHighlightActive: Bool = false
+    var guideOptionsBubbleActive: Bool = false
+    var onGuideOptionsDone: (() -> Void)? = nil
     
     var onHeightChangeEnd: () -> Void
     var onWidthChangeEnd: () -> Void
@@ -10247,7 +10782,7 @@ struct DetayKarti<Content: View>: View {
     private let altTutamacAlani: Double = 16
     private let guvenlikPayi: Double = 8
     
-    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
+    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, forceLayoutUnlocked: Bool = false, guideHighlightActive: Bool = false, guideOptionsHighlightActive: Bool = false, guideOptionsBubbleActive: Bool = false, onGuideOptionsDone: (() -> Void)? = nil, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.iconName = iconName
         self.kartTipi = kartTipi
@@ -10258,6 +10793,11 @@ struct DetayKarti<Content: View>: View {
         self.kartRengi = kartRengi
         self.minimumHeightOverride = minimumHeightOverride
         self.autoAdjustHeightOnContentChange = autoAdjustHeightOnContentChange
+        self.forceLayoutUnlocked = forceLayoutUnlocked
+        self.guideHighlightActive = guideHighlightActive
+        self.guideOptionsHighlightActive = guideOptionsHighlightActive
+        self.guideOptionsBubbleActive = guideOptionsBubbleActive
+        self.onGuideOptionsDone = onGuideOptionsDone
         self.onHeightChangeEnd = onHeightChangeEnd
         self.onWidthChangeEnd = onWidthChangeEnd
         self.onHide = onHide
@@ -10330,7 +10870,33 @@ struct DetayKarti<Content: View>: View {
             .allowsHitTesting(false)
     }
     
-    private var etkiliMinimumBoy: Double { minimumHeightOverride ?? minimumBoy }
+    private var kartTipiMinimumBoyu: Double {
+        switch kartTipi {
+        case .preview: return previewMinBoyu
+        case .financial: return 430
+        case .schedule: return 390
+        case .clientFiles: return 360
+        case .todo: return 360
+        case .workTime: return 380
+        case .status: return 260
+        case .shipping: return 260
+        case .notes, .customerNotes: return 220
+        case .summary: return 210
+        case .customer: return 260
+        case .delivery: return 240
+        case .materials: return 260
+        case .priority: return 240
+        case .communication: return 220
+        case .historyLog: return 240
+        }
+    }
+
+    private var etkiliMinimumBoy: Double {
+        if let minimumHeightOverride {
+            return Swift.max(minimumHeightOverride, kartTipiMinimumBoyu)
+        }
+        return Swift.max(minimumBoy, kartTipiMinimumBoyu)
+    }
     private var etkiliYukseklik: Double { max(etkiliMinimumBoy, yukseklik ?? etkiliMinimumBoy) }
     private var shouldAutoAdjustHeightForContent: Bool {
         #if os(macOS)
@@ -10410,6 +10976,10 @@ struct DetayKarti<Content: View>: View {
     private var canCustomizeThisCard: Bool {
         let plan = StudioBillingPlan(rawValue: storedBillingPlan) ?? .teamMonthly
         return plan.entitlements.cardCustomizationEnabled
+    }
+
+    private var effectiveWorkspaceCardsLocked: Bool {
+        workspaceCardsLocked && !forceLayoutUnlocked
     }
 
     @ViewBuilder
@@ -10657,7 +11227,7 @@ struct DetayKarti<Content: View>: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showCardOptionsPopover, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 kartContextMenuActions
             }
             .padding(12)
@@ -10673,11 +11243,47 @@ struct DetayKarti<Content: View>: View {
         #endif
     }
 
+    @ViewBuilder
+    private var cardOptionsGuideFloatingCallout: some View {
+        #if os(macOS)
+        if guideOptionsBubbleActive {
+            StudioFirstRunGuideBubble(
+                stepText: "6 / 6",
+                title: t("Card actions", lang: seciliDil),
+                message: t("Click the three-dot button to hide this card, edit its block headings, export when available, and change the card colour.", lang: seciliDil),
+                primaryTitle: t("Done", lang: seciliDil),
+                secondaryTitle: t("Skip", lang: seciliDil),
+                onPrimary: {
+                    showCardOptionsPopover = false
+                    onGuideOptionsDone?()
+                },
+                onSkip: {
+                    showCardOptionsPopover = false
+                    onGuideOptionsDone?()
+                }
+            )
+            .frame(width: 330, alignment: .leading)
+            .offset(x: -24, y: 64)
+            .zIndex(1000)
+            .allowsHitTesting(true)
+        }
+        #endif
+    }
+
     private var cardOptionsIcon: some View {
-        Image(systemName: "ellipsis.circle")
+        Image(systemName: guideOptionsHighlightActive ? "ellipsis.circle.fill" : "ellipsis.circle")
             .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(.gray.opacity(0.75))
-            .padding(6)
+            .foregroundColor(guideOptionsHighlightActive ? .blue : .gray.opacity(0.75))
+            .padding(8)
+            .background(
+                Circle()
+                    .fill(guideOptionsHighlightActive ? Color.blue.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                Circle()
+                    .stroke(guideOptionsHighlightActive ? Color.blue : Color.clear, lineWidth: guideOptionsHighlightActive ? 3 : 0)
+                    .shadow(color: Color.blue.opacity(guideOptionsHighlightActive ? 0.45 : 0), radius: 10, x: 0, y: 0)
+            )
             .contentShape(Rectangle())
     }
 
@@ -10686,7 +11292,7 @@ struct DetayKarti<Content: View>: View {
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                if workspaceCardsLocked || !canCustomizeThisCard {
+                if effectiveWorkspaceCardsLocked || !canCustomizeThisCard {
                     lockedCardHandle
                 } else if isPhoneLayout {
                     phoneMoveMenuHandle
@@ -10787,7 +11393,7 @@ struct DetayKarti<Content: View>: View {
                 .frame(maxWidth: .infinity)
                 .background(WorkspacePanSurface())
             
-            if workspaceCardsLocked || !canCustomizeThisCard {
+            if effectiveWorkspaceCardsLocked || !canCustomizeThisCard {
                 Color.clear
                     .frame(height: 8)
             } else {
@@ -10901,12 +11507,24 @@ struct DetayKarti<Content: View>: View {
         .background(cardHighlightOverlay)
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(borderColor, lineWidth: 1.5)) // 🌟 KARTIN DİNAMİK ÇİZGİSİ 🌟
+        .overlay {
+            if guideHighlightActive {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.blue, lineWidth: 3)
+                    .shadow(color: Color.blue.opacity(0.45), radius: 14, x: 0, y: 0)
+                    .padding(-5)
+                    .allowsHitTesting(false)
+            }
+        }
         .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
         .opacity(draggedKart == kartTipi ? 0.86 : 1.0)
         .animation(.snappy, value: kartRengi)
         .clipped()
+        .overlay(alignment: .topTrailing) {
+            cardOptionsGuideFloatingCallout
+        }
         .overlay(alignment: .trailing) {
-            if !isPhoneLayout && !workspaceCardsLocked {
+            if !isPhoneLayout && !effectiveWorkspaceCardsLocked {
                 Rectangle()
                     .fill(Color.clear)
                     .frame(width: 8)
@@ -10929,7 +11547,7 @@ struct DetayKarti<Content: View>: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if !isPhoneLayout && !workspaceCardsLocked {
+            if !isPhoneLayout && !effectiveWorkspaceCardsLocked {
                 Image(systemName: "circle.grid.2x2.fill")
                     .font(.system(size: 11))
                     .foregroundColor(.gray.opacity(0.3))

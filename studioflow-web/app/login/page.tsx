@@ -41,7 +41,7 @@ function LoginPageContent() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
+    if (!loading && user) router.replace("/orders");
   }, [loading, router, user]);
 
   async function handleEmailLogin(event: FormEvent) {
@@ -50,7 +50,7 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace("/dashboard");
+      router.replace("/orders");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : t("login.errorLoginFailed"));
     } finally {
@@ -63,7 +63,7 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      router.replace("/dashboard");
+      router.replace("/orders");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : t("login.errorGoogleFailed"));
     } finally {

@@ -1013,8 +1013,9 @@ class FirebaseManager: ObservableObject {
         }
     }
 
-    func addSiparis(_ siparis: Siparis) {
-        guard !currentCompanyId.isEmpty else { print("Company ID is not configured."); return }
+    @discardableResult
+    func addSiparis(_ siparis: Siparis) -> Siparis? {
+        guard !currentCompanyId.isEmpty else { print("Company ID is not configured."); return nil }
         var yeniSiparis = siparis
         yeniSiparis.companyId = currentCompanyId
         let ref = db.collection("siparisler").document()
@@ -1024,7 +1025,7 @@ class FirebaseManager: ObservableObject {
             createSiparisThroughCallable(yeniSiparis, documentId: ref.documentID)
             upsertLocalSiparis(yeniSiparis)
             registerAction(.addedSiparis(yeniSiparis))
-            return
+            return yeniSiparis
         }
 
         do {
@@ -1035,7 +1036,11 @@ class FirebaseManager: ObservableObject {
             withHistorySuspended {
                 musteriKontrolVeOlustur(siparis: yeniSiparis)
             }
-        } catch { print("Hata: \(error)") }
+            return yeniSiparis
+        } catch {
+            print("Hata: \(error)")
+            return nil
+        }
     }
 
     private func createSiparisThroughCallable(_ siparis: Siparis, documentId: String) {

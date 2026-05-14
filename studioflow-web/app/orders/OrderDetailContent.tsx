@@ -62,6 +62,12 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import {
+  FIRST_PROJECT_GUIDE_EVENT,
+  broadcastFirstProjectGuideState,
+  readCurrentFirstProjectGuideState,
+  type FirstProjectGuideState
+} from "@/lib/studioflow/firstProjectGuide";
 
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
 const ORDER_HEADER_SHOW_DELIVERY_TIME_KEY = "orderDetailHeaderShowDeliveryTime";
@@ -1461,6 +1467,82 @@ export function OrderDetailContent({
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
+  const customerCardRef = useRef<HTMLElement | null>(null);
+  const [customerGuideStyle, setCustomerGuideStyle] = useState<CSSProperties | null>(null);
+
+  useEffect(() => {
+    setFirstProjectGuide(readCurrentFirstProjectGuideState());
+    function handleGuideUpdate(event: Event) {
+      const next = (event as CustomEvent<FirstProjectGuideState>).detail;
+      if (next) setFirstProjectGuide(next);
+    }
+    window.addEventListener(FIRST_PROJECT_GUIDE_EVENT, handleGuideUpdate);
+    return () => window.removeEventListener(FIRST_PROJECT_GUIDE_EVENT, handleGuideUpdate);
+  }, []);
+
+  const showCustomerGuide = Boolean(
+    firstProjectGuide &&
+    !firstProjectGuide.completed &&
+    firstProjectGuide.step === 3 &&
+    firstProjectGuide.orderId === order?.id
+  );
+  const restrictToCustomerOnly = Boolean(
+    firstProjectGuide &&
+    !firstProjectGuide.completed &&
+    (firstProjectGuide.step === 2 || firstProjectGuide.step === 3) &&
+    firstProjectGuide.orderId === order?.id
+  );
+
+  useEffect(() => {
+    if (!showCustomerGuide) {
+      setCustomerGuideStyle(null);
+      return;
+    }
+    let frame = 0;
+    let observer: ResizeObserver | null = null;
+    let interval = 0;
+    function update() {
+      const el = customerCardRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 40 || rect.height < 40) return;
+      const vw = window.innerWidth || 1024;
+      const vh = window.innerHeight || 720;
+      const width = Math.min(340, Math.max(280, vw - 32));
+      const left = Math.max(16, Math.min(rect.right + 16, vw - width - 16));
+      const preferredTop = rect.top;
+      const top = preferredTop + 260 < vh
+        ? preferredTop
+        : Math.max(16, vh - 280);
+      setCustomerGuideStyle({ left, top, width });
+    }
+    function tick() {
+      update();
+      frame = window.requestAnimationFrame(tick);
+    }
+    frame = window.requestAnimationFrame(tick);
+    // Stop the rAF loop after 1.5s to avoid burning cycles; observers/listeners keep it fresh.
+    interval = window.setTimeout(() => {
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+        frame = 0;
+      }
+    }, 1500);
+    if (typeof ResizeObserver !== "undefined" && customerCardRef.current) {
+      observer = new ResizeObserver(() => update());
+      observer.observe(customerCardRef.current);
+    }
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      if (interval) window.clearTimeout(interval);
+      if (observer) observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [showCustomerGuide, firstProjectGuide?.step, firstProjectGuide?.orderId]);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
   const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [headerPreferencesLoaded, setHeaderPreferencesLoaded] = useState(false);
@@ -1996,8 +2078,25 @@ export function OrderDetailContent({
       id: `column-${index}`,
       index,
       width: clampColumnWidth(cardLayout.columnWidths[index]),
-      cards: column.filter(cardId => cardLayout.visibility[cardId] && canShowOrderCard(cardId))
+      cards: column.filter(cardId =>
+        cardLayout.visibility[cardId] &&
+        canShowOrderCard(cardId) &&
+        (!restrictToCustomerOnly || cardId === "customer")
+      )
     }));
+
+    if (restrictToCustomerOnly) {
+      const hasCustomer = columns.some(col => col.cards.includes("customer"));
+      if (hasCustomer) {
+        columns.forEach(col => {
+          col.cards = col.cards.filter(cardId => cardId !== "customer");
+        });
+        if (columns.length === 0) {
+          columns.push({ id: "column-0", index: 0, width: clampColumnWidth(cardLayout.columnWidths[0]), cards: [] });
+        }
+        columns[0].cards = ["customer", ...columns[0].cards];
+      }
+    }
 
     let lastVisibleIndex = columns.findIndex(column => column.cards.length > 0);
     columns.forEach((column, index) => {
@@ -2022,10 +2121,14 @@ export function OrderDetailContent({
     }
 
     return columns.slice(0, columnCount);
-  }, [canSeeFinance, cardLayout, draggingCardId, workspace.memberAccess]);
+  }, [canSeeFinance, cardLayout, draggingCardId, workspace.memberAccess, restrictToCustomerOnly]);
   const visibleMobileCards = useMemo(
-    () => cardLayout.mobileCardOrder.filter(cardId => cardLayout.visibility[cardId] && canShowOrderCard(cardId)),
-    [canSeeFinance, cardLayout, workspace.memberAccess]
+    () => cardLayout.mobileCardOrder.filter(cardId =>
+      cardLayout.visibility[cardId] &&
+      canShowOrderCard(cardId) &&
+      (!restrictToCustomerOnly || cardId === "customer")
+    ),
+    [canSeeFinance, cardLayout, workspace.memberAccess, restrictToCustomerOnly]
   );
   const allCardsHidden = visibleMobileCards.length === 0;
   const customizeCardOrder = (isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder)
@@ -2136,29 +2239,15 @@ export function OrderDetailContent({
     }
     if (savingLayoutRef.current || resizingCardIdRef.current) return;
 
-    const currentUser = user;
-    let cancelled = false;
-    async function run() {
+    // Shared card layouts are now driven by the live companySettings listener below.
+    // Keeping the old one-off callable load here caused a race: the listener could
+    // receive the newest Mac/iPad layout, then the slower callable response would
+    // overwrite it with the previous layout, making the web UI look one step behind.
+    if (independentCardLayout) {
       setLayoutError(null);
-      try {
-        const loadedLayout = await loadOrderDetailCardLayout(currentUser.uid, workspace.id, order.id);
-        if (!cancelled && !savingLayoutRef.current && !resizingCardIdRef.current) {
-          setCardLayout(independentCardLayout ?? loadedLayout);
-          setLayoutReadyOrderId(order.id);
-        }
-      } catch (loadError) {
-        if (!cancelled && !savingLayoutRef.current && !resizingCardIdRef.current) {
-          setCardLayout(independentCardLayout ?? DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
-          setLayoutReadyOrderId(order.id);
-          setLayoutError(loadError instanceof Error ? loadError.message : "Could not load card layout.");
-        }
-      }
+      setCardLayout(independentCardLayout);
+      setLayoutReadyOrderId(order.id);
     }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
   }, [independentCardLayout, order.id, user, workspace.id]);
 
   useEffect(() => {
@@ -2188,6 +2277,40 @@ export function OrderDetailContent({
       }
     );
   }, [independentCardLayout, order.id, user, workspace.id, workspace.ownerUid]);
+
+  useEffect(() => {
+    if (!user || !workspace.id || !order.id) return;
+
+    // When an order uses an independent card layout, parent order lists can receive
+    // rapid Mac/iPad resize writes one update late. Listen to the selected order
+    // document directly so web applies every Mac resize/height update immediately.
+    const unsubscribe = onSnapshot(
+      doc(db, "siparisler", order.id),
+      snapshot => {
+        if (!snapshot.exists()) return;
+        const data = snapshot.data() as Record<string, unknown>;
+        if (typeof data.companyId === "string" && data.companyId && data.companyId !== workspace.id) return;
+
+        const customFields = data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+          ? data.customFields as Record<string, unknown>
+          : {};
+        const layoutJSON = customFields[ORDER_WORKSPACE_LAYOUT_KEY] ?? data[ORDER_WORKSPACE_LAYOUT_KEY];
+        const liveIndependentLayout = layoutFromOrderWorkspaceSnapshotJSON(layoutJSON, order.id);
+
+        if (!liveIndependentLayout) return;
+        if (savingLayoutRef.current || resizingCardIdRef.current) return;
+
+        setCardLayout(liveIndependentLayout);
+        setLayoutReadyOrderId(order.id);
+        setLayoutError(null);
+      },
+      () => {
+        // Keep the existing parent order data as a fallback if the direct listener is blocked.
+      }
+    );
+
+    return () => unsubscribe();
+  }, [order.id, user, workspace.id]);
 
   useEffect(() => {
     if (!workspace.id) {
@@ -4263,7 +4386,11 @@ export function OrderDetailContent({
       }
       case "customer":
         return (
-          <section key={cardId} className="card order-detail-card">
+          <section
+            key={cardId}
+            ref={node => { customerCardRef.current = node; }}
+            className={`card order-detail-card${showCustomerGuide ? " web-first-guide-customer-target" : ""}`}
+          >
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-customer-panel">
               <InlineValueRow
@@ -5981,6 +6108,57 @@ export function OrderDetailContent({
           </div>
         </>
       )}
+      {showCustomerGuide && customerGuideStyle ? (
+        <div className="web-first-guide-customer-bubble" role="note" style={customerGuideStyle}>
+          <span className="web-first-guide-eyebrow">{`${t("Step")} 3 / 6`}</span>
+          <strong>{t("Customer & Communication")}</strong>
+          <span>{t("This is where customer name, design name, email, phone and address are kept for the project.")}</span>
+          <span className="web-first-guide-actions">
+            <button type="button" onClick={() => broadcastFirstProjectGuideState({ step: 6, completed: true, orderId: order.id })}>{t("Skip")}</button>
+            <button type="button" className="primary" onClick={() => broadcastFirstProjectGuideState({ step: 4, orderId: order.id })}>{t("Next")}</button>
+          </span>
+          <style jsx global>{`
+            .web-first-guide-customer-target {
+              position: relative;
+              z-index: 35;
+              border-color: rgba(37, 99, 235, 0.9) !important;
+              box-shadow:
+                0 0 0 3px rgba(37, 99, 235, 0.9),
+                0 0 0 11px rgba(37, 99, 235, 0.18),
+                0 22px 54px rgba(37, 99, 235, 0.22) !important;
+            }
+            .web-first-guide-customer-bubble {
+              position: fixed;
+              z-index: 9999;
+              display: grid;
+              gap: 8px;
+              padding: 16px;
+              border-radius: 20px;
+              border: 3px solid rgba(37, 99, 235, 0.95);
+              background: linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99));
+              color: #0f172a;
+              box-shadow: 0 24px 70px rgba(37, 99, 235, 0.26), 0 0 0 7px rgba(37, 99, 235, 0.1);
+            }
+            .web-first-guide-customer-bubble strong { font-size: 1.05rem; line-height: 1.2; }
+            .web-first-guide-customer-bubble .web-first-guide-eyebrow {
+              width: fit-content; padding: 4px 10px; border-radius: 999px;
+              background: rgba(37, 99, 235, 0.13); color: #1d4ed8;
+              font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+            }
+            .web-first-guide-customer-bubble .web-first-guide-actions {
+              display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;
+            }
+            .web-first-guide-customer-bubble .web-first-guide-actions button {
+              border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 999px;
+              background: rgba(255, 255, 255, 0.86); color: #1d4ed8;
+              cursor: pointer; font-weight: 800; padding: 8px 12px;
+            }
+            .web-first-guide-customer-bubble .web-first-guide-actions button.primary {
+              background: #2563eb; color: white; border-color: #2563eb;
+            }
+          `}</style>
+        </div>
+      ) : null}
     </div>
   );
 }
