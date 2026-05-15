@@ -28,6 +28,7 @@ struct AyarlarView: View {
     @State private var supportTicketTitle: String = ""
     @State private var supportTicketMessageText: String = ""
     @State private var supportReplyDrafts: [String: String] = [:]
+    @State private var supportOpenConversationIds: Set<String> = []
     private let canEditWorkspace: Bool
 
     init(startSection: String = "Theme & Brand", canEditWorkspace: Bool = true) {
@@ -596,20 +597,40 @@ struct AyarlarView: View {
                     Text(t("Where should this ticket go?", lang: seciliDil))
                         .font(.system(size: 17, weight: .bold))
 
-                    HStack(spacing: 12) {
-                        supportDestinationCard(
-                            key: "workspace",
-                            title: t("Contact Workspace Owner", lang: seciliDil),
-                            subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: seciliDil),
-                            icon: "person.2.badge.gearshape.fill"
-                        )
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            supportDestinationCard(
+                                key: "workspace",
+                                title: t("Contact Workspace Owner", lang: seciliDil),
+                                subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: seciliDil),
+                                icon: "person.2.badge.gearshape.fill"
+                            )
+                            .frame(minWidth: 320)
 
-                        supportDestinationCard(
-                            key: "appSupport",
-                            title: t("Contact NivaDesk Support", lang: seciliDil),
-                            subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: seciliDil),
-                            icon: "lifepreserver.fill"
-                        )
+                            supportDestinationCard(
+                                key: "appSupport",
+                                title: t("Contact NivaDesk Support", lang: seciliDil),
+                                subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: seciliDil),
+                                icon: "lifepreserver.fill"
+                            )
+                            .frame(minWidth: 320)
+                        }
+
+                        VStack(spacing: 10) {
+                            supportDestinationCard(
+                                key: "workspace",
+                                title: t("Contact Workspace Owner", lang: seciliDil),
+                                subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: seciliDil),
+                                icon: "person.2.badge.gearshape.fill"
+                            )
+
+                            supportDestinationCard(
+                                key: "appSupport",
+                                title: t("Contact NivaDesk Support", lang: seciliDil),
+                                subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: seciliDil),
+                                icon: "lifepreserver.fill"
+                            )
+                        }
                     }
                 }
             }
@@ -621,31 +642,17 @@ struct AyarlarView: View {
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(t("Category", lang: seciliDil))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary)
-                            Picker("", selection: $supportTicketCategory) {
-                                ForEach(supportTicketCategories, id: \.key) { item in
-                                    Text(item.title).tag(item.key)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            supportCategoryPickerField
+                                .frame(minWidth: 360, maxWidth: .infinity, alignment: .leading)
+                            supportPriorityPickerField
+                                .frame(minWidth: 240, maxWidth: .infinity, alignment: .leading)
                         }
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(t("Priority", lang: seciliDil))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary)
-                            Picker("", selection: $supportTicketPriority) {
-                                ForEach(supportTicketPriorities, id: \.key) { item in
-                                    Text(item.title).tag(item.key)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
+                        VStack(alignment: .leading, spacing: 12) {
+                            supportCategoryPickerField
+                            supportPriorityPickerField
                         }
                     }
 
@@ -755,18 +762,26 @@ struct AyarlarView: View {
                             .foregroundColor(.secondary)
                     } else {
                         ForEach(currentSupportTickets) { ticket in
+                            let isConversationOpen = supportOpenConversationIds.contains(ticket.id)
+
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(alignment: .top, spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(ticket.title)
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundColor(.primary)
-                                        Text("\(supportLabel(for: ticket.category, in: supportTicketCategories)) • \(supportLabel(for: ticket.priority, in: supportTicketPriorities))")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.secondary)
+                                    Button {
+                                        toggleSupportTicketConversation(ticket)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(ticket.title)
+                                                .font(.system(size: 14, weight: .bold))
+                                                .foregroundColor(.primary)
+                                                .multilineTextAlignment(.leading)
+                                            Text("\(supportLabel(for: ticket.category, in: supportTicketCategories)) • \(supportLabel(for: ticket.priority, in: supportTicketPriorities))")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.secondary)
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     }
-
-                                    Spacer()
+                                    .buttonStyle(.plain)
 
                                     VStack(alignment: .trailing, spacing: 6) {
                                         Text(t(ticket.status, lang: seciliDil))
@@ -808,27 +823,58 @@ struct AyarlarView: View {
                                     }
                                 }
 
-                                if canManageCurrentSupportTickets {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("\(t("From", lang: seciliDil)): \(ticket.createdByName.isEmpty ? ticket.createdByEmail : ticket.createdByName)")
-                                        if canManageNivaDeskSupportTickets {
-                                            Text("\(t("Workspace", lang: seciliDil)): \(ticket.companyName.isEmpty ? ticket.companyId : ticket.companyName) • \(ticket.platform) • \(ticket.appVersion.isEmpty ? t("Unknown version", lang: seciliDil) : ticket.appVersion)")
-                                        }
-                                    }
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.secondary)
+                                if !isConversationOpen {
+                                    Text(ticket.message)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
                                 }
 
-                                Text(ticket.message)
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(3)
+                                HStack(spacing: 10) {
+                                    Text(ticket.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.gray)
 
-                                supportTicketConversationView(ticket)
+                                    Spacer()
 
-                                Text(ticket.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.gray)
+                                    Button {
+                                        toggleSupportTicketConversation(ticket)
+                                    } label: {
+                                        Label(
+                                            isConversationOpen ? t("Hide Conversation", lang: seciliDil) : t("Open Conversation", lang: seciliDil),
+                                            systemImage: isConversationOpen ? "chevron.up" : "bubble.left.and.bubble.right"
+                                        )
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(Capsule().fill(Color.blue.opacity(isConversationOpen ? 0.08 : 0.12)))
+                                        .foregroundColor(.blue)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                if isConversationOpen {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        if canManageCurrentSupportTickets {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text("\(t("From", lang: seciliDil)): \(ticket.createdByName.isEmpty ? ticket.createdByEmail : ticket.createdByName)")
+                                                if canManageNivaDeskSupportTickets {
+                                                    Text("\(t("Workspace", lang: seciliDil)): \(ticket.companyName.isEmpty ? ticket.companyId : ticket.companyName) • \(ticket.platform) • \(ticket.appVersion.isEmpty ? t("Unknown version", lang: seciliDil) : ticket.appVersion)")
+                                                }
+                                            }
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                        }
+
+                                        Text(ticket.message)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+
+                                        supportTicketConversationView(ticket)
+                                    }
+                                    .padding(.top, 4)
+                                }
                             }
                             .padding(14)
                             .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.035)))
@@ -844,6 +890,7 @@ struct AyarlarView: View {
         .onChange(of: supportTicketDestination) { _ in
             firebaseManager.supportTicketError = ""
             firebaseManager.supportTicketMessage = ""
+            supportOpenConversationIds.removeAll()
             if supportTicketDestination == "workspace" && !workspaceTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
                 supportTicketCategory = "project"
             }
@@ -864,6 +911,100 @@ struct AyarlarView: View {
         }
     }
 
+    private func toggleSupportTicketConversation(_ ticket: StudioSupportTicket) {
+        if supportOpenConversationIds.contains(ticket.id) {
+            supportOpenConversationIds.remove(ticket.id)
+            return
+        }
+
+        supportOpenConversationIds.insert(ticket.id)
+        let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+        let ticketType = supportTicketDestination == "workspace" ? "workspace" : "appSupport"
+        if firebaseManager.supportTicketMessagesByTicketId[ticket.id] == nil {
+            firebaseManager.loadSupportTicketMessages(companyId: companyId, ticketId: ticket.id, ticketType: ticketType)
+        }
+    }
+
+
+    private func supportCompactCategoryTitle(_ key: String) -> String {
+        switch key {
+        case "bug": return t("Bug", lang: seciliDil)
+        case "question": return t("Question", lang: seciliDil)
+        case "billing": return t("Billing", lang: seciliDil)
+        case "feature": return t("Feature", lang: seciliDil)
+        case "account": return t("Account", lang: seciliDil)
+        case "project": return t("Project", lang: seciliDil)
+        case "task": return t("Task", lang: seciliDil)
+        case "approval": return t("Approval", lang: seciliDil)
+        case "customer": return t("Customer", lang: seciliDil)
+        case "internal": return t("Internal", lang: seciliDil)
+        default: return t("Other", lang: seciliDil)
+        }
+    }
+
+    private func supportMenuButtonLabel(_ title: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.blue)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.blue.opacity(0.8))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.blue.opacity(0.18)))
+    }
+
+    private var supportCategoryPickerField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(t("Category", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+            Menu {
+                ForEach(supportTicketCategories, id: \.key) { item in
+                    Button {
+                        supportTicketCategory = item.key
+                    } label: {
+                        Label(item.title, systemImage: supportTicketCategory == item.key ? "checkmark.circle.fill" : "circle")
+                    }
+                }
+            } label: {
+                supportMenuButtonLabel(supportCompactCategoryTitle(supportTicketCategory))
+            }
+            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var supportPriorityPickerField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(t("Priority", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+            Menu {
+                ForEach(supportTicketPriorities, id: \.key) { item in
+                    Button {
+                        supportTicketPriority = item.key
+                    } label: {
+                        Label(item.title, systemImage: supportTicketPriority == item.key ? "checkmark.circle.fill" : "circle")
+                    }
+                }
+            } label: {
+                supportMenuButtonLabel(supportLabel(for: supportTicketPriority, in: supportTicketPriorities))
+            }
+            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func supportDestinationCard(key: String, title: String, subtitle: String, icon: String) -> some View {
         let selected = supportTicketDestination == key
         return Button {
@@ -875,28 +1016,34 @@ struct AyarlarView: View {
                 supportTicketCategory = "bug"
             }
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(selected ? .white : .blue)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(selected ? Color.blue : Color.blue.opacity(0.12)))
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(selected ? .white : .blue)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(selected ? Color.blue : Color.blue.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 5) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: isPhoneLayout ? 15 : 14, weight: .bold))
                         .foregroundColor(.primary)
-                    Spacer()
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(subtitle)
+                        .font(.system(size: isPhoneLayout ? 12 : 12))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(isPhoneLayout ? 3 : 4)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(selected ? Color.blue.opacity(0.12) : Color.primary.opacity(0.035)))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected ? Color.blue : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
+            .padding(isPhoneLayout ? 12 : 14)
+            .frame(maxWidth: .infinity, minHeight: isPhoneLayout ? 96 : 112, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18).fill(selected ? Color.blue.opacity(0.10) : Color.primary.opacity(0.035)))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(selected ? Color.blue : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
         }
         .buttonStyle(.plain)
     }

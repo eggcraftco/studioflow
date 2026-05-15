@@ -9,7 +9,31 @@ import UniformTypeIdentifiers
 import SwiftUI
 import Combine
 import Network
+#if canImport(UIKit)
+import UIKit
+#endif
 
+private let studioFlowSupportPlatform: String = {
+    #if os(macOS)
+    return "mac"
+    #elseif os(iOS)
+    return "ios"
+    #else
+    return "unknown"
+    #endif
+}()
+
+private func studioFlowSupportDeviceInfo() -> String {
+    #if os(iOS)
+    let deviceName = UIDevice.current.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !deviceName.isEmpty { return deviceName }
+    return "iPhone/iPad"
+    #else
+    let hostName = ProcessInfo.processInfo.hostName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !hostName.isEmpty { return hostName }
+    return "Mac"
+    #endif
+}
 
 struct StudioSupportTicket: Identifiable, Codable, Equatable {
     var id: String = UUID().uuidString
@@ -26,7 +50,7 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
     var ticketType: String = "appSupport"
     var platform: String = "mac"
     var appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-    var deviceInfo: String = Host.current().localizedName ?? "Mac"
+    var deviceInfo: String = studioFlowSupportDeviceInfo()
     var language: String = Locale.current.identifier
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -2516,9 +2540,9 @@ class FirebaseManager: ObservableObject {
             "category": category,
             "priority": priority,
             "ticketType": "appSupport",
-            "platform": "mac",
+            "platform": studioFlowSupportPlatform,
             "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            "deviceInfo": Host.current().localizedName ?? "Mac",
+            "deviceInfo": studioFlowSupportDeviceInfo(),
             "language": language
         ]
 
@@ -2590,9 +2614,9 @@ class FirebaseManager: ObservableObject {
             "category": category,
             "priority": priority,
             "ticketType": "workspace",
-            "platform": "mac",
+            "platform": studioFlowSupportPlatform,
             "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            "deviceInfo": Host.current().localizedName ?? "Mac",
+            "deviceInfo": studioFlowSupportDeviceInfo(),
             "language": language
         ]
 
