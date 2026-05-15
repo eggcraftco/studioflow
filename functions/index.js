@@ -956,15 +956,40 @@ function isSupportAdminRequest(request = {}) {
   return Boolean(email && SUPPORT_ADMIN_EMAILS.has(email));
 }
 
-function supportTicketFromDoc(doc, ticketType = "appSupport") {
+function supportTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+}
+
+function supportReadByMillisMap(value = {}) {
+  const output = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return output;
+  for (const [uid, timestamp] of Object.entries(value)) {
+    const cleanUid = String(uid || "").trim();
+    if (!cleanUid) continue;
+    output[cleanUid] = supportTimestampMillis(timestamp);
+  }
+  return output;
+}
+
+function supportLastMessagePreview(value = "") {
+  return cleanSupportText(value, 180);
+}
+
+function supportTicketIsUnreadForUid(ticketData = {}, uid = "") {
+  const cleanUid = String(uid || "").trim();
+  if (!cleanUid) return false;
+  const lastMessageAt = supportTimestampMillis(ticketData.lastMessageAt);
+  const lastReadAt = supportTimestampMillis((ticketData.readBy || {})[cleanUid]);
+  const lastMessageByUid = String(ticketData.lastMessageByUid || "").trim();
+  return Boolean(lastMessageAt > 0 && lastMessageAt > lastReadAt && lastMessageByUid !== cleanUid);
+}
+
+function supportTicketFromDoc(doc, ticketType = "appSupport", currentUid = "") {
   const data = doc.data() || {};
-  const toMillis = (value) => {
-    if (!value) return 0;
-    if (typeof value.toMillis === "function") return value.toMillis();
-    if (typeof value.toDate === "function") return value.toDate().getTime();
-    const date = new Date(value);
-    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
-  };
   return {
     id: doc.id,
     ticketType: String(data.ticketType || data.type || ticketType),
@@ -982,9 +1007,15 @@ function supportTicketFromDoc(doc, ticketType = "appSupport") {
     appVersion: String(data.appVersion || ""),
     deviceInfo: String(data.deviceInfo || ""),
     language: String(data.language || "English"),
-    createdAtMillis: toMillis(data.createdAt),
-    updatedAtMillis: toMillis(data.updatedAt),
-    lastMessageAtMillis: toMillis(data.lastMessageAt)
+    createdAtMillis: supportTimestampMillis(data.createdAt),
+    updatedAtMillis: supportTimestampMillis(data.updatedAt),
+    lastMessageAtMillis: supportTimestampMillis(data.lastMessageAt),
+    lastMessageByUid: String(data.lastMessageByUid || ""),
+    lastMessageByEmail: String(data.lastMessageByEmail || ""),
+    lastMessageByRole: String(data.lastMessageByRole || ""),
+    lastMessagePreview: String(data.lastMessagePreview || ""),
+    readByMillis: supportReadByMillisMap(data.readBy || {}),
+    isUnread: supportTicketIsUnreadForUid(data, currentUid)
   };
 }
 
@@ -1024,6 +1055,13 @@ function baseSupportPayload(request, companyId, companyData, ticketType, allowed
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageByUid: uid,
+    lastMessageByEmail: createdByEmail,
+    lastMessageByRole: "user",
+    lastMessagePreview: supportLastMessagePreview(message),
+    readBy: {
+      [uid]: admin.firestore.FieldValue.serverTimestamp()
+    },
     source: "callable",
     supportSchemaVersion: 2
   };
@@ -1058,8 +1096,8 @@ exports.listMySupportTickets = onCall({ region: "europe-west2" }, async (request
   const snapshot = await query.get();
 
   const tickets = snapshot.docs
-    .map((doc) => supportTicketFromDoc(doc, "appSupport"))
-    .sort((a, b) => Number(b.createdAtMillis || 0) - Number(a.createdAtMillis || 0));
+    .map((doc) => supportTicketFromDoc(doc, "appSupport", uid))
+    .sort((a, b) => Number(b.lastMessageAtMillis || b.createdAtMillis || 0) - Number(a.lastMessageAtMillis || a.createdAtMillis || 0));
 
   return { ok: true, tickets, isSupportAdmin: isSupportAdminRequest(request) };
 });
@@ -1093,8 +1131,8 @@ exports.listWorkspaceTickets = onCall({ region: "europe-west2" }, async (request
   const snapshot = await query.get();
 
   const tickets = snapshot.docs
-    .map((doc) => supportTicketFromDoc(doc, "workspace"))
-    .sort((a, b) => Number(b.createdAtMillis || 0) - Number(a.createdAtMillis || 0));
+    .map((doc) => supportTicketFromDoc(doc, "workspace", uid))
+    .sort((a, b) => Number(b.lastMessageAtMillis || b.createdAtMillis || 0) - Number(a.lastMessageAtMillis || a.createdAtMillis || 0));
 
   return { ok: true, tickets, canSeeWorkspaceQueue };
 });
@@ -1326,6 +1364,7 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
       lastMessageByUid: uid,
       lastMessageByEmail: supportUserEmail(request),
       lastMessageByRole: isAdmin ? "supportAdmin" : "user",
+      lastMessagePreview: supportLastMessagePreview(message),
       status: nextStatus
     }, { merge: true });
     await batch.commit();
@@ -1419,6 +1458,7 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
       lastMessageByUid: uid,
       lastMessageByEmail: supportUserEmail(request),
       lastMessageByRole: isManager ? "workspaceAdmin" : "user",
+      lastMessagePreview: supportLastMessagePreview(message),
       status: nextStatus
     }, { merge: true });
     await batch.commit();
@@ -1428,6 +1468,110 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
     throw supportCallableInternalError("addWorkspaceTicketReply", error);
   }
 });
+
+
+exports.markSupportTicketRead = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to mark support tickets as read.");
+    }
+
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    if (!ticketId) {
+      throw new HttpsError("invalid-argument", "ticketId is required.");
+    }
+
+    const ticketRef = admin.firestore().collection("supportTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Support ticket not found.");
+    }
+
+    const ticketData = ticketSnap.data() || {};
+    if (!canAccessAppSupportTicket(ticketData, request)) {
+      throw new HttpsError("permission-denied", "You do not have access to this support ticket.");
+    }
+
+    await ticketRef.set({
+      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return { ok: true, ticketId, message: "Ticket marked as read." };
+  } catch (error) {
+    throw supportCallableInternalError("markSupportTicketRead", error);
+  }
+});
+
+exports.markWorkspaceTicketRead = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to mark workspace tickets as read.");
+    }
+
+    const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    if (!ticketId) {
+      throw new HttpsError("invalid-argument", "ticketId is required.");
+    }
+
+    const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Workspace ticket not found.");
+    }
+
+    const ticketData = ticketSnap.data() || {};
+    if (!canReplyWorkspaceTicket(ticketData, companyData, request)) {
+      throw new HttpsError("permission-denied", "You do not have access to this workspace ticket.");
+    }
+
+    await ticketRef.set({
+      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return { ok: true, ticketId, message: "Workspace ticket marked as read." };
+  } catch (error) {
+    throw supportCallableInternalError("markWorkspaceTicketRead", error);
+  }
+});
+
+exports.getSupportTicketUnreadSummary = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to read support ticket unread counts.");
+    }
+
+    const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const appQuery = isSupportAdminRequest(request)
+      ? admin.firestore().collection("supportTickets").limit(200)
+      : admin.firestore().collection("supportTickets").where("companyId", "==", companyId).where("createdByUid", "==", uid).limit(100);
+
+    const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+    const canSeeWorkspaceQueue = uidIsCompanyOwner(companyData, uid) || role === "admin";
+    const workspaceCollection = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets");
+    const workspaceQuery = canSeeWorkspaceQueue ? workspaceCollection.limit(200) : workspaceCollection.where("createdByUid", "==", uid).limit(100);
+
+    const [appSnap, workspaceSnap] = await Promise.all([appQuery.get(), workspaceQuery.get()]);
+    const appSupportUnread = appSnap.docs.filter((doc) => supportTicketIsUnreadForUid(doc.data() || {}, uid)).length;
+    const workspaceUnread = workspaceSnap.docs.filter((doc) => supportTicketIsUnreadForUid(doc.data() || {}, uid)).length;
+
+    return {
+      ok: true,
+      companyId,
+      appSupportUnread,
+      workspaceUnread,
+      totalUnread: appSupportUnread + workspaceUnread
+    };
+  } catch (error) {
+    throw supportCallableInternalError("getSupportTicketUnreadSummary", error);
+  }
+});
+
 
 const { createStripeBillingFunctions } = require("./stripeBilling");
 Object.assign(exports, createStripeBillingFunctions({

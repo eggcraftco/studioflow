@@ -55,6 +55,20 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var lastMessageAt: Date = Date()
+    var lastMessageByUid: String = ""
+    var lastMessageByEmail: String = ""
+    var lastMessageByRole: String = ""
+    var lastMessagePreview: String = ""
+    var readBy: [String: Date] = [:]
+    var isUnread: Bool = false
+
+    func isUnread(for uid: String) -> Bool {
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUid.isEmpty else { return isUnread }
+        guard lastMessageByUid != cleanUid else { return false }
+        let lastReadAt = readBy[cleanUid] ?? .distantPast
+        return lastMessageAt > lastReadAt
+    }
 
     init() {}
 
@@ -78,6 +92,13 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
         if let timestamp = data["createdAt"] as? Timestamp { self.createdAt = timestamp.dateValue() }
         if let timestamp = data["updatedAt"] as? Timestamp { self.updatedAt = timestamp.dateValue() }
         if let timestamp = data["lastMessageAt"] as? Timestamp { self.lastMessageAt = timestamp.dateValue() }
+        self.lastMessageByUid = data["lastMessageByUid"] as? String ?? ""
+        self.lastMessageByEmail = data["lastMessageByEmail"] as? String ?? ""
+        self.lastMessageByRole = data["lastMessageByRole"] as? String ?? ""
+        self.lastMessagePreview = data["lastMessagePreview"] as? String ?? ""
+        if let readByMap = data["readBy"] as? [String: Timestamp] {
+            self.readBy = readByMap.mapValues { $0.dateValue() }
+        }
     }
 
 
@@ -104,6 +125,22 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
         if let millis = data["createdAtMillis"] as? Int, millis > 0 { self.createdAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
         if let millis = data["updatedAtMillis"] as? Int, millis > 0 { self.updatedAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
         if let millis = data["lastMessageAtMillis"] as? Int, millis > 0 { self.lastMessageAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
+        self.lastMessageByUid = data["lastMessageByUid"] as? String ?? ""
+        self.lastMessageByEmail = data["lastMessageByEmail"] as? String ?? ""
+        self.lastMessageByRole = data["lastMessageByRole"] as? String ?? ""
+        self.lastMessagePreview = data["lastMessagePreview"] as? String ?? ""
+        self.isUnread = data["isUnread"] as? Bool ?? false
+        if let readByMillis = data["readByMillis"] as? [String: Any] {
+            var parsedReadBy: [String: Date] = [:]
+            for (uid, rawValue) in readByMillis {
+                if let millis = rawValue as? Double, millis > 0 {
+                    parsedReadBy[uid] = Date(timeIntervalSince1970: millis / 1000)
+                } else if let millis = rawValue as? Int, millis > 0 {
+                    parsedReadBy[uid] = Date(timeIntervalSince1970: Double(millis) / 1000)
+                }
+            }
+            self.readBy = parsedReadBy
+        }
     }
 
     var firestoreData: [String: Any] {
@@ -125,7 +162,12 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
             "language": language,
             "createdAt": Timestamp(date: createdAt),
             "updatedAt": Timestamp(date: updatedAt),
-            "lastMessageAt": Timestamp(date: lastMessageAt)
+            "lastMessageAt": Timestamp(date: lastMessageAt),
+            "lastMessageByUid": lastMessageByUid,
+            "lastMessageByEmail": lastMessageByEmail,
+            "lastMessageByRole": lastMessageByRole,
+            "lastMessagePreview": lastMessagePreview,
+            "readBy": readBy.mapValues { Timestamp(date: $0) }
         ]
     }
 
@@ -425,6 +467,8 @@ class FirebaseManager: ObservableObject {
     @Published var isUpdatingSupportTicketStatus: Bool = false
     @Published var isSendingSupportTicketReply: Bool = false
     @Published var isLoadingSupportTicketMessages: Bool = false
+    @Published var supportTicketUnreadCount: Int = 0
+    @Published var workspaceTicketUnreadCount: Int = 0
     
     private var db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
@@ -2250,7 +2294,8 @@ class FirebaseManager: ObservableObject {
                     let items = payload?["tickets"] as? [[String: Any]] ?? []
                     self?.supportTickets = items.compactMap { item in
                         StudioSupportTicket(callableData: item)
-                    }.sorted { $0.createdAt > $1.createdAt }
+                    }.sorted { ($0.lastMessageAt) > ($1.lastMessageAt) }
+                    self?.refreshLocalSupportUnreadCounts()
                 }
             }
         #else
@@ -2282,7 +2327,8 @@ class FirebaseManager: ObservableObject {
                     let items = payload?["tickets"] as? [[String: Any]] ?? []
                     self?.workspaceTickets = items.compactMap { item in
                         StudioSupportTicket(callableData: item)
-                    }.sorted { $0.createdAt > $1.createdAt }
+                    }.sorted { ($0.lastMessageAt) > ($1.lastMessageAt) }
+                    self?.refreshLocalSupportUnreadCounts()
                 }
             }
         #else
@@ -2290,6 +2336,93 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+
+
+
+    private var currentSupportUserId: String {
+        Auth.auth().currentUser?.uid ?? ""
+    }
+
+    private func refreshLocalSupportUnreadCounts() {
+        let uid = currentSupportUserId
+        supportTicketUnreadCount = supportTickets.filter { $0.isUnread(for: uid) }.count
+        workspaceTicketUnreadCount = workspaceTickets.filter { $0.isUnread(for: uid) }.count
+    }
+
+    func loadSupportTicketUnreadSummary(companyId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty else {
+            supportTicketUnreadCount = 0
+            workspaceTicketUnreadCount = 0
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("getSupportTicketUnreadSummary")
+            .call(["companyId": cleanCompanyId]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("Support unread summary failed: \(error.localizedDescription)")
+                        self?.refreshLocalSupportUnreadCounts()
+                        return
+                    }
+
+                    let payload = result?.data as? [String: Any]
+                    self?.supportTicketUnreadCount = payload?["appSupportUnread"] as? Int ?? 0
+                    self?.workspaceTicketUnreadCount = payload?["workspaceUnread"] as? Int ?? 0
+                }
+            }
+        #else
+        refreshLocalSupportUnreadCounts()
+        #endif
+    }
+
+    func markSupportTicketRead(companyId: String, ticketId: String, ticketType: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTicketId.isEmpty else { return }
+
+        #if canImport(FirebaseFunctions)
+        let functionName = ticketType == "workspace" ? "markWorkspaceTicketRead" : "markSupportTicketRead"
+        var payload: [String: Any] = ["ticketId": cleanTicketId]
+        if ticketType == "workspace" {
+            payload["companyId"] = cleanCompanyId
+        }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable(functionName)
+            .call(payload) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("Mark support ticket read failed: \(error.localizedDescription)")
+                        return
+                    }
+
+                    if ticketType == "workspace" {
+                        self?.workspaceTickets = self?.workspaceTickets.map { ticket in
+                            var updated = ticket
+                            if updated.id == cleanTicketId {
+                                updated.readBy[self?.currentSupportUserId ?? ""] = Date()
+                                updated.isUnread = false
+                            }
+                            return updated
+                        } ?? []
+                    } else {
+                        self?.supportTickets = self?.supportTickets.map { ticket in
+                            var updated = ticket
+                            if updated.id == cleanTicketId {
+                                updated.readBy[self?.currentSupportUserId ?? ""] = Date()
+                                updated.isUnread = false
+                            }
+                            return updated
+                        } ?? []
+                    }
+                    self?.refreshLocalSupportUnreadCounts()
+                }
+            }
+        #endif
+    }
 
 
     func updateSupportTicketStatus(
@@ -2494,6 +2627,8 @@ class FirebaseManager: ObservableObject {
         supportTickets = []
         workspaceTickets = []
         supportTicketMessagesByTicketId = [:]
+        supportTicketUnreadCount = 0
+        workspaceTicketUnreadCount = 0
     }
 
     func submitSupportTicket(

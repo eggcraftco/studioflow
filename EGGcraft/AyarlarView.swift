@@ -311,7 +311,7 @@ struct AyarlarView: View {
 
                 ForEach(settingsSections, id: \.key) { section in
                     AyarMenuButonu(
-                        title: section.title,
+                        title: supportSectionTitle(section),
                         icon: section.icon,
                         isSelected: seciliAyarSekmesi == section.key
                     ) {
@@ -422,7 +422,7 @@ struct AyarlarView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(section.title)
+                                    Text(supportSectionTitle(section))
                                         .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(.primary)
                                         .lineLimit(1)
@@ -590,6 +590,23 @@ struct AyarlarView: View {
         supportTicketDestination == "workspace" ? firebaseManager.workspaceTickets : firebaseManager.supportTickets
     }
 
+    private var supportSettingsUnreadCount: Int {
+        firebaseManager.supportTicketUnreadCount + firebaseManager.workspaceTicketUnreadCount
+    }
+
+    private var currentSupportUnreadCount: Int {
+        supportTicketDestination == "workspace" ? firebaseManager.workspaceTicketUnreadCount : firebaseManager.supportTicketUnreadCount
+    }
+
+    private func supportTicketIsUnread(_ ticket: StudioSupportTicket) -> Bool {
+        ticket.isUnread(for: authVM.currentUserId ?? "")
+    }
+
+    private func supportSectionTitle(_ section: (key: String, title: String, icon: String)) -> String {
+        guard section.key == "Support", supportSettingsUnreadCount > 0 else { return section.title }
+        return "\(section.title) \(supportSettingsUnreadCount)"
+    }
+
     private var supportTicketsAyari: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsCard(title: t("Support / Tickets", lang: seciliDil), iconName: "questionmark.bubble.fill", footerText: t("Choose whether this is an internal workspace request or a NivaDesk app support ticket.", lang: seciliDil)) {
@@ -743,7 +760,7 @@ struct AyarlarView: View {
                 }
             }
 
-            SettingsCard(title: supportTicketListTitle, iconName: canManageCurrentSupportTickets ? "tray.and.arrow.down.fill" : "tray.full.fill") {
+            SettingsCard(title: currentSupportUnreadCount > 0 ? "\(supportTicketListTitle) \(currentSupportUnreadCount)" : supportTicketListTitle, iconName: canManageCurrentSupportTickets ? "tray.and.arrow.down.fill" : "tray.full.fill") {
                 VStack(alignment: .leading, spacing: 12) {
                     if canManageWorkspaceTickets {
                         Text(t("Owner and admins can review internal workspace tickets here and update their status.", lang: seciliDil))
@@ -763,6 +780,7 @@ struct AyarlarView: View {
                     } else {
                         ForEach(currentSupportTickets) { ticket in
                             let isConversationOpen = supportOpenConversationIds.contains(ticket.id)
+                            let isUnread = supportTicketIsUnread(ticket)
 
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(alignment: .top, spacing: 8) {
@@ -784,6 +802,16 @@ struct AyarlarView: View {
                                     .buttonStyle(.plain)
 
                                     VStack(alignment: .trailing, spacing: 6) {
+                                        if isUnread {
+                                            Text(t("New", lang: seciliDil))
+                                                .font(.system(size: 10, weight: .bold))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.red.opacity(0.14))
+                                                .foregroundColor(.red)
+                                                .clipShape(Capsule())
+                                        }
+
                                         Text(t(ticket.status, lang: seciliDil))
                                             .font(.system(size: 11, weight: .bold))
                                             .padding(.horizontal, 9)
@@ -824,16 +852,19 @@ struct AyarlarView: View {
                                 }
 
                                 if !isConversationOpen {
-                                    Text(ticket.message)
+                                    Text(ticket.lastMessagePreview.isEmpty ? ticket.message : ticket.lastMessagePreview)
                                         .font(.system(size: 12))
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                 }
 
                                 HStack(spacing: 10) {
-                                    Text(ticket.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.gray)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(t("Created", lang: seciliDil)): \(ticket.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                                        Text("\(t("Last message", lang: seciliDil)): \(ticket.lastMessageAt.formatted(date: .abbreviated, time: .shortened))")
+                                    }
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray)
 
                                     Spacer()
 
@@ -904,6 +935,7 @@ struct AyarlarView: View {
 
     private func reloadVisibleSupportTickets() {
         let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+        firebaseManager.loadSupportTicketUnreadSummary(companyId: companyId)
         if supportTicketDestination == "workspace" {
             firebaseManager.loadWorkspaceTickets(companyId: companyId)
         } else {
@@ -920,6 +952,7 @@ struct AyarlarView: View {
         supportOpenConversationIds.insert(ticket.id)
         let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
         let ticketType = supportTicketDestination == "workspace" ? "workspace" : "appSupport"
+        firebaseManager.markSupportTicketRead(companyId: companyId, ticketId: ticket.id, ticketType: ticketType)
         if firebaseManager.supportTicketMessagesByTicketId[ticket.id] == nil {
             firebaseManager.loadSupportTicketMessages(companyId: companyId, ticketId: ticket.id, ticketType: ticketType)
         }
