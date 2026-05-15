@@ -10,6 +10,134 @@ import SwiftUI
 import Combine
 import Network
 
+
+struct StudioSupportTicket: Identifiable, Codable, Equatable {
+    var id: String = UUID().uuidString
+    var companyId: String = ""
+    var companyName: String = ""
+    var createdByUid: String = ""
+    var createdByEmail: String = ""
+    var createdByName: String = ""
+    var title: String = ""
+    var message: String = ""
+    var category: String = "bug"
+    var priority: String = "normal"
+    var status: String = "open"
+    var ticketType: String = "appSupport"
+    var platform: String = "mac"
+    var appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    var deviceInfo: String = Host.current().localizedName ?? "Mac"
+    var language: String = Locale.current.identifier
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var lastMessageAt: Date = Date()
+
+    init() {}
+
+    init?(id: String, data: [String: Any]) {
+        self.id = id
+        self.companyId = data["companyId"] as? String ?? ""
+        self.companyName = data["companyName"] as? String ?? ""
+        self.createdByUid = data["createdByUid"] as? String ?? ""
+        self.createdByEmail = data["createdByEmail"] as? String ?? ""
+        self.createdByName = data["createdByName"] as? String ?? ""
+        self.title = data["title"] as? String ?? ""
+        self.message = data["message"] as? String ?? ""
+        self.category = data["category"] as? String ?? "bug"
+        self.priority = data["priority"] as? String ?? "normal"
+        self.status = data["status"] as? String ?? "open"
+        self.ticketType = data["ticketType"] as? String ?? data["type"] as? String ?? "appSupport"
+        self.platform = data["platform"] as? String ?? "mac"
+        self.appVersion = data["appVersion"] as? String ?? ""
+        self.deviceInfo = data["deviceInfo"] as? String ?? ""
+        self.language = data["language"] as? String ?? ""
+        if let timestamp = data["createdAt"] as? Timestamp { self.createdAt = timestamp.dateValue() }
+        if let timestamp = data["updatedAt"] as? Timestamp { self.updatedAt = timestamp.dateValue() }
+        if let timestamp = data["lastMessageAt"] as? Timestamp { self.lastMessageAt = timestamp.dateValue() }
+    }
+
+
+    init?(callableData data: [String: Any]) {
+        self.id = data["id"] as? String ?? UUID().uuidString
+        self.companyId = data["companyId"] as? String ?? ""
+        self.companyName = data["companyName"] as? String ?? ""
+        self.createdByUid = data["createdByUid"] as? String ?? ""
+        self.createdByEmail = data["createdByEmail"] as? String ?? ""
+        self.createdByName = data["createdByName"] as? String ?? ""
+        self.title = data["title"] as? String ?? ""
+        self.message = data["message"] as? String ?? ""
+        self.category = data["category"] as? String ?? "bug"
+        self.priority = data["priority"] as? String ?? "normal"
+        self.status = data["status"] as? String ?? "open"
+        self.ticketType = data["ticketType"] as? String ?? data["type"] as? String ?? "appSupport"
+        self.platform = data["platform"] as? String ?? "mac"
+        self.appVersion = data["appVersion"] as? String ?? ""
+        self.deviceInfo = data["deviceInfo"] as? String ?? ""
+        self.language = data["language"] as? String ?? ""
+        if let millis = data["createdAtMillis"] as? Double, millis > 0 { self.createdAt = Date(timeIntervalSince1970: millis / 1000) }
+        if let millis = data["updatedAtMillis"] as? Double, millis > 0 { self.updatedAt = Date(timeIntervalSince1970: millis / 1000) }
+        if let millis = data["lastMessageAtMillis"] as? Double, millis > 0 { self.lastMessageAt = Date(timeIntervalSince1970: millis / 1000) }
+        if let millis = data["createdAtMillis"] as? Int, millis > 0 { self.createdAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
+        if let millis = data["updatedAtMillis"] as? Int, millis > 0 { self.updatedAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
+        if let millis = data["lastMessageAtMillis"] as? Int, millis > 0 { self.lastMessageAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
+    }
+
+    var firestoreData: [String: Any] {
+        [
+            "companyId": companyId,
+            "companyName": companyName,
+            "createdByUid": createdByUid,
+            "createdByEmail": createdByEmail,
+            "createdByName": createdByName,
+            "title": title,
+            "message": message,
+            "category": category,
+            "priority": priority,
+            "status": status,
+            "ticketType": ticketType,
+            "platform": platform,
+            "appVersion": appVersion,
+            "deviceInfo": deviceInfo,
+            "language": language,
+            "createdAt": Timestamp(date: createdAt),
+            "updatedAt": Timestamp(date: updatedAt),
+            "lastMessageAt": Timestamp(date: lastMessageAt)
+        ]
+    }
+
+}
+
+struct StudioSupportTicketMessage: Identifiable, Codable, Equatable {
+    var id: String = UUID().uuidString
+    var ticketId: String = ""
+    var message: String = ""
+    var authorUid: String = ""
+    var authorEmail: String = ""
+    var authorName: String = ""
+    var authorRole: String = "user"
+    var createdAt: Date = Date()
+
+    init() {}
+
+    init?(callableData data: [String: Any]) {
+        self.id = data["id"] as? String ?? UUID().uuidString
+        self.ticketId = data["ticketId"] as? String ?? ""
+        self.message = data["message"] as? String ?? ""
+        self.authorUid = data["authorUid"] as? String ?? ""
+        self.authorEmail = data["authorEmail"] as? String ?? ""
+        self.authorName = data["authorName"] as? String ?? ""
+        self.authorRole = data["authorRole"] as? String ?? "user"
+
+        if let millis = data["createdAtMillis"] as? Double, millis > 0 {
+            self.createdAt = Date(timeIntervalSince1970: millis / 1000)
+        }
+        if let millis = data["createdAtMillis"] as? Int, millis > 0 {
+            self.createdAt = Date(timeIntervalSince1970: Double(millis) / 1000)
+        }
+    }
+}
+
+
 private enum StudioHistoryAction {
     case addedSiparis(Siparis)
     case deletedSiparis(Siparis)
@@ -263,10 +391,21 @@ class FirebaseManager: ObservableObject {
     @Published private(set) var pendingClientFileUploadsCount: Int = 0
     @Published private(set) var lastOfflineCacheDate: Date?
     @Published private(set) var offlineStatusMessage: String = "Online"
+    @Published var supportTickets: [StudioSupportTicket] = []
+    @Published var workspaceTickets: [StudioSupportTicket] = []
+    @Published var supportTicketMessage: String = ""
+    @Published var supportTicketError: String = ""
+    @Published var supportTicketMessagesByTicketId: [String: [StudioSupportTicketMessage]] = [:]
+    @Published var isSubmittingSupportTicket: Bool = false
+    @Published var isUpdatingWorkspaceTicketStatus: Bool = false
+    @Published var isUpdatingSupportTicketStatus: Bool = false
+    @Published var isSendingSupportTicketReply: Bool = false
+    @Published var isLoadingSupportTicketMessages: Bool = false
     
     private var db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
     private var musteriListenerRegistration: ListenerRegistration?
+    private var supportTicketsListenerRegistration: ListenerRegistration?
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "uk.co.eggcraft.studioflow.network-monitor")
     private var pendingSyncOperations: [StudioPendingSyncOperation] = []
@@ -2054,7 +2193,430 @@ class FirebaseManager: ObservableObject {
     func stopListening() {
         listenerRegistration?.remove()
         musteriListenerRegistration?.remove()
+        supportTicketsListenerRegistration?.remove()
         listenerRegistration = nil
         musteriListenerRegistration = nil
+        supportTicketsListenerRegistration = nil
     }
+
+    func listenSupportTickets(companyId: String, userId: String) {
+        loadMySupportTickets(companyId: companyId)
+    }
+
+    func loadMySupportTickets(companyId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty else {
+            supportTickets = []
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("listMySupportTickets")
+            .call(["companyId": cleanCompanyId]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("Support tickets load failed: \(error.localizedDescription)")
+                        self?.supportTickets = []
+                        return
+                    }
+
+                    let payload = result?.data as? [String: Any]
+                    let items = payload?["tickets"] as? [[String: Any]] ?? []
+                    self?.supportTickets = items.compactMap { item in
+                        StudioSupportTicket(callableData: item)
+                    }.sorted { $0.createdAt > $1.createdAt }
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        #endif
+    }
+
+
+    func loadWorkspaceTickets(companyId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty else {
+            workspaceTickets = []
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("listWorkspaceTickets")
+            .call(["companyId": cleanCompanyId]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("Workspace tickets load failed: \(error.localizedDescription)")
+                        self?.workspaceTickets = []
+                        return
+                    }
+
+                    let payload = result?.data as? [String: Any]
+                    let items = payload?["tickets"] as? [[String: Any]] ?? []
+                    self?.workspaceTickets = items.compactMap { item in
+                        StudioSupportTicket(callableData: item)
+                    }.sorted { $0.createdAt > $1.createdAt }
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        #endif
+    }
+
+
+
+    func updateSupportTicketStatus(
+        companyId: String,
+        ticketId: String,
+        status: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTicketId.isEmpty else {
+            supportTicketError = "Support ticket is not ready yet."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isUpdatingSupportTicketStatus = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("updateSupportTicketStatus")
+            .call([
+                "companyId": cleanCompanyId,
+                "ticketId": cleanTicketId,
+                "status": status
+            ]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isUpdatingSupportTicketStatus = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    self?.supportTicketMessage = response?["message"] as? String ?? "NivaDesk support ticket status updated."
+                    self?.loadMySupportTickets(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+        #endif
+    }
+
+    func updateWorkspaceTicketStatus(
+        companyId: String,
+        ticketId: String,
+        status: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanTicketId.isEmpty else {
+            supportTicketError = "Workspace ticket is not ready yet."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isUpdatingWorkspaceTicketStatus = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("updateWorkspaceTicketStatus")
+            .call([
+                "companyId": cleanCompanyId,
+                "ticketId": cleanTicketId,
+                "status": status
+            ]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isUpdatingWorkspaceTicketStatus = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Workspace ticket status updated."
+                    self?.loadWorkspaceTickets(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+        #endif
+    }
+
+
+    func loadSupportTicketMessages(
+        companyId: String,
+        ticketId: String,
+        ticketType: String
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTicketId.isEmpty else { return }
+
+        #if canImport(FirebaseFunctions)
+        isLoadingSupportTicketMessages = true
+        let functionName = ticketType == "workspace" ? "listWorkspaceTicketMessages" : "listSupportTicketMessages"
+        var payload: [String: Any] = [
+            "ticketId": cleanTicketId
+        ]
+        if ticketType == "workspace" {
+            payload["companyId"] = cleanCompanyId
+        }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable(functionName)
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isLoadingSupportTicketMessages = false
+                    if let error {
+                        print("Support ticket messages load failed: \(error.localizedDescription)")
+                        return
+                    }
+
+                    let payload = result?.data as? [String: Any]
+                    let items = payload?["messages"] as? [[String: Any]] ?? []
+                    self?.supportTicketMessagesByTicketId[cleanTicketId] = items.compactMap { item in
+                        StudioSupportTicketMessage(callableData: item)
+                    }.sorted { $0.createdAt < $1.createdAt }
+                }
+            }
+        #endif
+    }
+
+    func addSupportTicketReply(
+        companyId: String,
+        ticketId: String,
+        ticketType: String,
+        message: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanTicketId.isEmpty else {
+            supportTicketError = "Support ticket is not ready yet."
+            completion?(false)
+            return
+        }
+
+        guard !cleanMessage.isEmpty else {
+            supportTicketError = "Please write a reply."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isSendingSupportTicketReply = true
+
+        let functionName = ticketType == "workspace" ? "addWorkspaceTicketReply" : "addSupportTicketReply"
+        var payload: [String: Any] = [
+            "ticketId": cleanTicketId,
+            "message": cleanMessage
+        ]
+        if ticketType == "workspace" {
+            payload["companyId"] = cleanCompanyId
+        }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable(functionName)
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isSendingSupportTicketReply = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Reply sent."
+                    self?.loadSupportTicketMessages(companyId: cleanCompanyId, ticketId: cleanTicketId, ticketType: ticketType)
+                    if ticketType == "workspace" {
+                        self?.loadWorkspaceTickets(companyId: cleanCompanyId)
+                    } else {
+                        self?.loadMySupportTickets(companyId: cleanCompanyId)
+                    }
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+        #endif
+    }
+
+
+    func stopListeningSupportTickets() {
+        supportTicketsListenerRegistration?.remove()
+        supportTicketsListenerRegistration = nil
+        supportTickets = []
+        workspaceTickets = []
+        supportTicketMessagesByTicketId = [:]
+    }
+
+    func submitSupportTicket(
+        companyId: String,
+        companyName: String,
+        userId: String,
+        userEmail: String,
+        userName: String,
+        title: String,
+        message: String,
+        category: String,
+        priority: String,
+        language: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanCompanyId.isEmpty else {
+            supportTicketError = "Workspace is not ready yet."
+            completion?(false)
+            return
+        }
+
+        guard !cleanTitle.isEmpty, !cleanMessage.isEmpty else {
+            supportTicketError = "Please add a subject and message."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isSubmittingSupportTicket = true
+
+        let payload: [String: Any] = [
+            "companyId": cleanCompanyId,
+            "companyName": companyName,
+            "userEmail": userEmail,
+            "userName": userName,
+            "title": cleanTitle,
+            "message": cleanMessage,
+            "category": category,
+            "priority": priority,
+            "ticketType": "appSupport",
+            "platform": "mac",
+            "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            "deviceInfo": Host.current().localizedName ?? "Mac",
+            "language": language
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("createSupportTicket")
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isSubmittingSupportTicket = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Ticket sent. We will review it as soon as possible."
+                    self?.loadMySupportTickets(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+
+        #endif
+    }
+
+    func submitWorkspaceTicket(
+        companyId: String,
+        companyName: String,
+        userId: String,
+        userEmail: String,
+        userName: String,
+        title: String,
+        message: String,
+        category: String,
+        priority: String,
+        language: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanCompanyId.isEmpty else {
+            supportTicketError = "Workspace is not ready yet."
+            completion?(false)
+            return
+        }
+
+        guard !cleanTitle.isEmpty, !cleanMessage.isEmpty else {
+            supportTicketError = "Please add a subject and message."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isSubmittingSupportTicket = true
+
+        let payload: [String: Any] = [
+            "companyId": cleanCompanyId,
+            "companyName": companyName,
+            "userEmail": userEmail,
+            "userName": userName,
+            "title": cleanTitle,
+            "message": cleanMessage,
+            "category": category,
+            "priority": priority,
+            "ticketType": "workspace",
+            "platform": "mac",
+            "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            "deviceInfo": Host.current().localizedName ?? "Mac",
+            "language": language
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("createWorkspaceTicket")
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isSubmittingSupportTicket = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Workspace ticket sent to the workspace owner."
+                    self?.loadWorkspaceTickets(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+        #endif
+    }
+
 }

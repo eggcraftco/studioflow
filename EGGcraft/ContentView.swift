@@ -1445,7 +1445,7 @@ struct ContentView: View {
                                         .overlay(alignment: .bottom) {
                                             if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 1 && siparisKey == seciliSiparisGorunumKey {
                                                 StudioFirstRunGuideBubble(
-                                                    stepText: "2 / 6",
+                                                    stepText: "2 / 7",
                                                     title: t("Project card", lang: seciliDil),
                                                     message: t("This small card represents the project you just created. You can select projects from this list and open their workspace on the right.", lang: seciliDil),
                                                     primaryTitle: t("Next", lang: seciliDil),
@@ -3340,7 +3340,7 @@ struct ContentView: View {
     private var macFirstProjectGuideOverlay: some View {
         if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 0 {
             StudioFirstRunGuideBubble(
-                stepText: "1 / 6",
+                stepText: "1 / 7",
                 title: t("Start with Add Project", lang: seciliDil),
                 message: t("Click the green Add Project button to create your first project.", lang: seciliDil),
                 primaryTitle: nil,

@@ -1419,7 +1419,7 @@ struct SiparisDetayView: View {
 
                         if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 4 {
                             StudioFirstRunGuideBubble(
-                                stepText: "4 / 6",
+                                stepText: "5 / 7",
                                 title: t("Turn on Financial Info", lang: seciliDil),
                                 message: t("Enable the Financial Info card here. It will appear in the project workspace.", lang: seciliDil),
                                 primaryTitle: nil,
@@ -1457,7 +1457,7 @@ struct SiparisDetayView: View {
         .overlay(alignment: .topTrailing) {
             if shouldShowMacFirstProjectGuide && macFirstProjectGuideStep == 3 {
                 StudioFirstRunGuideBubble(
-                    stepText: "4 / 6",
+                    stepText: "4 / 7",
                     title: t("Open Actions", lang: seciliDil),
                     message: t("Click Actions in the top-right corner, then choose Customize.", lang: seciliDil),
                     primaryTitle: nil,
@@ -2709,7 +2709,7 @@ struct SiparisDetayView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             StudioFirstRunGuideBubble(
-                stepText: "3 / 6",
+                stepText: "3 / 7",
                 title: t("Customer & Communication", lang: seciliDil),
                 message: t("This is where customer name, design name, email, phone and address are kept for the project.", lang: seciliDil),
                 primaryTitle: t("Next", lang: seciliDil),
@@ -2729,7 +2729,7 @@ struct SiparisDetayView: View {
 
     private var macFirstProjectGuideFinancialCardBubble: some View {
         StudioFirstRunGuideBubble(
-            stepText: "5 / 6",
+            stepText: "6 / 7",
             title: t("Financial Info is now open", lang: seciliDil),
             message: t("This card is where paid amount, costs, remaining balance and profit are tracked for the project.", lang: seciliDil),
             primaryTitle: t("Next", lang: seciliDil),
@@ -11248,7 +11248,7 @@ struct DetayKarti<Content: View>: View {
         #if os(macOS)
         if guideOptionsBubbleActive {
             StudioFirstRunGuideBubble(
-                stepText: "6 / 6",
+                stepText: "7 / 7",
                 title: t("Card actions", lang: seciliDil),
                 message: t("Click the three-dot button to hide this card, edit its block headings, export when available, and change the card colour.", lang: seciliDil),
                 primaryTitle: t("Done", lang: seciliDil),

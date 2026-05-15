@@ -21,11 +21,18 @@ struct AyarlarView: View {
     @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
     @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
     @AppStorage("uploadSafetyMaxFileSizeMBV1") private var uploadSafetyMaxFileSizeMB: Double = 10.0
+
+    @State private var supportTicketDestination: String = "appSupport"
+    @State private var supportTicketCategory: String = "bug"
+    @State private var supportTicketPriority: String = "normal"
+    @State private var supportTicketTitle: String = ""
+    @State private var supportTicketMessageText: String = ""
+    @State private var supportReplyDrafts: [String: String] = [:]
     private let canEditWorkspace: Bool
 
     init(startSection: String = "Theme & Brand", canEditWorkspace: Bool = true) {
         self.canEditWorkspace = canEditWorkspace
-        let allowedForReadOnly = ["Account", "Plan & Access", "Team Access", "Theme & Brand", "Language & Labels", "About"]
+        let allowedForReadOnly = ["Account", "Plan & Access", "Team Access", "Support", "Theme & Brand", "Language & Labels", "About"]
         let initialSection = canEditWorkspace || allowedForReadOnly.contains(startSection) ? startSection : "Account"
         _seciliAyarSekmesi = State(initialValue: initialSection)
     }
@@ -256,7 +263,7 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settings") && workspaceAccessAllows("clientFiles")
         case "Team Access":
             return workspaceAccessAllows("settings") && workspaceAccessAllows("teamAccess")
-        case "Account", "About":
+        case "Account", "Support", "About":
             return true
         default:
             return false
@@ -277,6 +284,7 @@ struct AyarlarView: View {
             ("Account", t("Account", lang: seciliDil), "person.crop.circle"),
             ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill"),
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
+            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
             ("About", t("About", lang: seciliDil), "info.circle.fill")
         ]
 
@@ -497,9 +505,526 @@ struct AyarlarView: View {
             else if seciliAyarSekmesi == "Account" { AccountProfileView(sectionMode: .account) }
             else if seciliAyarSekmesi == "Plan & Access" { AccountProfileView(sectionMode: .planAccess) }
             else if seciliAyarSekmesi == "Team Access" { AccountProfileView(sectionMode: .teamAccess) }
+            else if seciliAyarSekmesi == "Support" { supportTicketsAyari }
             else if seciliAyarSekmesi == "About" { aboutAyari }
         }
     }
+
+
+    private var appSupportTicketCategories: [(key: String, title: String)] {
+        [
+            ("bug", t("Bug / Something is not working", lang: seciliDil)),
+            ("question", t("Question / How do I use this?", lang: seciliDil)),
+            ("billing", t("Billing / Plan", lang: seciliDil)),
+            ("feature", t("Feature request", lang: seciliDil)),
+            ("account", t("Account / Login", lang: seciliDil)),
+            ("other", t("Other", lang: seciliDil))
+        ]
+    }
+
+    private var workspaceTicketCategories: [(key: String, title: String)] {
+        [
+            ("project", t("Project / Order question", lang: seciliDil)),
+            ("task", t("Task / Assignment", lang: seciliDil)),
+            ("approval", t("Approval request", lang: seciliDil)),
+            ("customer", t("Customer information", lang: seciliDil)),
+            ("internal", t("Internal workflow", lang: seciliDil)),
+            ("other", t("Other", lang: seciliDil))
+        ]
+    }
+
+    private var supportTicketCategories: [(key: String, title: String)] {
+        supportTicketDestination == "workspace" ? workspaceTicketCategories : appSupportTicketCategories
+    }
+
+    private var supportTicketPriorities: [(key: String, title: String)] {
+        [
+            ("low", t("Low", lang: seciliDil)),
+            ("normal", t("Normal", lang: seciliDil)),
+            ("high", t("High", lang: seciliDil)),
+            ("urgent", t("Urgent", lang: seciliDil))
+        ]
+    }
+
+    private var supportTicketStatuses: [(key: String, title: String)] {
+        [
+            ("open", t("open", lang: seciliDil)),
+            ("inProgress", t("inProgress", lang: seciliDil)),
+            ("waitingForUser", t("waitingForUser", lang: seciliDil)),
+            ("resolved", t("resolved", lang: seciliDil)),
+            ("closed", t("closed", lang: seciliDil))
+        ]
+    }
+
+    private var isNivaDeskSupportAdmin: Bool {
+        let email = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
+    }
+
+    private var canManageWorkspaceTickets: Bool {
+        let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return supportTicketDestination == "workspace" && (role == "owner" || role == "admin")
+    }
+
+    private var canManageNivaDeskSupportTickets: Bool {
+        supportTicketDestination == "appSupport" && isNivaDeskSupportAdmin
+    }
+
+    private var canManageCurrentSupportTickets: Bool {
+        canManageWorkspaceTickets || canManageNivaDeskSupportTickets
+    }
+
+    private func supportLabel(for key: String, in options: [(key: String, title: String)]) -> String {
+        options.first(where: { $0.key == key })?.title ?? key
+    }
+
+    private var supportTicketListTitle: String {
+        if supportTicketDestination == "workspace" {
+            return canManageWorkspaceTickets ? t("Workspace Ticket Inbox", lang: seciliDil) : t("My Workspace Tickets", lang: seciliDil)
+        }
+        return canManageNivaDeskSupportTickets ? t("NivaDesk Support Inbox", lang: seciliDil) : t("My NivaDesk Support Tickets", lang: seciliDil)
+    }
+
+    private var currentSupportTickets: [StudioSupportTicket] {
+        supportTicketDestination == "workspace" ? firebaseManager.workspaceTickets : firebaseManager.supportTickets
+    }
+
+    private var supportTicketsAyari: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsCard(title: t("Support / Tickets", lang: seciliDil), iconName: "questionmark.bubble.fill", footerText: t("Choose whether this is an internal workspace request or a NivaDesk app support ticket.", lang: seciliDil)) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(t("Where should this ticket go?", lang: seciliDil))
+                        .font(.system(size: 17, weight: .bold))
+
+                    HStack(spacing: 12) {
+                        supportDestinationCard(
+                            key: "workspace",
+                            title: t("Contact Workspace Owner", lang: seciliDil),
+                            subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: seciliDil),
+                            icon: "person.2.badge.gearshape.fill"
+                        )
+
+                        supportDestinationCard(
+                            key: "appSupport",
+                            title: t("Contact NivaDesk Support", lang: seciliDil),
+                            subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: seciliDil),
+                            icon: "lifepreserver.fill"
+                        )
+                    }
+                }
+            }
+
+            SettingsCard(title: supportTicketDestination == "workspace" ? t("New Workspace Ticket", lang: seciliDil) : t("New NivaDesk Support Ticket", lang: seciliDil), iconName: supportTicketDestination == "workspace" ? "person.2.badge.gearshape.fill" : "lifepreserver.fill") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(supportTicketDestination == "workspace" ? t("Send a request to your workspace owner or admins.", lang: seciliDil) : t("Tell us what happened. Your workspace, account and platform details will be attached automatically so we can investigate faster.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(t("Category", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                            Picker("", selection: $supportTicketCategory) {
+                                ForEach(supportTicketCategories, id: \.key) { item in
+                                    Text(item.title).tag(item.key)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(t("Priority", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                            Picker("", selection: $supportTicketPriority) {
+                                ForEach(supportTicketPriorities, id: \.key) { item in
+                                    Text(item.title).tag(item.key)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("Subject", lang: seciliDil))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        TextField(t("Briefly describe the issue", lang: seciliDil), text: $supportTicketTitle)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("Message", lang: seciliDil))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        TextEditor(text: $supportTicketMessageText)
+                            .frame(minHeight: 120)
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.04)))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.12)))
+                    }
+
+                    if !firebaseManager.supportTicketError.isEmpty {
+                        Text(firebaseManager.supportTicketError)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.red)
+                    }
+
+                    if !firebaseManager.supportTicketMessage.isEmpty {
+                        Text(t(firebaseManager.supportTicketMessage, lang: seciliDil))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.green)
+                    }
+
+                    HStack {
+                        Spacer()
+                        Button {
+                            let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+                            if supportTicketDestination == "workspace" {
+                                firebaseManager.submitWorkspaceTicket(
+                                    companyId: companyId,
+                                    companyName: authVM.companyName,
+                                    userId: authVM.currentUserId ?? "",
+                                    userEmail: authVM.accountEmail,
+                                    userName: authVM.accountDisplayName,
+                                    title: supportTicketTitle,
+                                    message: supportTicketMessageText,
+                                    category: supportTicketCategory,
+                                    priority: supportTicketPriority,
+                                    language: seciliDil
+                                ) { success in
+                                    if success {
+                                        supportTicketTitle = ""
+                                        supportTicketMessageText = ""
+                                    }
+                                }
+                            } else {
+                                firebaseManager.submitSupportTicket(
+                                    companyId: companyId,
+                                    companyName: authVM.companyName,
+                                    userId: authVM.currentUserId ?? "",
+                                    userEmail: authVM.accountEmail,
+                                    userName: authVM.accountDisplayName,
+                                    title: supportTicketTitle,
+                                    message: supportTicketMessageText,
+                                    category: supportTicketCategory,
+                                    priority: supportTicketPriority,
+                                    language: seciliDil
+                                ) { success in
+                                    if success {
+                                        supportTicketTitle = ""
+                                        supportTicketMessageText = ""
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if firebaseManager.isSubmittingSupportTicket {
+                                    ProgressView().scaleEffect(0.75)
+                                }
+                                Text(firebaseManager.isSubmittingSupportTicket ? t("Sending...", lang: seciliDil) : t("Send Ticket", lang: seciliDil))
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(firebaseManager.isSubmittingSupportTicket)
+                    }
+                }
+            }
+
+            SettingsCard(title: supportTicketListTitle, iconName: canManageCurrentSupportTickets ? "tray.and.arrow.down.fill" : "tray.full.fill") {
+                VStack(alignment: .leading, spacing: 12) {
+                    if canManageWorkspaceTickets {
+                        Text(t("Owner and admins can review internal workspace tickets here and update their status.", lang: seciliDil))
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    if canManageNivaDeskSupportTickets {
+                        Text(t("NivaDesk support admins can review app support tickets from every workspace and update their status.", lang: seciliDil))
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if currentSupportTickets.isEmpty {
+                        Text(t("No support tickets yet.", lang: seciliDil))
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(currentSupportTickets) { ticket in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(ticket.title)
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundColor(.primary)
+                                        Text("\(supportLabel(for: ticket.category, in: supportTicketCategories)) • \(supportLabel(for: ticket.priority, in: supportTicketPriorities))")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    VStack(alignment: .trailing, spacing: 6) {
+                                        Text(t(ticket.status, lang: seciliDil))
+                                            .font(.system(size: 11, weight: .bold))
+                                            .padding(.horizontal, 9)
+                                            .padding(.vertical, 5)
+                                            .background(ticketStatusColor(ticket.status).opacity(0.15))
+                                            .foregroundColor(ticketStatusColor(ticket.status))
+                                            .clipShape(Capsule())
+
+                                        if canManageCurrentSupportTickets {
+                                            Menu {
+                                                ForEach(supportTicketStatuses, id: \.key) { item in
+                                                    Button {
+                                                        let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+                                                        if supportTicketDestination == "workspace" {
+                                                            firebaseManager.updateWorkspaceTicketStatus(companyId: companyId, ticketId: ticket.id, status: item.key)
+                                                        } else {
+                                                            firebaseManager.updateSupportTicketStatus(companyId: companyId, ticketId: ticket.id, status: item.key)
+                                                        }
+                                                    } label: {
+                                                        Label(item.title, systemImage: ticket.status == item.key ? "checkmark.circle.fill" : "circle")
+                                                    }
+                                                }
+                                            } label: {
+                                                HStack(spacing: 4) {
+                                                    if firebaseManager.isUpdatingWorkspaceTicketStatus || firebaseManager.isUpdatingSupportTicketStatus {
+                                                        ProgressView().scaleEffect(0.65)
+                                                    }
+                                                    Text(t("Update Status", lang: seciliDil))
+                                                    Image(systemName: "chevron.down")
+                                                        .font(.system(size: 9, weight: .bold))
+                                                }
+                                                .font(.system(size: 11, weight: .semibold))
+                                            }
+                                            .menuStyle(.borderlessButton)
+                                            .disabled(firebaseManager.isUpdatingWorkspaceTicketStatus || firebaseManager.isUpdatingSupportTicketStatus)
+                                        }
+                                    }
+                                }
+
+                                if canManageCurrentSupportTickets {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("\(t("From", lang: seciliDil)): \(ticket.createdByName.isEmpty ? ticket.createdByEmail : ticket.createdByName)")
+                                        if canManageNivaDeskSupportTickets {
+                                            Text("\(t("Workspace", lang: seciliDil)): \(ticket.companyName.isEmpty ? ticket.companyId : ticket.companyName) • \(ticket.platform) • \(ticket.appVersion.isEmpty ? t("Unknown version", lang: seciliDil) : ticket.appVersion)")
+                                        }
+                                    }
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                }
+
+                                Text(ticket.message)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(3)
+
+                                supportTicketConversationView(ticket)
+
+                                Text(ticket.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(14)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.035)))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.08)))
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            reloadVisibleSupportTickets()
+        }
+        .onChange(of: supportTicketDestination) { _ in
+            firebaseManager.supportTicketError = ""
+            firebaseManager.supportTicketMessage = ""
+            if supportTicketDestination == "workspace" && !workspaceTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
+                supportTicketCategory = "project"
+            }
+            if supportTicketDestination == "appSupport" && !appSupportTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
+                supportTicketCategory = "bug"
+            }
+            reloadVisibleSupportTickets()
+        }
+    }
+
+
+    private func reloadVisibleSupportTickets() {
+        let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+        if supportTicketDestination == "workspace" {
+            firebaseManager.loadWorkspaceTickets(companyId: companyId)
+        } else {
+            firebaseManager.loadMySupportTickets(companyId: companyId)
+        }
+    }
+
+    private func supportDestinationCard(key: String, title: String, subtitle: String, icon: String) -> some View {
+        let selected = supportTicketDestination == key
+        return Button {
+            supportTicketDestination = key
+            if key == "workspace" && !workspaceTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
+                supportTicketCategory = "project"
+            }
+            if key == "appSupport" && !appSupportTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
+                supportTicketCategory = "bug"
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(selected ? .white : .blue)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(selected ? Color.blue : Color.blue.opacity(0.12)))
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary)
+                    Spacer()
+                }
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16).fill(selected ? Color.blue.opacity(0.12) : Color.primary.opacity(0.035)))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected ? Color.blue : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+
+    private func supportTicketConversationView(_ ticket: StudioSupportTicket) -> some View {
+        let messages = firebaseManager.supportTicketMessagesByTicketId[ticket.id] ?? []
+        let draftBinding = Binding<String>(
+            get: { supportReplyDrafts[ticket.id] ?? "" },
+            set: { supportReplyDrafts[ticket.id] = $0 }
+        )
+        let ticketType = supportTicketDestination == "workspace" ? "workspace" : "appSupport"
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Divider().opacity(0.35)
+
+            HStack {
+                Text(t("Conversation", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+                    firebaseManager.loadSupportTicketMessages(companyId: companyId, ticketId: ticket.id, ticketType: ticketType)
+                } label: {
+                    Label(t("Refresh", lang: seciliDil), systemImage: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+            }
+
+            if messages.isEmpty {
+                Text(t("No replies yet.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(messages) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(item.authorName.isEmpty ? item.authorEmail : item.authorName)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.primary)
+                                Text(t(item.authorRole, lang: seciliDil))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.blue.opacity(0.10))
+                                    .foregroundColor(.blue)
+                                    .clipShape(Capsule())
+                                Spacer()
+                                Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.gray)
+                            }
+
+                            Text(item.message)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.025)))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.06)))
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("Reply", lang: seciliDil))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                TextEditor(text: draftBinding)
+                    .frame(minHeight: 70)
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.035)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.10)))
+
+                HStack {
+                    Spacer()
+                    Button {
+                        let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+                        firebaseManager.addSupportTicketReply(
+                            companyId: companyId,
+                            ticketId: ticket.id,
+                            ticketType: ticketType,
+                            message: supportReplyDrafts[ticket.id] ?? ""
+                        ) { success in
+                            if success {
+                                supportReplyDrafts[ticket.id] = ""
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if firebaseManager.isSendingSupportTicketReply {
+                                ProgressView().scaleEffect(0.65)
+                            }
+                            Text(firebaseManager.isSendingSupportTicketReply ? t("Sending...", lang: seciliDil) : t("Send Reply", lang: seciliDil))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(firebaseManager.isSendingSupportTicketReply || (supportReplyDrafts[ticket.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .onAppear {
+            let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+            if firebaseManager.supportTicketMessagesByTicketId[ticket.id] == nil {
+                firebaseManager.loadSupportTicketMessages(companyId: companyId, ticketId: ticket.id, ticketType: ticketType)
+            }
+        }
+    }
+
+
+    private func ticketStatusColor(_ status: String) -> Color {
+        switch status {
+        case "open": return .blue
+        case "inProgress": return .orange
+        case "waitingForUser": return .purple
+        case "resolved": return .green
+        case "closed": return .gray
+        default: return .secondary
+        }
+    }
+
 
     private var restrictedSettingsSection: some View {
         SettingsCard(title: t("Access restricted", lang: seciliDil), iconName: "lock.shield.fill") {

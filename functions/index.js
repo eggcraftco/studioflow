@@ -925,6 +925,510 @@ exports.recalculateWorkspacePlanUsage = onCall({ region: "europe-west2" }, async
   };
 });
 
+
+
+
+const SUPPORT_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com"]);
+const SUPPORT_TICKET_CATEGORIES = new Set(["bug", "question", "billing", "feature", "account", "other"]);
+const WORKSPACE_TICKET_CATEGORIES = new Set(["project", "task", "approval", "customer", "internal", "other"]);
+const SUPPORT_TICKET_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
+const SUPPORT_TICKET_STATUSES = new Set(["open", "inProgress", "waitingForUser", "resolved", "closed"]);
+
+function cleanSupportText(value, maxLength = 2000) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function cleanSupportMultiline(value, maxLength = 5000) {
+  return String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, maxLength);
+}
+
+function cleanSupportChoice(value, allowed, fallback) {
+  const raw = String(value || "").trim();
+  return allowed.has(raw) ? raw : fallback;
+}
+
+function supportUserEmail(request = {}) {
+  return cleanSupportText(request.auth?.token?.email || request.data?.userEmail || "", 240).toLowerCase();
+}
+
+function isSupportAdminRequest(request = {}) {
+  const email = supportUserEmail(request);
+  return Boolean(email && SUPPORT_ADMIN_EMAILS.has(email));
+}
+
+function supportTicketFromDoc(doc, ticketType = "appSupport") {
+  const data = doc.data() || {};
+  const toMillis = (value) => {
+    if (!value) return 0;
+    if (typeof value.toMillis === "function") return value.toMillis();
+    if (typeof value.toDate === "function") return value.toDate().getTime();
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  };
+  return {
+    id: doc.id,
+    ticketType: String(data.ticketType || data.type || ticketType),
+    companyId: String(data.companyId || ""),
+    companyName: String(data.companyName || ""),
+    createdByUid: String(data.createdByUid || ""),
+    createdByEmail: String(data.createdByEmail || ""),
+    createdByName: String(data.createdByName || ""),
+    title: String(data.title || ""),
+    message: String(data.message || ""),
+    category: String(data.category || "other"),
+    priority: String(data.priority || "normal"),
+    status: String(data.status || "open"),
+    platform: String(data.platform || "mac"),
+    appVersion: String(data.appVersion || ""),
+    deviceInfo: String(data.deviceInfo || ""),
+    language: String(data.language || "English"),
+    createdAtMillis: toMillis(data.createdAt),
+    updatedAtMillis: toMillis(data.updatedAt),
+    lastMessageAtMillis: toMillis(data.lastMessageAt)
+  };
+}
+
+function baseSupportPayload(request, companyId, companyData, ticketType, allowedCategories) {
+  const uid = request.auth?.uid;
+  const title = cleanSupportText(request.data?.title, 160);
+  const message = cleanSupportMultiline(request.data?.message, 5000);
+
+  if (!title || !message) {
+    throw new HttpsError("invalid-argument", "Please add a subject and message.");
+  }
+
+  const companyName = cleanSupportText(
+    request.data?.companyName || companyData.companyName || companyData.name || companyData.businessName || "",
+    160
+  );
+  const createdByEmail = supportUserEmail(request);
+  const createdByName = cleanSupportText(request.auth?.token?.name || request.data?.userName || createdByEmail || uid, 160);
+  const platform = cleanSupportChoice(request.data?.platform, new Set(["mac", "web", "android", "ios", "unknown"]), "mac");
+
+  return {
+    ticketType,
+    companyId,
+    companyName,
+    createdByUid: uid,
+    createdByEmail,
+    createdByName,
+    title,
+    message,
+    category: cleanSupportChoice(request.data?.category, allowedCategories, "other"),
+    priority: cleanSupportChoice(request.data?.priority, SUPPORT_TICKET_PRIORITIES, "normal"),
+    status: "open",
+    platform,
+    appVersion: cleanSupportText(request.data?.appVersion, 80),
+    deviceInfo: cleanSupportText(request.data?.deviceInfo, 240),
+    language: cleanSupportText(request.data?.language || "English", 80),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "callable",
+    supportSchemaVersion: 2
+  };
+}
+
+exports.createSupportTicket = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to send a support ticket.");
+  }
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const ticketRef = admin.firestore().collection("supportTickets").doc();
+  const payload = baseSupportPayload(request, companyId, companyData, "appSupport", SUPPORT_TICKET_CATEGORIES);
+  payload.supportAdminEmails = Array.from(SUPPORT_ADMIN_EMAILS);
+  payload.shareWithWorkspaceOwner = request.data?.shareWithWorkspaceOwner === true;
+
+  await ticketRef.set(payload);
+  return { ok: true, ticketId: ticketRef.id, message: "Ticket sent. We will review it as soon as possible." };
+});
+
+exports.listMySupportTickets = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to read support tickets.");
+  }
+
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const query = isSupportAdminRequest(request)
+    ? admin.firestore().collection("supportTickets").limit(200)
+    : admin.firestore().collection("supportTickets").where("companyId", "==", companyId).where("createdByUid", "==", uid).limit(100);
+  const snapshot = await query.get();
+
+  const tickets = snapshot.docs
+    .map((doc) => supportTicketFromDoc(doc, "appSupport"))
+    .sort((a, b) => Number(b.createdAtMillis || 0) - Number(a.createdAtMillis || 0));
+
+  return { ok: true, tickets, isSupportAdmin: isSupportAdminRequest(request) };
+});
+
+exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to send a workspace ticket.");
+  }
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc();
+  const payload = baseSupportPayload(request, companyId, companyData, "workspace", WORKSPACE_TICKET_CATEGORIES);
+  payload.targetRole = "owner_admin";
+
+  await ticketRef.set(payload);
+  return { ok: true, ticketId: ticketRef.id, message: "Workspace ticket sent to the workspace owner." };
+});
+
+exports.listWorkspaceTickets = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to read workspace tickets.");
+  }
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  const canSeeWorkspaceQueue = uidIsCompanyOwner(companyData, uid) || role === "admin";
+  const collection = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets");
+  const query = canSeeWorkspaceQueue ? collection.limit(200) : collection.where("createdByUid", "==", uid).limit(100);
+  const snapshot = await query.get();
+
+  const tickets = snapshot.docs
+    .map((doc) => supportTicketFromDoc(doc, "workspace"))
+    .sort((a, b) => Number(b.createdAtMillis || 0) - Number(a.createdAtMillis || 0));
+
+  return { ok: true, tickets, canSeeWorkspaceQueue };
+});
+
+exports.updateSupportTicketStatus = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to update support tickets.");
+  }
+
+  if (!isSupportAdminRequest(request)) {
+    throw new HttpsError("permission-denied", "Only NivaDesk support admins can update app support ticket status.");
+  }
+
+  const ticketId = cleanSupportText(request.data?.ticketId, 160);
+  if (!ticketId) {
+    throw new HttpsError("invalid-argument", "ticketId is required.");
+  }
+
+  const status = cleanSupportChoice(request.data?.status, SUPPORT_TICKET_STATUSES, "open");
+  const ticketRef = admin.firestore().collection("supportTickets").doc(ticketId);
+  const ticketSnap = await ticketRef.get();
+  if (!ticketSnap.exists) {
+    throw new HttpsError("not-found", "Support ticket not found.");
+  }
+
+  await ticketRef.set({
+    status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastStatusChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastStatusChangedByUid: uid,
+    lastStatusChangedByEmail: supportUserEmail(request)
+  }, { merge: true });
+
+  return { ok: true, ticketId, status, message: "NivaDesk support ticket status updated." };
+});
+
+exports.updateWorkspaceTicketStatus = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to update workspace tickets.");
+  }
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  const canManageWorkspaceQueue = uidIsCompanyOwner(companyData, uid) || role === "admin";
+  if (!canManageWorkspaceQueue) {
+    throw new HttpsError("permission-denied", "Only the workspace owner or admins can update workspace ticket status.");
+  }
+
+  const ticketId = cleanSupportText(request.data?.ticketId, 160);
+  if (!ticketId) {
+    throw new HttpsError("invalid-argument", "ticketId is required.");
+  }
+
+  const status = cleanSupportChoice(request.data?.status, SUPPORT_TICKET_STATUSES, "open");
+  const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc(ticketId);
+  const ticketSnap = await ticketRef.get();
+  if (!ticketSnap.exists) {
+    throw new HttpsError("not-found", "Workspace ticket not found.");
+  }
+
+  await ticketRef.set({
+    status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastStatusChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastStatusChangedByUid: uid,
+    lastStatusChangedByEmail: supportUserEmail(request)
+  }, { merge: true });
+
+  return { ok: true, ticketId, status, message: "Workspace ticket status updated." };
+});
+
+
+
+
+function supportTicketMessageFromDoc(doc, ticketId = "") {
+  const data = doc.data() || {};
+  const toMillis = (value) => {
+    if (!value) return 0;
+    if (typeof value.toMillis === "function") return value.toMillis();
+    if (typeof value.toDate === "function") return value.toDate().getTime();
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  };
+  return {
+    id: doc.id,
+    ticketId: String(data.ticketId || ticketId || ""),
+    message: String(data.message || ""),
+    authorUid: String(data.authorUid || ""),
+    authorEmail: String(data.authorEmail || ""),
+    authorName: String(data.authorName || ""),
+    authorRole: String(data.authorRole || "user"),
+    createdAtMillis: toMillis(data.createdAt)
+  };
+}
+
+function supportTicketInitialMessage(ticketId = "", ticketData = {}, ticketType = "workspace") {
+  const toMillis = (value) => {
+    if (!value) return 0;
+    if (typeof value.toMillis === "function") return value.toMillis();
+    if (typeof value.toDate === "function") return value.toDate().getTime();
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  };
+  return {
+    id: "initial",
+    ticketId,
+    message: String(ticketData.message || ""),
+    authorUid: String(ticketData.createdByUid || ""),
+    authorEmail: String(ticketData.createdByEmail || ""),
+    authorName: String(ticketData.createdByName || ticketData.createdByEmail || ""),
+    authorRole: "user",
+    createdAtMillis: toMillis(ticketData.createdAt)
+  };
+}
+
+function supportAuthorPayload(request = {}, authorRole = "user") {
+  const uid = request.auth?.uid || "";
+  const email = supportUserEmail(request);
+  return {
+    authorUid: uid,
+    authorEmail: email,
+    authorName: cleanSupportText(request.auth?.token?.name || request.data?.userName || email || uid, 160),
+    authorRole
+  };
+}
+
+function canAccessAppSupportTicket(ticketData = {}, request = {}) {
+  const uid = request.auth?.uid || "";
+  return isSupportAdminRequest(request) || String(ticketData.createdByUid || "") === uid;
+}
+
+function canReplyAppSupportTicket(ticketData = {}, request = {}) {
+  return canAccessAppSupportTicket(ticketData, request);
+}
+
+function canReplyWorkspaceTicket(ticketData = {}, companyData = {}, request = {}) {
+  const uid = request.auth?.uid || "";
+  if (String(ticketData.createdByUid || "") === uid) return true;
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  return uidIsCompanyOwner(companyData, uid) || role === "admin";
+}
+
+function supportCallableInternalError(label, error) {
+  if (error instanceof HttpsError) return error;
+  const message = error?.message || String(error || "Unknown support ticket error.");
+  console.error(label, error);
+  return new HttpsError("internal", `${label}: ${message}`, { label, message });
+}
+
+exports.listSupportTicketMessages = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to read ticket messages.");
+    }
+
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    if (!ticketId) {
+      throw new HttpsError("invalid-argument", "ticketId is required.");
+    }
+
+    const ticketRef = admin.firestore().collection("supportTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Support ticket not found.");
+    }
+
+    const ticketData = ticketSnap.data() || {};
+    if (!canAccessAppSupportTicket(ticketData, request)) {
+      throw new HttpsError("permission-denied", "You do not have access to this support ticket.");
+    }
+
+    const snapshot = await ticketRef.collection("messages").orderBy("createdAt", "asc").limit(200).get();
+    const messages = snapshot.docs.map((doc) => supportTicketMessageFromDoc(doc, ticketId));
+    if (messages.length === 0 && ticketData.message) {
+      messages.push(supportTicketInitialMessage(ticketId, ticketData, "appSupport"));
+    }
+
+    return { ok: true, ticketId, messages };
+  } catch (error) {
+    throw supportCallableInternalError("listSupportTicketMessages", error);
+  }
+});
+
+exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to reply to support tickets.");
+    }
+
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    const message = cleanSupportMultiline(request.data?.message, 5000);
+    if (!ticketId || !message) {
+      throw new HttpsError("invalid-argument", "ticketId and message are required.");
+    }
+
+    const ticketRef = admin.firestore().collection("supportTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Support ticket not found.");
+    }
+
+    const ticketData = ticketSnap.data() || {};
+    if (!canReplyAppSupportTicket(ticketData, request)) {
+      throw new HttpsError("permission-denied", "You do not have access to reply to this support ticket.");
+    }
+
+    const isAdmin = isSupportAdminRequest(request);
+    const messageRef = ticketRef.collection("messages").doc();
+    const currentStatus = String(ticketData.status || "open");
+    const nextStatus = isAdmin ? "waitingForUser" : (["resolved", "closed"].includes(currentStatus) ? "open" : currentStatus);
+    const payload = {
+      ticketId,
+      message,
+      ...supportAuthorPayload(request, isAdmin ? "supportAdmin" : "user"),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      source: "callable",
+      supportSchemaVersion: 2
+    };
+
+    const batch = admin.firestore().batch();
+    batch.set(messageRef, payload);
+    batch.set(ticketRef, {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageByUid: uid,
+      lastMessageByEmail: supportUserEmail(request),
+      lastMessageByRole: isAdmin ? "supportAdmin" : "user",
+      status: nextStatus
+    }, { merge: true });
+    await batch.commit();
+
+    return { ok: true, ticketId, messageId: messageRef.id, status: nextStatus, message: "Reply sent." };
+  } catch (error) {
+    throw supportCallableInternalError("addSupportTicketReply", error);
+  }
+});
+
+exports.listWorkspaceTicketMessages = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to read workspace ticket messages.");
+    }
+
+    const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    if (!ticketId) {
+      throw new HttpsError("invalid-argument", "ticketId is required.");
+    }
+
+    const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Workspace ticket not found.");
+    }
+
+    const ticketData = ticketSnap.data() || {};
+    if (!canReplyWorkspaceTicket(ticketData, companyData, request)) {
+      throw new HttpsError("permission-denied", "You do not have access to this workspace ticket.");
+    }
+
+    const snapshot = await ticketRef.collection("messages").orderBy("createdAt", "asc").limit(200).get();
+    const messages = snapshot.docs.map((doc) => supportTicketMessageFromDoc(doc, ticketId));
+    if (messages.length === 0 && ticketData.message) {
+      messages.push(supportTicketInitialMessage(ticketId, ticketData, "workspace"));
+    }
+
+    return { ok: true, ticketId, messages };
+  } catch (error) {
+    throw supportCallableInternalError("listWorkspaceTicketMessages", error);
+  }
+});
+
+exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to reply to workspace tickets.");
+    }
+
+    const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    const message = cleanSupportMultiline(request.data?.message, 5000);
+    if (!ticketId || !message) {
+      throw new HttpsError("invalid-argument", "ticketId and message are required.");
+    }
+
+    const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Workspace ticket not found.");
+    }
+
+    const ticketData = ticketSnap.data() || {};
+    if (!canReplyWorkspaceTicket(ticketData, companyData, request)) {
+      throw new HttpsError("permission-denied", "You do not have access to reply to this workspace ticket.");
+    }
+
+    const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+    const isManager = uidIsCompanyOwner(companyData, uid) || role === "admin";
+    const messageRef = ticketRef.collection("messages").doc();
+    const currentStatus = String(ticketData.status || "open");
+    const nextStatus = isManager ? "waitingForUser" : (["resolved", "closed"].includes(currentStatus) ? "open" : currentStatus);
+    const payload = {
+      ticketId,
+      message,
+      ...supportAuthorPayload(request, isManager ? "workspaceAdmin" : "user"),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      source: "callable",
+      supportSchemaVersion: 2
+    };
+
+    const batch = admin.firestore().batch();
+    batch.set(messageRef, payload);
+    batch.set(ticketRef, {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageByUid: uid,
+      lastMessageByEmail: supportUserEmail(request),
+      lastMessageByRole: isManager ? "workspaceAdmin" : "user",
+      status: nextStatus
+    }, { merge: true });
+    await batch.commit();
+
+    return { ok: true, ticketId, messageId: messageRef.id, status: nextStatus, message: "Reply sent." };
+  } catch (error) {
+    throw supportCallableInternalError("addWorkspaceTicketReply", error);
+  }
+});
+
 const { createStripeBillingFunctions } = require("./stripeBilling");
 Object.assign(exports, createStripeBillingFunctions({
   admin,

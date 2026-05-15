@@ -43,6 +43,22 @@ import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, canUseOwnerTestingControlsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings, updateWorkspaceBillingPlan } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
+import {
+  addNivaDeskSupportTicketReply,
+  addWorkspaceSupportTicketReply,
+  createNivaDeskSupportTicket,
+  createWorkspaceSupportTicket,
+  listNivaDeskSupportTicketMessages,
+  listNivaDeskSupportTickets,
+  listWorkspaceSupportTicketMessages,
+  listWorkspaceSupportTickets,
+  updateNivaDeskSupportTicketStatus,
+  updateWorkspaceSupportTicketStatus,
+  type StudioSupportTicket,
+  type StudioSupportTicketMessage,
+  type StudioSupportTicketStatus,
+  type StudioSupportTicketType
+} from "@/lib/studioflow/supportTickets";
 
 type SettingsSectionId =
   | "theme-branding"
@@ -57,6 +73,7 @@ type SettingsSectionId =
   | "account"
   | "plan-access"
   | "team-access"
+  | "support-tickets"
   | "about";
 
 type SettingsSection = {
@@ -96,6 +113,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "account", title: "Account", appKey: "Account", description: "Profile and sign-in security.", icon: "account" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team" },
+  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" },
   { id: "about", title: "About", appKey: "About", description: "App information.", icon: "about" }
 ];
 
@@ -198,7 +216,7 @@ function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
-  if (sectionId === "account" || sectionId === "about") return true;
+  if (sectionId === "account" || sectionId === "about" || sectionId === "support-tickets") return true;
   if (!workspaceAccessAllows(workspace.memberAccess, "settings")) return false;
   if (sectionId === "team-access") return workspaceAccessAllows(workspace.memberAccess, "teamAccess");
   if (sectionId === "quick-reply") return workspaceAccessAllows(workspace.memberAccess, "quickReply");
@@ -448,6 +466,8 @@ function renderSettingsSection({
       return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} onPlanChanged={onWorkspacePlanChanged} />;
     case "team-access":
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} />;
+    case "support-tickets":
+      return <SupportTicketsSection workspace={workspace} language={language} />;
     case "about":
       return <AboutSection workspace={workspace} />;
   }
@@ -3507,6 +3527,474 @@ function TeamAccessSection({
     </div>
   );
 }
+
+function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceContext; language: string }) {
+  const [ticketMode, setTicketMode] = useState<StudioSupportTicketType>("workspace");
+  const [category, setCategory] = useState("project");
+  const [priority, setPriority] = useState("normal");
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [tickets, setTickets] = useState<StudioSupportTicket[]>([]);
+  const [messagesByTicketId, setMessagesByTicketId] = useState<Record<string, StudioSupportTicketMessage[]>>({});
+  const [replyByTicketId, setReplyByTicketId] = useState<Record<string, string>>({});
+  const [selectedTicketId, setSelectedTicketId] = useState("");
+  const [loadingTickets, setLoadingTickets] = useState(false);
+  const [sendingTicket, setSendingTicket] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState<Record<string, boolean>>({});
+  const [sendingReply, setSendingReply] = useState<Record<string, boolean>>({});
+  const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isSupportAdmin, setIsSupportAdmin] = useState(false);
+  const [canSeeWorkspaceQueue, setCanSeeWorkspaceQueue] = useState(false);
+  const t = (text: string) => studioT(text, language);
+  const isWorkspaceMode = ticketMode === "workspace";
+  const canUpdateStatus = isWorkspaceMode ? canSeeWorkspaceQueue : isSupportAdmin;
+  const categories = isWorkspaceMode ? WORKSPACE_SUPPORT_CATEGORY_OPTIONS : APP_SUPPORT_CATEGORY_OPTIONS;
+
+  function ticketStarterMessage(ticket: StudioSupportTicket): StudioSupportTicketMessage {
+    return {
+      id: `${ticket.id}-initial`,
+      ticketId: ticket.id,
+      message: ticket.message,
+      authorUid: ticket.createdByUid,
+      authorEmail: ticket.createdByEmail,
+      authorName: ticket.createdByName || ticket.createdByEmail || t("Unknown user"),
+      authorRole: "user",
+      createdAtMillis: ticket.createdAtMillis
+    };
+  }
+
+  function localReplyMessage(ticket: StudioSupportTicket, reply: string): StudioSupportTicketMessage {
+    return {
+      id: `${ticket.id}-local-${Date.now()}`,
+      ticketId: ticket.id,
+      message: reply,
+      authorUid: "",
+      authorEmail: "",
+      authorName: t("You"),
+      authorRole: isWorkspaceMode && canSeeWorkspaceQueue ? "workspaceAdmin" : (!isWorkspaceMode && isSupportAdmin ? "supportAdmin" : "user"),
+      createdAtMillis: Date.now()
+    };
+  }
+
+  useEffect(() => {
+    setCategory(ticketMode === "workspace" ? "project" : "bug");
+    setTitle("");
+    setMessage("");
+    setStatus("");
+    setError("");
+    setSelectedTicketId("");
+    setMessagesByTicketId({});
+  }, [ticketMode]);
+
+  useEffect(() => {
+    void loadTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id, ticketMode]);
+
+  async function loadTickets() {
+    setLoadingTickets(true);
+    setError("");
+    try {
+      const result = isWorkspaceMode
+        ? await listWorkspaceSupportTickets(workspace)
+        : await listNivaDeskSupportTickets(workspace);
+      setTickets(result.tickets ?? []);
+      setIsSupportAdmin(Boolean(result.isSupportAdmin));
+      setCanSeeWorkspaceQueue(Boolean(result.canSeeWorkspaceQueue));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : t("Could not load support tickets."));
+    } finally {
+      setLoadingTickets(false);
+    }
+  }
+
+  async function submitTicket() {
+    setSendingTicket(true);
+    setStatus("");
+    setError("");
+    try {
+      const payload = { title, message, category, priority, language };
+      const result = isWorkspaceMode
+        ? await createWorkspaceSupportTicket(workspace, payload)
+        : await createNivaDeskSupportTicket(workspace, payload);
+      setTitle("");
+      setMessage("");
+      setPriority("normal");
+      setStatus(result.message || t("Ticket sent."));
+      await loadTickets();
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : t("Ticket could not be sent."));
+    } finally {
+      setSendingTicket(false);
+    }
+  }
+
+  async function loadMessages(ticket: StudioSupportTicket) {
+    const shouldClose = ticket.id === selectedTicketId;
+    setSelectedTicketId(shouldClose ? "" : ticket.id);
+    if (shouldClose || messagesByTicketId[ticket.id]) return;
+
+    setMessagesByTicketId(previous => ({
+      ...previous,
+      [ticket.id]: previous[ticket.id] ?? [ticketStarterMessage(ticket)]
+    }));
+    setLoadingMessages(previous => ({ ...previous, [ticket.id]: true }));
+    setError("");
+    try {
+      const result = isWorkspaceMode
+        ? await listWorkspaceSupportTicketMessages(workspace, ticket.id)
+        : await listNivaDeskSupportTicketMessages(workspace, ticket.id);
+      const remoteMessages = result.messages ?? [];
+      setMessagesByTicketId(previous => ({
+        ...previous,
+        [ticket.id]: remoteMessages.length > 0 ? remoteMessages : [ticketStarterMessage(ticket)]
+      }));
+    } catch {
+      setMessagesByTicketId(previous => ({
+        ...previous,
+        [ticket.id]: previous[ticket.id] && previous[ticket.id].length > 0 ? previous[ticket.id] : [ticketStarterMessage(ticket)]
+      }));
+      setStatus(t("Conversation will sync when the support functions finish updating."));
+    } finally {
+      setLoadingMessages(previous => ({ ...previous, [ticket.id]: false }));
+    }
+  }
+
+  async function sendReply(ticket: StudioSupportTicket) {
+    const reply = (replyByTicketId[ticket.id] || "").trim();
+    if (!reply) return;
+    setSendingReply(previous => ({ ...previous, [ticket.id]: true }));
+    setError("");
+    setStatus("");
+    try {
+      await (isWorkspaceMode
+        ? addWorkspaceSupportTicketReply(workspace, ticket.id, reply)
+        : addNivaDeskSupportTicketReply(workspace, ticket.id, reply));
+      setReplyByTicketId(previous => ({ ...previous, [ticket.id]: "" }));
+      setMessagesByTicketId(previous => {
+        const existing = previous[ticket.id] && previous[ticket.id].length > 0 ? previous[ticket.id] : [ticketStarterMessage(ticket)];
+        return { ...previous, [ticket.id]: [...existing, localReplyMessage(ticket, reply)] };
+      });
+      setStatus(t("Reply sent."));
+
+      try {
+        const result = isWorkspaceMode
+          ? await listWorkspaceSupportTicketMessages(workspace, ticket.id)
+          : await listNivaDeskSupportTicketMessages(workspace, ticket.id);
+        const remoteMessages = result.messages ?? [];
+        if (remoteMessages.length > 0) {
+          setMessagesByTicketId(previous => ({ ...previous, [ticket.id]: remoteMessages }));
+        }
+      } catch {
+        setStatus(t("Reply sent. Conversation will refresh automatically after the support functions update."));
+      }
+
+      await loadTickets();
+      setSelectedTicketId(ticket.id);
+    } catch (replyError) {
+      setError(replyError instanceof Error ? replyError.message : t("Reply could not be sent."));
+    } finally {
+      setSendingReply(previous => ({ ...previous, [ticket.id]: false }));
+    }
+  }
+
+  async function updateTicketStatus(ticket: StudioSupportTicket, nextStatus: StudioSupportTicketStatus) {
+    setStatusUpdating(previous => ({ ...previous, [ticket.id]: true }));
+    setError("");
+    try {
+      await (isWorkspaceMode
+        ? updateWorkspaceSupportTicketStatus(workspace, ticket.id, nextStatus)
+        : updateNivaDeskSupportTicketStatus(workspace, ticket.id, nextStatus));
+      await loadTickets();
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : t("Ticket status could not be updated."));
+    } finally {
+      setStatusUpdating(previous => ({ ...previous, [ticket.id]: false }));
+    }
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="notes" eyebrow={t("Support / Tickets")} title={t("How can we help?")} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+          <button
+            className={isWorkspaceMode ? "settings-section-button active" : "settings-section-button"}
+            type="button"
+            onClick={() => setTicketMode("workspace")}
+            style={{ textAlign: "left" }}
+          >
+            <span>
+              <strong>{t("Contact Workspace Owner")}</strong>
+              <small>{t("For internal project, task, customer or approval questions.")}</small>
+            </span>
+          </button>
+          <button
+            className={!isWorkspaceMode ? "settings-section-button active" : "settings-section-button"}
+            type="button"
+            onClick={() => setTicketMode("appSupport")}
+            style={{ textAlign: "left" }}
+          >
+            <span>
+              <strong>{t("Contact NivaDesk Support")}</strong>
+              <small>{t("For app bugs, sync issues, billing, account or feature requests.")}</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="notes" eyebrow={isWorkspaceMode ? t("Workspace Ticket") : t("NivaDesk Support")} title={t("New Ticket")} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <label className="quick-reply-settings-label">
+            <span>{t("Category")}</span>
+            <select className="input" value={category} disabled={sendingTicket} onChange={event => setCategory(event.target.value)}>
+              {categories.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+            </select>
+          </label>
+          <label className="quick-reply-settings-label">
+            <span>{t("Priority")}</span>
+            <select className="input" value={priority} disabled={sendingTicket} onChange={event => setPriority(event.target.value)}>
+              {SUPPORT_PRIORITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="quick-reply-settings-label">
+          <span>{t("Subject")}</span>
+          <input className="input" value={title} disabled={sendingTicket} maxLength={160} onChange={event => setTitle(event.target.value)} placeholder={t("Briefly describe the issue")} />
+        </label>
+        <label className="quick-reply-settings-label">
+          <span>{t("Message")}</span>
+          <textarea className="input" value={message} disabled={sendingTicket} rows={6} maxLength={5000} onChange={event => setMessage(event.target.value)} placeholder={t("Add details, steps, screenshots context or what you expected to happen.")} />
+        </label>
+        <div className="settings-action-row">
+          <button className="button" type="button" disabled={sendingTicket || !title.trim() || !message.trim()} onClick={submitTicket}>
+            {sendingTicket ? t("Sending...") : t("Send Ticket")}
+          </button>
+          <button className="button secondary" type="button" disabled={loadingTickets} onClick={() => void loadTickets()}>
+            {loadingTickets ? t("Refreshing...") : t("Refresh Tickets")}
+          </button>
+        </div>
+        {status ? <p className="success-copy">{status}</p> : null}
+        {error ? <p className="layout-error">{error}</p> : null}
+      </section>
+
+      <section className="card app-card">
+        <CardTitle
+          icon="notes"
+          eyebrow={isWorkspaceMode ? t("Workspace Inbox") : t("NivaDesk Support Inbox")}
+          title={isWorkspaceMode
+            ? (canSeeWorkspaceQueue ? t("Workspace Tickets") : t("My Workspace Tickets"))
+            : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets"))}
+        />
+        {loadingTickets ? <p className="muted-copy">{t("Loading tickets...")}</p> : null}
+        {!loadingTickets && tickets.length === 0 ? <p className="muted-copy">{t("No tickets yet.")}</p> : null}
+        <div style={{ display: "grid", gap: 12 }}>
+          {tickets.map(ticket => {
+            const isSelected = selectedTicketId === ticket.id;
+            const ticketMessages = messagesByTicketId[ticket.id] ?? [];
+            return (
+              <article key={ticket.id} className="mini-panel" style={supportTicketCardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 240, flex: "1 1 360px", display: "grid", gap: 5 }}>
+                    <strong style={{ fontSize: 17, lineHeight: 1.25, color: "var(--text)" }}>{ticket.title || t("Untitled ticket")}</strong>
+                    <p className="muted-copy" style={{ margin: 0, lineHeight: 1.45 }}>{ticket.message}</p>
+                    <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.createdByName || ticket.createdByEmail || ticket.createdByUid} · {formatSupportDate(ticket.createdAtMillis)}</small>
+                    {!isWorkspaceMode && isSupportAdmin ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.companyName || ticket.companyId} · {ticket.platform} {ticket.appVersion}</small> : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", flex: "0 1 auto" }}>
+                    <span style={supportStatusPillStyle(ticket.status)}>{t(supportStatusLabel(ticket.status))}</span>
+                    <span style={supportPriorityPillStyle(ticket.priority)}>{t(supportPriorityLabel(ticket.priority))}</span>
+                    {canUpdateStatus ? (
+                      <select
+                        className="input"
+                        value={ticket.status || "open"}
+                        disabled={Boolean(statusUpdating[ticket.id])}
+                        onChange={event => void updateTicketStatus(ticket, event.target.value as StudioSupportTicketStatus)}
+                        style={{ width: 170 }}
+                      >
+                        {SUPPORT_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+                      </select>
+                    ) : null}
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => void loadMessages(ticket)}
+                      style={{
+                        padding: "6px 12px",
+                        minHeight: 30,
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        letterSpacing: "0.01em",
+                        background: isSelected ? "rgba(148, 163, 184, 0.10)" : "rgba(59, 130, 246, 0.12)",
+                        border: isSelected ? "1px solid rgba(148, 163, 184, 0.28)" : "1px solid rgba(96, 165, 250, 0.32)",
+                        color: isSelected ? "var(--muted)" : "#93c5fd",
+                        boxShadow: "none"
+                      }}
+                    >
+                      {isSelected ? t("Hide Conversation") : t("Open Conversation")}
+                    </button>
+                  </div>
+                </div>
+                {isSelected ? (
+                  <div style={{ borderTop: "1px solid rgba(148, 163, 184, 0.25)", paddingTop: 10, display: "grid", gap: 10 }}>
+                    {loadingMessages[ticket.id] ? <p className="muted-copy">{t("Loading conversation...")}</p> : null}
+                    {!loadingMessages[ticket.id] && ticketMessages.length === 0 ? <p className="muted-copy">{t("No replies yet.")}</p> : null}
+                    {ticketMessages.map(item => (
+                      <div key={item.id} className="mini-panel" style={{
+                        background: item.authorRole === "user" ? "rgba(148, 163, 184, 0.08)" : "rgba(59, 130, 246, 0.12)",
+                        border: item.authorRole === "user" ? "1px solid rgba(148, 163, 184, 0.22)" : "1px solid rgba(96, 165, 250, 0.30)",
+                        padding: 14
+                      }}>
+                        <strong style={{ color: "var(--text)" }}>{item.authorName || item.authorEmail || t("Unknown user")}</strong>
+                        <small className="muted-copy"> · {t(supportAuthorRoleLabel(item.authorRole))} · {formatSupportDate(item.createdAtMillis)}</small>
+                        <p className="muted-copy" style={{ marginTop: 6, marginBottom: 0, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{item.message}</p>
+                      </div>
+                    ))}
+                    <label className="quick-reply-settings-label">
+                      <span>{t("Reply")}</span>
+                      <textarea
+                        className="input"
+                        rows={4}
+                        value={replyByTicketId[ticket.id] ?? ""}
+                        disabled={Boolean(sendingReply[ticket.id])}
+                        onChange={event => setReplyByTicketId(previous => ({ ...previous, [ticket.id]: event.target.value }))}
+                        placeholder={t("Write a reply...")}
+                      />
+                    </label>
+                    <div className="settings-action-row">
+                      <button className="button" type="button" disabled={Boolean(sendingReply[ticket.id]) || !(replyByTicketId[ticket.id] || "").trim()} onClick={() => void sendReply(ticket)}>
+                        {sendingReply[ticket.id] ? t("Sending...") : t("Send Reply")}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const APP_SUPPORT_CATEGORY_OPTIONS = [
+  { value: "bug", label: "Bug / Problem" },
+  { value: "question", label: "Question" },
+  { value: "billing", label: "Billing" },
+  { value: "feature", label: "Feature Request" },
+  { value: "account", label: "Account" },
+  { value: "other", label: "Other" }
+];
+
+const WORKSPACE_SUPPORT_CATEGORY_OPTIONS = [
+  { value: "project", label: "Project" },
+  { value: "task", label: "Task" },
+  { value: "approval", label: "Approval" },
+  { value: "customer", label: "Customer" },
+  { value: "internal", label: "Internal" },
+  { value: "other", label: "Other" }
+];
+
+const SUPPORT_PRIORITY_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "normal", label: "Normal" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" }
+];
+
+const SUPPORT_STATUS_OPTIONS: Array<{ value: StudioSupportTicketStatus; label: string }> = [
+  { value: "open", label: "Open" },
+  { value: "inProgress", label: "In Progress" },
+  { value: "waitingForUser", label: "Waiting for User" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" }
+];
+
+
+const supportTicketCardStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  padding: "18px 20px",
+  borderRadius: 18,
+  border: "1px solid rgba(148, 163, 184, 0.28)",
+  background: "color-mix(in srgb, var(--card) 88%, transparent)",
+  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)"
+};
+
+const baseSupportPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 30,
+  padding: "0 13px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 800,
+  letterSpacing: "0.01em",
+  whiteSpace: "nowrap",
+  border: "1px solid transparent"
+};
+
+function supportStatusPillStyle(status: string): React.CSSProperties {
+  const normalized = String(status || "open");
+  if (normalized === "resolved") {
+    return { ...baseSupportPillStyle, color: "#166534", background: "rgba(34, 197, 94, 0.18)", borderColor: "rgba(34, 197, 94, 0.38)" };
+  }
+  if (normalized === "inProgress") {
+    return { ...baseSupportPillStyle, color: "#1d4ed8", background: "rgba(59, 130, 246, 0.18)", borderColor: "rgba(59, 130, 246, 0.38)" };
+  }
+  if (normalized === "waitingForUser") {
+    return { ...baseSupportPillStyle, color: "#92400e", background: "rgba(245, 158, 11, 0.20)", borderColor: "rgba(245, 158, 11, 0.42)" };
+  }
+  if (normalized === "closed") {
+    return { ...baseSupportPillStyle, color: "#475569", background: "rgba(100, 116, 139, 0.18)", borderColor: "rgba(100, 116, 139, 0.32)" };
+  }
+  return { ...baseSupportPillStyle, color: "#075985", background: "rgba(14, 165, 233, 0.16)", borderColor: "rgba(14, 165, 233, 0.34)" };
+}
+
+function supportPriorityPillStyle(priority: string): React.CSSProperties {
+  const normalized = String(priority || "normal");
+  if (normalized === "urgent") {
+    return { ...baseSupportPillStyle, color: "#991b1b", background: "rgba(239, 68, 68, 0.18)", borderColor: "rgba(239, 68, 68, 0.40)" };
+  }
+  if (normalized === "high") {
+    return { ...baseSupportPillStyle, color: "#9a3412", background: "rgba(249, 115, 22, 0.18)", borderColor: "rgba(249, 115, 22, 0.40)" };
+  }
+  if (normalized === "low") {
+    return { ...baseSupportPillStyle, color: "#166534", background: "rgba(34, 197, 94, 0.14)", borderColor: "rgba(34, 197, 94, 0.30)" };
+  }
+  return { ...baseSupportPillStyle, color: "#334155", background: "rgba(148, 163, 184, 0.18)", borderColor: "rgba(148, 163, 184, 0.34)" };
+}
+
+function supportStatusLabel(status: string) {
+  return SUPPORT_STATUS_OPTIONS.find(option => option.value === status)?.label ?? "Open";
+}
+
+function supportPriorityLabel(priority: string) {
+  return SUPPORT_PRIORITY_OPTIONS.find(option => option.value === priority)?.label ?? "Normal";
+}
+
+function supportAuthorRoleLabel(role: string) {
+  if (role === "supportAdmin") return "NivaDesk Support";
+  if (role === "workspaceAdmin") return "Workspace Owner/Admin";
+  return "User";
+}
+
+function formatSupportDate(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "-";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 
 function AboutSection({ workspace }: { workspace: WorkspaceContext }) {
   return (
