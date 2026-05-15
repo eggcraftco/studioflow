@@ -438,6 +438,54 @@ data class StudioJoinRequest(
         get() = requesterDisplayName.trim().ifEmpty { emailName(requesterEmail).ifEmpty { requesterUid } }
 }
 
+
+data class StudioSupportTicket(
+    val id: String,
+    val ticketType: String,
+    val companyId: String,
+    val companyName: String,
+    val createdByUid: String,
+    val createdByEmail: String,
+    val createdByName: String,
+    val title: String,
+    val message: String,
+    val category: String,
+    val priority: String,
+    val status: String,
+    val platform: String,
+    val appVersion: String,
+    val deviceInfo: String,
+    val language: String,
+    val createdAt: Date?,
+    val updatedAt: Date?,
+    val lastMessageAt: Date?
+) {
+    val senderLabel: String
+        get() = createdByName.trim().ifEmpty { emailName(createdByEmail).ifEmpty { createdByUid } }
+
+    val isWorkspaceTicket: Boolean
+        get() = ticketType == "workspace"
+}
+
+data class StudioSupportTicketMessage(
+    val id: String,
+    val message: String,
+    val createdByUid: String,
+    val createdByEmail: String,
+    val createdByName: String,
+    val senderRole: String,
+    val createdAt: Date?
+) {
+    val senderLabel: String
+        get() = createdByName.trim().ifEmpty { emailName(createdByEmail).ifEmpty { createdByUid } }
+}
+
+data class StudioSupportTicketListResult(
+    val tickets: List<StudioSupportTicket>,
+    val canManage: Boolean
+)
+
+
 data class StudioCustomRole(
     val id: String,
     val name: String,

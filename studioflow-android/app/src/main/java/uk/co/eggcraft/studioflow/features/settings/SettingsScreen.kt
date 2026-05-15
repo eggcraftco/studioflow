@@ -107,6 +107,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import uk.co.eggcraft.studioflow.R
+import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
+import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
+import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.QuickReplyTemplateItem
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
@@ -294,6 +297,7 @@ private fun rememberSettingsSections(): List<SettingsSection> = remember {
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
         SettingsSection("account", "Account", "Profile, company and sign-in security.", Icons.Filled.AccountCircle),
+        SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
         SettingsSection("about", "About", "Version and ownership information.", Icons.Filled.Info)
@@ -388,6 +392,7 @@ private fun SettingsDetailScreen(
                     onSendPasswordResetEmail = onSendPasswordResetEmail,
                     onSignOut = onSignOut
                 )
+                "support" -> SupportTicketsDetail(state)
                 "plan" -> PlanAccessDetail(state, onUpdateWorkspaceBillingPlan)
                 "team" -> TeamAccessDetail(
                     state = state,
@@ -2169,6 +2174,548 @@ private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): Work
         else -> this
     }
 }
+
+
+@Composable
+private fun SupportTicketsDetail(state: StudioFlowUiState) {
+    val workspace = state.workspace
+    if (workspace == null) {
+        DetailColumn {
+            DetailCard("Support / Tickets", Icons.Filled.Email) {
+                Text("Sign in and select a workspace to use support tickets.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        return
+    }
+    val repository = remember { StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    var selectedType by rememberSaveable { mutableStateOf("workspace") }
+    var category by rememberSaveable { mutableStateOf("project") }
+    var priority by rememberSaveable { mutableStateOf("normal") }
+    var subject by rememberSaveable { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("") }
+    var tickets by remember { mutableStateOf<List<StudioSupportTicket>>(emptyList()) }
+    var canManageTickets by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf("") }
+    var refreshKey by remember { mutableStateOf(0) }
+    var openTicketIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var messagesByTicketId by remember { mutableStateOf<Map<String, List<StudioSupportTicketMessage>>>(emptyMap()) }
+    var replyTextByTicketId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    val isWorkspaceMode = selectedType == "workspace"
+    val categoryOptions = if (isWorkspaceMode) {
+        listOf("project", "task", "approval", "customer", "internal", "other")
+    } else {
+        listOf("bug", "question", "billing", "feature", "account", "other")
+    }
+    val priorityOptions = listOf("low", "normal", "high", "urgent")
+    val statusOptions = listOf("open", "inProgress", "waitingForUser", "resolved", "closed")
+
+    LaunchedEffect(selectedType) {
+        category = if (isWorkspaceMode) "project" else "bug"
+        statusMessage = ""
+        errorMessage = ""
+        openTicketIds = emptySet()
+        messagesByTicketId = emptyMap()
+        replyTextByTicketId = emptyMap()
+        refreshKey += 1
+    }
+
+    fun loadTickets() {
+        loading = true
+        scope.launch {
+            runCatching {
+                if (isWorkspaceMode) {
+                    repository.listWorkspaceTickets(workspace)
+                } else {
+                    repository.listSupportTickets(workspace)
+                }
+            }.onSuccess { result ->
+                tickets = result.tickets
+                canManageTickets = result.canManage
+                loading = false
+            }.onFailure { error ->
+                loading = false
+                errorMessage = error.message ?: "Could not load tickets."
+            }
+        }
+    }
+
+    fun loadMessages(ticket: StudioSupportTicket) {
+        scope.launch {
+            runCatching {
+                if (ticket.isWorkspaceTicket) {
+                    repository.listWorkspaceTicketMessages(workspace, ticket.id)
+                } else {
+                    repository.listSupportTicketMessages(workspace, ticket.id)
+                }
+            }.onSuccess { messages ->
+                messagesByTicketId = messagesByTicketId + (ticket.id to messages)
+            }.onFailure { error ->
+                errorMessage = error.message ?: "Could not load conversation."
+            }
+        }
+    }
+
+    LaunchedEffect(workspace?.id, selectedType, refreshKey) {
+        loadTickets()
+    }
+
+    DetailColumn {
+        DetailCard("Support / Tickets", Icons.Filled.Email) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val narrow = maxWidth < 560.dp
+                if (narrow) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SupportTicketTypeCard(
+                            title = "Contact Workspace Owner",
+                            subtitle = "Internal project, task, approval or customer questions.",
+                            selected = isWorkspaceMode,
+                            onClick = { selectedType = "workspace" }
+                        )
+                        SupportTicketTypeCard(
+                            title = "Contact NivaDesk Support",
+                            subtitle = "App bugs, sync, billing, account or feature requests.",
+                            selected = !isWorkspaceMode,
+                            onClick = { selectedType = "appSupport" }
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        SupportTicketTypeCard(
+                            title = "Contact Workspace Owner",
+                            subtitle = "Internal project, task, approval or customer questions.",
+                            selected = isWorkspaceMode,
+                            onClick = { selectedType = "workspace" },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SupportTicketTypeCard(
+                            title = "Contact NivaDesk Support",
+                            subtitle = "App bugs, sync, billing, account or feature requests.",
+                            selected = !isWorkspaceMode,
+                            onClick = { selectedType = "appSupport" },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            SupportFormFieldMenus(
+                category = category,
+                categories = categoryOptions,
+                onCategory = { category = it },
+                priority = priority,
+                priorities = priorityOptions,
+                onPriority = { priority = it }
+            )
+
+            OutlinedTextField(
+                value = subject,
+                onValueChange = { subject = it },
+                label = { Text("Subject") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = message,
+                onValueChange = { message = it },
+                label = { Text("Message") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = {
+                        val cleanSubject = subject.trim()
+                        val cleanMessage = message.trim()
+                        if (cleanSubject.isBlank() || cleanMessage.isBlank()) {
+                            errorMessage = "Please add a subject and message."
+                            return@Button
+                        }
+                        sending = true
+                        errorMessage = ""
+                        statusMessage = ""
+                        scope.launch {
+                            runCatching {
+                                if (isWorkspaceMode) {
+                                    repository.createWorkspaceTicket(workspace, category, priority, cleanSubject, cleanMessage)
+                                } else {
+                                    repository.createSupportTicket(workspace, category, priority, cleanSubject, cleanMessage)
+                                }
+                            }.onSuccess { response ->
+                                sending = false
+                                subject = ""
+                                message = ""
+                                statusMessage = response
+                                refreshKey += 1
+                            }.onFailure { error ->
+                                sending = false
+                                errorMessage = error.message ?: "Could not send ticket."
+                            }
+                        }
+                    },
+                    enabled = !sending,
+                    colors = ButtonDefaults.buttonColors(containerColor = StudioBlue),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (sending) "Sending..." else "Send Ticket", fontWeight = FontWeight.ExtraBold)
+                }
+                OutlinedButton(onClick = { refreshKey += 1 }, shape = RoundedCornerShape(10.dp)) {
+                    Text("Refresh")
+                }
+            }
+
+            if (statusMessage.isNotBlank()) Pill(statusMessage, StudioGreen)
+            if (errorMessage.isNotBlank()) Pill(errorMessage, DangerRed)
+        }
+
+        DetailCard(
+            title = if (isWorkspaceMode) {
+                if (canManageTickets) "Workspace Ticket Inbox" else "My Workspace Tickets"
+            } else {
+                if (canManageTickets) "NivaDesk Support Inbox" else "My NivaDesk Support Tickets"
+            },
+            icon = Icons.Filled.Info
+        ) {
+            if (loading) {
+                Pill("Loading tickets...", StudioBlue)
+            }
+            if (tickets.isEmpty() && !loading) {
+                Text("No tickets yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            tickets.forEach { ticket ->
+                SupportTicketCard(
+                    ticket = ticket,
+                    canManage = canManageTickets,
+                    statusOptions = statusOptions,
+                    isOpen = openTicketIds.contains(ticket.id),
+                    messages = messagesByTicketId[ticket.id].orEmpty(),
+                    replyText = replyTextByTicketId[ticket.id].orEmpty(),
+                    onToggleOpen = {
+                        val willOpen = !openTicketIds.contains(ticket.id)
+                        openTicketIds = if (willOpen) openTicketIds + ticket.id else openTicketIds - ticket.id
+                        if (willOpen && !messagesByTicketId.containsKey(ticket.id)) {
+                            loadMessages(ticket)
+                        }
+                    },
+                    onStatusChange = { status ->
+                        scope.launch {
+                            runCatching {
+                                if (ticket.isWorkspaceTicket) {
+                                    repository.updateWorkspaceTicketStatus(workspace, ticket.id, status)
+                                } else {
+                                    repository.updateSupportTicketStatus(workspace, ticket.id, status)
+                                }
+                            }.onSuccess {
+                                statusMessage = it
+                                refreshKey += 1
+                            }.onFailure { error ->
+                                errorMessage = error.message ?: "Could not update status."
+                            }
+                        }
+                    },
+                    onReplyTextChange = { value ->
+                        replyTextByTicketId = replyTextByTicketId + (ticket.id to value)
+                    },
+                    onSendReply = {
+                        val reply = replyTextByTicketId[ticket.id].orEmpty().trim()
+                        if (reply.isNotBlank()) {
+                            scope.launch {
+                                runCatching {
+                                    if (ticket.isWorkspaceTicket) {
+                                        repository.addWorkspaceTicketReply(workspace, ticket.id, reply)
+                                    } else {
+                                        repository.addSupportTicketReply(workspace, ticket.id, reply)
+                                    }
+                                }.onSuccess { response ->
+                                    statusMessage = response
+                                    replyTextByTicketId = replyTextByTicketId + (ticket.id to "")
+                                    loadMessages(ticket)
+                                    refreshKey += 1
+                                }.onFailure { error ->
+                                    errorMessage = error.message ?: "Could not send reply."
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportTicketTypeCard(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) StudioBlue.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = if (selected) 2.dp else 0.dp,
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (selected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (selected) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+            }
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 18.sp)
+        }
+    }
+}
+
+@Composable
+private fun SupportFormFieldMenus(
+    category: String,
+    categories: List<String>,
+    onCategory: (String) -> Unit,
+    priority: String,
+    priorities: List<String>,
+    onPriority: (String) -> Unit
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val narrow = maxWidth < 560.dp
+        if (narrow) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SupportMenuField("Category", supportCategoryLabel(category), categories, onCategory)
+                SupportMenuField("Priority", supportPriorityLabel(priority), priorities, onPriority)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                SupportMenuField("Category", supportCategoryLabel(category), categories, onCategory, Modifier.weight(1f))
+                SupportMenuField("Priority", supportPriorityLabel(priority), priorities, onPriority, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportMenuField(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+        MenuChip(
+            value = value,
+            options = options,
+            modifier = Modifier.fillMaxWidth(),
+            onSelect = onSelect
+        )
+    }
+}
+
+@Composable
+private fun SupportTicketCard(
+    ticket: StudioSupportTicket,
+    canManage: Boolean,
+    statusOptions: List<String>,
+    isOpen: Boolean,
+    messages: List<StudioSupportTicketMessage>,
+    replyText: String,
+    onToggleOpen: () -> Unit,
+    onStatusChange: (String) -> Unit,
+    onReplyTextChange: (String) -> Unit,
+    onSendReply: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(ticket.title, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
+                    Text(
+                        listOf(ticket.senderLabel, ticket.companyName, supportDateText(ticket.lastMessageAt ?: ticket.createdAt))
+                            .filter { it.isNotBlank() }
+                            .joinToString(" • "),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                SupportStatusPill(ticket.status)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SupportSmallPill(supportCategoryLabel(ticket.category), StudioBlue)
+                SupportSmallPill(supportPriorityLabel(ticket.priority), supportPriorityColor(ticket.priority))
+            }
+
+            Text(
+                ticket.message,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (isOpen) 8 else 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = onToggleOpen, shape = RoundedCornerShape(999.dp)) {
+                    Text(if (isOpen) "Hide Conversation" else "Open Conversation", fontWeight = FontWeight.Bold)
+                }
+                if (canManage) {
+                    MenuChip(
+                        value = supportStatusLabel(ticket.status),
+                        options = statusOptions,
+                        onSelect = onStatusChange
+                    )
+                }
+            }
+
+            if (isOpen) {
+                HorizontalDivider()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val conversation = if (messages.isEmpty()) {
+                        listOf(
+                            StudioSupportTicketMessage(
+                                id = "initial",
+                                message = ticket.message,
+                                createdByUid = ticket.createdByUid,
+                                createdByEmail = ticket.createdByEmail,
+                                createdByName = ticket.createdByName,
+                                senderRole = "user",
+                                createdAt = ticket.createdAt
+                            )
+                        )
+                    } else {
+                        messages
+                    }
+                    conversation.forEach { item ->
+                        SupportMessageBubble(item)
+                    }
+                    OutlinedTextField(
+                        value = replyText,
+                        onValueChange = onReplyTextChange,
+                        label = { Text("Reply") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+                    Button(
+                        onClick = onSendReply,
+                        enabled = replyText.trim().isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = StudioBlue),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Send Reply", fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportMessageBubble(message: StudioSupportTicketMessage) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(message.senderLabel, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                Text(supportDateText(message.createdAt), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+            Text(message.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SupportStatusPill(status: String) {
+    SupportSmallPill(supportStatusLabel(status), supportStatusColor(status))
+}
+
+@Composable
+private fun SupportSmallPill(label: String, color: Color) {
+    Surface(shape = RoundedCornerShape(999.dp), color = color.copy(alpha = 0.14f)) {
+        Text(label, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = color, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+    }
+}
+
+private fun supportStatusLabel(value: String): String {
+    return when (value) {
+        "inProgress" -> "In Progress"
+        "waitingForUser" -> "Waiting for User"
+        "resolved" -> "Resolved"
+        "closed" -> "Closed"
+        else -> "Open"
+    }
+}
+
+private fun supportStatusColor(value: String): Color {
+    return when (value) {
+        "inProgress" -> StudioBlue
+        "waitingForUser" -> StudioOrange
+        "resolved" -> StudioGreen
+        "closed" -> Color(0xFF7B8494)
+        else -> StudioBlue
+    }
+}
+
+private fun supportPriorityLabel(value: String): String {
+    return value.replaceFirstChar { it.uppercaseChar() }
+}
+
+private fun supportPriorityColor(value: String): Color {
+    return when (value) {
+        "low" -> StudioGreen
+        "high" -> StudioOrange
+        "urgent" -> DangerRed
+        else -> Color(0xFF7B8494)
+    }
+}
+
+private fun supportCategoryLabel(value: String): String {
+    return when (value) {
+        "bug" -> "Bug"
+        "question" -> "Question"
+        "billing" -> "Billing"
+        "feature" -> "Feature"
+        "account" -> "Account"
+        "project" -> "Project"
+        "task" -> "Task"
+        "approval" -> "Approval"
+        "customer" -> "Customer"
+        "internal" -> "Internal"
+        else -> "Other"
+    }
+}
+
+private fun supportDateText(value: Date?): String {
+    if (value == null) return ""
+    return SimpleDateFormat("dd MMM yyyy HH:mm", Locale.UK).format(value)
+}
+
 
 @Composable
 private fun AboutDetail() {

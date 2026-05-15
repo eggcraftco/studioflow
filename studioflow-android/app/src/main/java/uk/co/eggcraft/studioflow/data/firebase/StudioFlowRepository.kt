@@ -1,5 +1,6 @@
 package uk.co.eggcraft.studioflow.data.firebase
 
+import android.os.Build
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
@@ -26,6 +27,9 @@ import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
+import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
+import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
+import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioTeamAccessSnapshot
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
@@ -857,6 +861,227 @@ class StudioFlowRepository(
             }
         }
         return deleted
+    }
+
+
+    suspend fun createSupportTicket(
+        workspace: StudioWorkspace,
+        category: String,
+        priority: String,
+        title: String,
+        message: String
+    ): String {
+        val result = functions.getHttpsCallable("createSupportTicket")
+            .call(
+                supportTicketPayload(
+                    workspace = workspace,
+                    category = category,
+                    priority = priority,
+                    title = title,
+                    message = message
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return stringValue(data["message"], "Ticket sent.")
+    }
+
+    suspend fun createWorkspaceTicket(
+        workspace: StudioWorkspace,
+        category: String,
+        priority: String,
+        title: String,
+        message: String
+    ): String {
+        val result = functions.getHttpsCallable("createWorkspaceTicket")
+            .call(
+                supportTicketPayload(
+                    workspace = workspace,
+                    category = category,
+                    priority = priority,
+                    title = title,
+                    message = message
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return stringValue(data["message"], "Workspace ticket sent.")
+    }
+
+    suspend fun listSupportTickets(workspace: StudioWorkspace): StudioSupportTicketListResult {
+        val result = functions.getHttpsCallable("listMySupportTickets")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return StudioSupportTicketListResult(
+            tickets = supportTicketList(data["tickets"], "appSupport"),
+            canManage = data["isSupportAdmin"] as? Boolean ?: false
+        )
+    }
+
+    suspend fun listWorkspaceTickets(workspace: StudioWorkspace): StudioSupportTicketListResult {
+        val result = functions.getHttpsCallable("listWorkspaceTickets")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return StudioSupportTicketListResult(
+            tickets = supportTicketList(data["tickets"], "workspace"),
+            canManage = data["canSeeWorkspaceQueue"] as? Boolean ?: false
+        )
+    }
+
+    suspend fun updateSupportTicketStatus(workspace: StudioWorkspace, ticketId: String, status: String): String {
+        val result = functions.getHttpsCallable("updateSupportTicketStatus")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId,
+                    "status" to status
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return stringValue(data["message"], "Ticket status updated.")
+    }
+
+    suspend fun updateWorkspaceTicketStatus(workspace: StudioWorkspace, ticketId: String, status: String): String {
+        val result = functions.getHttpsCallable("updateWorkspaceTicketStatus")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId,
+                    "status" to status
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return stringValue(data["message"], "Workspace ticket status updated.")
+    }
+
+    suspend fun listSupportTicketMessages(workspace: StudioWorkspace, ticketId: String): List<StudioSupportTicketMessage> {
+        val result = functions.getHttpsCallable("listSupportTicketMessages")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return supportTicketMessageList(data["messages"])
+    }
+
+    suspend fun listWorkspaceTicketMessages(workspace: StudioWorkspace, ticketId: String): List<StudioSupportTicketMessage> {
+        val result = functions.getHttpsCallable("listWorkspaceTicketMessages")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return supportTicketMessageList(data["messages"])
+    }
+
+    suspend fun addSupportTicketReply(workspace: StudioWorkspace, ticketId: String, message: String): String {
+        val result = functions.getHttpsCallable("addSupportTicketReply")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId,
+                    "message" to message.trim()
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return stringValue(data["message"], "Reply sent.")
+    }
+
+    suspend fun addWorkspaceTicketReply(workspace: StudioWorkspace, ticketId: String, message: String): String {
+        val result = functions.getHttpsCallable("addWorkspaceTicketReply")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId,
+                    "message" to message.trim()
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return stringValue(data["message"], "Reply sent.")
+    }
+
+    private fun supportTicketPayload(
+        workspace: StudioWorkspace,
+        category: String,
+        priority: String,
+        title: String,
+        message: String
+    ): Map<String, Any?> {
+        return mapOf(
+            "companyId" to workspace.id,
+            "companyName" to workspace.name,
+            "category" to category,
+            "priority" to priority,
+            "title" to title.trim(),
+            "message" to message.trim(),
+            "platform" to "android",
+            "appVersion" to "Android",
+            "deviceInfo" to androidDeviceInfo(),
+            "language" to Locale.getDefault().displayLanguage.ifBlank { "English" }
+        )
+    }
+
+    private fun androidDeviceInfo(): String {
+        val manufacturer = Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercaseChar() }
+        val model = Build.MODEL.orEmpty()
+        val version = Build.VERSION.RELEASE.orEmpty()
+        return listOf(manufacturer, model, "Android $version").filter { it.isNotBlank() }.joinToString(" ")
+    }
+
+    private fun supportTicketList(value: Any?, fallbackType: String): List<StudioSupportTicket> {
+        val items = value as? List<*> ?: return emptyList()
+        return items.mapNotNull { item ->
+            val data = item as? Map<*, *> ?: return@mapNotNull null
+            StudioSupportTicket(
+                id = stringValue(data["id"], ""),
+                ticketType = stringValue(data["ticketType"], fallbackType),
+                companyId = stringValue(data["companyId"], ""),
+                companyName = stringValue(data["companyName"], ""),
+                createdByUid = stringValue(data["createdByUid"], ""),
+                createdByEmail = stringValue(data["createdByEmail"], ""),
+                createdByName = stringValue(data["createdByName"], ""),
+                title = stringValue(data["title"], "Ticket"),
+                message = stringValue(data["message"], ""),
+                category = stringValue(data["category"], "other"),
+                priority = stringValue(data["priority"], "normal"),
+                status = stringValue(data["status"], "open"),
+                platform = stringValue(data["platform"], "android"),
+                appVersion = stringValue(data["appVersion"], ""),
+                deviceInfo = stringValue(data["deviceInfo"], ""),
+                language = stringValue(data["language"], "English"),
+                createdAt = dateFromAny(data["createdAtMillis"]),
+                updatedAt = dateFromAny(data["updatedAtMillis"]),
+                lastMessageAt = dateFromAny(data["lastMessageAtMillis"])
+            )
+        }.sortedByDescending { it.lastMessageAt?.time ?: it.createdAt?.time ?: 0L }
+    }
+
+    private fun supportTicketMessageList(value: Any?): List<StudioSupportTicketMessage> {
+        val items = value as? List<*> ?: return emptyList()
+        return items.mapNotNull { item ->
+            val data = item as? Map<*, *> ?: return@mapNotNull null
+            StudioSupportTicketMessage(
+                id = stringValue(data["id"], ""),
+                message = stringValue(data["message"], ""),
+                createdByUid = stringValue(data["createdByUid"], ""),
+                createdByEmail = stringValue(data["createdByEmail"], ""),
+                createdByName = stringValue(data["createdByName"], ""),
+                senderRole = stringValue(data["senderRole"], "user"),
+                createdAt = dateFromAny(data["createdAtMillis"])
+            )
+        }.sortedBy { it.createdAt?.time ?: 0L }
     }
 
     private suspend fun validateWorkspacePlanAction(workspace: StudioWorkspace, action: String, fileSizeBytes: Int) {
