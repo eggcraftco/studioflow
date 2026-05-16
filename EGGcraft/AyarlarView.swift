@@ -311,9 +311,10 @@ struct AyarlarView: View {
 
                 ForEach(settingsSections, id: \.key) { section in
                     AyarMenuButonu(
-                        title: supportSectionTitle(section),
+                        title: section.title,
                         icon: section.icon,
-                        isSelected: seciliAyarSekmesi == section.key
+                        isSelected: seciliAyarSekmesi == section.key,
+                        badgeCount: supportSectionUnreadBadgeCount(section)
                     ) {
                         seciliAyarSekmesi = section.key
                     }
@@ -422,7 +423,7 @@ struct AyarlarView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(supportSectionTitle(section))
+                                    Text(section.title)
                                         .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(.primary)
                                         .lineLimit(1)
@@ -434,6 +435,18 @@ struct AyarlarView: View {
                                 }
 
                                 Spacer()
+
+                                if supportSectionUnreadBadgeCount(section) > 0 {
+                                    Text("\(supportSectionUnreadBadgeCount(section))")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 5)
+                                        .background(Color.red)
+                                        .clipShape(Capsule())
+                                        .shadow(color: Color.red.opacity(0.25), radius: 4, y: 2)
+                                        .accessibilityLabel(Text("\(supportSectionUnreadBadgeCount(section)) new support tickets"))
+                                }
 
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
@@ -602,9 +615,8 @@ struct AyarlarView: View {
         ticket.isUnread(for: authVM.currentUserId ?? "")
     }
 
-    private func supportSectionTitle(_ section: (key: String, title: String, icon: String)) -> String {
-        guard section.key == "Support", supportSettingsUnreadCount > 0 else { return section.title }
-        return "\(section.title) \(supportSettingsUnreadCount)"
+    private func supportSectionUnreadBadgeCount(_ section: (key: String, title: String, icon: String)) -> Int {
+        section.key == "Support" ? supportSettingsUnreadCount : 0
     }
 
     private var supportTicketsAyari: some View {
@@ -4336,7 +4348,46 @@ struct AyarlarView: View {
     }
 }
 
-struct AyarMenuButonu: View { let title: String; let icon: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { HStack(spacing: 12) { Image(systemName: icon).frame(width: 20); Text(title).font(.system(size: 14, weight: .medium)); Spacer() }.padding(.horizontal, 12).padding(.vertical, 10).background(isSelected ? Color.blue.opacity(0.15) : Color.clear).foregroundColor(isSelected ? .blue : .primary).cornerRadius(8) }.buttonStyle(.plain) } }
+struct AyarMenuButonu: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    var badgeCount: Int = 0
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .frame(width: 20)
+
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .lineLimit(1)
+
+                Spacer()
+
+                if badgeCount > 0 {
+                    Text("\(badgeCount)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red)
+                        .clipShape(Capsule())
+                        .shadow(color: Color.red.opacity(0.25), radius: 4, y: 2)
+                        .accessibilityLabel(Text("\(badgeCount) new support tickets"))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(isSelected ? Color.blue.opacity(0.15) : Color.clear)
+            .foregroundColor(isSelected ? .blue : .primary)
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+}
 struct TemplateRow: View { @Binding var title: String; @Binding var desc: String; var titlePlaceholder: String; var descPlaceholder: String; var body: some View { HStack(spacing: 10) { TextField(titlePlaceholder, text: $title).textFieldStyle(.plain).font(.system(size: 13, weight: .bold)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6).frame(width: 150); TextField(descPlaceholder, text: $desc).textFieldStyle(.plain).font(.system(size: 13)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6) } } }
 
 struct MusteriTransfer: Codable { var name: String; var phone: String; var email: String; var address: String; var streetAddress: String?; var city: String?; var postalCode: String?; var country: String?; var notes: String }

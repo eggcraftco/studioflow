@@ -166,6 +166,20 @@ fun SettingsScreen(
 ) {
     var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
     val sections = rememberSettingsSections()
+    val settingsRepository = remember { StudioFlowRepository() }
+    var supportUnreadCount by remember { mutableStateOf(0) }
+
+    LaunchedEffect(state.workspace?.id) {
+        val workspace = state.workspace
+        if (workspace == null) {
+            supportUnreadCount = 0
+        } else {
+            runCatching { settingsRepository.getSupportTicketUnreadSummary(workspace) }
+                .onSuccess { supportUnreadCount = it.totalUnread }
+                .onFailure { supportUnreadCount = 0 }
+        }
+    }
+
     LaunchedEffect(initialSectionKey) {
         if (!initialSectionKey.isNullOrBlank()) {
             selectedKey = initialSectionKey
@@ -194,6 +208,7 @@ fun SettingsScreen(
                             SettingsRow(
                                 section = section,
                                 selected = section.key == selected?.key,
+                                unreadCount = if (section.key == "support") supportUnreadCount else 0,
                                 onClick = { selectedKey = section.key }
                             )
                         }
@@ -276,7 +291,11 @@ fun SettingsScreen(
             SectionHeader(title = "Settings", subtitle = "Choose a section to edit.")
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
                 items(sections, key = { it.key }) { section ->
-                    SettingsRow(section = section, onClick = { selectedKey = section.key })
+                    SettingsRow(
+                        section = section,
+                        unreadCount = if (section.key == "support") supportUnreadCount else 0,
+                        onClick = { selectedKey = section.key }
+                    )
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
@@ -305,7 +324,12 @@ private fun rememberSettingsSections(): List<SettingsSection> = remember {
 }
 
 @Composable
-private fun SettingsRow(section: SettingsSection, onClick: () -> Unit, selected: Boolean = false) {
+private fun SettingsRow(
+    section: SettingsSection,
+    onClick: () -> Unit,
+    selected: Boolean = false,
+    unreadCount: Int = 0
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -324,6 +348,9 @@ private fun SettingsRow(section: SettingsSection, onClick: () -> Unit, selected:
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(section.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 Text(section.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            }
+            if (unreadCount > 0) {
+                SupportUnreadBadge(unreadCount)
             }
             Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -2204,6 +2231,8 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
     var openTicketIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var messagesByTicketId by remember { mutableStateOf<Map<String, List<StudioSupportTicketMessage>>>(emptyMap()) }
     var replyTextByTicketId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var unreadSupportTicketIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var unreadWorkspaceTicketIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     val isWorkspaceMode = selectedType == "workspace"
     val categoryOptions = if (isWorkspaceMode) {
@@ -2224,6 +2253,34 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
         refreshKey += 1
     }
 
+    fun loadUnreadSummary() {
+        scope.launch {
+            runCatching { repository.getSupportTicketUnreadSummary(workspace) }
+                .onSuccess { summary ->
+                    unreadSupportTicketIds = summary.unreadSupportTicketIds
+                    unreadWorkspaceTicketIds = summary.unreadWorkspaceTicketIds
+                }
+        }
+    }
+
+    fun markTicketRead(ticket: StudioSupportTicket) {
+        scope.launch {
+            runCatching {
+                if (ticket.isWorkspaceTicket) {
+                    repository.markWorkspaceTicketRead(workspace, ticket.id)
+                } else {
+                    repository.markSupportTicketRead(workspace, ticket.id)
+                }
+            }.onSuccess {
+                if (ticket.isWorkspaceTicket) {
+                    unreadWorkspaceTicketIds = unreadWorkspaceTicketIds - ticket.id
+                } else {
+                    unreadSupportTicketIds = unreadSupportTicketIds - ticket.id
+                }
+            }
+        }
+    }
+
     fun loadTickets() {
         loading = true
         scope.launch {
@@ -2237,6 +2294,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 tickets = result.tickets
                 canManageTickets = result.canManage
                 loading = false
+                loadUnreadSummary()
             }.onFailure { error ->
                 loading = false
                 errorMessage = error.message ?: "Could not load tickets."
@@ -2390,8 +2448,14 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 Text("No tickets yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             tickets.forEach { ticket ->
+                val isUnread = if (ticket.isWorkspaceTicket) {
+                    unreadWorkspaceTicketIds.contains(ticket.id)
+                } else {
+                    unreadSupportTicketIds.contains(ticket.id)
+                }
                 SupportTicketCard(
                     ticket = ticket,
+                    isUnread = isUnread,
                     canManage = canManageTickets,
                     statusOptions = statusOptions,
                     isOpen = openTicketIds.contains(ticket.id),
@@ -2400,6 +2464,9 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                     onToggleOpen = {
                         val willOpen = !openTicketIds.contains(ticket.id)
                         openTicketIds = if (willOpen) openTicketIds + ticket.id else openTicketIds - ticket.id
+                        if (willOpen) {
+                            markTicketRead(ticket)
+                        }
                         if (willOpen && !messagesByTicketId.containsKey(ticket.id)) {
                             loadMessages(ticket)
                         }
@@ -2533,6 +2600,7 @@ private fun SupportMenuField(
 @Composable
 private fun SupportTicketCard(
     ticket: StudioSupportTicket,
+    isUnread: Boolean,
     canManage: Boolean,
     statusOptions: List<String>,
     isOpen: Boolean,
@@ -2562,7 +2630,21 @@ private fun SupportTicketCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                SupportStatusPill(ticket.status)
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (isUnread) {
+                        SupportUnreadBadge()
+                    }
+                    SupportStatusPill(ticket.status)
+                }
+            }
+
+            if (ticket.lastMessageAt != null) {
+                Text(
+                    "Last message: ${supportDateText(ticket.lastMessageAt)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2647,6 +2729,19 @@ private fun SupportMessageBubble(message: StudioSupportTicketMessage) {
             }
             Text(message.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun SupportUnreadBadge(count: Int? = null) {
+    Surface(shape = RoundedCornerShape(999.dp), color = DangerRed.copy(alpha = 0.18f)) {
+        Text(
+            text = count?.coerceAtMost(99)?.toString() ?: "New",
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            color = DangerRed,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 12.sp
+        )
     }
 }
 

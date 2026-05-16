@@ -40,6 +40,14 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+data class SupportTicketUnreadSummary(
+    val totalUnread: Int = 0,
+    val supportUnread: Int = 0,
+    val workspaceUnread: Int = 0,
+    val unreadSupportTicketIds: Set<String> = emptySet(),
+    val unreadWorkspaceTicketIds: Set<String> = emptySet()
+)
+
 class StudioFlowRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -1012,6 +1020,51 @@ class StudioFlowRepository(
         return stringValue(data["message"], "Reply sent.")
     }
 
+    suspend fun markSupportTicketRead(workspace: StudioWorkspace, ticketId: String) {
+        functions.getHttpsCallable("markSupportTicketRead")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId
+                )
+            )
+            .await()
+    }
+
+    suspend fun markWorkspaceTicketRead(workspace: StudioWorkspace, ticketId: String) {
+        functions.getHttpsCallable("markWorkspaceTicketRead")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "ticketId" to ticketId
+                )
+            )
+            .await()
+    }
+
+    suspend fun getSupportTicketUnreadSummary(workspace: StudioWorkspace): SupportTicketUnreadSummary {
+        val result = functions.getHttpsCallable("getSupportTicketUnreadSummary")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        val supportIds = stringSetValue(
+            data["unreadSupportTicketIds"] ?: data["supportUnreadTicketIds"] ?: data["supportTicketIds"]
+        )
+        val workspaceIds = stringSetValue(
+            data["unreadWorkspaceTicketIds"] ?: data["workspaceUnreadTicketIds"] ?: data["workspaceTicketIds"]
+        )
+        val supportUnread = intValue(data["supportUnread"] ?: data["supportUnreadCount"], supportIds.size)
+        val workspaceUnread = intValue(data["workspaceUnread"] ?: data["workspaceUnreadCount"], workspaceIds.size)
+        val totalUnread = intValue(data["totalUnread"] ?: data["unreadCount"], supportUnread + workspaceUnread)
+        return SupportTicketUnreadSummary(
+            totalUnread = totalUnread,
+            supportUnread = supportUnread,
+            workspaceUnread = workspaceUnread,
+            unreadSupportTicketIds = supportIds,
+            unreadWorkspaceTicketIds = workspaceIds
+        )
+    }
+
     private fun supportTicketPayload(
         workspace: StudioWorkspace,
         category: String,
@@ -1075,10 +1128,10 @@ class StudioFlowRepository(
             StudioSupportTicketMessage(
                 id = stringValue(data["id"], ""),
                 message = stringValue(data["message"], ""),
-                createdByUid = stringValue(data["createdByUid"], ""),
-                createdByEmail = stringValue(data["createdByEmail"], ""),
-                createdByName = stringValue(data["createdByName"], ""),
-                senderRole = stringValue(data["senderRole"], "user"),
+                createdByUid = stringValue(data["createdByUid"] ?: data["authorUid"], ""),
+                createdByEmail = stringValue(data["createdByEmail"] ?: data["authorEmail"], ""),
+                createdByName = stringValue(data["createdByName"] ?: data["authorName"], ""),
+                senderRole = stringValue(data["senderRole"] ?: data["authorRole"], "user"),
                 createdAt = dateFromAny(data["createdAtMillis"])
             )
         }.sortedBy { it.createdAt?.time ?: 0L }
@@ -1897,6 +1950,11 @@ private fun intValue(value: Any?, fallback: Int): Int {
         is String -> value.toIntOrNull() ?: fallback
         else -> fallback
     }
+}
+
+private fun stringSetValue(value: Any?): Set<String> {
+    val items = value as? List<*> ?: return emptySet()
+    return items.mapNotNull { item -> stringValue(item, "").takeIf { it.isNotBlank() } }.toSet()
 }
 
 private fun requireImageBytes(bytes: ByteArray, maxMb: Int, message: String) {

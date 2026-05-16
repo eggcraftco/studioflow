@@ -25,6 +25,11 @@ export type StudioSupportTicket = {
   createdAtMillis: number;
   updatedAtMillis: number;
   lastMessageAtMillis: number;
+  lastMessageByUid?: string;
+  lastMessageByEmail?: string;
+  lastMessageByRole?: string;
+  lastMessagePreview?: string;
+  readBy?: Record<string, unknown>;
 };
 
 export type StudioSupportTicketMessage = {
@@ -67,6 +72,22 @@ export type TicketMutationResult = {
   message?: string;
 };
 
+export type SupportTicketUnreadSummary = {
+  ok?: boolean;
+  totalUnread?: number;
+  unreadCount?: number;
+  appSupportUnread?: number;
+  supportUnread?: number;
+  workspaceUnread?: number;
+  supportTicketIds?: string[];
+  workspaceTicketIds?: string[];
+  unreadTicketIds?: string[];
+  appSupportTicketIds?: string[];
+  supportUnreadIds?: string[];
+  workspaceUnreadIds?: string[];
+  appSupportUnreadIds?: string[];
+};
+
 function webDeviceInfo() {
   if (typeof navigator === "undefined") return "Web";
   return navigator.userAgent || "Web";
@@ -91,6 +112,70 @@ function supportError(error: unknown) {
     return meaningful || "Reply could not be sent yet. Please refresh and try again after the support ticket functions finish deploying.";
   }
   return raw || detailMessage || "Support ticket action failed.";
+}
+
+function supportTimestampMillis(value: unknown): number {
+  if (!value) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (value instanceof Date) return value.getTime();
+
+  if (typeof value === "object") {
+    const source = value as { seconds?: unknown; _seconds?: unknown; nanoseconds?: unknown; _nanoseconds?: unknown; toMillis?: unknown };
+    if (typeof source.toMillis === "function") {
+      const millis = source.toMillis();
+      return typeof millis === "number" && Number.isFinite(millis) ? millis : 0;
+    }
+
+    const seconds = Number(source.seconds ?? source._seconds ?? 0);
+    const nanoseconds = Number(source.nanoseconds ?? source._nanoseconds ?? 0);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.round((seconds * 1000) + (Number.isFinite(nanoseconds) ? nanoseconds / 1_000_000 : 0));
+    }
+  }
+
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  }
+
+  return 0;
+}
+
+export function supportTicketIsUnread(ticket: StudioSupportTicket, currentUserUid: string) {
+  const uid = String(currentUserUid || "").trim();
+  if (!uid) return false;
+
+  const lastMessageAt = supportTimestampMillis(ticket.lastMessageAtMillis);
+  if (lastMessageAt <= 0) return false;
+
+  if (String(ticket.lastMessageByUid || "") === uid) return false;
+
+  const readBy = ticket.readBy && typeof ticket.readBy === "object" ? ticket.readBy : {};
+  const readAt = supportTimestampMillis((readBy as Record<string, unknown>)[uid]);
+  return lastMessageAt > readAt;
+}
+
+export function supportUnreadTotal(summary: SupportTicketUnreadSummary | null | undefined) {
+  const count = Number(
+    summary?.totalUnread ??
+    summary?.unreadCount ??
+    ((Number(summary?.appSupportUnread ?? summary?.supportUnread ?? 0) || 0) + (Number(summary?.workspaceUnread ?? 0) || 0)) ??
+    0
+  );
+  return Number.isFinite(count) && count > 0 ? Math.round(count) : 0;
+}
+
+export function supportUnreadTicketIds(summary: SupportTicketUnreadSummary | null | undefined) {
+  const ids = [
+    ...(summary?.unreadTicketIds ?? []),
+    ...(summary?.supportTicketIds ?? []),
+    ...(summary?.workspaceTicketIds ?? []),
+    ...(summary?.appSupportTicketIds ?? []),
+    ...(summary?.supportUnreadIds ?? []),
+    ...(summary?.workspaceUnreadIds ?? []),
+    ...(summary?.appSupportUnreadIds ?? [])
+  ];
+  return Array.from(new Set(ids.map(item => String(item || "").trim()).filter(Boolean)));
 }
 
 function basePayload(workspace: WorkspaceContext, input: SupportTicketFormInput) {
@@ -202,6 +287,36 @@ export async function addWorkspaceSupportTicketReply(workspace: WorkspaceContext
   try {
     const callable = httpsCallable<Record<string, unknown>, TicketMutationResult>(functions, "addWorkspaceTicketReply");
     const result = await callable({ companyId: workspace.id, ticketId, message });
+    return result.data;
+  } catch (error) {
+    throw new Error(supportError(error));
+  }
+}
+
+export async function markNivaDeskSupportTicketRead(workspace: WorkspaceContext, ticketId: string) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, TicketMutationResult>(functions, "markSupportTicketRead");
+    const result = await callable({ companyId: workspace.id, ticketId });
+    return result.data;
+  } catch (error) {
+    throw new Error(supportError(error));
+  }
+}
+
+export async function markWorkspaceSupportTicketRead(workspace: WorkspaceContext, ticketId: string) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, TicketMutationResult>(functions, "markWorkspaceTicketRead");
+    const result = await callable({ companyId: workspace.id, ticketId });
+    return result.data;
+  } catch (error) {
+    throw new Error(supportError(error));
+  }
+}
+
+export async function getSupportTicketUnreadSummary(workspace: WorkspaceContext) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, SupportTicketUnreadSummary>(functions, "getSupportTicketUnreadSummary");
+    const result = await callable({ companyId: workspace.id });
     return result.data;
   } catch (error) {
     throw new Error(supportError(error));

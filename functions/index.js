@@ -1557,15 +1557,26 @@ exports.getSupportTicketUnreadSummary = onCall({ region: "europe-west2" }, async
     const workspaceQuery = canSeeWorkspaceQueue ? workspaceCollection.limit(200) : workspaceCollection.where("createdByUid", "==", uid).limit(100);
 
     const [appSnap, workspaceSnap] = await Promise.all([appQuery.get(), workspaceQuery.get()]);
-    const appSupportUnread = appSnap.docs.filter((doc) => supportTicketIsUnreadForUid(doc.data() || {}, uid)).length;
-    const workspaceUnread = workspaceSnap.docs.filter((doc) => supportTicketIsUnreadForUid(doc.data() || {}, uid)).length;
+    const unreadSupportTicketIds = appSnap.docs
+      .filter((doc) => supportTicketIsUnreadForUid(doc.data() || {}, uid))
+      .map((doc) => doc.id);
+    const unreadWorkspaceTicketIds = workspaceSnap.docs
+      .filter((doc) => supportTicketIsUnreadForUid(doc.data() || {}, uid))
+      .map((doc) => doc.id);
+    const supportUnread = unreadSupportTicketIds.length;
+    const workspaceUnread = unreadWorkspaceTicketIds.length;
 
     return {
       ok: true,
       companyId,
-      appSupportUnread,
+      supportUnread,
+      appSupportUnread: supportUnread,
       workspaceUnread,
-      totalUnread: appSupportUnread + workspaceUnread
+      totalUnread: supportUnread + workspaceUnread,
+      unreadSupportTicketIds,
+      unreadWorkspaceTicketIds,
+      supportTicketIds: unreadSupportTicketIds,
+      workspaceTicketIds: unreadWorkspaceTicketIds
     };
   } catch (error) {
     throw supportCallableInternalError("getSupportTicketUnreadSummary", error);

@@ -52,6 +52,12 @@ import {
   listNivaDeskSupportTickets,
   listWorkspaceSupportTicketMessages,
   listWorkspaceSupportTickets,
+  markNivaDeskSupportTicketRead,
+  markWorkspaceSupportTicketRead,
+  getSupportTicketUnreadSummary,
+  supportTicketIsUnread,
+  supportUnreadTicketIds,
+  supportUnreadTotal,
   updateNivaDeskSupportTicketStatus,
   updateWorkspaceSupportTicketStatus,
   type StudioSupportTicket,
@@ -234,6 +240,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [quickReplySettings, setQuickReplySettings] = useState<QuickReplySettings | null>(null);
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
+  const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("theme-branding");
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [error, setError] = useState("");
@@ -270,11 +277,12 @@ export default function SettingsPage() {
           }
           return loadTeamAccessData(loadedWorkspace).catch(() => null);
         })();
-        const [loadedCounts, loadedSettings, loadedQuickReplySettings, loadedTeamData] = await Promise.all([
+        const [loadedCounts, loadedSettings, loadedQuickReplySettings, loadedTeamData, loadedSupportUnreadSummary] = await Promise.all([
           loadDashboardCounts(loadedWorkspace.id),
           loadWorkspaceSettingsOverview(loadedWorkspace.id),
           loadQuickReplySettings(loadedWorkspace.id),
-          teamDataPromise
+          teamDataPromise,
+          getSupportTicketUnreadSummary(loadedWorkspace).catch(() => null)
         ]);
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
@@ -282,6 +290,7 @@ export default function SettingsPage() {
         setSettings(loadedSettings);
         setQuickReplySettings(loadedQuickReplySettings);
         setTeamData(loadedTeamData);
+        setSupportUnreadCount(supportUnreadTotal(loadedSupportUnreadSummary));
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load settings.");
       } finally {
@@ -363,20 +372,26 @@ export default function SettingsPage() {
             <p>{t("Choose a section to edit.")}</p>
           </div>
           <div className="settings-section-list">
-            {visibleSections.map(section => (
-              <button
-                key={section.id}
-                className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
-                type="button"
-                onClick={() => selectSection(section.id)}
-              >
-                <SettingsSectionIcon icon={section.icon} />
-                <span>
-                  <strong>{t(section.title)}</strong>
-                  <small>{t(section.description)}</small>
-                </span>
-              </button>
-            ))}
+            {visibleSections.map(section => {
+              const unreadCount = section.id === "support-tickets" ? supportUnreadCount : 0;
+              return (
+                <button
+                  key={section.id}
+                  className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
+                  type="button"
+                  onClick={() => selectSection(section.id)}
+                >
+                  <SettingsSectionIcon icon={section.icon} />
+                  <span>
+                    <strong style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      {t(section.title)}
+                      {unreadCount > 0 ? <span style={supportUnreadMenuBadgeStyle}>{unreadCount}</span> : null}
+                    </strong>
+                    <small>{t(section.description)}</small>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </aside>
 
@@ -400,6 +415,8 @@ export default function SettingsPage() {
             teamData,
             onRefreshTeamAccess: refreshTeamAccessData,
             onWorkspacePlanChanged: refreshWorkspaceContext,
+            supportUnreadCount,
+            onSupportUnreadChanged: setSupportUnreadCount,
             storagePercent,
             userEmail: user.email ?? "Signed in",
             onDataImported: refreshSettingsAfterImport
@@ -422,6 +439,8 @@ function renderSettingsSection({
   teamData,
   onRefreshTeamAccess,
   onWorkspacePlanChanged,
+  supportUnreadCount,
+  onSupportUnreadChanged,
   storagePercent,
   userEmail,
   onDataImported
@@ -437,6 +456,8 @@ function renderSettingsSection({
   teamData: TeamAccessData | null;
   onRefreshTeamAccess: () => Promise<TeamAccessData | null>;
   onWorkspacePlanChanged: () => Promise<WorkspaceContext | null>;
+  supportUnreadCount: number;
+  onSupportUnreadChanged: (count: number) => void;
   storagePercent: number;
   userEmail: string;
   onDataImported: () => Promise<void>;
@@ -467,7 +488,7 @@ function renderSettingsSection({
     case "team-access":
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} />;
     case "support-tickets":
-      return <SupportTicketsSection workspace={workspace} language={language} />;
+      return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
       return <AboutSection workspace={workspace} />;
   }
@@ -3528,7 +3549,17 @@ function TeamAccessSection({
   );
 }
 
-function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceContext; language: string }) {
+function SupportTicketsSection({
+  workspace,
+  language,
+  supportUnreadCount,
+  onSupportUnreadChanged
+}: {
+  workspace: WorkspaceContext;
+  language: string;
+  supportUnreadCount: number;
+  onSupportUnreadChanged: (count: number) => void;
+}) {
   const [ticketMode, setTicketMode] = useState<StudioSupportTicketType>("workspace");
   const [category, setCategory] = useState("project");
   const [priority, setPriority] = useState("normal");
@@ -3545,12 +3576,46 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [unreadTicketIds, setUnreadTicketIds] = useState<string[]>([]);
   const [isSupportAdmin, setIsSupportAdmin] = useState(false);
   const [canSeeWorkspaceQueue, setCanSeeWorkspaceQueue] = useState(false);
   const t = (text: string) => studioT(text, language);
   const isWorkspaceMode = ticketMode === "workspace";
   const canUpdateStatus = isWorkspaceMode ? canSeeWorkspaceQueue : isSupportAdmin;
   const categories = isWorkspaceMode ? WORKSPACE_SUPPORT_CATEGORY_OPTIONS : APP_SUPPORT_CATEGORY_OPTIONS;
+  const currentUserUid = auth.currentUser?.uid ?? "";
+
+  async function refreshSupportUnreadSummary() {
+    try {
+      const summary = await getSupportTicketUnreadSummary(workspace);
+      onSupportUnreadChanged(supportUnreadTotal(summary));
+      setUnreadTicketIds(supportUnreadTicketIds(summary));
+    } catch {
+      // Keep the currently visible count if unread summary is temporarily unavailable.
+    }
+  }
+
+  async function markTicketAsRead(ticket: StudioSupportTicket) {
+    const uid = auth.currentUser?.uid ?? "";
+    try {
+      await (isWorkspaceMode
+        ? markWorkspaceSupportTicketRead(workspace, ticket.id)
+        : markNivaDeskSupportTicketRead(workspace, ticket.id));
+
+      if (uid) {
+        const readAt = Date.now();
+        setTickets(previous => previous.map(item => item.id === ticket.id
+          ? { ...item, readBy: { ...(item.readBy ?? {}), [uid]: readAt } }
+          : item
+        ));
+      }
+      setUnreadTicketIds(previous => previous.filter(id => id !== ticket.id));
+
+      await refreshSupportUnreadSummary();
+    } catch {
+      // Opening the conversation should not fail just because read receipt sync is delayed.
+    }
+  }
 
   function ticketStarterMessage(ticket: StudioSupportTicket): StudioSupportTicketMessage {
     return {
@@ -3600,9 +3665,14 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
       const result = isWorkspaceMode
         ? await listWorkspaceSupportTickets(workspace)
         : await listNivaDeskSupportTickets(workspace);
-      setTickets(result.tickets ?? []);
+      const sortedTickets = [...(result.tickets ?? [])].sort((a, b) =>
+        Number(b.lastMessageAtMillis || b.updatedAtMillis || b.createdAtMillis || 0) -
+        Number(a.lastMessageAtMillis || a.updatedAtMillis || a.createdAtMillis || 0)
+      );
+      setTickets(sortedTickets);
       setIsSupportAdmin(Boolean(result.isSupportAdmin));
       setCanSeeWorkspaceQueue(Boolean(result.canSeeWorkspaceQueue));
+      void refreshSupportUnreadSummary();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : t("Could not load support tickets."));
     } finally {
@@ -3634,7 +3704,10 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
   async function loadMessages(ticket: StudioSupportTicket) {
     const shouldClose = ticket.id === selectedTicketId;
     setSelectedTicketId(shouldClose ? "" : ticket.id);
-    if (shouldClose || messagesByTicketId[ticket.id]) return;
+    if (shouldClose) return;
+
+    void markTicketAsRead(ticket);
+    if (messagesByTicketId[ticket.id]) return;
 
     setMessagesByTicketId(previous => ({
       ...previous,
@@ -3692,6 +3765,7 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
       }
 
       await loadTickets();
+      await refreshSupportUnreadSummary();
       setSelectedTicketId(ticket.id);
     } catch (replyError) {
       setError(replyError instanceof Error ? replyError.message : t("Reply could not be sent."));
@@ -3789,22 +3863,28 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
             ? (canSeeWorkspaceQueue ? t("Workspace Tickets") : t("My Workspace Tickets"))
             : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets"))}
         />
+        {supportUnreadCount > 0 ? <p className="muted-copy" style={{ marginTop: -4 }}>{supportUnreadCount} {t("unread ticket update")}</p> : null}
         {loadingTickets ? <p className="muted-copy">{t("Loading tickets...")}</p> : null}
         {!loadingTickets && tickets.length === 0 ? <p className="muted-copy">{t("No tickets yet.")}</p> : null}
         <div style={{ display: "grid", gap: 12 }}>
           {tickets.map(ticket => {
             const isSelected = selectedTicketId === ticket.id;
             const ticketMessages = messagesByTicketId[ticket.id] ?? [];
+            const isUnread = supportTicketIsUnread(ticket, currentUserUid) || unreadTicketIds.includes(ticket.id);
+            const lastMessageTime = ticket.lastMessageAtMillis || ticket.updatedAtMillis || ticket.createdAtMillis;
             return (
               <article key={ticket.id} className="mini-panel" style={supportTicketCardStyle}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                   <div style={{ minWidth: 240, flex: "1 1 360px", display: "grid", gap: 5 }}>
                     <strong style={{ fontSize: 17, lineHeight: 1.25, color: "var(--text)" }}>{ticket.title || t("Untitled ticket")}</strong>
                     <p className="muted-copy" style={{ margin: 0, lineHeight: 1.45 }}>{ticket.message}</p>
-                    <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.createdByName || ticket.createdByEmail || ticket.createdByUid} · {formatSupportDate(ticket.createdAtMillis)}</small>
+                    <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.createdByName || ticket.createdByEmail || ticket.createdByUid} · {t("Created")} {formatSupportDate(ticket.createdAtMillis)}</small>
+                    <small className="muted-copy" style={{ lineHeight: 1.4 }}>{t("Last message")} · {formatSupportDate(lastMessageTime)}</small>
+                    {ticket.lastMessagePreview ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{t("Last reply")} · {ticket.lastMessagePreview}</small> : null}
                     {!isWorkspaceMode && isSupportAdmin ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.companyName || ticket.companyId} · {ticket.platform} {ticket.appVersion}</small> : null}
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", flex: "0 1 auto" }}>
+                    {isUnread ? <span style={supportNewBadgeStyle}>{t("New")}</span> : null}
                     <span style={supportStatusPillStyle(ticket.status)}>{t(supportStatusLabel(ticket.status))}</span>
                     <span style={supportPriorityPillStyle(ticket.priority)}>{t(supportPriorityLabel(ticket.priority))}</span>
                     {canUpdateStatus ? (
@@ -3813,7 +3893,15 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
                         value={ticket.status || "open"}
                         disabled={Boolean(statusUpdating[ticket.id])}
                         onChange={event => void updateTicketStatus(ticket, event.target.value as StudioSupportTicketStatus)}
-                        style={{ width: 170 }}
+                        style={{
+                          width: 170,
+                          minHeight: 34,
+                          borderRadius: 10,
+                          background: "rgba(241, 245, 249, 0.92)",
+                          border: "1px solid rgba(100, 116, 139, 0.34)",
+                          color: "#0f172a",
+                          fontWeight: 800
+                        }}
                       >
                         {SUPPORT_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
                       </select>
@@ -3829,9 +3917,9 @@ function SupportTicketsSection({ workspace, language }: { workspace: WorkspaceCo
                         fontSize: 12,
                         fontWeight: 700,
                         letterSpacing: "0.01em",
-                        background: isSelected ? "rgba(148, 163, 184, 0.10)" : "rgba(59, 130, 246, 0.12)",
-                        border: isSelected ? "1px solid rgba(148, 163, 184, 0.28)" : "1px solid rgba(96, 165, 250, 0.32)",
-                        color: isSelected ? "var(--muted)" : "#93c5fd",
+                        background: isSelected ? "rgba(226, 232, 240, 0.92)" : "rgba(219, 234, 254, 0.98)",
+                        border: isSelected ? "1px solid rgba(100, 116, 139, 0.24)" : "1px solid rgba(59, 130, 246, 0.18)",
+                        color: isSelected ? "#334155" : "#0284c7",
                         boxShadow: "none"
                       }}
                     >
@@ -3939,35 +4027,59 @@ const baseSupportPillStyle: React.CSSProperties = {
   border: "1px solid transparent"
 };
 
+const supportNewBadgeStyle: React.CSSProperties = {
+  ...baseSupportPillStyle,
+  color: "#ef4444",
+  background: "rgba(254, 226, 226, 0.98)",
+  borderColor: "rgba(239, 68, 68, 0.18)",
+  boxShadow: "none"
+};
+
+const supportUnreadMenuBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  minWidth: 22,
+  height: 22,
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0 8px",
+  borderRadius: 999,
+  background: "rgba(254, 226, 226, 0.98)",
+  border: "1px solid rgba(239, 68, 68, 0.18)",
+  color: "#ef4444",
+  fontSize: 12,
+  fontWeight: 900,
+  boxShadow: "none"
+};
+
 function supportStatusPillStyle(status: string): React.CSSProperties {
   const normalized = String(status || "open");
   if (normalized === "resolved") {
-    return { ...baseSupportPillStyle, color: "#166534", background: "rgba(34, 197, 94, 0.18)", borderColor: "rgba(34, 197, 94, 0.38)" };
+    return { ...baseSupportPillStyle, color: "#16a34a", background: "rgba(220, 252, 231, 0.98)", borderColor: "rgba(34, 197, 94, 0.16)" };
   }
   if (normalized === "inProgress") {
-    return { ...baseSupportPillStyle, color: "#1d4ed8", background: "rgba(59, 130, 246, 0.18)", borderColor: "rgba(59, 130, 246, 0.38)" };
+    return { ...baseSupportPillStyle, color: "#0284c7", background: "rgba(219, 234, 254, 0.98)", borderColor: "rgba(59, 130, 246, 0.18)" };
   }
   if (normalized === "waitingForUser") {
-    return { ...baseSupportPillStyle, color: "#92400e", background: "rgba(245, 158, 11, 0.20)", borderColor: "rgba(245, 158, 11, 0.42)" };
+    return { ...baseSupportPillStyle, color: "#c026d3", background: "rgba(250, 232, 255, 0.98)", borderColor: "rgba(217, 70, 239, 0.16)" };
   }
   if (normalized === "closed") {
-    return { ...baseSupportPillStyle, color: "#475569", background: "rgba(100, 116, 139, 0.18)", borderColor: "rgba(100, 116, 139, 0.32)" };
+    return { ...baseSupportPillStyle, color: "#64748b", background: "rgba(241, 245, 249, 0.98)", borderColor: "rgba(100, 116, 139, 0.16)" };
   }
-  return { ...baseSupportPillStyle, color: "#075985", background: "rgba(14, 165, 233, 0.16)", borderColor: "rgba(14, 165, 233, 0.34)" };
+  return { ...baseSupportPillStyle, color: "#0284c7", background: "rgba(224, 242, 254, 0.98)", borderColor: "rgba(14, 165, 233, 0.18)" };
 }
 
 function supportPriorityPillStyle(priority: string): React.CSSProperties {
   const normalized = String(priority || "normal");
   if (normalized === "urgent") {
-    return { ...baseSupportPillStyle, color: "#991b1b", background: "rgba(239, 68, 68, 0.18)", borderColor: "rgba(239, 68, 68, 0.40)" };
+    return { ...baseSupportPillStyle, color: "#dc2626", background: "rgba(254, 226, 226, 0.98)", borderColor: "rgba(239, 68, 68, 0.18)" };
   }
   if (normalized === "high") {
-    return { ...baseSupportPillStyle, color: "#9a3412", background: "rgba(249, 115, 22, 0.18)", borderColor: "rgba(249, 115, 22, 0.40)" };
+    return { ...baseSupportPillStyle, color: "#ea580c", background: "rgba(255, 237, 213, 0.98)", borderColor: "rgba(249, 115, 22, 0.18)" };
   }
   if (normalized === "low") {
-    return { ...baseSupportPillStyle, color: "#166534", background: "rgba(34, 197, 94, 0.14)", borderColor: "rgba(34, 197, 94, 0.30)" };
+    return { ...baseSupportPillStyle, color: "#16a34a", background: "rgba(220, 252, 231, 0.98)", borderColor: "rgba(34, 197, 94, 0.16)" };
   }
-  return { ...baseSupportPillStyle, color: "#334155", background: "rgba(148, 163, 184, 0.18)", borderColor: "rgba(148, 163, 184, 0.34)" };
+  return { ...baseSupportPillStyle, color: "#64748b", background: "rgba(241, 245, 249, 0.98)", borderColor: "rgba(100, 116, 139, 0.16)" };
 }
 
 function supportStatusLabel(status: string) {
