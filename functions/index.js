@@ -215,8 +215,7 @@ function toPushStringMap(data = {}) {
 function isInvalidFcmTokenError(code = "") {
   return [
     "messaging/invalid-registration-token",
-    "messaging/registration-token-not-registered",
-    "messaging/invalid-argument"
+    "messaging/registration-token-not-registered"
   ].includes(code);
 }
 
@@ -252,7 +251,7 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
     data,
     apns: {
       headers: { "apns-priority": "10" },
-      payload: { aps: { sound: "default", badge: 1 } }
+      payload: { aps: { sound: "default", badge: 1, "mutable-content": 1 } }
     }
   });
 
@@ -277,6 +276,386 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
 
   return { sent: response.successCount, failed: response.failureCount, tokenCount: tokens.length };
 }
+
+function supportUniqueStrings(values = []) {
+  return Array.from(new Set(
+    values
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
+}
+
+function supportEmailQueueRef() {
+  return admin.firestore().collection("supportEmailQueue");
+}
+
+function cleanSupportEmailSubject(value = "") {
+  return cleanSupportText(value, 180) || "NivaDesk Support update";
+}
+
+function cleanSupportEmailBody(value = "") {
+  return cleanSupportMultiline(value, 4000) || "You have a new Support / Tickets update in NivaDesk.";
+}
+
+async function queueSupportEmailNotification(email = {}, context = {}) {
+  const toEmail = cleanSupportText(email.toEmail || email.to || "", 240).toLowerCase();
+  if (!toEmail || !toEmail.includes("@")) {
+    return { queued: false, reason: "missing_email" };
+  }
+
+  const payload = {
+    toEmail,
+    subject: cleanSupportEmailSubject(email.subject),
+    body: cleanSupportEmailBody(email.body),
+    companyId: String(context.companyId || ""),
+    ticketId: String(context.ticketId || ""),
+    ticketType: String(context.ticketType || ""),
+    notificationType: String(context.notificationType || "support_ticket"),
+    status: "pending",
+    provider: "not_configured",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "supportTicketNotification",
+    supportSchemaVersion: 2
+  };
+
+  const docRef = supportEmailQueueRef().doc();
+  await docRef.set(payload);
+  return { queued: true, emailQueueId: docRef.id };
+}
+
+async function queueSupportEmailNotifications(emails = [], email = {}, context = {}) {
+  const cleanEmails = supportUniqueStrings(emails).map((item) => item.toLowerCase());
+  const results = [];
+  for (const toEmail of cleanEmails) {
+    try {
+      results.push(await queueSupportEmailNotification({ ...email, toEmail }, context));
+    } catch (error) {
+      console.error("queueSupportEmailNotification failed:", toEmail, error?.message || error);
+      results.push({ queued: false, toEmail, error: error?.message || String(error) });
+    }
+  }
+  return results;
+}
+
+async function sendPushNotificationToRecipients(companyId, notification = {}, recipient = {}) {
+  if (!companyId) {
+    return { sent: 0, failed: 0, reason: "missing_company" };
+  }
+
+  const userIds = new Set(supportUniqueStrings(recipient.userIds || recipient.uids || []));
+  const emails = new Set(supportUniqueStrings(recipient.emails || []).map((item) => item.toLowerCase()));
+
+  if (userIds.size === 0 && emails.size === 0) {
+    return { sent: 0, failed: 0, reason: "missing_recipients" };
+  }
+
+  const tokenSnap = await deviceTokenCollectionRef(companyId).limit(200).get();
+  const tokenDocs = tokenSnap.docs.filter((doc) => {
+    const data = doc.data() || {};
+    if (data.enabled === false) return false;
+    const tokenUserId = String(data.userId || data.uid || "").trim();
+    const tokenEmail = String(data.email || "").trim().toLowerCase();
+    return (tokenUserId && userIds.has(tokenUserId)) || (tokenEmail && emails.has(tokenEmail));
+  });
+  const tokens = tokenDocs.map((doc) => doc.data()?.token || doc.id).filter(Boolean);
+
+  if (tokens.length === 0) {
+    return { sent: 0, failed: 0, reason: "no_matching_device_tokens", recipientCount: userIds.size + emails.size };
+  }
+
+  const title = String(notification.title || "NivaDesk").slice(0, 120);
+  const body = String(notification.message || notification.body || "You have a new update.").slice(0, 240);
+  const senderPhotoURL = cleanSupportPhotoURL(notification.senderPhotoURL || notification.imageUrl || notification.imageURL || "");
+  const data = toPushStringMap({
+    companyId,
+    orderId: notification.orderId || "",
+    type: notification.type || "support_ticket",
+    notificationId: notification.notificationId || "",
+    ticketId: notification.ticketId || "",
+    ticketType: notification.ticketType || "",
+    ticketTitle: notification.ticketTitle || "",
+    threadId: notification.threadId || "",
+    messageId: notification.messageId || "",
+    conversationType: notification.conversationType || "",
+    route: notification.route || (notification.threadId ? "messageThread" : (notification.ticketId ? "supportTicket" : "")),
+    senderName: notification.senderName || "",
+    senderEmail: notification.senderEmail || "",
+    senderUid: notification.senderUid || "",
+    senderPhotoURL,
+    imageUrl: senderPhotoURL,
+    priority: notification.priority || "",
+    status: notification.status || ""
+  });
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    data,
+    apns: {
+      headers: { "apns-priority": "10" },
+      payload: { aps: { sound: "default", badge: 1, "mutable-content": 1 } }
+    }
+  });
+
+  const cleanupBatch = admin.firestore().batch();
+  const failureDetails = [];
+  response.responses.forEach((item, index) => {
+    if (item.success) return;
+    const code = item.error?.code || "";
+    const message = item.error?.message || "";
+    const tokenData = tokenDocs[index]?.data?.() || tokenDocs[index]?.data() || {};
+    const token = String(tokenData.token || tokenDocs[index]?.id || "");
+    failureDetails.push({
+      index,
+      code,
+      message: String(message).slice(0, 500),
+      tokenPreview: token ? `${token.slice(0, 8)}...${token.slice(-6)}` : "",
+      userId: String(tokenData.userId || tokenData.uid || ""),
+      email: String(tokenData.email || "")
+    });
+    if (isInvalidFcmTokenError(code)) {
+      cleanupBatch.set(tokenDocs[index].ref, {
+        enabled: false,
+        invalidAt: admin.firestore.FieldValue.serverTimestamp(),
+        invalidReason: code,
+        invalidMessage: String(message).slice(0, 500)
+      }, { merge: true });
+    }
+  });
+
+  try {
+    await cleanupBatch.commit();
+  } catch (error) {
+    console.error("Targeted FCM token cleanup failed:", error?.message || error);
+  }
+
+  const firstFailure = failureDetails[0] || null;
+  return {
+    sent: response.successCount,
+    failed: response.failureCount,
+    tokenCount: tokens.length,
+    recipientCount: userIds.size + emails.size,
+    failureCode: firstFailure?.code || "",
+    failureMessage: firstFailure?.message || "",
+    failures: failureDetails
+  };
+}
+
+async function writeSupportTicketNotification(companyId, notification = {}, recipient = {}) {
+  const notificationRef = notificationCollectionRef(companyId).doc();
+  const recipientUids = supportUniqueStrings(recipient.userIds || recipient.uids || []);
+  const recipientEmails = supportUniqueStrings(recipient.emails || []).map((item) => item.toLowerCase());
+  const title = cleanSupportText(notification.title || "Support / Tickets", 140);
+  const message = cleanSupportText(notification.message || "You have a new ticket update.", 240);
+
+  const payload = {
+    companyId,
+    type: String(notification.type || "support_ticket"),
+    title,
+    message,
+    ticketId: String(notification.ticketId || ""),
+    ticketType: String(notification.ticketType || ""),
+    ticketTitle: String(notification.ticketTitle || ""),
+    route: String(notification.route || (notification.ticketId ? "supportTicket" : "")),
+    senderUid: String(notification.senderUid || ""),
+    senderEmail: String(notification.senderEmail || ""),
+    senderName: String(notification.senderName || ""),
+    senderPhotoURL: cleanSupportPhotoURL(notification.senderPhotoURL || notification.imageUrl || notification.imageURL || ""),
+    imageUrl: cleanSupportPhotoURL(notification.senderPhotoURL || notification.imageUrl || notification.imageURL || ""),
+    priority: String(notification.priority || ""),
+    status: String(notification.status || ""),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    actioned: false,
+    source: "supportTicketNotification",
+    recipientUids,
+    recipientEmails,
+    supportSchemaVersion: 2
+  };
+
+  await notificationRef.set(payload, { merge: true });
+
+  let pushResult = { sent: 0, failed: 0, reason: "not_attempted" };
+  try {
+    pushResult = await sendPushNotificationToRecipients(companyId, {
+      ...payload,
+      notificationId: notificationRef.id,
+      body: message
+    }, { userIds: recipientUids, emails: recipientEmails });
+  } catch (error) {
+    console.error("Support ticket push failed:", notificationRef.id, error?.message || error);
+    pushResult = { sent: 0, failed: 1, error: error?.message || String(error) };
+  }
+
+  await notificationRef.set({
+    pushSent: Number(pushResult.sent || 0) > 0,
+    pushResult,
+    pushSentAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { notificationId: notificationRef.id, pushResult };
+}
+
+function workspaceSupportRecipientEntries(companyData = {}, excludeUid = "") {
+  const cleanExcludeUid = String(excludeUid || "").trim();
+  const recipients = [];
+  const addRecipient = (uid = "", email = "") => {
+    const cleanUid = String(uid || "").trim();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    if (cleanUid && cleanUid === cleanExcludeUid) return;
+    if (!cleanUid && !cleanEmail) return;
+    if (recipients.some((item) => (cleanUid && item.uid === cleanUid) || (cleanEmail && item.email === cleanEmail))) return;
+    recipients.push({ uid: cleanUid, email: cleanEmail });
+  };
+
+  const ownerUid = String(companyData.ownerUid || "").trim();
+  addRecipient(ownerUid, companyData.ownerEmail || companyData.email || "");
+
+  const members = companyMembersMap(companyData);
+  for (const [uid, entry] of Object.entries(members)) {
+    const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+    if (role !== "owner" && role !== "admin") continue;
+    const email = entry && typeof entry === "object" && !Array.isArray(entry) ? entry.email || entry.userEmail || "" : "";
+    addRecipient(uid, email);
+  }
+
+  const memberRoles = companyMemberRolesMap(companyData);
+  for (const [uid, roleValue] of Object.entries(memberRoles)) {
+    const role = normalizeWorkspaceRole(roleValue, "member");
+    if (role === "owner" || role === "admin") addRecipient(uid, "");
+  }
+
+  return recipients;
+}
+
+function supportRecipientObject(entries = []) {
+  return {
+    userIds: supportUniqueStrings(entries.map((item) => item.uid)),
+    emails: supportUniqueStrings(entries.map((item) => item.email)).map((item) => item.toLowerCase())
+  };
+}
+
+async function notifySupportAdminsForTicket(companyId, ticketId, ticketData = {}, eventType = "new_ticket") {
+  const subject = eventType === "reply"
+    ? `New reply on support ticket: ${ticketData.title || ticketId}`
+    : `New support ticket: ${ticketData.title || ticketId}`;
+  const body = [
+    `Ticket: ${ticketData.title || ticketId}`,
+    `Workspace: ${ticketData.companyName || companyId}`,
+    `From: ${ticketData.createdByEmail || "Unknown user"}`,
+    "",
+    supportLastMessagePreview(ticketData.lastMessagePreview || ticketData.message || "")
+  ].join("\n");
+
+  return queueSupportEmailNotifications(Array.from(SUPPORT_ADMIN_EMAILS), {
+    subject,
+    body
+  }, {
+    companyId,
+    ticketId,
+    ticketType: "appSupport",
+    notificationType: eventType === "reply" ? "support_ticket_reply_to_admin" : "new_support_ticket"
+  });
+}
+
+async function notifySupportTicketCreator(companyId, ticketId, ticketData = {}, message = "") {
+  const recipient = supportRecipientObject([{ uid: ticketData.createdByUid || "", email: ticketData.createdByEmail || "" }]);
+  const senderName = supportNotificationSenderName({ ...ticketData, lastMessageByName: "NivaDesk Support" }, "NivaDesk Support");
+  const subject = supportNotificationSubject(ticketData.title || "your ticket", "your ticket");
+  const title = supportNotificationTitle(senderName, subject, "replied");
+  const body = supportNotificationBody(senderName, message || ticketData.lastMessagePreview || "", `Reply on: ${subject}`);
+  const result = await writeSupportTicketNotification(companyId, {
+    type: "support_ticket_reply",
+    title,
+    message: body,
+    ticketId,
+    ticketType: "appSupport",
+    ticketTitle: ticketData.title || "",
+    route: "supportTicket",
+    senderUid: ticketData.lastMessageByUid || "",
+    senderEmail: ticketData.lastMessageByEmail || "",
+    senderName,
+    senderPhotoURL: ticketData.lastMessageByPhotoURL || "",
+    priority: ticketData.priority || "",
+    status: ticketData.status || ""
+  }, recipient);
+
+  const emailResult = await queueSupportEmailNotifications(recipient.emails, {
+    subject: `${title}: ${ticketData.title || "your ticket"}`,
+    body: `${body}\n\nTicket: ${ticketData.title || ticketId}`
+  }, {
+    companyId,
+    ticketId,
+    ticketType: "appSupport",
+    notificationType: "support_ticket_reply_to_user"
+  });
+
+  return { ...result, emailResult };
+}
+
+async function notifyWorkspaceTicketRecipients(companyId, companyData = {}, ticketId, ticketData = {}, senderUid = "", eventType = "reply", message = "") {
+  const creatorUid = String(ticketData.createdByUid || "").trim();
+  const senderIsCreator = senderUid && senderUid === creatorUid;
+  const recipientEntries = senderIsCreator
+    ? workspaceSupportRecipientEntries(companyData, senderUid)
+    : [{ uid: creatorUid, email: ticketData.createdByEmail || "" }];
+
+  const recipient = supportRecipientObject(recipientEntries);
+  if (recipient.userIds.length === 0 && recipient.emails.length === 0) {
+    return { skipped: true, reason: "no_workspace_ticket_recipients" };
+  }
+
+  const isNew = eventType === "new_ticket";
+  const subject = supportNotificationSubject(ticketData.title || "Workspace ticket", "Workspace ticket");
+  const senderName = isNew
+    ? supportNotificationSenderName(ticketData, "A team member")
+    : supportNotificationSenderName(ticketData, "Workspace");
+  const title = isNew
+    ? supportNotificationTitle(senderName, subject, "opened")
+    : supportNotificationTitle(senderName, subject, "replied");
+  const body = isNew
+    ? supportNotificationBody(senderName, message || ticketData.message || "", `Opened: ${subject}`)
+    : supportNotificationBody(senderName, message || ticketData.lastMessagePreview || "", `Reply on: ${subject}`);
+
+  const result = await writeSupportTicketNotification(companyId, {
+    type: isNew ? "workspace_ticket" : "workspace_ticket_reply",
+    title,
+    message: body,
+    ticketId,
+    ticketType: "workspace",
+    ticketTitle: ticketData.title || "",
+    route: "supportTicket",
+    senderUid: isNew ? ticketData.createdByUid || "" : ticketData.lastMessageByUid || "",
+    senderEmail: isNew ? ticketData.createdByEmail || "" : ticketData.lastMessageByEmail || "",
+    senderName,
+    senderPhotoURL: isNew ? ticketData.createdByPhotoURL || "" : ticketData.lastMessageByPhotoURL || "",
+    priority: ticketData.priority || "",
+    status: ticketData.status || ""
+  }, recipient);
+
+  const emailResult = await queueSupportEmailNotifications(recipient.emails, {
+    subject: `${title}: ${ticketData.title || "Workspace ticket"}`,
+    body: `${body}\n\nTicket: ${ticketData.title || ticketId}`
+  }, {
+    companyId,
+    ticketId,
+    ticketType: "workspace",
+    notificationType: isNew ? "new_workspace_ticket" : "workspace_ticket_reply"
+  });
+
+  return { ...result, emailResult };
+}
+
+async function safeSupportNotification(label, callback) {
+  try {
+    return await callback();
+  } catch (error) {
+    console.error(label, error?.message || error);
+    return { ok: false, error: error?.message || String(error) };
+  }
+}
+
 
 
 const PLAN_ENTITLEMENTS = {
@@ -979,6 +1358,178 @@ function supportLastMessagePreview(value = "") {
   return cleanSupportText(value, 180);
 }
 
+function supportNotificationPreview(value = "", fallback = "You have a new support update.") {
+  return supportLastMessagePreview(value || fallback).slice(0, 140);
+}
+
+function supportNotificationSenderName(ticketData = {}, fallback = "NivaDesk") {
+  const rawName = cleanSupportText(
+    ticketData.lastMessageByName ||
+    ticketData.authorName ||
+    ticketData.createdByName ||
+    "",
+    80
+  );
+  if (rawName && !rawName.includes("@")) return rawName;
+
+  const rawEmail = cleanSupportText(
+    ticketData.lastMessageByEmail ||
+    ticketData.authorEmail ||
+    ticketData.createdByEmail ||
+    "",
+    120
+  ).toLowerCase();
+  if (rawEmail && rawEmail.includes("@")) {
+    const localPart = rawEmail.split("@")[0]
+      .replace(/[._-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (localPart) return localPart.replace(/\w/g, (char) => char.toUpperCase()).slice(0, 80);
+  }
+
+  return cleanSupportText(fallback, 80) || "NivaDesk";
+}
+
+function supportNotificationSubject(value = "", fallback = "Support ticket") {
+  return cleanSupportText(value || fallback, 90) || fallback;
+}
+
+function supportNotificationTitle(senderName = "", subject = "", action = "replied") {
+  const sender = cleanSupportText(senderName, 80) || "NivaDesk";
+  const cleanSubject = supportNotificationSubject(subject, "Support ticket");
+  return `${sender} ${action} • ${cleanSubject}`.slice(0, 120);
+}
+
+function supportNotificationBody(senderName = "", message = "", fallback = "You have a new support update.") {
+  return supportNotificationPreview(message, fallback).slice(0, 240);
+}
+
+function cleanSupportPhotoURL(value = "") {
+  const url = cleanSupportText(value, 1200);
+  if (!url) return "";
+  if (!/^https:\/\//i.test(url)) return "";
+  return url;
+}
+
+function supportPhotoURLFromCompanyData(companyData = {}, uid = "", email = "") {
+  const cleanUid = String(uid || "").trim();
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  const candidates = [];
+
+  if (cleanUid) {
+    const members = companyMembersMap(companyData);
+    const member = members[cleanUid];
+    if (member && typeof member === "object" && !Array.isArray(member)) {
+      candidates.push(member.photoURL, member.accountPhotoURL, member.avatarURL, member.profilePhotoURL);
+    }
+  }
+
+  if (cleanEmail) {
+    const members = companyMembersMap(companyData);
+    for (const entry of Object.values(members)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const entryEmail = String(entry.email || entry.userEmail || "").trim().toLowerCase();
+      if (entryEmail === cleanEmail) {
+        candidates.push(entry.photoURL, entry.accountPhotoURL, entry.avatarURL, entry.profilePhotoURL);
+      }
+    }
+  }
+
+  if (cleanUid && cleanUid === String(companyData.ownerUid || "").trim()) {
+    candidates.push(companyData.ownerPhotoURL, companyData.photoURL, companyData.accountPhotoURL, companyData.avatarURL);
+  }
+
+  for (const candidate of candidates) {
+    const photoURL = cleanSupportPhotoURL(candidate || "");
+    if (photoURL) return photoURL;
+  }
+  return "";
+}
+
+async function supportPhotoURLForUser(companyId = "", companyData = {}, uid = "", email = "", preferredPhotoURL = "") {
+  const preferred = cleanSupportPhotoURL(preferredPhotoURL || "");
+  if (preferred) return preferred;
+
+  const fromCompany = supportPhotoURLFromCompanyData(companyData, uid, email);
+  if (fromCompany) return fromCompany;
+
+  const cleanUid = String(uid || "").trim();
+  if (cleanUid) {
+    try {
+      const userSnap = await admin.firestore().collection("users").doc(cleanUid).get();
+      const userData = userSnap.data() || {};
+      const fromUser = cleanSupportPhotoURL(userData.photoURL || userData.accountPhotoURL || userData.avatarURL || userData.profilePhotoURL || "");
+      if (fromUser) return fromUser;
+    } catch (error) {
+      console.warn("supportPhotoURLForUser users lookup failed:", error?.message || error);
+    }
+
+    try {
+      const authUser = await admin.auth().getUser(cleanUid);
+      const fromAuth = cleanSupportPhotoURL(authUser.photoURL || "");
+      if (fromAuth) return fromAuth;
+    } catch (error) {
+      console.warn("supportPhotoURLForUser auth lookup failed:", error?.message || error);
+    }
+  }
+
+  if (email) {
+    try {
+      const authUser = await admin.auth().getUserByEmail(String(email).trim().toLowerCase());
+      const fromAuth = cleanSupportPhotoURL(authUser.photoURL || "");
+      if (fromAuth) return fromAuth;
+    } catch (error) {
+      // Email may not belong to a Firebase Auth account. This is okay.
+    }
+  }
+
+  return "";
+}
+
+
+function supportPhotoURLFromRequest(request = {}) {
+  return cleanSupportPhotoURL(
+    request.data?.userPhotoURL ||
+    request.data?.accountPhotoURL ||
+    request.data?.photoURL ||
+    request.data?.senderPhotoURL ||
+    ""
+  );
+}
+
+async function hydrateSupportTicketMessagePhotoURLs(companyId = "", companyData = {}, messages = []) {
+  const cache = new Map();
+  const output = [];
+  for (const message of messages) {
+    const existing = cleanSupportPhotoURL(message.authorPhotoURL || "");
+    if (existing) {
+      output.push({ ...message, authorPhotoURL: existing });
+      continue;
+    }
+
+    const uid = String(message.authorUid || "").trim();
+    const email = String(message.authorEmail || "").trim().toLowerCase();
+    const cacheKey = `${uid}|${email}`;
+    if (!cache.has(cacheKey)) {
+      cache.set(cacheKey, await supportPhotoURLForUser(companyId, companyData, uid, email));
+    }
+    output.push({ ...message, authorPhotoURL: cache.get(cacheKey) || "" });
+  }
+  return output;
+}
+
+async function supportCompanyDataForId(companyId = "") {
+  const cleanCompanyId = String(companyId || "").trim();
+  if (!cleanCompanyId) return {};
+  try {
+    const snap = await admin.firestore().collection("companies").doc(cleanCompanyId).get();
+    return snap.data() || {};
+  } catch (error) {
+    console.warn("supportCompanyDataForId failed:", error?.message || error);
+    return {};
+  }
+}
+
 function supportTicketIsUnreadForUid(ticketData = {}, uid = "") {
   const cleanUid = String(uid || "").trim();
   if (!cleanUid) return false;
@@ -1043,6 +1594,7 @@ function baseSupportPayload(request, companyId, companyData, ticketType, allowed
     createdByUid: uid,
     createdByEmail,
     createdByName,
+    createdByPhotoURL: "",
     title,
     message,
     category: cleanSupportChoice(request.data?.category, allowedCategories, "other"),
@@ -1057,6 +1609,7 @@ function baseSupportPayload(request, companyId, companyData, ticketType, allowed
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     lastMessageByUid: uid,
     lastMessageByEmail: createdByEmail,
+    lastMessageByName: createdByName,
     lastMessageByRole: "user",
     lastMessagePreview: supportLastMessagePreview(message),
     readBy: {
@@ -1076,10 +1629,15 @@ exports.createSupportTicket = onCall({ region: "europe-west2" }, async (request)
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
   const ticketRef = admin.firestore().collection("supportTickets").doc();
   const payload = baseSupportPayload(request, companyId, companyData, "appSupport", SUPPORT_TICKET_CATEGORIES);
+  payload.createdByPhotoURL = await supportPhotoURLForUser(companyId, companyData, uid, payload.createdByEmail, payload.createdByPhotoURL);
+  payload.lastMessageByPhotoURL = payload.createdByPhotoURL;
   payload.supportAdminEmails = Array.from(SUPPORT_ADMIN_EMAILS);
   payload.shareWithWorkspaceOwner = request.data?.shareWithWorkspaceOwner === true;
 
   await ticketRef.set(payload);
+  await safeSupportNotification("notifySupportAdminsForTicket(createSupportTicket)", () =>
+    notifySupportAdminsForTicket(companyId, ticketRef.id, payload, "new_ticket")
+  );
   return { ok: true, ticketId: ticketRef.id, message: "Ticket sent. We will review it as soon as possible." };
 });
 
@@ -1111,9 +1669,14 @@ exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (reques
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
   const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc();
   const payload = baseSupportPayload(request, companyId, companyData, "workspace", WORKSPACE_TICKET_CATEGORIES);
+  payload.createdByPhotoURL = await supportPhotoURLForUser(companyId, companyData, uid, payload.createdByEmail, payload.createdByPhotoURL);
+  payload.lastMessageByPhotoURL = payload.createdByPhotoURL;
   payload.targetRole = "owner_admin";
 
   await ticketRef.set(payload);
+  await safeSupportNotification("notifyWorkspaceTicketRecipients(createWorkspaceTicket)", () =>
+    notifyWorkspaceTicketRecipients(companyId, companyData, ticketRef.id, payload, uid, "new_ticket", payload.message)
+  );
   return { ok: true, ticketId: ticketRef.id, message: "Workspace ticket sent to the workspace owner." };
 });
 
@@ -1225,6 +1788,7 @@ function supportTicketMessageFromDoc(doc, ticketId = "") {
     authorUid: String(data.authorUid || ""),
     authorEmail: String(data.authorEmail || ""),
     authorName: String(data.authorName || ""),
+    authorPhotoURL: String(data.authorPhotoURL || data.authorAvatarURL || data.senderPhotoURL || ""),
     authorRole: String(data.authorRole || "user"),
     createdAtMillis: toMillis(data.createdAt)
   };
@@ -1245,6 +1809,7 @@ function supportTicketInitialMessage(ticketId = "", ticketData = {}, ticketType 
     authorUid: String(ticketData.createdByUid || ""),
     authorEmail: String(ticketData.createdByEmail || ""),
     authorName: String(ticketData.createdByName || ticketData.createdByEmail || ""),
+    authorPhotoURL: String(ticketData.createdByPhotoURL || ticketData.authorPhotoURL || ""),
     authorRole: "user",
     createdAtMillis: toMillis(ticketData.createdAt)
   };
@@ -1257,6 +1822,7 @@ function supportAuthorPayload(request = {}, authorRole = "user") {
     authorUid: uid,
     authorEmail: email,
     authorName: cleanSupportText(request.auth?.token?.name || request.data?.userName || email || uid, 160),
+    authorPhotoURL: supportPhotoURLFromRequest(request),
     authorRole
   };
 }
@@ -1308,10 +1874,12 @@ exports.listSupportTicketMessages = onCall({ region: "europe-west2" }, async (re
     }
 
     const snapshot = await ticketRef.collection("messages").orderBy("createdAt", "asc").limit(200).get();
-    const messages = snapshot.docs.map((doc) => supportTicketMessageFromDoc(doc, ticketId));
-    if (messages.length === 0 && ticketData.message) {
-      messages.push(supportTicketInitialMessage(ticketId, ticketData, "appSupport"));
+    const rawMessages = snapshot.docs.map((doc) => supportTicketMessageFromDoc(doc, ticketId));
+    if (rawMessages.length === 0 && ticketData.message) {
+      rawMessages.push(supportTicketInitialMessage(ticketId, ticketData, "appSupport"));
     }
+    const supportCompanyData = await supportCompanyDataForId(String(ticketData.companyId || ""));
+    const messages = await hydrateSupportTicketMessagePhotoURLs(String(ticketData.companyId || ""), supportCompanyData, rawMessages);
 
     return { ok: true, ticketId, messages };
   } catch (error) {
@@ -1355,6 +1923,8 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
       source: "callable",
       supportSchemaVersion: 2
     };
+    const supportCompanyData = await supportCompanyDataForId(String(ticketData.companyId || ""));
+    payload.authorPhotoURL = await supportPhotoURLForUser(String(ticketData.companyId || ""), supportCompanyData, uid, payload.authorEmail, payload.authorPhotoURL);
 
     const batch = admin.firestore().batch();
     batch.set(messageRef, payload);
@@ -1364,10 +1934,28 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
       lastMessageByUid: uid,
       lastMessageByEmail: supportUserEmail(request),
       lastMessageByRole: isAdmin ? "supportAdmin" : "user",
+      lastMessageByName: payload.authorName,
+      lastMessageByPhotoURL: payload.authorPhotoURL || "",
       lastMessagePreview: supportLastMessagePreview(message),
       status: nextStatus
     }, { merge: true });
     await batch.commit();
+
+    await safeSupportNotification("support ticket reply notification", () => {
+      const nextTicketData = {
+        ...ticketData,
+        status: nextStatus,
+        lastMessagePreview: supportLastMessagePreview(message),
+        lastMessageByUid: uid,
+        lastMessageByEmail: supportUserEmail(request),
+        lastMessageByRole: isAdmin ? "supportAdmin" : "user",
+        lastMessageByName: payload.authorName,
+        lastMessageByPhotoURL: payload.authorPhotoURL || ""
+      };
+      return isAdmin
+        ? notifySupportTicketCreator(String(ticketData.companyId || ""), ticketId, nextTicketData, message)
+        : notifySupportAdminsForTicket(String(ticketData.companyId || ""), ticketId, nextTicketData, "reply");
+    });
 
     return { ok: true, ticketId, messageId: messageRef.id, status: nextStatus, message: "Reply sent." };
   } catch (error) {
@@ -1400,10 +1988,11 @@ exports.listWorkspaceTicketMessages = onCall({ region: "europe-west2" }, async (
     }
 
     const snapshot = await ticketRef.collection("messages").orderBy("createdAt", "asc").limit(200).get();
-    const messages = snapshot.docs.map((doc) => supportTicketMessageFromDoc(doc, ticketId));
-    if (messages.length === 0 && ticketData.message) {
-      messages.push(supportTicketInitialMessage(ticketId, ticketData, "workspace"));
+    const rawMessages = snapshot.docs.map((doc) => supportTicketMessageFromDoc(doc, ticketId));
+    if (rawMessages.length === 0 && ticketData.message) {
+      rawMessages.push(supportTicketInitialMessage(ticketId, ticketData, "workspace"));
     }
+    const messages = await hydrateSupportTicketMessagePhotoURLs(companyId, companyData, rawMessages);
 
     return { ok: true, ticketId, messages };
   } catch (error) {
@@ -1449,6 +2038,7 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
       source: "callable",
       supportSchemaVersion: 2
     };
+    payload.authorPhotoURL = await supportPhotoURLForUser(companyId, companyData, uid, payload.authorEmail, payload.authorPhotoURL);
 
     const batch = admin.firestore().batch();
     batch.set(messageRef, payload);
@@ -1458,10 +2048,26 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
       lastMessageByUid: uid,
       lastMessageByEmail: supportUserEmail(request),
       lastMessageByRole: isManager ? "workspaceAdmin" : "user",
+      lastMessageByName: payload.authorName,
+      lastMessageByPhotoURL: payload.authorPhotoURL || "",
       lastMessagePreview: supportLastMessagePreview(message),
       status: nextStatus
     }, { merge: true });
     await batch.commit();
+
+    await safeSupportNotification("workspace ticket reply notification", () => {
+      const nextTicketData = {
+        ...ticketData,
+        status: nextStatus,
+        lastMessagePreview: supportLastMessagePreview(message),
+        lastMessageByUid: uid,
+        lastMessageByEmail: supportUserEmail(request),
+        lastMessageByRole: isManager ? "workspaceAdmin" : "user",
+        lastMessageByName: payload.authorName,
+        lastMessageByPhotoURL: payload.authorPhotoURL || ""
+      };
+      return notifyWorkspaceTicketRecipients(companyId, companyData, ticketId, nextTicketData, uid, "reply", message);
+    });
 
     return { ok: true, ticketId, messageId: messageRef.id, status: nextStatus, message: "Reply sent." };
   } catch (error) {
@@ -9494,4 +10100,357 @@ exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) 
       error: error.message || String(error)
     });
   }
+});
+
+
+// MARK: - Workspace Messages
+
+function messageThreadsRef(companyId) {
+  return admin.firestore().collection("companies").doc(companyId).collection("messageThreads");
+}
+
+function cleanMessageText(value = "", maxLength = 5000) {
+  return String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, maxLength);
+}
+
+function messageMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+}
+
+function messageWorkspaceMemberEntries(companyData = {}) {
+  const out = [];
+  const seen = new Set();
+  const add = (uid = "", email = "", name = "", photoURL = "") => {
+    const cleanUid = String(uid || "").trim();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const key = cleanUid || cleanEmail;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      uid: cleanUid,
+      email: cleanEmail,
+      name: cleanSupportText(name || email || uid || "Team member", 120),
+      photoURL: cleanSupportPhotoURL(photoURL || "")
+    });
+  };
+
+  add(companyData.ownerUid || companyData.companyId || "", companyData.ownerEmail || companyData.email || "", companyData.ownerDisplayName || companyData.ownerName || "Owner", companyData.ownerPhotoURL || "");
+
+  const members = companyMembersMap(companyData);
+  for (const [uid, entry] of Object.entries(members)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      add(uid, "", "", "");
+      continue;
+    }
+    add(
+      uid,
+      entry.email || entry.userEmail || "",
+      entry.displayName || entry.name || entry.userName || "",
+      entry.photoURL || entry.accountPhotoURL || entry.avatarURL || entry.profilePhotoURL || ""
+    );
+  }
+
+  const memberRoles = companyMemberRolesMap(companyData);
+  for (const uid of Object.keys(memberRoles)) add(uid, "", "", "");
+  return out;
+}
+
+function messageThreadFromDoc(doc, currentUid = "") {
+  const data = doc.data() || {};
+  const readBy = data.readBy && typeof data.readBy === "object" && !Array.isArray(data.readBy) ? data.readBy : {};
+  const lastMessageAt = messageMillis(data.lastMessageAt);
+  const currentReadAt = messageMillis(readBy[currentUid]);
+  const lastMessageByUid = String(data.lastMessageByUid || "");
+  return {
+    id: doc.id,
+    companyId: String(data.companyId || ""),
+    type: String(data.type || "team"),
+    title: String(data.title || ""),
+    memberUids: Array.isArray(data.memberUids) ? data.memberUids.map(String) : [],
+    memberEmails: Array.isArray(data.memberEmails) ? data.memberEmails.map(String) : [],
+    lastMessageText: String(data.lastMessageText || ""),
+    lastMessageAtMillis: lastMessageAt,
+    lastMessageByUid,
+    lastMessageByName: String(data.lastMessageByName || ""),
+    lastMessageByPhotoURL: String(data.lastMessageByPhotoURL || ""),
+    readByMillis: Object.fromEntries(Object.entries(readBy).map(([uid, ts]) => [uid, messageMillis(ts)])),
+    isUnread: Boolean(lastMessageAt > 0 && lastMessageAt > currentReadAt && lastMessageByUid !== currentUid)
+  };
+}
+
+function messageFromDoc(doc, threadId = "") {
+  const data = doc.data() || {};
+  return {
+    id: doc.id,
+    threadId: String(data.threadId || threadId || ""),
+    text: String(data.text || ""),
+    senderUid: String(data.senderUid || ""),
+    senderEmail: String(data.senderEmail || ""),
+    senderName: String(data.senderName || ""),
+    senderPhotoURL: String(data.senderPhotoURL || ""),
+    createdAtMillis: messageMillis(data.createdAt),
+    type: String(data.type || "text"),
+    fileName: String(data.fileName || ""),
+    fileURL: String(data.fileURL || ""),
+    fileType: String(data.fileType || ""),
+    fileSize: Number(data.fileSize || 0)
+  };
+}
+
+async function ensureTeamMessageThread(companyId, companyData = {}) {
+  const threadRef = messageThreadsRef(companyId).doc("team");
+  const entries = messageWorkspaceMemberEntries(companyData);
+  const memberUids = supportUniqueStrings(entries.map((item) => item.uid));
+  const memberEmails = supportUniqueStrings(entries.map((item) => item.email)).map((item) => item.toLowerCase());
+
+  await threadRef.set({
+    companyId,
+    type: "team",
+    title: "Team Chat",
+    memberUids,
+    memberEmails,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "messages",
+    messageSchemaVersion: 1
+  }, { merge: true });
+
+  return threadRef;
+}
+
+async function requireMessageThreadAccess(companyId, threadId, uid, companyData = {}) {
+  const threadRef = messageThreadsRef(companyId).doc(threadId);
+  const threadSnap = await threadRef.get();
+  if (!threadSnap.exists) {
+    throw new HttpsError("not-found", "Message thread not found.");
+  }
+
+  const data = threadSnap.data() || {};
+  const memberUids = Array.isArray(data.memberUids) ? data.memberUids.map(String) : [];
+  if (!memberUids.includes(uid) && !uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to this conversation.");
+  }
+  return { threadRef, threadData: data };
+}
+
+async function messageSenderProfile(companyId, companyData, request) {
+  const uid = request.auth?.uid || "";
+  const email = supportUserEmail(request);
+  const requestedPhotoURL = supportPhotoURLFromRequest(request);
+  const photoURL = await supportPhotoURLForUser(companyId, companyData, uid, email, requestedPhotoURL);
+  const name = cleanSupportText(request.auth?.token?.name || request.data?.userName || "", 120) ||
+    supportNotificationSenderName({ createdByEmail: email, createdByName: "" }, "Team member");
+  return { uid, email, name, photoURL };
+}
+
+exports.createMessageThread = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to create a message thread.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const type = String(request.data?.type || "team").trim() === "direct" ? "direct" : "team";
+
+  if (type === "team") {
+    await ensureTeamMessageThread(companyId, companyData);
+    return { ok: true, threadId: "team" };
+  }
+
+  const otherUid = cleanSupportText(request.data?.memberUid || request.data?.otherUid || "", 160);
+  if (!otherUid || otherUid === uid) throw new HttpsError("invalid-argument", "Please choose a team member.");
+  if (!uidHasCompanyAccess(companyData, otherUid)) throw new HttpsError("permission-denied", "That user is not in this workspace.");
+
+  const ids = [uid, otherUid].sort();
+  const threadId = `direct_${ids[0]}_${ids[1]}`.replace(/[^A-Za-z0-9_-]/g, "_");
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const otherPhotoURL = await supportPhotoURLForUser(companyId, companyData, otherUid, "");
+  const members = messageWorkspaceMemberEntries(companyData);
+  const otherEntry = members.find((item) => item.uid === otherUid) || {};
+  const otherEmail = cleanSupportText(otherEntry.email || "", 240).toLowerCase();
+
+  await messageThreadsRef(companyId).doc(threadId).set({
+    companyId,
+    type: "direct",
+    title: cleanSupportText(otherEntry.name || otherEntry.email || "Direct message", 120),
+    memberUids: ids,
+    memberEmails: supportUniqueStrings([sender.email, otherEmail]).map((item) => item.toLowerCase()),
+    participantPhotoURLs: {
+      [uid]: sender.photoURL || "",
+      [otherUid]: otherPhotoURL || otherEntry.photoURL || ""
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "messages",
+    messageSchemaVersion: 1
+  }, { merge: true });
+
+  return { ok: true, threadId };
+});
+
+exports.listMessageThreads = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to read messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  await ensureTeamMessageThread(companyId, companyData);
+
+  const snap = await messageThreadsRef(companyId)
+    .where("memberUids", "array-contains", uid)
+    .limit(100)
+    .get();
+
+  const threads = snap.docs
+    .map((doc) => messageThreadFromDoc(doc, uid))
+    .sort((a, b) => Number(b.lastMessageAtMillis || 0) - Number(a.lastMessageAtMillis || 0));
+
+  return { ok: true, companyId, threads, teamMembers: messageWorkspaceMemberEntries(companyData) };
+});
+
+exports.listThreadMessages = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to read messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+
+  const snap = await threadRef.collection("messages").orderBy("createdAt", "asc").limit(300).get();
+  const messages = snap.docs.map((doc) => messageFromDoc(doc, threadId));
+  return { ok: true, threadId, messages };
+});
+
+exports.markMessageThreadRead = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to mark messages read.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+
+  await threadRef.set({
+    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { ok: true, threadId };
+});
+
+async function notifyMessageRecipients(companyId, threadId, threadData, messageId, messageData, recipientUids = []) {
+  const cleanRecipientUids = supportUniqueStrings(recipientUids);
+  if (cleanRecipientUids.length === 0) return { sent: 0, failed: 0, reason: "no_recipients" };
+
+  const title = `${messageData.senderName || "Team member"} • ${threadData.title || "Messages"}`.slice(0, 120);
+  const body = cleanSupportText(messageData.text || messageData.fileName || "Sent a file", 240);
+  const notificationRef = notificationCollectionRef(companyId).doc();
+  const payload = {
+    companyId,
+    type: "message",
+    title,
+    message: body,
+    route: "messageThread",
+    threadId,
+    messageId,
+    conversationType: threadData.type || "team",
+    senderUid: messageData.senderUid || "",
+    senderEmail: messageData.senderEmail || "",
+    senderName: messageData.senderName || "",
+    senderPhotoURL: messageData.senderPhotoURL || "",
+    imageUrl: messageData.senderPhotoURL || "",
+    recipientUids: cleanRecipientUids,
+    recipientEmails: [],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    actioned: false,
+    source: "workspaceMessages",
+    messageSchemaVersion: 1
+  };
+
+  await notificationRef.set(payload, { merge: true });
+
+  let pushResult = { sent: 0, failed: 0, reason: "not_attempted" };
+  try {
+    pushResult = await sendPushNotificationToRecipients(companyId, {
+      ...payload,
+      notificationId: notificationRef.id,
+      body
+    }, { userIds: cleanRecipientUids, emails: [] });
+  } catch (error) {
+    console.error("Message push failed:", notificationRef.id, error?.message || error);
+    pushResult = { sent: 0, failed: 1, error: error?.message || String(error) };
+  }
+
+  await notificationRef.set({
+    pushSent: Number(pushResult.sent || 0) > 0,
+    pushResult,
+    pushSentAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return pushResult;
+}
+
+exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to send messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const text = cleanMessageText(request.data?.text || request.data?.message || "", 5000);
+  const fileURL = cleanSupportPhotoURL(request.data?.fileURL || "");
+  const fileName = cleanSupportText(request.data?.fileName || "", 240);
+  const fileType = cleanSupportText(request.data?.fileType || "", 160);
+  const fileSize = Math.max(0, Number(request.data?.fileSize || 0) || 0);
+
+  if (!text && !fileURL) {
+    throw new HttpsError("invalid-argument", "Please write a message or attach a file.");
+  }
+
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef, threadData } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const messageRef = threadRef.collection("messages").doc();
+  const messageType = fileURL ? (String(fileType).toLowerCase().startsWith("image/") ? "image" : "file") : "text";
+  const messagePayload = {
+    threadId,
+    companyId,
+    text,
+    senderUid: sender.uid,
+    senderEmail: sender.email,
+    senderName: sender.name,
+    senderPhotoURL: sender.photoURL,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    type: messageType,
+    fileName,
+    fileURL,
+    fileType,
+    fileSize,
+    source: "callable",
+    messageSchemaVersion: 1
+  };
+
+  const batch = admin.firestore().batch();
+  batch.set(messageRef, messagePayload);
+  batch.set(threadRef, {
+    lastMessageText: text || (fileName ? `File: ${fileName}` : "Sent a file"),
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageByUid: sender.uid,
+    lastMessageByName: sender.name,
+    lastMessageByPhotoURL: sender.photoURL,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  await batch.commit();
+
+  const memberUids = Array.isArray(threadData.memberUids) ? threadData.memberUids.map(String) : [];
+  const recipientUids = memberUids.filter((item) => item && item !== uid);
+  await notifyMessageRecipients(companyId, threadId, threadData, messageRef.id, {
+    ...messagePayload,
+    createdAt: Date.now()
+  }, recipientUids);
+
+  return { ok: true, threadId, messageId: messageRef.id, message: "Message sent." };
 });

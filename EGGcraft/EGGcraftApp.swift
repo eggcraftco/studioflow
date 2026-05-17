@@ -1,6 +1,10 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseFirestore
+import UserNotifications
+#if os(iOS)
+import UIKit
+#endif
 #if os(macOS)
 import AppKit
 #endif
@@ -12,6 +16,10 @@ import GoogleSignIn
 
 @main
 struct StudioManagerApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(EGGcraftAppDelegate.self) private var appDelegate
+    #endif
+
     @StateObject var authVM: AuthViewModel
     @StateObject var firebaseManager: FirebaseManager
 
@@ -21,6 +29,9 @@ struct StudioManagerApp: App {
         #endif
 
         FirebaseApp.configure()
+        #if os(iOS)
+        UNUserNotificationCenter.current().delegate = PushNotificationManager.shared
+        #endif
         #if os(macOS) && DEBUG
         Self.useMemoryFirestoreCacheForDebugRuns()
         #endif
@@ -123,8 +134,14 @@ struct StudioManagerApp: App {
            let companyId = authVM.currentCompanyId,
            !companyId.isEmpty {
             firebaseManager.configure(companyId: companyId, workspaceRole: authVM.currentWorkspaceRole)
+            #if os(iOS)
+            PushNotificationManager.shared.configure(companyId: companyId)
+            #endif
         } else {
             firebaseManager.resetForLogout()
+            #if os(iOS)
+            PushNotificationManager.shared.resetForLogout()
+            #endif
         }
     }
 }

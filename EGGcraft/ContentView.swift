@@ -325,7 +325,7 @@ struct ContentView: View {
     @State private var aramaMetni: String = ""
     @State private var seciliSiralama: SiralamaTuru = .akilli
     @State private var aktifSiparisFiltresi: SiparisHizliFiltre = .all
-    @State private var aktifSekme: String = "Orders"
+    @State private var aktifSekme: String = UserDefaults.standard.string(forKey: "studioRequestedStartTab") ?? "Orders"
     @FocusState private var orderListFocused: Bool
     @FocusState private var searchFocused: Bool
     @State private var orderSelectionShouldScroll: Bool = false
@@ -1332,6 +1332,7 @@ struct ContentView: View {
             if canAccessQuickReply {
                 UstMenuButonu(title: t("Quick Reply", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
             }
+            UstMenuButonuWithBadge(title: "Messages", icon: "message.fill", isSelected: aktifSekme == "Messages", badgeCount: firebaseManager.messageUnreadCount) { aktifSekme = "Messages" }
             if canAccessSettings {
                 UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
             }
@@ -1689,6 +1690,11 @@ struct ContentView: View {
                 } else {
                     restrictedAccessView(title: t("Customers hidden", lang: seciliDil), message: t("Your current workspace role does not include customer access.", lang: seciliDil))
                 }
+            } else if aktifSekme == "Messages" {
+                StudioMessagesView()
+                    .environmentObject(authVM)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(bgMain)
             } else if aktifSekme == "QuickReply" {
                 if canAccessQuickReply {
                     AutoReplyView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
@@ -1763,6 +1769,8 @@ struct ContentView: View {
             scheduleSharedClientFileInboxCheck()
             refreshCloudSyncIndicatorForOfflineState()
             refreshMacFirstProjectGuideForCurrentAccount()
+            consumePendingSupportTicketLaunchRoute()
+            consumePendingMessageThreadLaunchRoute()
         }
         .onDisappear { stopCompanySettingsListener() }
         .onChange(of: authVM.currentUserId) { _, _ in
@@ -1792,6 +1800,8 @@ struct ContentView: View {
             if newPhase == .active {
                 scheduleSharedClientFileInboxCheck()
                 refreshCloudSyncIndicatorForOfflineState()
+                consumePendingSupportTicketLaunchRoute()
+                consumePendingMessageThreadLaunchRoute()
             }
         }
         .onReceive(firebaseManager.$isOnline) { _ in
@@ -3183,13 +3193,14 @@ struct ContentView: View {
         case "Schedule": return canAccessSchedule
         case "Customers": return canAccessCustomers
         case "QuickReply": return canAccessQuickReply
+        case "Messages": return true
         case "Settings": return canAccessSettings
         default: return false
         }
     }
 
     private var firstAccessibleWorkspaceTab: String {
-        ["Orders", "Dashboard", "Schedule", "Customers", "QuickReply", "Settings"].first(where: canOpenTab) ?? "Orders"
+        ["Orders", "Dashboard", "Schedule", "Customers", "QuickReply", "Messages", "Settings"].first(where: canOpenTab) ?? "Orders"
     }
 
     private func enforceWorkspaceRoleAccess() {
@@ -3213,6 +3224,27 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(bgMain)
+    }
+
+
+    private func consumePendingSupportTicketLaunchRoute() {
+        let defaults = UserDefaults.standard
+        let ticketId = (defaults.string(forKey: "pendingSupportTicketId") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ticketId.isEmpty else { return }
+
+        settingsStartSection = "Support"
+        if canAccessSettings {
+            aktifSekme = "Settings"
+        }
+        defaults.removeObject(forKey: "studioRequestedStartTab")
+    }
+
+    private func consumePendingMessageThreadLaunchRoute() {
+        let defaults = UserDefaults.standard
+        let threadId = (defaults.string(forKey: "pendingMessageThreadId") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !threadId.isEmpty else { return }
+        aktifSekme = "Messages"
+        defaults.removeObject(forKey: "studioRequestedStartTab")
     }
 
     private func stopCompanySettingsListener() {
@@ -4223,6 +4255,43 @@ struct CloudSyncStatusBadge: View {
 
 
 struct UstMenuButonu: View { let title: String; let icon: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { HStack(spacing: 8) { Image(systemName: icon); Text(title).font(.system(size: 14, weight: .medium)) }.padding(.horizontal, 16).padding(.vertical, 8).background(isSelected ? Color.blue.opacity(0.2) : Color.clear).foregroundColor(isSelected ? .blue : .gray).cornerRadius(20) }.buttonStyle(.plain) } }
+
+struct UstMenuButonuWithBadge: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let badgeCount: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                if badgeCount > 0 {
+                    Text(badgeText)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.red)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color.blue.opacity(0.2) : Color.clear)
+            .foregroundColor(isSelected ? .blue : .gray)
+            .cornerRadius(20)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var badgeText: String {
+        badgeCount > 99 ? "99+" : String(badgeCount)
+    }
+}
 struct SolMenuSiralamaButonu: View { let title: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { Text(title).font(.system(size: 12, weight: isSelected ? .bold : .regular)).padding(.horizontal, 16).padding(.vertical, 6).background(isSelected ? Color.blue : Color.clear).foregroundColor(isSelected ? .white : .gray).cornerRadius(15).overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)) }.buttonStyle(.plain) } }
 struct CustomStepDTOList: Codable { var id = UUID(); var title: String }
 

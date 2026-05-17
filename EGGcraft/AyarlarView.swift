@@ -22,7 +22,7 @@ struct AyarlarView: View {
     @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
     @AppStorage("uploadSafetyMaxFileSizeMBV1") private var uploadSafetyMaxFileSizeMB: Double = 10.0
 
-    @State private var supportTicketDestination: String = "appSupport"
+    @State private var supportTicketDestination: String = "workspace"
     @State private var supportTicketCategory: String = "bug"
     @State private var supportTicketPriority: String = "normal"
     @State private var supportTicketTitle: String = ""
@@ -39,6 +39,9 @@ struct AyarlarView: View {
     }
     
     @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
+    @AppStorage("pendingSupportTicketId") private var pendingSupportTicketId: String = ""
+    @AppStorage("pendingSupportTicketType") private var pendingSupportTicketType: String = ""
+    @AppStorage("pendingSupportTicketOpenRequestedAt") private var pendingSupportTicketOpenRequestedAt: Double = 0
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     let desteklenenDiller = ["English", "Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"]
     
@@ -728,6 +731,7 @@ struct AyarlarView: View {
                                     userId: authVM.currentUserId ?? "",
                                     userEmail: authVM.accountEmail,
                                     userName: authVM.accountDisplayName,
+                                    userPhotoURL: authVM.accountPhotoURL,
                                     title: supportTicketTitle,
                                     message: supportTicketMessageText,
                                     category: supportTicketCategory,
@@ -746,6 +750,7 @@ struct AyarlarView: View {
                                     userId: authVM.currentUserId ?? "",
                                     userEmail: authVM.accountEmail,
                                     userName: authVM.accountDisplayName,
+                                    userPhotoURL: authVM.accountPhotoURL,
                                     title: supportTicketTitle,
                                     message: supportTicketMessageText,
                                     category: supportTicketCategory,
@@ -1094,6 +1099,92 @@ struct AyarlarView: View {
     }
 
 
+
+    private func supportMessageAuthorName(_ item: StudioSupportTicketMessage) -> String {
+        let name = item.authorName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let email = item.authorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !email.isEmpty { return email }
+        return "?"
+    }
+
+    private func supportMessageInitials(_ item: StudioSupportTicketMessage) -> String {
+        let source = supportMessageAuthorName(item)
+            .replacingOccurrences(of: "@", with: " ")
+            .replacingOccurrences(of: ".", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+        let initials = source
+            .split(whereSeparator: { $0.isWhitespace })
+            .prefix(2)
+            .compactMap { $0.first }
+            .map { String($0).uppercased() }
+            .joined()
+        return initials.isEmpty ? "?" : initials
+    }
+
+    @ViewBuilder
+    private func supportMessageAvatar(_ item: StudioSupportTicketMessage) -> some View {
+        let photoURL = item.authorPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        ZStack {
+            Circle().fill(Color.blue.opacity(0.12))
+            if let url = URL(string: photoURL), !photoURL.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Text(supportMessageInitials(item))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.blue)
+                    }
+                }
+            } else {
+                Text(supportMessageInitials(item))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.blue)
+            }
+        }
+        .frame(width: 30, height: 30)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+
+    private func supportTicketMessageRow(_ item: StudioSupportTicketMessage) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            supportMessageAvatar(item)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(supportMessageAuthorName(item))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.primary)
+                    Text(t(item.authorRole, lang: seciliDil))
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.10))
+                        .foregroundColor(.blue)
+                        .clipShape(Capsule())
+                    Spacer()
+                    Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                }
+
+                Text(item.message)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.025)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.06)))
+    }
+
     private func supportTicketConversationView(_ ticket: StudioSupportTicket) -> some View {
         let messages = firebaseManager.supportTicketMessagesByTicketId[ticket.id] ?? []
         let draftBinding = Binding<String>(
@@ -1129,32 +1220,7 @@ struct AyarlarView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(messages) { item in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(item.authorName.isEmpty ? item.authorEmail : item.authorName)
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.primary)
-                                Text(t(item.authorRole, lang: seciliDil))
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.blue.opacity(0.10))
-                                    .foregroundColor(.blue)
-                                    .clipShape(Capsule())
-                                Spacer()
-                                Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.gray)
-                            }
-
-                            Text(item.message)
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.025)))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.06)))
+                        supportTicketMessageRow(item)
                     }
                 }
             }
@@ -1178,7 +1244,8 @@ struct AyarlarView: View {
                             companyId: companyId,
                             ticketId: ticket.id,
                             ticketType: ticketType,
-                            message: supportReplyDrafts[ticket.id] ?? ""
+                            message: supportReplyDrafts[ticket.id] ?? "",
+                            userPhotoURL: authVM.accountPhotoURL
                         ) { success in
                             if success {
                                 supportReplyDrafts[ticket.id] = ""
@@ -1232,21 +1299,57 @@ struct AyarlarView: View {
         seciliAyarSekmesi = settingsSections.first?.key ?? "About"
     }
 
+    private func consumePendingSupportTicketRoute() {
+        let ticketId = pendingSupportTicketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ticketId.isEmpty else { return }
+
+        let normalizedType = pendingSupportTicketType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let nextDestination = normalizedType.contains("appsupport") || normalizedType.contains("support") && !normalizedType.contains("workspace") ? "appSupport" : "workspace"
+        let companyId = authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+
+        seciliAyarSekmesi = "Support"
+        if isPhoneLayout {
+            phoneShowsSettingsDetail = true
+        }
+        supportTicketDestination = nextDestination
+        supportOpenConversationIds.insert(ticketId)
+
+        firebaseManager.loadSupportTicketUnreadSummary(companyId: companyId)
+        if nextDestination == "workspace" {
+            firebaseManager.loadWorkspaceTickets(companyId: companyId)
+        } else {
+            firebaseManager.loadMySupportTickets(companyId: companyId)
+        }
+
+        firebaseManager.markSupportTicketRead(companyId: companyId, ticketId: ticketId, ticketType: nextDestination)
+        firebaseManager.loadSupportTicketMessages(companyId: companyId, ticketId: ticketId, ticketType: nextDestination)
+
+        pendingSupportTicketId = ""
+        pendingSupportTicketType = ""
+        pendingSupportTicketOpenRequestedAt = 0
+        settingsStartSection = ""
+    }
+
     private func consumeRequestedStartSection() {
         let requested = settingsStartSection.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !requested.isEmpty else { return }
         let allowedKeys = Set(settingsSections.map { $0.key })
         seciliAyarSekmesi = allowedKeys.contains(requested) ? requested : (settingsSections.first?.key ?? "About")
+        if requested == "Support" && pendingSupportTicketId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            supportTicketDestination = "workspace"
+        }
         if isPhoneLayout {
             phoneShowsSettingsDetail = true
         }
         settingsStartSection = ""
+        consumePendingSupportTicketRoute()
     }
 
     private func handleSettingsAppear() {
         yukleCustomData()
         startKnowledgeBaseCloudListener()
         consumeRequestedStartSection()
+        consumePendingSupportTicketRoute()
         enforceVisibleSettingsSection()
     }
 
@@ -1263,24 +1366,75 @@ struct AyarlarView: View {
     }
 
     var body: some View {
-        let lifecycleView = AnyView(
+        applyFileAndShareHandlers(
+            applyAlertHandlers(
+                applyCustomDataChangeHandlers(
+                    applyCloudChangeHandlers(
+                        applyRouteChangeHandlers(
+                            settingsLifecycleView
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+    private var settingsLifecycleView: AnyView {
+        AnyView(
             settingsRootView
                 .onAppear(perform: handleSettingsAppear)
                 .onDisappear(perform: stopKnowledgeBaseCloudListener)
         )
+    }
 
-        let changeTrackedView = AnyView(
-            lifecycleView
-                .onChange(of: quickReplyCloudSignature) { _, _ in scheduleKnowledgeBaseCloudSave() }
-                .onChange(of: authVM.currentWorkspaceAccess) { _, _ in enforceVisibleSettingsSection() }
-                .onChange(of: seciliDil) { _, _ in if canEditWorkspace { scheduleKnowledgeBaseCloudSave() } }
-                .onChange(of: appTheme) { _, _ in if canEditWorkspace { scheduleKnowledgeBaseCloudSave() } }
-                .onChange(of: appSubtitle) { _, _ in if canEditWorkspace { scheduleKnowledgeBaseCloudSave() } }
-                .onChange(of: workflowCloudSignature) { _, _ in scheduleKnowledgeBaseCloudSave() }
-                .onChange(of: pdfCloudSignature) { _, _ in scheduleKnowledgeBaseCloudSave() }
-                .onChange(of: financialCloudSignature) { _, _ in scheduleKnowledgeBaseCloudSave() }
-                .onChange(of: settingsStartSection) { _, _ in consumeRequestedStartSection() }
-                .onChange(of: activeStatuses) { _, _ in kaydetCustomData() }
+    private func applyRouteChangeHandlers(_ view: AnyView) -> AnyView {
+        AnyView(
+            view
+                .onChange(of: settingsStartSection) { _, _ in
+                    consumeRequestedStartSection()
+                }
+                .onChange(of: pendingSupportTicketOpenRequestedAt) { _, _ in
+                    consumePendingSupportTicketRoute()
+                }
+        )
+    }
+
+    private func applyCloudChangeHandlers(_ view: AnyView) -> AnyView {
+        AnyView(
+            view
+                .onChange(of: quickReplyCloudSignature) { _, _ in
+                    scheduleKnowledgeBaseCloudSave()
+                }
+                .onChange(of: authVM.currentWorkspaceAccess) { _, _ in
+                    enforceVisibleSettingsSection()
+                }
+                .onChange(of: seciliDil) { _, _ in
+                    if canEditWorkspace { scheduleKnowledgeBaseCloudSave() }
+                }
+                .onChange(of: appTheme) { _, _ in
+                    if canEditWorkspace { scheduleKnowledgeBaseCloudSave() }
+                }
+                .onChange(of: appSubtitle) { _, _ in
+                    if canEditWorkspace { scheduleKnowledgeBaseCloudSave() }
+                }
+                .onChange(of: workflowCloudSignature) { _, _ in
+                    scheduleKnowledgeBaseCloudSave()
+                }
+                .onChange(of: pdfCloudSignature) { _, _ in
+                    scheduleKnowledgeBaseCloudSave()
+                }
+                .onChange(of: financialCloudSignature) { _, _ in
+                    scheduleKnowledgeBaseCloudSave()
+                }
+        )
+    }
+
+    private func applyCustomDataChangeHandlers(_ view: AnyView) -> AnyView {
+        AnyView(
+            view
+                .onChange(of: activeStatuses) { _, _ in
+                    kaydetCustomData()
+                }
                 .onChange(of: customRules) { _, _ in
                     kaydetCustomData()
                     scheduleKnowledgeBaseCloudSave()
@@ -1289,14 +1443,24 @@ struct AyarlarView: View {
                     kaydetCustomData()
                     scheduleKnowledgeBaseCloudSave()
                 }
-                .onChange(of: customSteps) { _, _ in kaydetCustomData() }
-                .onChange(of: customFields) { _, _ in kaydetCustomData() }
-                .onChange(of: customToggles) { _, _ in kaydetCustomData() }
-                .onChange(of: companyNumbers) { _, _ in kaydetCustomData() }
+                .onChange(of: customSteps) { _, _ in
+                    kaydetCustomData()
+                }
+                .onChange(of: customFields) { _, _ in
+                    kaydetCustomData()
+                }
+                .onChange(of: customToggles) { _, _ in
+                    kaydetCustomData()
+                }
+                .onChange(of: companyNumbers) { _, _ in
+                    kaydetCustomData()
+                }
         )
+    }
 
-        let alertView = AnyView(
-            changeTrackedView
+    private func applyAlertHandlers(_ view: AnyView) -> AnyView {
+        AnyView(
+            view
                 .alert("Are you sure?", isPresented: $silmeOnayiGosteriliyor) {
                     Button("Yes, Delete All", role: .destructive) { tumVerileriSil() }
                     Button("Cancel", role: .cancel) { }
@@ -1315,24 +1479,27 @@ struct AyarlarView: View {
                     Text(importSonucMesaji)
                 }
         )
+    }
 
+    @ViewBuilder
+    private func applyFileAndShareHandlers(_ view: AnyView) -> some View {
         #if os(iOS)
-        return AnyView(
-            alertView
-                .fileExporter(isPresented: $disariAktariliyor, document: exportBelgesi, contentType: .json, defaultFilename: "StudioManager_Backup") { _ in }
-                .fileExporter(isPresented: $csvDisariAktariliyor, document: csvExportBelgesi, contentType: .commaSeparatedText, defaultFilename: "Orders_Export") { _ in }
-                .fileImporter(isPresented: $iceriAktariliyor, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in dosyadanIceriAktar(result: result) }
-                .sheet(item: $backupShareURL) { file in
-                    FileShareSheet(url: file.url)
-                }
-        )
+        view
+            .fileExporter(isPresented: $disariAktariliyor, document: exportBelgesi, contentType: UTType.json, defaultFilename: "StudioManager_Backup") { _ in }
+            .fileExporter(isPresented: $csvDisariAktariliyor, document: csvExportBelgesi, contentType: UTType.commaSeparatedText, defaultFilename: "Orders_Export") { _ in }
+            .fileImporter(isPresented: $iceriAktariliyor, allowedContentTypes: [UTType.json], allowsMultipleSelection: false) { result in
+                dosyadanIceriAktar(result: result)
+            }
+            .sheet(item: $backupShareURL) { file in
+                FileShareSheet(url: file.url)
+            }
         #else
-        return AnyView(
-            alertView
-                .fileExporter(isPresented: $disariAktariliyor, document: exportBelgesi, contentType: .json, defaultFilename: "StudioManager_Backup") { _ in }
-                .fileExporter(isPresented: $csvDisariAktariliyor, document: csvExportBelgesi, contentType: .commaSeparatedText, defaultFilename: "Orders_Export") { _ in }
-                .fileImporter(isPresented: $iceriAktariliyor, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in dosyadanIceriAktar(result: result) }
-        )
+        view
+            .fileExporter(isPresented: $disariAktariliyor, document: exportBelgesi, contentType: UTType.json, defaultFilename: "StudioManager_Backup") { _ in }
+            .fileExporter(isPresented: $csvDisariAktariliyor, document: csvExportBelgesi, contentType: UTType.commaSeparatedText, defaultFilename: "Orders_Export") { _ in }
+            .fileImporter(isPresented: $iceriAktariliyor, allowedContentTypes: [UTType.json], allowsMultipleSelection: false) { result in
+                dosyadanIceriAktar(result: result)
+            }
         #endif
     }
 

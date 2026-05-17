@@ -14,6 +14,7 @@
 		B4382D2C2F9CC1E2004BB413 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B4382D2B2F9CC1E2004BB413 /* FirebaseFirestore */; };
 		B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = B4382D372F9D879F004BB413 /* FirebaseStorage */; };
 		B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = B440FCAB2FA291B3007D3DED /* FirebaseFunctions */; };
+		B45DF6162FB8FDAB00C59217 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -23,6 +24,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = B433DF3D2FA74BD100A7CD26;
 			remoteInfo = ClientFileShareExtension;
+		};
+		B45DF6202FB917BB00C59217 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4382CDA2F9A845F004BB413 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B45DF61A2FB917BB00C59217;
+			remoteInfo = EGGcraftNotificationService;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -43,6 +51,7 @@
 /* Begin PBXFileReference section */
 		B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClientFileShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4382CE22F9A845F004BB413 /* EGGcraft.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EGGcraft.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EGGcraftNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -67,6 +76,13 @@
 			);
 			target = B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */;
 		};
+		B45DF6262FB917BB00C59217 /* Exceptions for "EGGcraftNotificationService" folder in "EGGcraftNotificationService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -87,6 +103,14 @@
 			path = EGGcraft;
 			sourceTree = "<group>";
 		};
+		B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B45DF6262FB917BB00C59217 /* Exceptions for "EGGcraftNotificationService" folder in "EGGcraftNotificationService" target */,
+			);
+			path = EGGcraftNotificationService;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,10 +127,18 @@
 			files = (
 				B42E74B12FA431BC00B96FEA /* GoogleSignIn in Frameworks */,
 				B4382D2A2F9CC1E2004BB413 /* FirebaseAuth in Frameworks */,
+				B45DF6162FB8FDAB00C59217 /* FirebaseMessaging in Frameworks */,
 				B4382D2C2F9CC1E2004BB413 /* FirebaseFirestore in Frameworks */,
 				B42E74B32FA431BC00B96FEA /* GoogleSignInSwift in Frameworks */,
 				B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */,
 				B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B45DF6182FB917BB00C59217 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +150,7 @@
 			children = (
 				B4382CE42F9A845F004BB413 /* EGGcraft */,
 				B433DF3F2FA74BD100A7CD26 /* ClientFileShareExtension */,
+				B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */,
 				B4382D362F9D879F004BB413 /* Frameworks */,
 				B4382CE32F9A845F004BB413 /* Products */,
 			);
@@ -128,6 +161,7 @@
 			children = (
 				B4382CE22F9A845F004BB413 /* EGGcraft.app */,
 				B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */,
+				B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -177,6 +211,7 @@
 			);
 			dependencies = (
 				B433DF5F2FA7611C00A7CD26 /* PBXTargetDependency */,
+				B45DF6212FB917BB00C59217 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B4382CE42F9A845F004BB413 /* EGGcraft */,
@@ -189,10 +224,33 @@
 				B440FCAB2FA291B3007D3DED /* FirebaseFunctions */,
 				B42E74B02FA431BC00B96FEA /* GoogleSignIn */,
 				B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */,
+				B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */,
 			);
 			productName = EGGcraft;
 			productReference = B4382CE22F9A845F004BB413 /* EGGcraft.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B45DF6232FB917BB00C59217 /* Build configuration list for PBXNativeTarget "EGGcraftNotificationService" */;
+			buildPhases = (
+				B45DF6172FB917BB00C59217 /* Sources */,
+				B45DF6182FB917BB00C59217 /* Frameworks */,
+				B45DF6192FB917BB00C59217 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */,
+			);
+			name = EGGcraftNotificationService;
+			packageProductDependencies = (
+			);
+			productName = EGGcraftNotificationService;
+			productReference = B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -208,6 +266,9 @@
 						CreatedOnToolsVersion = 26.4.1;
 					};
 					B4382CE12F9A845F004BB413 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					B45DF61A2FB917BB00C59217 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
 				};
@@ -232,6 +293,7 @@
 			targets = (
 				B4382CE12F9A845F004BB413 /* EGGcraft */,
 				B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */,
+				B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */,
 			);
 		};
 /* End PBXProject section */
@@ -245,6 +307,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B4382CE02F9A845F004BB413 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B45DF6192FB917BB00C59217 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -268,6 +337,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B45DF6172FB917BB00C59217 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -276,6 +352,11 @@
 			platformFilter = ios;
 			target = B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */;
 			targetProxy = B433DF5E2FA7611C00A7CD26 /* PBXContainerItemProxy */;
+		};
+		B45DF6212FB917BB00C59217 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */;
+			targetProxy = B45DF6202FB917BB00C59217 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -583,6 +664,71 @@
 			};
 			name = Release;
 		};
+		B45DF6242FB917BB00C59217 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EGGcraftNotificationService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.EGGcraftNotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B45DF6252FB917BB00C59217 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EGGcraftNotificationService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.EGGcraftNotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -609,6 +755,15 @@
 			buildConfigurations = (
 				B4382CF02F9A8460004BB413 /* Debug */,
 				B4382CF12F9A8460004BB413 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B45DF6232FB917BB00C59217 /* Build configuration list for PBXNativeTarget "EGGcraftNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B45DF6242FB917BB00C59217 /* Debug */,
+				B45DF6252FB917BB00C59217 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -664,6 +819,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFunctions;
+		};
+		B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
