@@ -31,6 +31,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-functions")
     implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-messaging")
 
     implementation("androidx.activity:activity-compose:1.12.0")
     implementation("androidx.compose.foundation:foundation")

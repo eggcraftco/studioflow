@@ -1,6 +1,9 @@
 package uk.co.eggcraft.studioflow.features.shell
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Job
@@ -11,9 +14,16 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
+import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
+import kotlinx.coroutines.delay
+import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
+import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
+import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
+import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
@@ -32,20 +42,69 @@ data class StudioFlowUiState(
     val teamMembers: List<StudioTeamMember> = emptyList(),
     val joinRequests: List<StudioJoinRequest> = emptyList(),
     val customRoles: List<StudioCustomRole> = emptyList(),
+    val messageThreads: List<StudioMessageThread> = emptyList(),
+    val messageTeamMembers: List<StudioMessageTeamMember> = emptyList(),
+    val selectedMessageThreadId: String = "",
+    val messageItemsByThreadId: Map<String, List<StudioMessageItem>> = emptyMap(),
+    val messageUnreadCount: Int = 0,
+    val isSendingMessage: Boolean = false,
+    val replyingToMessage: StudioMessageItem? = null,
+    val typingUsersByThreadId: Map<String, List<StudioMessageTypingUser>> = emptyMap(),
+    val messageSearchQuery: String = "",
+    val messageAttachmentFilter: String = "all",
+    val archivedThreadMarkers: Map<String, Long> = emptyMap(),
+    val savedMessageIdsByThreadId: Map<String, Set<String>> = emptyMap(),
+    val forwardingMessage: StudioMessageItem? = null,
+    val messageError: String = "",
+    val activityNotifications: List<StudioActivityNotification> = emptyList(),
+    val activityNotificationUnreadCount: Int = 0,
+    val activityNotificationSearch: String = "",
+    val activityNotificationReadFilter: String = "all",
+    val activityNotificationTypeFilter: String = "all",
+    val dismissedActivityNotificationIds: Set<String> = emptySet(),
     val errorMessage: String = "",
     val settingsMessage: String = ""
 )
 
-class StudioFlowViewModel(
+class StudioFlowViewModel @JvmOverloads constructor(
+    application: Application,
     private val repository: StudioFlowRepository = StudioFlowRepository()
-) : ViewModel() {
+) : AndroidViewModel(application) {
     private val mutableState = MutableStateFlow(StudioFlowUiState())
+    private val draftPrefs: SharedPreferences =
+        application.getSharedPreferences("studio_message_drafts", Context.MODE_PRIVATE)
+
+    fun loadDraft(workspaceId: String, threadId: String): String {
+        if (workspaceId.isBlank() || threadId.isBlank()) return ""
+        val uid = mutableState.value.user?.uid.orEmpty()
+        return draftPrefs.getString(draftKey(workspaceId, uid, threadId), "").orEmpty()
+    }
+
+    fun saveDraft(workspaceId: String, threadId: String, text: String) {
+        if (workspaceId.isBlank() || threadId.isBlank()) return
+        val uid = mutableState.value.user?.uid.orEmpty()
+        val key = draftKey(workspaceId, uid, threadId)
+        if (text.isBlank()) draftPrefs.edit().remove(key).apply()
+        else draftPrefs.edit().putString(key, text).apply()
+    }
+
+    private fun draftKey(workspaceId: String, uid: String, threadId: String): String =
+        "draft_${workspaceId}_${uid}_$threadId"
+
     val state: StateFlow<StudioFlowUiState> = mutableState.asStateFlow()
     private var workspaceJob: Job? = null
     private var ordersJob: Job? = null
     private var teamJob: Job? = null
     private var joinRequestsJob: Job? = null
     private var settingsJob: Job? = null
+    private var messageThreadsJob: Job? = null
+    private var messageItemsJob: Job? = null
+    private var messageTeamMembersJob: Job? = null
+    private var messageTypingJob: Job? = null
+    private var messagePresenceJob: Job? = null
+    private var messageTypingSenderJob: Job? = null
+    private var lastTypingSentAt: Long = 0L
+    private var activityNotificationsJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -55,7 +114,15 @@ class StudioFlowViewModel(
                 teamJob?.cancel()
                 joinRequestsJob?.cancel()
                 settingsJob?.cancel()
+                messageThreadsJob?.cancel()
+                messageItemsJob?.cancel()
+                messageTeamMembersJob?.cancel()
+                messageTypingJob?.cancel()
+                messagePresenceJob?.cancel()
+                messageTypingSenderJob?.cancel()
+                activityNotificationsJob?.cancel()
                 if (user == null) {
+                    StudioMessageRouteHolder.clearCurrentCompanyId()
                     mutableState.value = StudioFlowUiState(loading = false)
                 } else {
                     mutableState.update { it.copy(loading = true, user = user, errorMessage = "") }
@@ -607,7 +674,9 @@ class StudioFlowViewModel(
                     mutableState.update {
                         it.copy(loading = false, workspace = workspace, errorMessage = "")
                     }
+                    StudioMessageRouteHolder.setCurrentCompanyId(getApplication(), workspace.id)
                     observeWorkspace(workspace, user)
+                    observePendingThreadRoute()
                 }
                 .onFailure { error ->
                     mutableState.update {
@@ -617,11 +686,498 @@ class StudioFlowViewModel(
         }
     }
 
+    fun selectMessageThread(threadId: String) {
+        val clean = threadId.trim()
+        if (clean.isBlank()) return
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val sameThread = mutableState.value.selectedMessageThreadId == clean
+        val hasActiveListener = messageItemsJob != null
+        if (sameThread && hasActiveListener) {
+            markMessageThreadRead(clean)
+            return
+        }
+        mutableState.update { it.copy(selectedMessageThreadId = clean) }
+        startMessageItemsListener(workspace.id, user.uid, clean)
+        markMessageThreadRead(clean)
+    }
+
+    private fun startMessageItemsListener(workspaceId: String, userUid: String, threadId: String) {
+        messageItemsJob?.cancel()
+        messageItemsJob = viewModelScope.launch {
+            repository.messageItemsFlow(workspaceId, threadId, userUid)
+                .catch { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not load messages.") }
+                }
+                .collect { items ->
+                    mutableState.update { current ->
+                        current.copy(
+                            messageItemsByThreadId = current.messageItemsByThreadId + (threadId to items),
+                            messageError = ""
+                        )
+                    }
+                }
+        }
+        messageTypingJob?.cancel()
+        messageTypingJob = viewModelScope.launch {
+            repository.messageTypingUsersFlow(workspaceId, threadId, userUid)
+                .catch { }
+                .collect { users ->
+                    mutableState.update { current ->
+                        current.copy(typingUsersByThreadId = current.typingUsersByThreadId + (threadId to users))
+                    }
+                }
+        }
+        startPresenceHeartbeat(threadId)
+    }
+
+    private var pendingRouteJob: Job? = null
+    private fun observePendingThreadRoute() {
+        pendingRouteJob?.cancel()
+        pendingRouteJob = viewModelScope.launch {
+            StudioMessageRouteHolder.pendingThreadId.collect { id ->
+                if (id.isNotBlank() && mutableState.value.workspace != null) {
+                    StudioMessageRouteHolder.consumePendingThreadId()
+                    selectMessageThread(id)
+                }
+            }
+        }
+    }
+
+    private fun startPresenceHeartbeat(threadId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        messagePresenceJob?.cancel()
+        messagePresenceJob = viewModelScope.launch {
+            runCatching { repository.setMessageThreadActive(workspace, threadId, true) }
+            while (true) {
+                delay(45_000L)
+                runCatching { repository.setMessageThreadActive(workspace, threadId, true) }
+            }
+        }
+    }
+
+    fun onComposerTextChanged() {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank()) return
+        val now = System.currentTimeMillis()
+        if (now - lastTypingSentAt < 4_000L) return
+        lastTypingSentAt = now
+        messageTypingSenderJob?.cancel()
+        messageTypingSenderJob = viewModelScope.launch {
+            runCatching { repository.setMessageTypingStatus(workspace, user, threadId, true) }
+            delay(6_000L)
+            runCatching { repository.setMessageTypingStatus(workspace, user, threadId, false) }
+            lastTypingSentAt = 0L
+        }
+    }
+
+    fun setMessageSearchQuery(query: String) {
+        mutableState.update { it.copy(messageSearchQuery = query) }
+    }
+
+    fun setMessageAttachmentFilter(filter: String) {
+        mutableState.update { it.copy(messageAttachmentFilter = filter) }
+    }
+
+    fun toggleThreadArchive(threadId: String) {
+        val clean = threadId.trim()
+        if (clean.isBlank()) return
+        mutableState.update { current ->
+            val markers = current.archivedThreadMarkers.toMutableMap()
+            if (markers.containsKey(clean)) markers.remove(clean)
+            else markers[clean] = System.currentTimeMillis()
+            current.copy(archivedThreadMarkers = markers)
+        }
+    }
+
+    fun toggleSavedMessage(threadId: String, messageId: String) {
+        val ct = threadId.trim()
+        val cm = messageId.trim()
+        if (ct.isBlank() || cm.isBlank()) return
+        mutableState.update { current ->
+            val map = current.savedMessageIdsByThreadId.toMutableMap()
+            val set = (map[ct] ?: emptySet()).toMutableSet()
+            if (set.contains(cm)) set.remove(cm) else set.add(cm)
+            map[ct] = set
+            current.copy(savedMessageIdsByThreadId = map)
+        }
+    }
+
+    fun setForwardingMessage(message: StudioMessageItem?) {
+        mutableState.update { it.copy(forwardingMessage = message) }
+    }
+
+    fun forwardMessageToThread(targetThreadId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val message = mutableState.value.forwardingMessage ?: return
+        val clean = targetThreadId.trim()
+        if (clean.isBlank()) return
+        viewModelScope.launch {
+            mutableState.update { it.copy(isSendingMessage = true, messageError = "") }
+            runCatching {
+                val prefix = "Forwarded from ${message.senderLabel()}\n"
+                repository.sendThreadMessage(
+                    workspace = workspace,
+                    user = user,
+                    threadId = clean,
+                    text = prefix + message.text,
+                    fileURL = message.fileURL,
+                    fileName = message.fileName,
+                    fileType = message.fileType,
+                    fileSize = message.fileSize
+                )
+            }
+                .onSuccess {
+                    mutableState.update { it.copy(isSendingMessage = false, forwardingMessage = null) }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(isSendingMessage = false, messageError = error.message ?: "Could not forward message.")
+                    }
+                }
+        }
+    }
+
+    fun createDirectMessageThread(memberUid: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val clean = memberUid.trim()
+        if (clean.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.createMessageThread(workspace, type = "direct", memberUid = clean) }
+                .onSuccess { newId ->
+                    if (newId.isNotBlank()) mutableState.update { it.copy(selectedMessageThreadId = newId) }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not create conversation.") }
+                }
+        }
+    }
+
+    fun createGroupMessageThread(memberUids: List<String>, title: String) {
+        val workspace = mutableState.value.workspace ?: return
+        if (memberUids.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                repository.createMessageThread(workspace, type = "group", memberUids = memberUids, title = title)
+            }
+                .onSuccess { newId ->
+                    if (newId.isNotBlank()) mutableState.update { it.copy(selectedMessageThreadId = newId) }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not create group.") }
+                }
+        }
+    }
+
+    fun addMembersToThread(threadId: String, memberUids: List<String>) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.addMembersToMessageThread(workspace, threadId, memberUids) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not add members.") }
+                }
+        }
+    }
+
+    fun renameThread(threadId: String, title: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.renameMessageThread(workspace, threadId, title) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not rename group.") }
+                }
+        }
+    }
+
+    fun leaveThread(threadId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.leaveMessageThread(workspace, threadId) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not leave conversation.") }
+                }
+        }
+    }
+
+    fun removeThreadMember(threadId: String, memberUid: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.removeMemberFromMessageThread(workspace, threadId, memberUid) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not remove member.") }
+                }
+        }
+    }
+
+    fun setActivityNotificationSearch(query: String) {
+        mutableState.update { it.copy(activityNotificationSearch = query) }
+    }
+
+    fun setActivityNotificationReadFilter(filter: String) {
+        mutableState.update { it.copy(activityNotificationReadFilter = filter) }
+    }
+
+    fun setActivityNotificationTypeFilter(filter: String) {
+        mutableState.update { it.copy(activityNotificationTypeFilter = filter) }
+    }
+
+    fun markActivityNotificationRead(notificationId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        if (notificationId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.markActivityNotificationRead(workspace, notificationId) }
+        }
+    }
+
+    fun markAllActivityNotificationsRead() {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.markAllActivityNotificationsRead(workspace) }
+        }
+    }
+
+    fun dismissActivityNotifications(notificationIds: List<String>) {
+        val workspace = mutableState.value.workspace ?: return
+        val clean = notificationIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (clean.isEmpty()) return
+        mutableState.update { it.copy(dismissedActivityNotificationIds = it.dismissedActivityNotificationIds + clean) }
+        viewModelScope.launch {
+            runCatching { repository.dismissActivityNotifications(workspace, clean) }
+        }
+    }
+
+    fun openActivityNotification(notification: StudioActivityNotification) {
+        markActivityNotificationRead(notification.id)
+        if (notification.threadId.isNotBlank()) {
+            selectMessageThread(notification.threadId)
+        }
+    }
+
+    fun setThreadMute(threadId: String, mode: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.setMessageThreadMute(workspace, threadId, mode) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not change mute.") }
+                }
+        }
+    }
+
+    fun markMessageThreadRead(threadId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val clean = threadId.trim()
+        if (clean.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.markMessageThreadRead(workspace, clean) }
+        }
+    }
+
+    fun setReplyingToMessage(message: StudioMessageItem?) {
+        mutableState.update { it.copy(replyingToMessage = message) }
+    }
+
+    fun sendMessage(text: String, mentionedUids: List<String> = emptyList()) {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank()) return
+        val replyId = mutableState.value.replyingToMessage?.id.orEmpty()
+        viewModelScope.launch {
+            mutableState.update { it.copy(isSendingMessage = true, messageError = "") }
+            runCatching {
+                repository.sendThreadMessage(
+                    workspace = workspace,
+                    user = user,
+                    threadId = threadId,
+                    text = text,
+                    replyToMessageId = replyId,
+                    mentionedUids = mentionedUids
+                )
+            }
+                .onSuccess {
+                    mutableState.update {
+                        it.copy(isSendingMessage = false, replyingToMessage = null, messageError = "")
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(isSendingMessage = false, messageError = error.message ?: "Could not send message.")
+                    }
+                }
+        }
+    }
+
+    fun sendMessageWithAttachment(
+        bytes: ByteArray,
+        fileName: String,
+        contentType: String,
+        text: String = "",
+        mentionedUids: List<String> = emptyList()
+    ) {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank()) return
+        val replyId = mutableState.value.replyingToMessage?.id.orEmpty()
+        viewModelScope.launch {
+            mutableState.update { it.copy(isSendingMessage = true, messageError = "") }
+            runCatching {
+                repository.uploadMessageFileAndSend(
+                    workspace = workspace,
+                    user = user,
+                    threadId = threadId,
+                    bytes = bytes,
+                    fileName = fileName,
+                    contentType = contentType,
+                    text = text,
+                    replyToMessageId = replyId,
+                    mentionedUids = mentionedUids
+                )
+            }
+                .onSuccess {
+                    mutableState.update {
+                        it.copy(isSendingMessage = false, replyingToMessage = null, messageError = "")
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(isSendingMessage = false, messageError = error.message ?: "Could not send attachment.")
+                    }
+                }
+        }
+    }
+
+    fun toggleReaction(messageId: String, emoji: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank() || messageId.isBlank() || emoji.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.toggleMessageReaction(workspace, user, threadId, messageId, emoji) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not react.") }
+                }
+        }
+    }
+
+    fun togglePin(messageId: String, currentlyPinned: Boolean) {
+        val workspace = mutableState.value.workspace ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank() || messageId.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                if (currentlyPinned) repository.unpinMessageInThread(workspace, threadId, messageId)
+                else repository.pinMessageInThread(workspace, threadId, messageId)
+            }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not pin message.") }
+                }
+        }
+    }
+
+    fun editMessage(messageId: String, newText: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank() || messageId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.editThreadMessage(workspace, threadId, messageId, newText) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not edit message.") }
+                }
+        }
+    }
+
+    fun deleteMessageForMe(messageId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank() || messageId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.deleteMessageForMe(workspace, threadId, messageId) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not delete message.") }
+                }
+        }
+    }
+
+    fun deleteMessageForEveryone(messageId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val threadId = mutableState.value.selectedMessageThreadId
+        if (threadId.isBlank() || messageId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.deleteMessageForEveryone(workspace, threadId, messageId) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not delete message.") }
+                }
+        }
+    }
+
     private fun observeWorkspace(workspace: StudioWorkspace, user: FirebaseUser) {
         ordersJob?.cancel()
         teamJob?.cancel()
         joinRequestsJob?.cancel()
         settingsJob?.cancel()
+        messageThreadsJob?.cancel()
+        messageItemsJob?.cancel()
+        messageTeamMembersJob?.cancel()
+        mutableState.update {
+            it.copy(
+                messageThreads = emptyList(),
+                messageTeamMembers = emptyList(),
+                selectedMessageThreadId = "",
+                messageItemsByThreadId = emptyMap(),
+                messageUnreadCount = 0,
+                messageError = ""
+            )
+        }
+        messageThreadsJob = viewModelScope.launch {
+            repository.messageThreadsFlow(workspace, user.uid)
+                .catch { error ->
+                    mutableState.update { it.copy(messageError = error.message ?: "Could not load messages.") }
+                }
+                .collect { threads ->
+                    val previousSelected = mutableState.value.selectedMessageThreadId
+                    val nextSelected = when {
+                        previousSelected.isNotBlank() && threads.any { it.id == previousSelected } -> previousSelected
+                        else -> threads.firstOrNull { it.id == "team" }?.id ?: threads.firstOrNull()?.id.orEmpty()
+                    }
+                    mutableState.update { current ->
+                        current.copy(
+                            messageThreads = threads,
+                            messageUnreadCount = threads.count { it.isUnread },
+                            selectedMessageThreadId = nextSelected
+                        )
+                    }
+                    if (nextSelected.isNotBlank() && (nextSelected != previousSelected || messageItemsJob == null)) {
+                        startMessageItemsListener(workspace.id, user.uid, nextSelected)
+                        markMessageThreadRead(nextSelected)
+                    }
+                }
+        }
+        messageTeamMembersJob = viewModelScope.launch {
+            runCatching { repository.loadMessageTeamMembers(workspace) }
+                .onSuccess { members ->
+                    mutableState.update { it.copy(messageTeamMembers = members) }
+                }
+        }
+        activityNotificationsJob = viewModelScope.launch {
+            repository.activityNotificationsFlow(workspace, user.uid, user.email.orEmpty())
+                .catch { }
+                .collect { items ->
+                    val uid = user.uid
+                    val email = user.email.orEmpty()
+                    mutableState.update { current ->
+                        val visible = items.filter { !current.dismissedActivityNotificationIds.contains(it.id) }
+                        val unread = visible.count { it.isUnread(uid, email) && !it.isDismissed(uid, email) }
+                        current.copy(
+                            activityNotifications = items,
+                            activityNotificationUnreadCount = unread
+                        )
+                    }
+                }
+        }
         settingsJob = viewModelScope.launch {
             repository.workspaceSettingsFlow(workspace.id, user.uid, workspace.ownerUid)
                 .catch { error ->

@@ -27,6 +27,12 @@ import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
+import com.google.firebase.firestore.Query
+import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
+import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
+import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
+import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
@@ -46,6 +52,11 @@ data class SupportTicketUnreadSummary(
     val workspaceUnread: Int = 0,
     val unreadSupportTicketIds: Set<String> = emptySet(),
     val unreadWorkspaceTicketIds: Set<String> = emptySet()
+)
+
+data class StudioMessageThreadsBundle(
+    val threads: List<StudioMessageThread> = emptyList(),
+    val teamMembers: List<StudioMessageTeamMember> = emptyList()
 )
 
 class StudioFlowRepository(
@@ -1181,6 +1192,413 @@ class StudioFlowRepository(
         return customRoles.firstOrNull { it.id == rawRole }?.baseRole ?: normalizeRole(rawRole)
     }
 
+    fun messageThreadsFlow(workspace: StudioWorkspace, currentUid: String): Flow<List<StudioMessageThread>> = callbackFlow {
+        val uid = currentUid.trim()
+        if (workspace.id.isBlank() || uid.isBlank()) {
+            trySend(emptyList())
+            awaitClose {}
+            return@callbackFlow
+        }
+        val registration = db.collection("companies")
+            .document(workspace.id)
+            .collection("messageThreads")
+            .whereArrayContains("memberUids", uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val threads = snapshot?.documents
+                    ?.map { document -> messageThreadFromDocument(document.id, document.data.orEmpty(), workspace.id, uid) }
+                    ?.filter { it.id == "team" || it.memberUids.contains(uid) }
+                    ?: emptyList()
+                trySend(sortedMessageThreadsForDisplay(threads))
+            }
+        awaitClose { registration.remove() }
+    }
+
+    fun messageItemsFlow(workspaceId: String, threadId: String, currentUid: String): Flow<List<StudioMessageItem>> = callbackFlow {
+        if (workspaceId.isBlank() || threadId.isBlank()) {
+            trySend(emptyList())
+            awaitClose {}
+            return@callbackFlow
+        }
+        val uid = currentUid.trim()
+        val registration = db.collection("companies")
+            .document(workspaceId)
+            .collection("messageThreads")
+            .document(threadId)
+            .collection("messages")
+            .orderBy("createdAt")
+            .limit(300)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val items = snapshot?.documents
+                    ?.mapNotNull { document -> messageItemFromDocument(document.id, document.data.orEmpty(), threadId, uid) }
+                    ?: emptyList()
+                trySend(items)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun loadMessageTeamMembers(workspace: StudioWorkspace): List<StudioMessageTeamMember> {
+        if (workspace.id.isBlank()) return emptyList()
+        val result = functions.getHttpsCallable("listMessageThreads")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *> ?: return emptyList()
+        val members = data["teamMembers"] as? List<*> ?: return emptyList()
+        return members.mapNotNull { item ->
+            val raw = item as? Map<*, *> ?: return@mapNotNull null
+            val uid = stringValue(raw["uid"] ?: raw["id"], "")
+            if (uid.isBlank()) return@mapNotNull null
+            StudioMessageTeamMember(
+                id = uid,
+                email = stringValue(raw["email"], ""),
+                name = stringValue(raw["name"] ?: raw["displayName"], stringValue(raw["email"], "")),
+                photoURL = stringValue(raw["photoURL"], "")
+            )
+        }
+    }
+
+    suspend fun sendThreadMessage(
+        workspace: StudioWorkspace,
+        user: FirebaseUser,
+        threadId: String,
+        text: String,
+        replyToMessageId: String = "",
+        mentionedUids: List<String> = emptyList(),
+        fileURL: String = "",
+        fileName: String = "",
+        fileType: String = "",
+        fileSize: Long = 0L
+    ) {
+        if (workspace.id.isBlank() || threadId.isBlank()) error("Conversation is not ready.")
+        val cleanText = text.trim()
+        val cleanFileUrl = fileURL.trim()
+        if (cleanText.isEmpty() && cleanFileUrl.isEmpty()) error("Please write a message or attach a file.")
+        val payload = mutableMapOf<String, Any>(
+            "companyId" to workspace.id,
+            "threadId" to threadId,
+            "text" to cleanText,
+            "userName" to user.displayName.orEmpty().trim(),
+            "userPhotoURL" to (user.photoUrl?.toString().orEmpty()).trim()
+        )
+        if (cleanFileUrl.isNotEmpty()) {
+            payload["fileURL"] = cleanFileUrl
+            payload["fileName"] = fileName.trim()
+            payload["fileType"] = fileType.trim()
+            payload["fileSize"] = fileSize
+        }
+        val cleanReplyId = replyToMessageId.trim()
+        if (cleanReplyId.isNotEmpty()) payload["replyToMessageId"] = cleanReplyId
+        val cleanMentions = mentionedUids.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (cleanMentions.isNotEmpty()) payload["mentionedUids"] = cleanMentions
+        functions.getHttpsCallable("sendThreadMessage").call(payload).await()
+    }
+
+    suspend fun editThreadMessage(
+        workspace: StudioWorkspace,
+        threadId: String,
+        messageId: String,
+        text: String
+    ) {
+        if (workspace.id.isBlank() || threadId.isBlank() || messageId.isBlank()) error("Message is not ready.")
+        functions.getHttpsCallable("editThreadMessage")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "threadId" to threadId,
+                    "messageId" to messageId,
+                    "text" to text.trim()
+                )
+            )
+            .await()
+    }
+
+    suspend fun deleteMessageForMe(workspace: StudioWorkspace, threadId: String, messageId: String) {
+        if (workspace.id.isBlank() || threadId.isBlank() || messageId.isBlank()) return
+        functions.getHttpsCallable("deleteMessageForMe")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "messageId" to messageId))
+            .await()
+    }
+
+    suspend fun deleteMessageForEveryone(workspace: StudioWorkspace, threadId: String, messageId: String) {
+        if (workspace.id.isBlank() || threadId.isBlank() || messageId.isBlank()) return
+        functions.getHttpsCallable("deleteMessageForEveryone")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "messageId" to messageId))
+            .await()
+    }
+
+    suspend fun uploadMessageFileAndSend(
+        workspace: StudioWorkspace,
+        user: FirebaseUser,
+        threadId: String,
+        bytes: ByteArray,
+        fileName: String,
+        contentType: String,
+        text: String = "",
+        replyToMessageId: String = "",
+        mentionedUids: List<String> = emptyList()
+    ) {
+        if (workspace.id.isBlank() || threadId.isBlank()) error("Conversation is not ready.")
+        if (bytes.isEmpty()) error("Selected file could not be read.")
+        val cleanName = fileName.trim()
+            .substringAfterLast("/")
+            .substringAfterLast("\\")
+            .ifBlank { "Attachment" }
+        val cleanType = contentType.trim().ifBlank { "application/octet-stream" }
+        val storagePath = "companies/${workspace.id}/message_files/$threadId/${UUID.randomUUID()}_$cleanName"
+        val ref = storage.reference.child(storagePath)
+        val metadata = StorageMetadata.Builder()
+            .setContentType(cleanType)
+            .setCustomMetadata("companyId", workspace.id)
+            .setCustomMetadata("threadId", threadId)
+            .setCustomMetadata("uploadedByUid", user.uid)
+            .setCustomMetadata("uploadedByEmail", user.email.orEmpty().ifBlank { "unknown" })
+            .setCustomMetadata("originalFileName", cleanName)
+            .setCustomMetadata("source", "android_message")
+            .build()
+        ref.putBytes(bytes, metadata).await()
+        val downloadUrl = ref.downloadUrl.await().toString()
+        sendThreadMessage(
+            workspace = workspace,
+            user = user,
+            threadId = threadId,
+            text = text,
+            replyToMessageId = replyToMessageId,
+            mentionedUids = mentionedUids,
+            fileURL = downloadUrl,
+            fileName = cleanName,
+            fileType = cleanType,
+            fileSize = bytes.size.toLong()
+        )
+    }
+
+    suspend fun toggleMessageReaction(
+        workspace: StudioWorkspace,
+        user: FirebaseUser,
+        threadId: String,
+        messageId: String,
+        emoji: String
+    ) {
+        val cleanEmoji = emoji.trim()
+        if (workspace.id.isBlank() || threadId.isBlank() || messageId.isBlank() || cleanEmoji.isBlank()) return
+        functions.getHttpsCallable("toggleMessageReaction")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "threadId" to threadId,
+                    "messageId" to messageId,
+                    "emoji" to cleanEmoji,
+                    "userName" to user.displayName.orEmpty().trim()
+                )
+            )
+            .await()
+    }
+
+    suspend fun pinMessageInThread(workspace: StudioWorkspace, threadId: String, messageId: String) {
+        if (workspace.id.isBlank() || threadId.isBlank() || messageId.isBlank()) return
+        functions.getHttpsCallable("pinMessageInThread")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "messageId" to messageId))
+            .await()
+    }
+
+    suspend fun unpinMessageInThread(workspace: StudioWorkspace, threadId: String, messageId: String) {
+        if (workspace.id.isBlank() || threadId.isBlank() || messageId.isBlank()) return
+        functions.getHttpsCallable("unpinMessageInThread")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "messageId" to messageId))
+            .await()
+    }
+
+    fun messageTypingUsersFlow(workspaceId: String, threadId: String, currentUid: String): Flow<List<StudioMessageTypingUser>> = callbackFlow {
+        if (workspaceId.isBlank() || threadId.isBlank()) {
+            trySend(emptyList())
+            awaitClose {}
+            return@callbackFlow
+        }
+        val registration = db.collection("companies")
+            .document(workspaceId)
+            .collection("messageThreads")
+            .document(threadId)
+            .collection("typing")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val now = System.currentTimeMillis()
+                val users = snapshot?.documents
+                    ?.mapNotNull { doc ->
+                        val data = doc.data.orEmpty()
+                        val uid = stringValue(data["uid"] ?: doc.id, "")
+                        if (uid.isBlank() || uid == currentUid) return@mapNotNull null
+                        val isTyping = (data["isTyping"] as? Boolean) ?: true
+                        if (!isTyping) return@mapNotNull null
+                        val updatedAt = messageDateFromAny(data["updatedAt"]) ?: messageDateFromAny(data["typingUntil"])
+                        if (updatedAt != null && now - updatedAt.time > 8_000L) return@mapNotNull null
+                        StudioMessageTypingUser(
+                            id = uid,
+                            name = stringValue(data["name"] ?: data["userName"], stringValue(data["email"], "")),
+                            email = stringValue(data["email"], ""),
+                            photoURL = stringValue(data["photoURL"] ?: data["userPhotoURL"], ""),
+                            updatedAt = updatedAt
+                        )
+                    }
+                    ?: emptyList()
+                trySend(users)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun createMessageThread(
+        workspace: StudioWorkspace,
+        type: String,
+        memberUid: String = "",
+        memberUids: List<String> = emptyList(),
+        title: String = ""
+    ): String {
+        if (workspace.id.isBlank()) return ""
+        val payload = mutableMapOf<String, Any>(
+            "companyId" to workspace.id,
+            "type" to type
+        )
+        val cleanMemberUid = memberUid.trim()
+        if (cleanMemberUid.isNotEmpty()) payload["memberUid"] = cleanMemberUid
+        val cleanMembers = memberUids.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (cleanMembers.isNotEmpty()) payload["memberUids"] = cleanMembers
+        val cleanTitle = title.trim()
+        if (cleanTitle.isNotEmpty()) payload["title"] = cleanTitle
+        val result = functions.getHttpsCallable("createMessageThread").call(payload).await()
+        val data = result.data as? Map<*, *> ?: return ""
+        return stringValue(data["threadId"], "")
+    }
+
+    suspend fun addMembersToMessageThread(workspace: StudioWorkspace, threadId: String, memberUids: List<String>) {
+        if (workspace.id.isBlank() || threadId.isBlank()) return
+        val cleanMembers = memberUids.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (cleanMembers.isEmpty()) return
+        functions.getHttpsCallable("addMembersToMessageThread")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "memberUids" to cleanMembers))
+            .await()
+    }
+
+    suspend fun renameMessageThread(workspace: StudioWorkspace, threadId: String, title: String) {
+        val cleanTitle = title.trim()
+        if (workspace.id.isBlank() || threadId.isBlank() || cleanTitle.isEmpty()) return
+        functions.getHttpsCallable("renameMessageThread")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "title" to cleanTitle))
+            .await()
+    }
+
+    suspend fun leaveMessageThread(workspace: StudioWorkspace, threadId: String) {
+        if (workspace.id.isBlank() || threadId.isBlank()) return
+        functions.getHttpsCallable("leaveMessageThread")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId))
+            .await()
+    }
+
+    suspend fun removeMemberFromMessageThread(workspace: StudioWorkspace, threadId: String, memberUid: String) {
+        val cleanUid = memberUid.trim()
+        if (workspace.id.isBlank() || threadId.isBlank() || cleanUid.isEmpty()) return
+        functions.getHttpsCallable("removeMemberFromMessageThread")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "memberUid" to cleanUid))
+            .await()
+    }
+
+    suspend fun setMessageThreadMute(workspace: StudioWorkspace, threadId: String, mode: String) {
+        if (workspace.id.isBlank() || threadId.isBlank()) return
+        functions.getHttpsCallable("setMessageThreadMute")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "mode" to mode.trim()))
+            .await()
+    }
+
+    suspend fun setMessageTypingStatus(
+        workspace: StudioWorkspace,
+        user: FirebaseUser,
+        threadId: String,
+        isTyping: Boolean
+    ) {
+        if (workspace.id.isBlank() || threadId.isBlank()) return
+        val functionName = if (isTyping) "setMessageTypingStatus" else "clearMessageTypingStatus"
+        functions.getHttpsCallable(functionName)
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "threadId" to threadId,
+                    "isTyping" to isTyping,
+                    "userName" to user.displayName.orEmpty().trim(),
+                    "userPhotoURL" to (user.photoUrl?.toString().orEmpty()).trim()
+                )
+            )
+            .await()
+    }
+
+    suspend fun setMessageThreadActive(workspace: StudioWorkspace, threadId: String, isActive: Boolean) {
+        if (workspace.id.isBlank() || threadId.isBlank()) return
+        functions.getHttpsCallable("setMessageThreadActive")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId, "isActive" to isActive))
+            .await()
+    }
+
+    fun activityNotificationsFlow(workspace: StudioWorkspace, currentUid: String, currentEmail: String): Flow<List<StudioActivityNotification>> = callbackFlow {
+        if (workspace.id.isBlank()) {
+            trySend(emptyList())
+            awaitClose {}
+            return@callbackFlow
+        }
+        val registration = db.collection("companies")
+            .document(workspace.id)
+            .collection("notifications")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(100)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val items = snapshot?.documents
+                    ?.map { document -> activityNotificationFromDocument(document.id, document.data.orEmpty()) }
+                    ?.filter { it.isVisible(currentUid, currentEmail) }
+                    ?.sortedByDescending { it.createdAt?.time ?: 0L }
+                    ?: emptyList()
+                trySend(items)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun markActivityNotificationRead(workspace: StudioWorkspace, notificationId: String) {
+        if (workspace.id.isBlank() || notificationId.isBlank()) return
+        functions.getHttpsCallable("markActivityNotificationRead")
+            .call(mapOf("companyId" to workspace.id, "notificationId" to notificationId))
+            .await()
+    }
+
+    suspend fun markAllActivityNotificationsRead(workspace: StudioWorkspace) {
+        if (workspace.id.isBlank()) return
+        functions.getHttpsCallable("markAllActivityNotificationsRead")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+    }
+
+    suspend fun dismissActivityNotifications(workspace: StudioWorkspace, notificationIds: List<String>) {
+        val cleanIds = notificationIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (workspace.id.isBlank() || cleanIds.isEmpty()) return
+        functions.getHttpsCallable("dismissActivityNotifications")
+            .call(mapOf("companyId" to workspace.id, "notificationIds" to cleanIds))
+            .await()
+    }
+
+    suspend fun markMessageThreadRead(workspace: StudioWorkspace, threadId: String) {
+        if (workspace.id.isBlank() || threadId.isBlank()) return
+        functions.getHttpsCallable("markMessageThreadRead")
+            .call(mapOf("companyId" to workspace.id, "threadId" to threadId))
+            .await()
+    }
+
     private fun memberAccess(
         data: Map<String, Any>,
         uid: String,
@@ -2027,5 +2445,200 @@ private fun extensionForImageContentType(contentType: String): String {
         "image/heic" -> "heic"
         "image/heif" -> "heif"
         else -> "jpg"
+    }
+}
+
+private fun messageThreadFromDocument(
+    id: String,
+    data: Map<String, Any?>,
+    fallbackCompanyId: String,
+    currentUid: String
+): StudioMessageThread {
+    val memberUids = (data["memberUids"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    val memberEmails = (data["memberEmails"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    val pinnedIds = (data["pinnedMessageIds"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    val readBy = messageDateMap(data["readBy"])
+    val mutedUntilBy = messageDateMap(data["mutedUntilBy"])
+    val lastMessageAt = messageDateFromAny(data["lastMessageAt"])
+    val type = stringValue(data["type"], if (id == "team") "team" else "direct")
+    val lastMessageByUid = stringValue(data["lastMessageByUid"], "")
+    val isUnread = if (currentUid.isNotBlank() && lastMessageAt != null && lastMessageByUid != currentUid) {
+        val lastReadAt = readBy[currentUid]?.time ?: 0L
+        lastMessageAt.time > lastReadAt
+    } else {
+        false
+    }
+    return StudioMessageThread(
+        id = id,
+        companyId = stringValue(data["companyId"], fallbackCompanyId),
+        type = type,
+        title = stringValue(data["title"], if (type == "team") "Team Chat" else ""),
+        memberUids = memberUids,
+        memberEmails = memberEmails,
+        lastMessageText = stringValue(data["lastMessageText"] ?: data["lastMessagePreview"], ""),
+        lastMessageAt = lastMessageAt,
+        lastMessageByUid = lastMessageByUid,
+        lastMessageByName = stringValue(data["lastMessageByName"], ""),
+        lastMessageByPhotoURL = stringValue(data["lastMessageByPhotoURL"], ""),
+        readBy = readBy,
+        mutedUntilBy = mutedUntilBy,
+        pinnedMessageIds = pinnedIds,
+        isUnread = isUnread
+    )
+}
+
+private fun messageItemFromDocument(
+    id: String,
+    data: Map<String, Any?>,
+    threadId: String,
+    currentUid: String
+): StudioMessageItem? {
+    val hiddenForUids = (data["hiddenForUids"] as? List<*>)?.mapNotNull { it as? String }
+        ?: (data["deletedForUids"] as? List<*>)?.mapNotNull { it as? String }
+        ?: (data["hiddenFor"] as? List<*>)?.mapNotNull { it as? String }
+        ?: emptyList()
+    if (currentUid.isNotBlank() && hiddenForUids.contains(currentUid)) return null
+
+    val deletedForEveryone = (data["deletedForEveryone"] as? Boolean) ?: (data["isDeleted"] as? Boolean) ?: false
+    val rawType = stringValue(data["type"], "text")
+    val type = if (deletedForEveryone) "deleted" else rawType
+    val text = if (deletedForEveryone) "" else stringValue(data["text"] ?: data["message"], "")
+    val fileName = if (deletedForEveryone) "" else stringValue(data["fileName"], "")
+    val fileURL = if (deletedForEveryone) "" else stringValue(data["fileURL"], "")
+    val fileType = if (deletedForEveryone) "" else stringValue(data["fileType"], "")
+    val fileSize = if (deletedForEveryone) 0L else longFromAny(data["fileSize"], 0L)
+
+    return StudioMessageItem(
+        id = id,
+        threadId = stringValue(data["threadId"], threadId),
+        text = text,
+        senderUid = stringValue(data["senderUid"], ""),
+        senderEmail = stringValue(data["senderEmail"], ""),
+        senderName = stringValue(data["senderName"], stringValue(data["senderEmail"], "")),
+        senderPhotoURL = stringValue(data["senderPhotoURL"] ?: data["senderAvatarURL"], ""),
+        createdAt = messageDateFromAny(data["createdAt"]) ?: Date(),
+        type = type,
+        fileName = fileName,
+        fileURL = fileURL,
+        fileType = fileType,
+        fileSize = fileSize,
+        deletedForEveryone = deletedForEveryone,
+        deletedByUid = stringValue(data["deletedByUid"], ""),
+        deletedAt = messageDateFromAny(data["deletedAt"]),
+        pinned = (data["pinned"] as? Boolean) ?: false,
+        pinnedByUid = stringValue(data["pinnedByUid"], ""),
+        pinnedByName = stringValue(data["pinnedByName"], ""),
+        pinnedAt = messageDateFromAny(data["pinnedAt"]),
+        replyToMessageId = stringValue(data["replyToMessageId"], ""),
+        replyToText = stringValue(data["replyToText"], ""),
+        replyToSenderName = stringValue(data["replyToSenderName"], ""),
+        replyToSenderUid = stringValue(data["replyToSenderUid"], ""),
+        replyToFileName = stringValue(data["replyToFileName"], ""),
+        replyToType = stringValue(data["replyToType"], ""),
+        reactions = messageReactionMap(data["reactions"]),
+        mentionedUids = (data["mentionedUids"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+        edited = (data["edited"] as? Boolean) ?: false,
+        editedAt = messageDateFromAny(data["editedAt"]),
+        editedByUid = stringValue(data["editedByUid"], "")
+    )
+}
+
+private fun sortedMessageThreadsForDisplay(threads: List<StudioMessageThread>): List<StudioMessageThread> {
+    val team = threads.filter { it.id == "team" }.sortedBy { it.id }
+    val others = threads.filter { it.id != "team" }.sortedWith(
+        compareByDescending<StudioMessageThread> { it.lastMessageAt?.time ?: 0L }.thenBy { it.id }
+    )
+    return team + others
+}
+
+private fun messageDateFromAny(value: Any?): Date? {
+    return when (value) {
+        null -> null
+        is com.google.firebase.Timestamp -> value.toDate()
+        is Date -> value
+        is Number -> {
+            val raw = value.toLong()
+            if (raw <= 0L) null else if (raw > 1_000_000_000_000L) Date(raw) else Date(raw * 1000L)
+        }
+        is Map<*, *> -> {
+            val seconds = (value["seconds"] ?: value["_seconds"]) as? Number
+            seconds?.let { Date(it.toLong() * 1000L) }
+        }
+        is String -> runCatching { Date.from(Instant.parse(value)) }.getOrNull()
+        else -> null
+    }
+}
+
+private fun messageDateMap(value: Any?): Map<String, Date> {
+    val raw = value as? Map<*, *> ?: return emptyMap()
+    val output = mutableMapOf<String, Date>()
+    raw.forEach { (key, rawValue) ->
+        val uid = key as? String ?: return@forEach
+        val date = messageDateFromAny(rawValue) ?: return@forEach
+        output[uid] = date
+    }
+    return output
+}
+
+private fun messageReactionMap(value: Any?): Map<String, Map<String, String>> {
+    val raw = value as? Map<*, *> ?: return emptyMap()
+    val output = mutableMapOf<String, Map<String, String>>()
+    raw.forEach { (emojiKey, emojiValue) ->
+        val emoji = (emojiKey as? String)?.trim() ?: return@forEach
+        if (emoji.isEmpty()) return@forEach
+        val users = emojiValue as? Map<*, *> ?: return@forEach
+        val parsed = mutableMapOf<String, String>()
+        users.forEach { (uidKey, nameValue) ->
+            val uid = (uidKey as? String)?.trim() ?: return@forEach
+            if (uid.isEmpty()) return@forEach
+            val name = when (nameValue) {
+                is String -> nameValue
+                is Map<*, *> -> (nameValue["name"] as? String) ?: (nameValue["email"] as? String) ?: uid
+                else -> uid
+            }
+            parsed[uid] = name
+        }
+        if (parsed.isNotEmpty()) output[emoji] = parsed
+    }
+    return output
+}
+
+private fun activityNotificationFromDocument(id: String, data: Map<String, Any?>): StudioActivityNotification {
+    return StudioActivityNotification(
+        id = id,
+        companyId = stringValue(data["companyId"], ""),
+        type = stringValue(data["type"], "update"),
+        title = stringValue(data["title"], "Notification"),
+        message = stringValue(data["message"] ?: data["body"], ""),
+        route = stringValue(data["route"], ""),
+        orderId = stringValue(data["orderId"], ""),
+        ticketId = stringValue(data["ticketId"], ""),
+        ticketType = stringValue(data["ticketType"], ""),
+        threadId = stringValue(data["threadId"], ""),
+        messageId = stringValue(data["messageId"], ""),
+        senderUid = stringValue(data["senderUid"], ""),
+        senderName = stringValue(data["senderName"], ""),
+        senderEmail = stringValue(data["senderEmail"], ""),
+        senderPhotoURL = stringValue(data["senderPhotoURL"] ?: data["imageUrl"], ""),
+        priority = stringValue(data["priority"], ""),
+        status = stringValue(data["status"], ""),
+        source = stringValue(data["source"], ""),
+        recipientUids = (data["recipientUids"] as? List<*>)?.mapNotNull { it as? String }
+            ?: (data["recipients"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+        recipientEmails = (data["recipientEmails"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+        readBy = messageDateMap(data["readBy"]),
+        dismissedBy = messageDateMap(data["dismissedBy"]),
+        createdAt = messageDateFromAny(data["createdAt"])
+    )
+}
+
+private fun longFromAny(value: Any?, fallback: Long): Long {
+    return when (value) {
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> value.toLong()
+        is Float -> value.toLong()
+        is String -> value.toLongOrNull() ?: fallback
+        else -> fallback
     }
 }

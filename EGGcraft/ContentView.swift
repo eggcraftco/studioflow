@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
 import FirebaseFirestore
+import FirebaseAuth
 #if canImport(EventKit)
 import EventKit
 #endif
@@ -1412,6 +1413,9 @@ struct StudioKeepNote: Identifiable, Equatable {
     var title: String
     var text: String
     var colorName: String
+    var ownerUserId: String
+    var sharedWith: [String]
+    var collaboratorEmails: [String]
     var isPinned: Bool
     var isArchived: Bool
     var isDeleted: Bool
@@ -1426,6 +1430,9 @@ struct StudioKeepNote: Identifiable, Equatable {
          title: String = "",
          text: String = "",
          colorName: String = "default",
+         ownerUserId: String = "",
+         sharedWith: [String] = [],
+         collaboratorEmails: [String] = [],
          isPinned: Bool = false,
          isArchived: Bool = false,
          isDeleted: Bool = false,
@@ -1439,6 +1446,9 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.title = title
         self.text = text
         self.colorName = colorName
+        self.ownerUserId = ownerUserId
+        self.sharedWith = sharedWith
+        self.collaboratorEmails = collaboratorEmails
         self.isPinned = isPinned
         self.isArchived = isArchived
         self.isDeleted = isDeleted
@@ -1456,6 +1466,9 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.title = data["title"] as? String ?? ""
         self.text = data["text"] as? String ?? ""
         self.colorName = data["colorName"] as? String ?? "default"
+        self.ownerUserId = data["ownerUserId"] as? String ?? ""
+        self.sharedWith = data["sharedWith"] as? [String] ?? []
+        self.collaboratorEmails = data["collaboratorEmails"] as? [String] ?? []
         self.isPinned = data["isPinned"] as? Bool ?? false
         self.isArchived = data["isArchived"] as? Bool ?? false
         self.isDeleted = data["isDeleted"] as? Bool ?? false
@@ -1493,6 +1506,111 @@ struct StudioKeepNote: Identifiable, Equatable {
     }
 }
 
+
+private struct KeepShortcutTooltipBubble: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .bold))
+            .foregroundColor(.white)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(Color(red: 0.12, green: 0.12, blue: 0.12).opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.22), radius: 5, x: 0, y: 2)
+            .fixedSize(horizontal: true, vertical: true)
+            .allowsHitTesting(false)
+    }
+}
+
+private struct KeepTooltipIconButton: View {
+    let systemImage: String
+    let tooltip: String
+    let role: ButtonRole?
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(role: role) {
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(role == .destructive ? .red : .secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(isHovering ? 0.085 : 0.055))
+                .clipShape(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .accessibilityLabel(tooltip)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.10)) {
+                isHovering = hovering
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if isHovering {
+                KeepShortcutTooltipBubble(text: tooltip)
+                    .offset(y: -34)
+                    .zIndex(999)
+                    .transition(.opacity)
+            }
+        }
+        .zIndex(isHovering ? 999 : 0)
+    }
+}
+
+private struct KeepTooltipIconMenu<Content: View>: View {
+    let systemImage: String
+    let tooltip: String
+    let content: () -> Content
+
+    @State private var isHovering = false
+
+    init(systemImage: String, tooltip: String, @ViewBuilder content: @escaping () -> Content) {
+        self.systemImage = systemImage
+        self.tooltip = tooltip
+        self.content = content
+    }
+
+    var body: some View {
+        Menu {
+            content()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(isHovering ? 0.085 : 0.055))
+                .clipShape(Circle())
+                .contentShape(Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .accessibilityLabel(tooltip)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.10)) {
+                isHovering = hovering
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if isHovering {
+                KeepShortcutTooltipBubble(text: tooltip)
+                    .offset(y: -34)
+                    .zIndex(999)
+                    .transition(.opacity)
+            }
+        }
+        .zIndex(isHovering ? 999 : 0)
+    }
+}
+
 struct StudioKeepNotesView: View {
     var onOpenProject: ((String) -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
@@ -1501,7 +1619,7 @@ struct StudioKeepNotesView: View {
     @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     @State private var notes: [StudioKeepNote] = []
-    @State private var selectedSection: String = "notes"
+    @AppStorage("studioKeepSelectedSection") private var selectedSection: String = "notes"
     @State private var searchText: String = ""
     @State private var isLoading: Bool = true
     @State private var errorMessage: String = ""
@@ -1517,7 +1635,9 @@ struct StudioKeepNotesView: View {
     @State private var composerReminderDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
     @State private var composerExpanded: Bool = false
     @State private var selectedNote: StudioKeepNote?
-    @State private var gridMode: Bool = true
+    @State private var collaboratorNote: StudioKeepNote?
+    @State private var collaboratorEmailText: String = ""
+    @AppStorage("studioKeepGridMode") private var gridMode: Bool = true
     @State private var showLabelManager: Bool = false
     @State private var newLabelText: String = ""
     @State private var reminderPickerNote: StudioKeepNote?
@@ -1525,6 +1645,10 @@ struct StudioKeepNotesView: View {
     @State private var expandedProjectNoteKeys: Set<String> = []
     @State private var hoveredKeepNoteId: String? = nil
     @State private var draggingKeepNoteId: String? = nil
+    @State private var lastDropTargetKeepNoteId: String? = nil
+    @State private var selectedKeepNoteIds: Set<String> = []
+    @State private var keepUndoMessage: String = ""
+    @State private var keepUndoAction: (() -> Void)? = nil
 
     private let noteColors = ["default", "yellow", "green", "blue", "pink", "purple"]
 
@@ -1832,7 +1956,15 @@ struct StudioKeepNotesView: View {
             }
             .background(pageBackground)
         }
-        .onAppear { startNotesListener() }
+        .onAppear {
+            if selectedSection.hasPrefix("label:") {
+                let labelName = String(selectedSection.dropFirst("label:".count))
+                if !allLabels.contains(where: { $0.caseInsensitiveCompare(labelName) == .orderedSame }) {
+                    selectedSection = "notes"
+                }
+            }
+            startNotesListener()
+        }
         .onDisappear {
             listener?.remove()
             listener = nil
@@ -1861,6 +1993,9 @@ struct StudioKeepNotesView: View {
         }
         .sheet(item: $reminderPickerNote) { note in
             reminderPickerSheet(for: note)
+        }
+        .sheet(item: $collaboratorNote) { note in
+            collaboratorSheet(for: note)
         }
     }
 
@@ -1942,6 +2077,8 @@ struct StudioKeepNotesView: View {
                     Image(systemName: gridMode ? "rectangle.grid.2x2" : "list.bullet")
                 }
                 .buttonStyle(.plain)
+                .help(keepShortcutText(gridMode ? "Grid view" : "List view"))
+                .accessibilityLabel(keepShortcutText(gridMode ? "Grid view" : "List view"))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -2039,260 +2176,348 @@ struct StudioKeepNotesView: View {
         .buttonStyle(.plain)
     }
 
-    private var notesSectionHeader: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(t(sectionDisplayTitle(selectedSection), lang: seciliDil))
-                    .font(.system(size: 24, weight: .bold))
-                Text(activeSectionCountText)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(.secondary)
+    private var isSelectionModeActive: Bool {
+        !selectedKeepNoteIds.isEmpty
+    }
+
+    private func toggleKeepNoteSelection(_ note: StudioKeepNote) {
+        if selectedKeepNoteIds.contains(note.id) {
+            selectedKeepNoteIds.remove(note.id)
+        } else {
+            selectedKeepNoteIds.insert(note.id)
+        }
+    }
+
+    private func clearKeepNoteSelection() {
+        selectedKeepNoteIds.removeAll()
+    }
+
+    private func selectedKeepNotes() -> [StudioKeepNote] {
+        notes.filter { selectedKeepNoteIds.contains($0.id) }
+    }
+
+    private func bulkPinSelectedNotes() {
+        for note in selectedKeepNotes() {
+            var updated = note
+            updated.isPinned = true
+            saveNote(updated)
+        }
+        clearKeepNoteSelection()
+    }
+
+    private func bulkArchiveSelectedNotes() {
+        let affectedNotes = selectedKeepNotes()
+        for note in affectedNotes {
+            var updated = note
+            updated.isArchived = true
+            updated.isDeleted = false
+            saveNote(updated)
+        }
+        clearKeepNoteSelection()
+
+        if !affectedNotes.isEmpty {
+            showKeepUndo("Notes archived") {
+                for note in affectedNotes {
+                    var restored = note
+                    restored.isArchived = false
+                    restored.isDeleted = false
+                    saveNote(restored)
+                }
             }
+        }
+    }
+
+    private func bulkTrashSelectedNotes() {
+        let affectedNotes = selectedKeepNotes()
+        for note in affectedNotes {
+            var updated = note
+            updated.isDeleted = true
+            updated.isArchived = false
+            saveNote(updated)
+        }
+        clearKeepNoteSelection()
+
+        if !affectedNotes.isEmpty {
+            showKeepUndo("Notes moved to trash") {
+                for note in affectedNotes {
+                    var restored = note
+                    restored.isDeleted = false
+                    restored.isArchived = false
+                    saveNote(restored)
+                }
+            }
+        }
+    }
+
+    private func keepShortcutText(_ key: String) -> String {
+        if seciliDil == "Türkçe" {
+            switch key {
+            case "Select": return "Seç"
+            case "Deselect": return "Seçimi kaldır"
+            case "Pin note": return "Notu sabitle"
+            case "Unpin note": return "Sabitlemeyi kaldır"
+            case "Duplicate note": return "Notu çoğalt"
+            case "Copy note": return "Notu kopyala"
+            case "Change colour": return "Rengi değiştir"
+            case "Reminder": return "Hatırlatma"
+            case "Labels": return "Etiketler"
+            case "Collaborators": return "Ortak çalışanlar"
+            case "collaborator": return "ortak çalışan"
+            case "collaborators": return "ortak çalışan"
+            case "Archive note": return "Arşivle"
+            case "Unarchive note": return "Arşivden çıkar"
+            case "Move to trash": return "Çöpe taşı"
+            case "Restore note": return "Geri yükle"
+            case "Delete forever": return "Kalıcı sil"
+            case "Open project": return "Projeyi aç"
+            case "Save as personal note": return "Kişisel nota kaydet"
+            case "Copy project note": return "Proje notunu kopyala"
+            case "Checklist": return "Checklist"
+            case "Image": return "Görsel"
+            case "Text options": return "Yazı seçenekleri"
+            case "More": return "Daha fazla"
+            case "Grid view": return "Grid görünümü"
+            case "List view": return "Liste görünümü"
+            case "Close": return "Kapat"
+            case "Undo": return "Geri al"
+            default: return t(key, lang: seciliDil)
+            }
+        }
+        return t(key, lang: seciliDil)
+    }
+
+    private var isKeepUndoVisible: Bool {
+        !keepUndoMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && keepUndoAction != nil
+    }
+
+    private func showKeepUndo(_ message: String, action: @escaping () -> Void) {
+        keepUndoMessage = message
+        keepUndoAction = action
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if keepUndoMessage == message {
+                keepUndoMessage = ""
+                keepUndoAction = nil
+            }
+        }
+    }
+
+    private func clearKeepUndo() {
+        keepUndoMessage = ""
+        keepUndoAction = nil
+    }
+
+    private var keepUndoBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.secondary)
+
+            Text(t(keepUndoMessage, lang: seciliDil))
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(.secondary)
 
             Spacer()
 
-            if selectedSection == "trash" && !visibleNotes.isEmpty {
-                Button(role: .destructive) {
-                    emptyTrash()
-                } label: {
-                    Label(t("Empty trash", lang: seciliDil), systemImage: "trash.slash")
-                        .font(.system(size: 12.5, weight: .bold))
+            Button {
+                keepUndoAction?()
+                clearKeepUndo()
+            } label: {
+                Text(t("Undo", lang: seciliDil))
+                    .font(.system(size: 12.5, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .help(keepShortcutText("Undo"))
+            .accessibilityLabel(keepShortcutText("Undo"))
+
+            Button {
+                clearKeepUndo()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(surfaceColor)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.18 : 0.06), radius: 8, x: 0, y: 3)
+    }
+
+    private var keepCurrentUserId: String {
+        Auth.auth().currentUser?.uid ?? ""
+    }
+
+    private var keepCurrentUserEmail: String {
+        Auth.auth().currentUser?.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    }
+
+    private func canEditKeepNote(_ note: StudioKeepNote) -> Bool {
+        note.ownerUserId.isEmpty || note.ownerUserId == keepCurrentUserId
+    }
+
+    private func normalizedCollaboratorEmail(_ email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func openCollaboratorSheet(_ note: StudioKeepNote) {
+        collaboratorEmailText = ""
+        collaboratorNote = note
+    }
+
+    private func addCollaborator(to note: StudioKeepNote) {
+        let email = normalizedCollaboratorEmail(collaboratorEmailText)
+        guard !email.isEmpty else { return }
+
+        var updated = note
+        if updated.ownerUserId.isEmpty {
+            updated.ownerUserId = keepCurrentUserId
+        }
+
+        if !updated.collaboratorEmails.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) {
+            updated.collaboratorEmails.append(email)
+        }
+
+        if !updated.sharedWith.contains(email) {
+            updated.sharedWith.append(email)
+        }
+
+        collaboratorEmailText = ""
+        saveNote(updated)
+        collaboratorNote = updated
+    }
+
+    private func removeCollaborator(_ email: String, from note: StudioKeepNote) {
+        let clean = normalizedCollaboratorEmail(email)
+        var updated = note
+        updated.collaboratorEmails.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
+        updated.sharedWith.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
+        saveNote(updated)
+        collaboratorNote = updated
+    }
+
+    private var notesSectionHeader: some View {
+        VStack(spacing: 10) {
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t(sectionDisplayTitle(selectedSection), lang: seciliDil))
+                        .font(.system(size: 24, weight: .bold))
+                    Text(activeSectionCountText)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.10))
-                .clipShape(Capsule())
+
+                Spacer()
+
+                if selectedSection == "trash" && !visibleNotes.isEmpty {
+                    Button(role: .destructive) {
+                        emptyTrash()
+                    } label: {
+                        Label(t("Empty trash", lang: seciliDil), systemImage: "trash.slash")
+                            .font(.system(size: 12.5, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.10))
+                    .clipShape(Capsule())
+                }
+
+                if selectedSection != "notes" {
+                    Button {
+                        selectedSection = "notes"
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                            composerExpanded = true
+                        }
+                    } label: {
+                        Label(t("New note", lang: seciliDil), systemImage: "plus")
+                            .font(.system(size: 12.5, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.yellow.opacity(keepColorScheme == .dark ? 0.18 : 0.22))
+                    .clipShape(Capsule())
+
+                    Button {
+                        selectedSection = "notes"
+                    } label: {
+                        Label(t("Back to notes", lang: seciliDil), systemImage: "arrow.left")
+                            .font(.system(size: 12.5, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.primary.opacity(0.055))
+                    .clipShape(Capsule())
+                }
             }
 
-            if selectedSection != "notes" {
-                Button {
-                    selectedSection = "notes"
-                } label: {
-                    Label(t("Back to notes", lang: seciliDil), systemImage: "arrow.left")
-                        .font(.system(size: 12.5, weight: .bold))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(Capsule())
+            if isSelectionModeActive {
+                bulkSelectionBar
+            }
+
+            if isKeepUndoVisible {
+                keepUndoBar
             }
         }
         .frame(maxWidth: 920)
     }
 
-    private func reminderPickerSheet(for note: StudioKeepNote) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "bell")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.orange)
-                    .frame(width: 38, height: 38)
-                    .background(Color.orange.opacity(0.14))
-                    .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t("Pick reminder", lang: seciliDil))
-                        .font(.system(size: 20, weight: .bold))
-                    Text(note.title.isEmpty ? t("Untitled note", lang: seciliDil) : note.title)
-                        .font(.system(size: 12.5))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                Button {
-                    reminderPickerNote = nil
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
-                        .background(Color.primary.opacity(0.06))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(18)
-
-            Divider().opacity(0.35)
-
-            VStack(alignment: .leading, spacing: 18) {
-                DatePicker(
-                    t("Reminder date and time", lang: seciliDil),
-                    selection: $reminderPickerDate,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.graphical)
-
-                HStack(spacing: 10) {
-                    Button {
-                        reminderPickerDate = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: Date()) ?? Date()
-                    } label: {
-                        Label(t("Today evening", lang: seciliDil), systemImage: "sunset")
-                    }
-
-                    Button {
-                        reminderPickerDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-                    } label: {
-                        Label(t("Tomorrow", lang: seciliDil), systemImage: "calendar.badge.plus")
-                    }
-
-                    Button {
-                        reminderPickerDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
-                    } label: {
-                        Label(t("Next week", lang: seciliDil), systemImage: "calendar")
-                    }
-                }
-                .buttonStyle(.plain)
+    private var bulkSelectionBar: some View {
+        HStack(spacing: 10) {
+            Text("\(selectedKeepNoteIds.count) \(t("selected", lang: seciliDil))")
                 .font(.system(size: 12.5, weight: .bold))
                 .foregroundColor(.secondary)
 
-                HStack {
-                    Button(role: .destructive) {
-                        setReminder(note, date: nil)
-                        reminderPickerNote = nil
-                    } label: {
-                        Label(t("Remove reminder", lang: seciliDil), systemImage: "bell.slash")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(note.reminderDate == nil)
+            Spacer()
 
-                    Spacer()
-
-                    Button {
-                        setReminder(note, date: reminderPickerDate)
-                        reminderPickerNote = nil
-                    } label: {
-                        Text(t("Save reminder", lang: seciliDil))
-                            .font(.system(size: 13, weight: .bold))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(Color.orange.opacity(0.18))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
+            Button {
+                bulkPinSelectedNotes()
+            } label: {
+                Label(t("Pin", lang: seciliDil), systemImage: "pin")
             }
-            .padding(20)
+
+            Button {
+                bulkArchiveSelectedNotes()
+            } label: {
+                Label(t("Archive", lang: seciliDil), systemImage: "archivebox")
+            }
+
+            Button(role: .destructive) {
+                bulkTrashSelectedNotes()
+            } label: {
+                Label(t("Trash", lang: seciliDil), systemImage: "trash")
+            }
+
+            Button {
+                clearKeepNoteSelection()
+            } label: {
+                Label(t("Clear", lang: seciliDil), systemImage: "xmark")
+            }
         }
-        .frame(minWidth: 440, minHeight: 520)
-        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
-        .onAppear {
-            reminderPickerDate = note.reminderDate ?? (Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date())
-        }
+        .buttonStyle(.plain)
+        .font(.system(size: 12.5, weight: .bold))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(surfaceColor)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.18 : 0.06), radius: 8, x: 0, y: 3)
     }
 
-    private var labelManagerSheet: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(t("Edit labels", lang: seciliDil))
-                    .font(.system(size: 20, weight: .bold))
-
-                Spacer()
-
-                Button {
-                    showLabelManager = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
-                        .background(Color.primary.opacity(0.06))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(18)
-
-            Divider().opacity(0.35)
-
-            HStack(spacing: 10) {
-                Image(systemName: "plus")
-                    .foregroundColor(.secondary)
-
-                TextField(t("Create new label", lang: seciliDil), text: $newLabelText)
-                    .textFieldStyle(.plain)
-                    .onSubmit {
-                        createLabelFromInput()
-                    }
-
-                Button {
-                    createLabelFromInput()
-                } label: {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
-                        .background(Color.green.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(newLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(14)
-            .background(Color.primary.opacity(0.045))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .padding(18)
-
-            if allLabels.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "tag")
-                        .font(.system(size: 36))
-                        .foregroundColor(.secondary.opacity(0.6))
-                    Text(t("No labels yet", lang: seciliDil))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(allLabels, id: \.self) { label in
-                        HStack(spacing: 12) {
-                            Image(systemName: "tag")
-                                .foregroundColor(.secondary)
-                            Text(label)
-                                .font(.system(size: 14, weight: .semibold))
-                            Spacer()
-                            Text("\(noteCount(for: "label:\(label)"))")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.primary.opacity(0.055))
-                                .clipShape(Capsule())
-
-                            Button(role: .destructive) {
-                                deleteLabel(label)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.vertical, 5)
-                    }
-                }
-                .listStyle(.plain)
-            }
-        }
-        .frame(minWidth: 420, minHeight: 480)
-        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
-    }
 
     private var projectNotesContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "info.circle")
-                    .foregroundColor(.secondary)
-                Text(t("Project notes are grouped by project. Open a group to review all notes from the same project.", lang: seciliDil))
-                    .font(.system(size: 12.5))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-            }
-            .padding(12)
-            .background(Color.primary.opacity(0.045))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
             if projectNoteGroups.isEmpty {
                 emptyState
                     .frame(maxWidth: .infinity)
@@ -2308,7 +2533,6 @@ struct StudioKeepNotesView: View {
         }
         .padding(.top, 8)
     }
-
 
     private func projectNoteGroupCard(_ group: StudioProjectNoteGroup) -> some View {
         let isExpanded = expandedProjectNoteKeys.contains(group.id)
@@ -2358,20 +2582,19 @@ struct StudioKeepNotesView: View {
                     .buttonStyle(.plain)
                 }
 
-                Button {
-                    if let firstItem = group.items.first {
-                        openProjectFromNote(firstItem)
+                if let first = group.items.first {
+                    Button {
+                        openProjectFromNote(first)
+                    } label: {
+                        Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
+                            .font(.system(size: 12, weight: .bold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Capsule())
                     }
-                } label: {
-                    Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
-                        .font(.system(size: 12, weight: .bold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.primary.opacity(0.055))
-                        .clipShape(Capsule())
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .help(t("Open project", lang: seciliDil))
             }
 
             if isExpanded {
@@ -2387,18 +2610,17 @@ struct StudioKeepNotesView: View {
                     .lineLimit(4)
 
                 if count > 1 {
-                    HStack(spacing: 8) {
+                    VStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .fill(Color.primary.opacity(0.10))
-                            .frame(height: 9)
+                            .frame(height: 8)
                             .padding(.horizontal, 12)
 
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .fill(Color.primary.opacity(0.065))
-                            .frame(height: 9)
+                            .frame(height: 8)
                             .padding(.horizontal, 24)
                     }
-                    .frame(height: 14)
                     .allowsHitTesting(false)
                 }
             }
@@ -2452,68 +2674,228 @@ struct StudioKeepNotesView: View {
 
                 Spacer()
 
-                HStack(spacing: 8) {
-                    Button {
-                        copyProjectNoteToClipboard(item)
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 12.5, weight: .bold))
-                            .foregroundColor(.secondary)
-                            .frame(width: 30, height: 30)
-                            .background(Color.primary.opacity(0.055))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(t("Copy note", lang: seciliDil))
-
-                    Button {
-                        createPersonalNote(from: item)
-                    } label: {
-                        Image(systemName: "plus.rectangle.on.folder")
-                            .font(.system(size: 12.5, weight: .bold))
-                            .foregroundColor(.secondary)
-                            .frame(width: 30, height: 30)
-                            .background(Color.primary.opacity(0.055))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(t("Save as personal note", lang: seciliDil))
-
-                    Button {
-                        openProjectFromNote(item)
-                    } label: {
-                        Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
-                            .font(.system(size: 12, weight: .bold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(Color.primary.opacity(0.055))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .help(t("Open project", lang: seciliDil))
+                Button {
+                    copyProjectNoteToClipboard(item)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Circle())
                 }
+                .buttonStyle(.plain)
+                .help(keepShortcutText("Copy project note"))
+                .accessibilityLabel(keepShortcutText("Copy project note"))
+
+                Button {
+                    createPersonalNote(from: item)
+                } label: {
+                    Image(systemName: "plus.rectangle.on.folder")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(keepShortcutText("Save as personal note"))
+                .accessibilityLabel(keepShortcutText("Save as personal note"))
+
+                Button {
+                    openProjectFromNote(item)
+                } label: {
+                    Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .bold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
 
             Text(item.text)
                 .font(.system(size: 14.5))
                 .foregroundColor(.primary.opacity(0.88))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(8)
+                .lineLimit(20)
+        }
+        .padding(14)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
 
-            if let updatedAt = item.updatedAt {
-                Text(updatedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 10.5, weight: .semibold))
+    private var labelManagerSheet: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(t("Edit labels", lang: seciliDil))
+                    .font(.system(size: 20, weight: .bold))
+                Spacer()
+                Button {
+                    showLabelManager = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Divider().opacity(0.35)
+
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
                     .foregroundColor(.secondary)
+                TextField(t("Create new label", lang: seciliDil), text: $newLabelText)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        createLabelFromInput()
+                    }
+                Button {
+                    createLabelFromInput()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(newLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(14)
+            .background(Color.primary.opacity(0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(18)
+
+            if allLabels.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "tag")
+                        .font(.system(size: 36))
+                        .foregroundColor(.secondary.opacity(0.6))
+                    Text(t("No labels yet", lang: seciliDil))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(allLabels, id: \.self) { label in
+                        HStack(spacing: 12) {
+                            Image(systemName: "tag")
+                                .foregroundColor(.secondary)
+                            Text(label)
+                                .font(.system(size: 14, weight: .semibold))
+                            Spacer()
+                            Text("\(noteCount(for: "label:\(label)"))")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.primary.opacity(0.055))
+                                .clipShape(Capsule())
+                            Button(role: .destructive) {
+                                deleteLabel(label)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+                .listStyle(.plain)
             }
         }
-        .padding(16)
-        .background(surfaceColor)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.045), radius: 8, x: 0, y: 3)
+        .frame(minWidth: 420, minHeight: 480)
+        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
+    }
+
+    private func reminderPickerSheet(for note: StudioKeepNote) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "bell")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.orange)
+                    .frame(width: 38, height: 38)
+                    .background(Color.orange.opacity(0.14))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Pick reminder", lang: seciliDil))
+                        .font(.system(size: 20, weight: .bold))
+                    Text(note.title.isEmpty ? t("Untitled note", lang: seciliDil) : note.title)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button {
+                    reminderPickerNote = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Divider().opacity(0.35)
+
+            VStack(alignment: .leading, spacing: 18) {
+                DatePicker(
+                    t("Reminder date and time", lang: seciliDil),
+                    selection: $reminderPickerDate,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.graphical)
+
+                HStack {
+                    Button(role: .destructive) {
+                        setReminder(note, date: nil)
+                        reminderPickerNote = nil
+                    } label: {
+                        Label(t("Remove reminder", lang: seciliDil), systemImage: "bell.slash")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(note.reminderDate == nil)
+
+                    Spacer()
+
+                    Button {
+                        setReminder(note, date: reminderPickerDate)
+                        reminderPickerNote = nil
+                    } label: {
+                        Text(t("Save reminder", lang: seciliDil))
+                            .font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(Color.orange.opacity(0.18))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+        }
+        .frame(minWidth: 440, minHeight: 520)
+        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
+        .onAppear {
+            reminderPickerDate = note.reminderDate ?? (Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date())
+        }
+    }
+
+    private func openProjectFromNote(_ item: StudioProjectNoteItem) {
+        onOpenProject?(item.orderKey)
     }
 
     private func copyProjectNoteToClipboard(_ item: StudioProjectNoteItem) {
@@ -2540,14 +2922,12 @@ struct StudioKeepNotesView: View {
         ]
         .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-        let title = titleParts.joined(separator: " • ")
-        let text = item.text
-
         let personalNote = StudioKeepNote(
-            title: title,
-            text: text,
+            title: titleParts.joined(separator: " • "),
+            text: item.text,
             colorName: "blue",
-            isPinned: composerPinned,
+            ownerUserId: keepCurrentUserId,
+            isPinned: false,
             isArchived: false,
             isDeleted: false,
             labels: ["Project Notes"],
@@ -2561,8 +2941,120 @@ struct StudioKeepNotesView: View {
         selectedSection = "notes"
     }
 
-    private func openProjectFromNote(_ item: StudioProjectNoteItem) {
-        onOpenProject?(item.orderKey)
+    private func collaboratorSheet(for note: StudioKeepNote) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 38, height: 38)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Collaborators", lang: seciliDil))
+                        .font(.system(size: 20, weight: .bold))
+                    Text(note.title.isEmpty ? t("Untitled note", lang: seciliDil) : note.title)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button {
+                    collaboratorNote = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Divider().opacity(0.35)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "envelope")
+                        .foregroundColor(.secondary)
+
+                    TextField(t("Add collaborator email", lang: seciliDil), text: $collaboratorEmailText)
+                        .textFieldStyle(.plain)
+                        .onSubmit {
+                            addCollaborator(to: note)
+                        }
+
+                    Button {
+                        addCollaborator(to: note)
+                    } label: {
+                        Text(t("Add", lang: seciliDil))
+                            .font(.system(size: 12.5, weight: .bold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.blue.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(normalizedCollaboratorEmail(collaboratorEmailText).isEmpty)
+                }
+                .padding(12)
+                .background(Color.primary.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                if note.collaboratorEmails.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 34))
+                            .foregroundColor(.secondary.opacity(0.55))
+                        Text(t("No collaborators yet", lang: seciliDil))
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(note.collaboratorEmails, id: \.self) { email in
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundColor(.secondary)
+
+                                Text(email)
+                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Button(role: .destructive) {
+                                    removeCollaborator(email, from: note)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 15, weight: .bold))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(10)
+                            .background(Color.primary.opacity(0.035))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+
+                Text(t("Shared notes will appear for collaborators when they sign in with the same email in this workspace.", lang: seciliDil))
+                    .font(.system(size: 11.5))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+            .padding(18)
+        }
+        .frame(minWidth: 460, minHeight: 430)
+        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
     }
 
     private var quickComposer: some View {
@@ -2623,7 +3115,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: "checklist")
                         }
                         .buttonStyle(.plain)
-                        .help(t("Checklist", lang: seciliDil))
+                        .help(keepShortcutText("Checklist"))
+                        .accessibilityLabel(keepShortcutText("Checklist"))
 
                         Button {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
@@ -2633,7 +3126,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: "photo")
                         }
                         .buttonStyle(.plain)
-                        .help(t("Image", lang: seciliDil))
+                        .help(keepShortcutText("Image"))
+                        .accessibilityLabel(keepShortcutText("Image"))
                     }
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundColor(.secondary)
@@ -2696,7 +3190,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: "textformat")
                         }
                         .buttonStyle(.plain)
-                        .help(t("Text options", lang: seciliDil))
+                        .help(keepShortcutText("Text options"))
+                        .accessibilityLabel(keepShortcutText("Text options"))
 
                         Menu {
                             ForEach(noteColors, id: \.self) { color in
@@ -2708,7 +3203,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: "paintpalette")
                         }
                         .buttonStyle(.plain)
-                        .help(t("Change colour", lang: seciliDil))
+                        .help(keepShortcutText("Change colour"))
+                        .accessibilityLabel(keepShortcutText("Change colour"))
 
                         Button {
                             if !composerText.hasSuffix("\n") && !composerText.isEmpty {
@@ -2719,7 +3215,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: "checklist")
                         }
                         .buttonStyle(.plain)
-                        .help(t("Checklist", lang: seciliDil))
+                        .help(keepShortcutText("Checklist"))
+                        .accessibilityLabel(keepShortcutText("Checklist"))
 
                         Menu {
                             Toggle(t("Reminder", lang: seciliDil), isOn: $composerReminderEnabled)
@@ -2728,7 +3225,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: composerReminderEnabled ? "bell.fill" : "bell")
                         }
                         .buttonStyle(.plain)
-                        .help(t("Reminder", lang: seciliDil))
+                        .help(keepShortcutText("Reminder"))
+                        .accessibilityLabel(keepShortcutText("Reminder"))
 
                         HStack(spacing: 6) {
                             Image(systemName: "tag")
@@ -2762,7 +3260,8 @@ struct StudioKeepNotesView: View {
                             Image(systemName: "ellipsis.vertical")
                         }
                         .buttonStyle(.plain)
-                        .help(t("More", lang: seciliDil))
+                        .help(keepShortcutText("More"))
+                        .accessibilityLabel(keepShortcutText("More"))
 
                         Spacer()
 
@@ -2775,6 +3274,8 @@ struct StudioKeepNotesView: View {
                                 .padding(.vertical, 9)
                         }
                         .buttonStyle(.plain)
+                        .help(keepShortcutText("Close"))
+                        .accessibilityLabel(keepShortcutText("Close"))
                     }
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.secondary)
@@ -2803,30 +3304,81 @@ struct StudioKeepNotesView: View {
     }
 
 
-    private var notesGrid: some View {
-        let columns = [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 20, alignment: .top)]
+    private func keepMasonryColumnCount(for width: CGFloat) -> Int {
+        if width >= 1320 { return 4 }
+        if width >= 980 { return 3 }
+        if width >= 620 { return 2 }
+        return 1
+    }
 
-        return LazyVStack(alignment: .leading, spacing: 22) {
+    private func keepMasonryColumns(_ notes: [StudioKeepNote], columnCount: Int) -> [[StudioKeepNote]] {
+        let safeCount = max(1, columnCount)
+        var columns = Array(repeating: [StudioKeepNote](), count: safeCount)
+
+        for (index, note) in notes.enumerated() {
+            columns[index % safeCount].append(note)
+        }
+
+        return columns
+    }
+
+    private var notesGrid: some View {
+        VStack(alignment: .leading, spacing: 18) {
             if !pinnedNotes.isEmpty {
-                sectionTitle("Pinned")
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
-                    ForEach(pinnedNotes) { note in
-                        noteCard(note)
-                    }
-                }
+                Text(t("Pinned", lang: seciliDil).uppercased())
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .tracking(1.1)
+                    .padding(.horizontal, 4)
+
+                masonryGrid(for: pinnedNotes)
             }
 
             if !otherNotes.isEmpty {
-                if !pinnedNotes.isEmpty { sectionTitle("Others") }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
-                    ForEach(otherNotes) { note in
-                        noteCard(note)
-                    }
+                if !pinnedNotes.isEmpty {
+                    Text(t("Others", lang: seciliDil).uppercased())
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .tracking(1.1)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 4)
                 }
+
+                masonryGrid(for: otherNotes)
             }
         }
-        .padding(.top, 4)
+        .frame(maxWidth: 1180, alignment: .topLeading)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visibleNotes.map(\.id))
     }
+
+    private func masonryGrid(for noteItems: [StudioKeepNote]) -> some View {
+        GeometryReader { proxy in
+            let columnCount = keepMasonryColumnCount(for: proxy.size.width)
+            let columns = keepMasonryColumns(noteItems, columnCount: columnCount)
+
+            HStack(alignment: .top, spacing: 18) {
+                ForEach(Array(columns.enumerated()), id: \.offset) { _, columnNotes in
+                    VStack(spacing: 18) {
+                        ForEach(columnNotes) { note in
+                            noteCard(note)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: noteItems.map(\.id))
+            .padding(.horizontal, 4)
+        }
+        .frame(minHeight: masonryEstimatedHeight(for: noteItems))
+    }
+
+    private func masonryEstimatedHeight(for noteItems: [StudioKeepNote]) -> CGFloat {
+        let rows = max(1, Int(ceil(Double(noteItems.count) / 3.0)))
+        return CGFloat(rows) * 190.0
+    }
+
 
     private var notesList: some View {
         LazyVStack(spacing: 12) {
@@ -2873,61 +3425,26 @@ struct StudioKeepNotesView: View {
         role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        Button(role: role) {
-            action()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(role == .destructive ? .red : .secondary)
-                .frame(width: 28, height: 28)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(keepText(helpKey))
-        .accessibilityLabel(keepText(helpKey))
+        KeepTooltipIconButton(
+            systemImage: systemImage,
+            tooltip: keepShortcutText(helpKey),
+            role: role,
+            action: action
+        )
     }
 
     private func keepIconMenu<Content: View>(
         _ systemImage: String,
         helpKey: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        Menu {
-            content()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(.secondary)
-                .frame(width: 28, height: 28)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(keepText(helpKey))
-        .accessibilityLabel(keepText(helpKey))
+        KeepTooltipIconMenu(
+            systemImage: systemImage,
+            tooltip: keepShortcutText(helpKey),
+            content: content
+        )
     }
 
-    private func keepActionText(_ key: String) -> String {
-        if seciliDil == "Türkçe" {
-            switch key {
-            case "Pin note": return "Notu sabitle"
-            case "Unpin note": return "Sabitlemeyi kaldır"
-            case "Duplicate note": return "Notu çoğalt"
-            case "Copy note": return "Notu kopyala"
-            case "Change colour": return "Rengi değiştir"
-            case "Reminder": return "Hatırlatma"
-            case "Labels": return "Etiketler"
-            case "Archive note": return "Arşivle"
-            case "Unarchive note": return "Arşivden çıkar"
-            case "Move to trash": return "Çöpe taşı"
-            case "Restore note": return "Geri yükle"
-            case "Delete forever": return "Kalıcı sil"
-            default: return t(key, lang: seciliDil)
-            }
-        }
-        return t(key, lang: seciliDil)
-    }
 
     private func keepCardIconButton(
         _ systemImage: String,
@@ -2935,46 +3452,46 @@ struct StudioKeepNotesView: View {
         role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        Button(role: role) {
-            action()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(role == .destructive ? .red : .secondary)
-                .frame(width: 28, height: 28)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(keepActionText(helpKey))
-        .accessibilityLabel(keepActionText(helpKey))
+        KeepTooltipIconButton(
+            systemImage: systemImage,
+            tooltip: keepShortcutText(helpKey),
+            role: role,
+            action: action
+        )
     }
 
     private func keepCardIconMenu<Content: View>(
         _ systemImage: String,
         helpKey: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        Menu {
-            content()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(.secondary)
-                .frame(width: 28, height: 28)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(keepActionText(helpKey))
-        .accessibilityLabel(keepActionText(helpKey))
+        KeepTooltipIconMenu(
+            systemImage: systemImage,
+            tooltip: keepShortcutText(helpKey),
+            content: content
+        )
     }
 
     private func noteCard(_ note: StudioKeepNote) -> some View {
-        let showActions = hoveredKeepNoteId == note.id
+        let showActions = hoveredKeepNoteId == note.id || selectedKeepNoteIds.contains(note.id)
+        let isSelected = selectedKeepNoteIds.contains(note.id)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
+                if showActions || isSelected {
+                    Button {
+                        toggleKeepNoteSelection(note)
+                    } label: {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(isSelected ? .blue : .secondary)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .help(keepShortcutText(isSelected ? "Deselect" : "Select"))
+                    .accessibilityLabel(keepShortcutText(isSelected ? "Deselect" : "Select"))
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
                     if !note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(note.title)
@@ -3047,6 +3564,17 @@ struct StudioKeepNotesView: View {
                 }
             }
 
+
+            if !note.collaboratorEmails.isEmpty {
+                Label("\(note.collaboratorEmails.count) \(t(note.collaboratorEmails.count == 1 ? "collaborator" : "collaborators", lang: seciliDil))", systemImage: "person.2")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.blue.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+
             Spacer(minLength: 6)
 
             HStack(spacing: 7) {
@@ -3108,6 +3636,10 @@ struct StudioKeepNotesView: View {
                     }
                 }
 
+                keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") {
+                    openCollaboratorSheet(note)
+                }
+
                 keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") {
                     toggleArchive(note)
                 }
@@ -3131,29 +3663,38 @@ struct StudioKeepNotesView: View {
             .allowsHitTesting(showActions)
         }
         .padding(16)
-        .frame(minHeight: 126, alignment: .topLeading)
+        .frame(minHeight: 104, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(noteCardColor(note.colorName))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
+                .stroke(isSelected ? Color.blue.opacity(0.55) : borderColor, lineWidth: isSelected ? 1.5 : 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.055), radius: 8, x: 0, y: 3)
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.070), radius: 7, x: 0, y: 2)
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {
-            selectedNote = note
+            if isSelectionModeActive {
+                toggleKeepNoteSelection(note)
+            } else {
+                selectedNote = note
+            }
         }
         .onHover { isHovering in
             hoveredKeepNoteId = isHovering ? note.id : nil
         }
-        .opacity(draggingKeepNoteId == note.id ? 0.55 : 1)
+        .opacity(draggingKeepNoteId == note.id ? 0.72 : 1)
+        .scaleEffect(draggingKeepNoteId == note.id ? 0.985 : 1)
+        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: draggingKeepNoteId)
         .onDrag {
             draggingKeepNoteId = note.id
+            lastDropTargetKeepNoteId = nil
             return NSItemProvider(object: note.id as NSString)
         }
         .onDrop(of: [.text], delegate: KeepNoteDropDelegate(
             targetNoteId: note.id,
             draggingNoteId: $draggingKeepNoteId,
+            lastTargetNoteId: $lastDropTargetKeepNoteId,
             moveAction: { draggedId, targetId in
                 moveKeepNote(draggedId, before: targetId)
             }
@@ -3265,6 +3806,7 @@ struct StudioKeepNotesView: View {
             title: title,
             text: text,
             colorName: composerColor,
+            ownerUserId: keepCurrentUserId,
             labels: labels,
             links: links,
             reminderDate: composerReminderEnabled ? composerReminderDate : nil,
@@ -3310,8 +3852,10 @@ struct StudioKeepNotesView: View {
             return
         }
 
-        let moved = active.remove(at: fromIndex)
-        active.insert(moved, at: toIndex)
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            let moved = active.remove(at: fromIndex)
+            active.insert(moved, at: toIndex)
+        }
 
         let timestamp = Date().timeIntervalSince1970
         for index in active.indices {
@@ -3330,6 +3874,9 @@ struct StudioKeepNotesView: View {
             "title": updated.title,
             "text": updated.text,
             "colorName": updated.colorName,
+            "ownerUserId": updated.ownerUserId.isEmpty ? keepCurrentUserId : updated.ownerUserId,
+            "sharedWith": updated.sharedWith,
+            "collaboratorEmails": updated.collaboratorEmails,
             "isPinned": updated.isPinned,
             "isArchived": updated.isArchived,
             "isDeleted": updated.isDeleted,
@@ -3362,6 +3909,22 @@ struct StudioKeepNotesView: View {
         updated.isArchived.toggle()
         updated.isDeleted = false
         saveNote(updated)
+
+        if updated.isArchived {
+            showKeepUndo("Note archived") {
+                var restored = note
+                restored.isArchived = false
+                restored.isDeleted = false
+                saveNote(restored)
+            }
+        } else {
+            showKeepUndo("Note unarchived") {
+                var restored = note
+                restored.isArchived = true
+                restored.isDeleted = false
+                saveNote(restored)
+            }
+        }
     }
 
     private func createLabelFromInput() {
@@ -3480,6 +4043,13 @@ struct StudioKeepNotesView: View {
         updated.isDeleted = true
         updated.isArchived = false
         saveNote(updated)
+
+        showKeepUndo("Note moved to trash") {
+            var restored = note
+            restored.isDeleted = false
+            restored.isArchived = false
+            saveNote(restored)
+        }
     }
 
     private func restoreNote(_ note: StudioKeepNote) {
@@ -3497,15 +4067,25 @@ struct StudioKeepNotesView: View {
 struct KeepNoteDropDelegate: DropDelegate {
     let targetNoteId: String
     @Binding var draggingNoteId: String?
+    @Binding var lastTargetNoteId: String?
     let moveAction: (String, String) -> Void
 
     func dropEntered(info: DropInfo) {
         guard let draggingNoteId, draggingNoteId != targetNoteId else { return }
-        moveAction(draggingNoteId, targetNoteId)
+        guard lastTargetNoteId != targetNoteId else { return }
+
+        lastTargetNoteId = targetNoteId
+
+        DispatchQueue.main.async {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                moveAction(draggingNoteId, targetNoteId)
+            }
+        }
     }
 
     func performDrop(info: DropInfo) -> Bool {
         draggingNoteId = nil
+        lastTargetNoteId = nil
         return true
     }
 
@@ -3514,7 +4094,7 @@ struct KeepNoteDropDelegate: DropDelegate {
     }
 
     func dropExited(info: DropInfo) {
-        // Keep current order preview.
+        // Keep current order preview while dragging.
     }
 }
 

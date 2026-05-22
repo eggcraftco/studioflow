@@ -30,12 +30,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Menu
@@ -116,6 +118,8 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Orders("Orders", Icons.Outlined.ListAlt, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
     Customers("Customers", Icons.Filled.People, "customers"),
+    Messages("Messages", Icons.AutoMirrored.Filled.Chat, "messages"),
+    Notifications("Notifications", Icons.Filled.Notifications, "notifications"),
     QuickReply("Quick Reply", Icons.Outlined.AutoAwesome, "quickReply"),
     Settings("Settings", Icons.Filled.Settings, "settings")
 }
@@ -173,7 +177,39 @@ fun StudioFlowMainScreen(
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
-    onDeleteWorkspaceData: () -> Unit
+    onDeleteWorkspaceData: () -> Unit,
+    onSelectMessageThread: (String) -> Unit,
+    onMarkMessageThreadRead: (String) -> Unit,
+    onSendMessage: (String, List<String>) -> Unit,
+    onSendMessageWithAttachment: (ByteArray, String, String, String, List<String>) -> Unit,
+    onEditMessage: (String, String) -> Unit,
+    onDeleteMessageForMe: (String) -> Unit,
+    onDeleteMessageForEveryone: (String) -> Unit,
+    onToggleReaction: (String, String) -> Unit,
+    onTogglePin: (String, Boolean) -> Unit,
+    onSetReplyingToMessage: (uk.co.eggcraft.studioflow.data.model.StudioMessageItem?) -> Unit,
+    onComposerTextChanged: () -> Unit,
+    onSetMessageSearchQuery: (String) -> Unit,
+    onSetMessageAttachmentFilter: (String) -> Unit,
+    onToggleThreadArchive: (String) -> Unit,
+    onToggleSavedMessage: (String, String) -> Unit,
+    onSetForwardingMessage: (uk.co.eggcraft.studioflow.data.model.StudioMessageItem?) -> Unit,
+    onForwardMessageToThread: (String) -> Unit,
+    onCreateDirectMessageThread: (String) -> Unit,
+    onCreateGroupMessageThread: (List<String>, String) -> Unit,
+    onAddMembersToThread: (String, List<String>) -> Unit,
+    onRenameThread: (String, String) -> Unit,
+    onLeaveThread: (String) -> Unit,
+    onSetThreadMute: (String, String) -> Unit,
+    onLoadDraft: (String, String) -> String,
+    onSaveDraft: (String, String, String) -> Unit,
+    onSetActivityNotificationSearch: (String) -> Unit,
+    onSetActivityNotificationReadFilter: (String) -> Unit,
+    onSetActivityNotificationTypeFilter: (String) -> Unit,
+    onMarkActivityNotificationRead: (String) -> Unit,
+    onMarkAllActivityNotificationsRead: () -> Unit,
+    onDismissActivityNotifications: (List<String>) -> Unit,
+    onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit
 ) {
     var section by rememberSaveable { mutableStateOf(StudioSection.Orders) }
     var settingsStartKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -183,6 +219,8 @@ fun StudioFlowMainScreen(
         StudioSection.Dashboard,
         StudioSection.Schedule,
         StudioSection.Customers,
+        StudioSection.Messages,
+        StudioSection.Notifications,
         StudioSection.QuickReply,
         StudioSection.Settings
     )
@@ -281,6 +319,8 @@ fun StudioFlowMainScreen(
                     onOpenAccount = openAccount,
                     onSignOut = onSignOut,
                     compact = containerWidth < 1500.dp,
+                    notificationUnreadCount = state.activityNotificationUnreadCount,
+                    messageUnreadCount = state.messageUnreadCount,
                     modifier = Modifier
                         .fillMaxWidth()
                 )
@@ -327,6 +367,38 @@ fun StudioFlowMainScreen(
                     onDeleteCustomRole = onDeleteCustomRole,
                     onImportBackup = onImportBackup,
                     onDeleteWorkspaceData = onDeleteWorkspaceData,
+                    onSelectMessageThread = onSelectMessageThread,
+                    onMarkMessageThreadRead = onMarkMessageThreadRead,
+                    onSendMessage = onSendMessage,
+                    onSendMessageWithAttachment = onSendMessageWithAttachment,
+                    onEditMessage = onEditMessage,
+                    onDeleteMessageForMe = onDeleteMessageForMe,
+                    onDeleteMessageForEveryone = onDeleteMessageForEveryone,
+                    onToggleReaction = onToggleReaction,
+                    onTogglePin = onTogglePin,
+                    onSetReplyingToMessage = onSetReplyingToMessage,
+                    onComposerTextChanged = onComposerTextChanged,
+                    onSetMessageSearchQuery = onSetMessageSearchQuery,
+                    onSetMessageAttachmentFilter = onSetMessageAttachmentFilter,
+                    onToggleThreadArchive = onToggleThreadArchive,
+                    onToggleSavedMessage = onToggleSavedMessage,
+                    onSetForwardingMessage = onSetForwardingMessage,
+                    onForwardMessageToThread = onForwardMessageToThread,
+                    onCreateDirectMessageThread = onCreateDirectMessageThread,
+                    onCreateGroupMessageThread = onCreateGroupMessageThread,
+                    onAddMembersToThread = onAddMembersToThread,
+                    onRenameThread = onRenameThread,
+                    onLeaveThread = onLeaveThread,
+                    onSetThreadMute = onSetThreadMute,
+                    onLoadDraft = onLoadDraft,
+                    onSaveDraft = onSaveDraft,
+                    onSetActivityNotificationSearch = onSetActivityNotificationSearch,
+                    onSetActivityNotificationReadFilter = onSetActivityNotificationReadFilter,
+                    onSetActivityNotificationTypeFilter = onSetActivityNotificationTypeFilter,
+                    onMarkActivityNotificationRead = onMarkActivityNotificationRead,
+                    onMarkAllActivityNotificationsRead = onMarkAllActivityNotificationsRead,
+                    onDismissActivityNotifications = onDismissActivityNotifications,
+                    onOpenActivityNotification = onOpenActivityNotification,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -347,7 +419,9 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = it
                     },
-                    onOpenAccount = openAccount
+                    onOpenAccount = openAccount,
+                    notificationUnreadCount = state.activityNotificationUnreadCount,
+                    messageUnreadCount = state.messageUnreadCount
                 )
                 StudioSectionContent(
                     activeSection = activeSection,
@@ -392,6 +466,38 @@ fun StudioFlowMainScreen(
                     onDeleteCustomRole = onDeleteCustomRole,
                     onImportBackup = onImportBackup,
                     onDeleteWorkspaceData = onDeleteWorkspaceData,
+                    onSelectMessageThread = onSelectMessageThread,
+                    onMarkMessageThreadRead = onMarkMessageThreadRead,
+                    onSendMessage = onSendMessage,
+                    onSendMessageWithAttachment = onSendMessageWithAttachment,
+                    onEditMessage = onEditMessage,
+                    onDeleteMessageForMe = onDeleteMessageForMe,
+                    onDeleteMessageForEveryone = onDeleteMessageForEveryone,
+                    onToggleReaction = onToggleReaction,
+                    onTogglePin = onTogglePin,
+                    onSetReplyingToMessage = onSetReplyingToMessage,
+                    onComposerTextChanged = onComposerTextChanged,
+                    onSetMessageSearchQuery = onSetMessageSearchQuery,
+                    onSetMessageAttachmentFilter = onSetMessageAttachmentFilter,
+                    onToggleThreadArchive = onToggleThreadArchive,
+                    onToggleSavedMessage = onToggleSavedMessage,
+                    onSetForwardingMessage = onSetForwardingMessage,
+                    onForwardMessageToThread = onForwardMessageToThread,
+                    onCreateDirectMessageThread = onCreateDirectMessageThread,
+                    onCreateGroupMessageThread = onCreateGroupMessageThread,
+                    onAddMembersToThread = onAddMembersToThread,
+                    onRenameThread = onRenameThread,
+                    onLeaveThread = onLeaveThread,
+                    onSetThreadMute = onSetThreadMute,
+                    onLoadDraft = onLoadDraft,
+                    onSaveDraft = onSaveDraft,
+                    onSetActivityNotificationSearch = onSetActivityNotificationSearch,
+                    onSetActivityNotificationReadFilter = onSetActivityNotificationReadFilter,
+                    onSetActivityNotificationTypeFilter = onSetActivityNotificationTypeFilter,
+                    onMarkActivityNotificationRead = onMarkActivityNotificationRead,
+                    onMarkAllActivityNotificationsRead = onMarkAllActivityNotificationsRead,
+                    onDismissActivityNotifications = onDismissActivityNotifications,
+                    onOpenActivityNotification = onOpenActivityNotification,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -669,6 +775,38 @@ private fun StudioSectionContent(
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
     onDeleteWorkspaceData: () -> Unit,
+    onSelectMessageThread: (String) -> Unit,
+    onMarkMessageThreadRead: (String) -> Unit,
+    onSendMessage: (String, List<String>) -> Unit,
+    onSendMessageWithAttachment: (ByteArray, String, String, String, List<String>) -> Unit,
+    onEditMessage: (String, String) -> Unit,
+    onDeleteMessageForMe: (String) -> Unit,
+    onDeleteMessageForEveryone: (String) -> Unit,
+    onToggleReaction: (String, String) -> Unit,
+    onTogglePin: (String, Boolean) -> Unit,
+    onSetReplyingToMessage: (uk.co.eggcraft.studioflow.data.model.StudioMessageItem?) -> Unit,
+    onComposerTextChanged: () -> Unit,
+    onSetMessageSearchQuery: (String) -> Unit,
+    onSetMessageAttachmentFilter: (String) -> Unit,
+    onToggleThreadArchive: (String) -> Unit,
+    onToggleSavedMessage: (String, String) -> Unit,
+    onSetForwardingMessage: (uk.co.eggcraft.studioflow.data.model.StudioMessageItem?) -> Unit,
+    onForwardMessageToThread: (String) -> Unit,
+    onCreateDirectMessageThread: (String) -> Unit,
+    onCreateGroupMessageThread: (List<String>, String) -> Unit,
+    onAddMembersToThread: (String, List<String>) -> Unit,
+    onRenameThread: (String, String) -> Unit,
+    onLeaveThread: (String) -> Unit,
+    onSetThreadMute: (String, String) -> Unit,
+    onLoadDraft: (String, String) -> String,
+    onSaveDraft: (String, String, String) -> Unit,
+    onSetActivityNotificationSearch: (String) -> Unit,
+    onSetActivityNotificationReadFilter: (String) -> Unit,
+    onSetActivityNotificationTypeFilter: (String) -> Unit,
+    onMarkActivityNotificationRead: (String) -> Unit,
+    onMarkAllActivityNotificationsRead: () -> Unit,
+    onDismissActivityNotifications: (List<String>) -> Unit,
+    onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -697,6 +835,44 @@ private fun StudioSectionContent(
                 onUpdateOrderFields = onUpdateOrderFields
             )
             StudioSection.Customers -> CustomersScreen(state = state, focusedCustomerName = focusedCustomerName)
+            StudioSection.Notifications -> uk.co.eggcraft.studioflow.features.notifications.NotificationsScreen(
+                state = state,
+                onSetSearch = onSetActivityNotificationSearch,
+                onSetReadFilter = onSetActivityNotificationReadFilter,
+                onSetTypeFilter = onSetActivityNotificationTypeFilter,
+                onMarkRead = onMarkActivityNotificationRead,
+                onMarkAllRead = onMarkAllActivityNotificationsRead,
+                onDismiss = onDismissActivityNotifications,
+                onOpen = onOpenActivityNotification
+            )
+            StudioSection.Messages -> uk.co.eggcraft.studioflow.features.messages.MessagesScreen(
+                state = state,
+                onSelectThread = onSelectMessageThread,
+                onMarkThreadRead = onMarkMessageThreadRead,
+                onSendMessage = onSendMessage,
+                onSendMessageWithAttachment = onSendMessageWithAttachment,
+                onEditMessage = onEditMessage,
+                onDeleteMessageForMe = onDeleteMessageForMe,
+                onDeleteMessageForEveryone = onDeleteMessageForEveryone,
+                onToggleReaction = onToggleReaction,
+                onTogglePin = onTogglePin,
+                onSetReplyingToMessage = onSetReplyingToMessage,
+                onComposerTextChanged = onComposerTextChanged,
+                onSetMessageSearchQuery = onSetMessageSearchQuery,
+                onSetMessageAttachmentFilter = onSetMessageAttachmentFilter,
+                onToggleThreadArchive = onToggleThreadArchive,
+                onToggleSavedMessage = onToggleSavedMessage,
+                onSetForwardingMessage = onSetForwardingMessage,
+                onForwardMessageToThread = onForwardMessageToThread,
+                onCreateDirectMessageThread = onCreateDirectMessageThread,
+                onCreateGroupMessageThread = onCreateGroupMessageThread,
+                onAddMembersToThread = onAddMembersToThread,
+                onRenameThread = onRenameThread,
+                onLeaveThread = onLeaveThread,
+                onSetThreadMute = onSetThreadMute,
+                onLoadDraft = onLoadDraft,
+                onSaveDraft = onSaveDraft
+            )
             StudioSection.QuickReply -> QuickReplyScreen(
                 state = state,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
@@ -752,6 +928,8 @@ private fun StudioLargeTopBar(
     onOpenAccount: () -> Unit,
     onSignOut: () -> Unit,
     compact: Boolean,
+    notificationUnreadCount: Int = 0,
+    messageUnreadCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
@@ -802,6 +980,11 @@ private fun StudioLargeTopBar(
                     TopNavItem(
                         section = item,
                         selected = item == selectedSection,
+                        badgeCount = when (item) {
+                            StudioSection.Notifications -> notificationUnreadCount
+                            StudioSection.Messages -> messageUnreadCount
+                            else -> 0
+                        },
                         onClick = { onSelectSection(item) }
                     )
                 }
@@ -924,7 +1107,7 @@ private fun TopMetric(label: String, value: String, compact: Boolean) {
 }
 
 @Composable
-private fun TopNavItem(section: StudioSection, selected: Boolean, onClick: () -> Unit) {
+private fun TopNavItem(section: StudioSection, selected: Boolean, badgeCount: Int = 0, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = if (selected) StudioBlue.copy(alpha = 0.14f) else Color.Transparent,
@@ -949,6 +1132,17 @@ private fun TopNavItem(section: StudioSection, selected: Boolean, onClick: () ->
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
+            if (badgeCount > 0) {
+                Surface(color = StudioRed, shape = RoundedCornerShape(50)) {
+                    Text(
+                        if (badgeCount > 99) "99+" else badgeCount.toString(),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -1096,6 +1290,8 @@ private fun StudioLargeSidebar(
     onToggleSensitiveNumbers: () -> Unit,
     onCreateOrder: () -> Unit,
     onSignOut: () -> Unit,
+    notificationUnreadCount: Int = 0,
+    messageUnreadCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
@@ -1144,6 +1340,11 @@ private fun StudioLargeSidebar(
                     SidebarItem(
                         section = item,
                         selected = item == selectedSection,
+                        badgeCount = when (item) {
+                            StudioSection.Notifications -> notificationUnreadCount
+                            StudioSection.Messages -> messageUnreadCount
+                            else -> 0
+                        },
                         onClick = { onSelectSection(item) }
                     )
                 }
@@ -1158,7 +1359,7 @@ private fun StudioLargeSidebar(
 }
 
 @Composable
-private fun SidebarItem(section: StudioSection, selected: Boolean, onClick: () -> Unit) {
+private fun SidebarItem(section: StudioSection, selected: Boolean, badgeCount: Int = 0, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -1181,8 +1382,24 @@ private fun SidebarItem(section: StudioSection, selected: Boolean, onClick: () -
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = if (selected) StudioBlue else MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.ExtraBold
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.weight(1f, fill = false)
             )
+            if (badgeCount > 0) {
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(
+                    color = StudioRed,
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(
+                        if (badgeCount > 99) "99+" else badgeCount.toString(),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -1214,7 +1431,9 @@ private fun StudioMobileHeader(
     sections: List<StudioSection>,
     onLogoClick: () -> Unit,
     onSelectSection: (StudioSection) -> Unit,
-    onOpenAccount: () -> Unit
+    onOpenAccount: () -> Unit,
+    notificationUnreadCount: Int = 0,
+    messageUnreadCount: Int = 0
 ) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -1267,8 +1486,28 @@ private fun StudioMobileHeader(
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     sections.forEach { item ->
+                        val badge = when (item) {
+                            StudioSection.Notifications -> notificationUnreadCount
+                            StudioSection.Messages -> messageUnreadCount
+                            else -> 0
+                        }
                         DropdownMenuItem(
-                            text = { Text(item.title, fontWeight = FontWeight.Bold) },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(item.title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    if (badge > 0) {
+                                        Surface(color = StudioRed, shape = RoundedCornerShape(50)) {
+                                            Text(
+                                                if (badge > 99) "99+" else badge.toString(),
+                                                color = Color.White,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            },
                             leadingIcon = { Icon(item.icon, contentDescription = null, tint = StudioBlue) },
                             onClick = {
                                 menuOpen = false

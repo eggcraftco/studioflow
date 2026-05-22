@@ -485,6 +485,158 @@ data class StudioSupportTicketListResult(
     val canManage: Boolean
 )
 
+data class StudioMessageThread(
+    val id: String = "team",
+    val companyId: String = "",
+    val type: String = "team",
+    val title: String = "Team Chat",
+    val memberUids: List<String> = emptyList(),
+    val memberEmails: List<String> = emptyList(),
+    val lastMessageText: String = "",
+    val lastMessageAt: Date? = null,
+    val lastMessageByUid: String = "",
+    val lastMessageByName: String = "",
+    val lastMessageByPhotoURL: String = "",
+    val readBy: Map<String, Date> = emptyMap(),
+    val mutedUntilBy: Map<String, Date> = emptyMap(),
+    val pinnedMessageIds: List<String> = emptyList(),
+    val isUnread: Boolean = false
+) {
+    val isTeamThread: Boolean get() = id == "team" || type == "team"
+    val isDirectThread: Boolean get() = type == "direct"
+    val isGroupThread: Boolean get() = type == "group"
+
+    fun displayTitle(currentUid: String, teamMembers: List<StudioMessageTeamMember>): String {
+        val clean = title.trim()
+        if (clean.isNotBlank()) return clean
+        if (isTeamThread) return "Team Chat"
+        if (isDirectThread) {
+            val otherUid = memberUids.firstOrNull { it.trim() != currentUid.trim() && it.isNotBlank() }
+            val member = teamMembers.firstOrNull { it.id == otherUid }
+            return member?.name?.ifBlank { member.email }?.ifBlank { "Direct Message" } ?: "Direct Message"
+        }
+        return "Conversation"
+    }
+
+    fun mutedAt(uid: String): Date? = mutedUntilBy[uid]
+    fun isMutedFor(uid: String): Boolean {
+        val until = mutedUntilBy[uid] ?: return false
+        return until.time > System.currentTimeMillis()
+    }
+}
+
+data class StudioMessageItem(
+    val id: String = "",
+    val threadId: String = "",
+    val text: String = "",
+    val senderUid: String = "",
+    val senderEmail: String = "",
+    val senderName: String = "",
+    val senderPhotoURL: String = "",
+    val createdAt: Date? = null,
+    val type: String = "text",
+    val fileName: String = "",
+    val fileURL: String = "",
+    val fileType: String = "",
+    val fileSize: Long = 0L,
+    val deletedForEveryone: Boolean = false,
+    val deletedByUid: String = "",
+    val deletedAt: Date? = null,
+    val pinned: Boolean = false,
+    val pinnedByUid: String = "",
+    val pinnedByName: String = "",
+    val pinnedAt: Date? = null,
+    val replyToMessageId: String = "",
+    val replyToText: String = "",
+    val replyToSenderName: String = "",
+    val replyToSenderUid: String = "",
+    val replyToFileName: String = "",
+    val replyToType: String = "",
+    val reactions: Map<String, Map<String, String>> = emptyMap(),
+    val mentionedUids: List<String> = emptyList(),
+    val edited: Boolean = false,
+    val editedAt: Date? = null,
+    val editedByUid: String = ""
+) {
+    val isImageAttachment: Boolean
+        get() = fileURL.isNotBlank() && fileType.lowercase(Locale.UK).startsWith("image/")
+
+    val isFileAttachment: Boolean
+        get() = fileURL.isNotBlank() && !isImageAttachment
+
+    val isDeleted: Boolean get() = deletedForEveryone || type == "deleted"
+
+    fun senderLabel(): String = senderName.trim().ifEmpty { emailName(senderEmail).ifEmpty { senderUid } }
+}
+
+data class StudioMessageTeamMember(
+    val id: String,
+    val email: String = "",
+    val name: String = "",
+    val photoURL: String = ""
+) {
+    val label: String get() = name.trim().ifEmpty { emailName(email).ifEmpty { id } }
+}
+
+data class StudioActivityNotification(
+    val id: String,
+    val companyId: String = "",
+    val type: String = "update",
+    val title: String = "Notification",
+    val message: String = "",
+    val route: String = "",
+    val orderId: String = "",
+    val ticketId: String = "",
+    val ticketType: String = "",
+    val threadId: String = "",
+    val messageId: String = "",
+    val senderUid: String = "",
+    val senderName: String = "",
+    val senderEmail: String = "",
+    val senderPhotoURL: String = "",
+    val priority: String = "",
+    val status: String = "",
+    val source: String = "",
+    val recipientUids: List<String> = emptyList(),
+    val recipientEmails: List<String> = emptyList(),
+    val readBy: Map<String, Date> = emptyMap(),
+    val dismissedBy: Map<String, Date> = emptyMap(),
+    val createdAt: Date? = null
+) {
+    fun isUnread(uid: String, email: String): Boolean {
+        val cleanUid = uid.trim()
+        val cleanEmail = email.trim().lowercase()
+        if (cleanUid.isNotEmpty() && readBy.containsKey(cleanUid)) return false
+        if (cleanEmail.isNotEmpty() && readBy.containsKey(cleanEmail)) return false
+        return true
+    }
+
+    fun isDismissed(uid: String, email: String): Boolean {
+        val cleanUid = uid.trim()
+        val cleanEmail = email.trim().lowercase()
+        if (cleanUid.isNotEmpty() && dismissedBy.containsKey(cleanUid)) return true
+        if (cleanEmail.isNotEmpty() && dismissedBy.containsKey(cleanEmail)) return true
+        return false
+    }
+
+    fun isVisible(uid: String, email: String): Boolean {
+        val cleanUid = uid.trim()
+        val cleanEmail = email.trim().lowercase()
+        if (recipientUids.isEmpty() && recipientEmails.isEmpty()) return true
+        if (cleanUid.isNotEmpty() && recipientUids.contains(cleanUid)) return true
+        if (cleanEmail.isNotEmpty() && recipientEmails.map { it.lowercase() }.contains(cleanEmail)) return true
+        return false
+    }
+}
+
+data class StudioMessageTypingUser(
+    val id: String,
+    val name: String = "",
+    val email: String = "",
+    val photoURL: String = "",
+    val updatedAt: Date? = null
+)
+
 
 data class StudioCustomRole(
     val id: String,
