@@ -942,6 +942,287 @@ async function safeSupportNotification(label, callback) {
 
 
 
+
+function cleanPersonalNoteText(value = "", maxLength = 20000) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function cleanPersonalNoteStringArray(value = [], maxItems = 80, maxLength = 240) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .map((item) => item.slice(0, maxLength))
+  )).slice(0, maxItems);
+}
+
+function normalizedPersonalNoteEmail(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function memberEmailFromCompanyData(companyData = {}, uid = "") {
+  const cleanUid = String(uid || "").trim();
+  if (!cleanUid) return "";
+  if (cleanUid === String(companyData.ownerUid || "").trim()) {
+    return normalizedPersonalNoteEmail(companyData.ownerEmail || companyData.email || "");
+  }
+
+  const members = companyMembersMap(companyData);
+  const member = members[cleanUid];
+  if (member && typeof member === "object" && !Array.isArray(member)) {
+    return normalizedPersonalNoteEmail(member.email || member.userEmail || "");
+  }
+
+  return "";
+}
+
+function isWorkspaceMemberTarget(companyData = {}, targetUserId = "", targetEmail = "") {
+  const cleanTargetUid = String(targetUserId || "").trim();
+  const cleanTargetEmail = normalizedPersonalNoteEmail(targetEmail);
+
+  if (cleanTargetUid && uidHasCompanyAccess(companyData, cleanTargetUid)) return true;
+
+  if (cleanTargetEmail) {
+    const ownerEmail = normalizedPersonalNoteEmail(companyData.ownerEmail || companyData.email || "");
+    if (ownerEmail && ownerEmail === cleanTargetEmail) return true;
+
+    const members = companyMembersMap(companyData);
+    for (const entry of Object.values(members)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const email = normalizedPersonalNoteEmail(entry.email || entry.userEmail || "");
+      if (email && email === cleanTargetEmail) return true;
+    }
+  }
+
+  return false;
+}
+
+function personalNoteDocRef(companyId = "", userId = "", noteId = "") {
+  return admin.firestore()
+    .collection("companies")
+    .doc(String(companyId || "").trim())
+    .collection("personal_notes")
+    .doc(String(userId || "").trim())
+    .collection("notes")
+    .doc(String(noteId || "").trim());
+}
+
+function cleanSharedPersonalNotePayload(data = {}, context = {}) {
+  const title = cleanPersonalNoteText(data.title || "", 500);
+  const text = cleanPersonalNoteText(data.text || "", 20000);
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  const payload = {
+    title,
+    text,
+    colorName: cleanPersonalNoteText(data.colorName || "default", 80) || "default",
+    ownerUserId: String(data.ownerUserId || context.ownerUserId || "").trim(),
+    companyId: String(context.companyId || data.companyId || "").trim(),
+    sharedWith: cleanPersonalNoteStringArray(data.sharedWith || []),
+    collaboratorEmails: cleanPersonalNoteStringArray(data.collaboratorEmails || []),
+    activeEditorUserId: "",
+    activeEditorEmail: "",
+    isPinned: Boolean(data.isPinned),
+    isArchived: Boolean(data.isArchived),
+    isDeleted: Boolean(data.isDeleted),
+    labels: cleanPersonalNoteStringArray(data.labels || [], 80, 160),
+    links: cleanPersonalNoteStringArray(data.links || [], 80, 1000),
+    manualOrder: Number.isFinite(Number(data.manualOrder)) ? Number(data.manualOrder) : Date.now(),
+    createdAt: data.createdAt && typeof data.createdAt.toDate === "function" ? data.createdAt : now,
+    updatedAt: now,
+    userId: String(context.targetUserId || data.userId || "").trim()
+  };
+
+  if (data.reminderDate) payload.reminderDate = data.reminderDate;
+  return payload;
+}
+
+exports.sharePersonalNoteWithWorkspaceMember = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const noteId = String(request.data?.noteId || "").trim();
+  const targetUserId = String(request.data?.targetUserId || request.data?.targetUid || "").trim();
+  const targetEmail = normalizedPersonalNoteEmail(request.data?.targetEmail || "");
+  const note = request.data?.note || {};
+
+  if (!companyId || !noteId || !targetUserId) {
+    throw new HttpsError("invalid-argument", "companyId, noteId and targetUserId are required.");
+  }
+
+  const { companyData } = await requireNotificationWorkspaceAccess(request, companyId);
+
+  if (!isWorkspaceMemberTarget(companyData, targetUserId, targetEmail)) {
+    throw new HttpsError("permission-denied", "The selected user is not a member of this workspace.");
+  }
+
+  const sourceRef = personalNoteDocRef(companyId, uid, noteId);
+  const sourceSnap = await sourceRef.get();
+
+  const sourceData = sourceSnap.exists ? sourceSnap.data() || {} : {};
+  const ownerUserId = String(sourceData.ownerUserId || note.ownerUserId || uid).trim();
+
+  if (ownerUserId && ownerUserId !== uid && !uidIsCompanyOwner(companyData, uid)) {
+    const sourceShared = Array.isArray(sourceData.sharedWith) ? sourceData.sharedWith.map(normalizedPersonalNoteEmail) : [];
+    const requestEmail = supportUserEmail(request);
+    if (!sourceShared.includes(requestEmail)) {
+      throw new HttpsError("permission-denied", "Only the note owner or an existing collaborator can share this note.");
+    }
+  }
+
+  const existingEmails = cleanPersonalNoteStringArray([
+    ...(Array.isArray(sourceData.sharedWith) ? sourceData.sharedWith : []),
+    ...(Array.isArray(note.sharedWith) ? note.sharedWith : []),
+    targetEmail
+  ]).map(normalizedPersonalNoteEmail).filter(Boolean);
+
+  const collaboratorEmails = cleanPersonalNoteStringArray([
+    ...(Array.isArray(sourceData.collaboratorEmails) ? sourceData.collaboratorEmails : []),
+    ...(Array.isArray(note.collaboratorEmails) ? note.collaboratorEmails : []),
+    targetEmail
+  ]).map(normalizedPersonalNoteEmail).filter(Boolean);
+
+  const mergedNote = {
+    ...note,
+    ...sourceData,
+    ownerUserId: ownerUserId || uid,
+    sharedWith: existingEmails,
+    collaboratorEmails
+  };
+
+  const targetRef = personalNoteDocRef(companyId, targetUserId, noteId);
+  const targetPayload = cleanSharedPersonalNotePayload(mergedNote, {
+    companyId,
+    ownerUserId: ownerUserId || uid,
+    targetUserId
+  });
+
+  const sourcePayload = {
+    sharedWith: existingEmails,
+    collaboratorEmails,
+    ownerUserId: ownerUserId || uid,
+    companyId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  const batch = admin.firestore().batch();
+  batch.set(sourceRef, sourcePayload, { merge: true });
+  batch.set(targetRef, targetPayload, { merge: true });
+
+  const notificationRef = notificationCollectionRef(companyId).doc();
+  const noteTitle = cleanPersonalNoteText(mergedNote.title || "Untitled note", 140) || "Untitled note";
+  const senderEmail = supportUserEmail(request);
+  const message = `${senderEmail || "A teammate"} shared a note with you: ${noteTitle}`;
+
+  batch.set(notificationRef, {
+    companyId,
+    type: "shared_note",
+    title: "Shared note",
+    message,
+    noteId,
+    route: "notes",
+    senderUid: uid,
+    senderEmail,
+    recipientUids: [targetUserId],
+    recipientEmails: targetEmail ? [targetEmail] : [],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    actioned: false,
+    source: "sharePersonalNoteWithWorkspaceMember"
+  }, { merge: true });
+
+  await batch.commit();
+
+  let pushResult = { sent: 0, failed: 0, reason: "not_attempted" };
+  try {
+    pushResult = await sendPushNotificationToRecipients(companyId, {
+      type: "shared_note",
+      title: "Shared note",
+      message,
+      noteId,
+      route: "notes",
+      notificationId: notificationRef.id,
+      senderUid: uid,
+      senderEmail
+    }, {
+      userIds: [targetUserId],
+      emails: targetEmail ? [targetEmail] : []
+    });
+    await notificationRef.set({
+      pushSent: Number(pushResult.sent || 0) > 0,
+      pushResult,
+      pushSentAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.error("shared note push failed:", error?.message || error);
+  }
+
+  return {
+    ok: true,
+    noteId,
+    companyId,
+    targetUserId,
+    targetEmail,
+    notificationId: notificationRef.id,
+    pushResult
+  };
+});
+
+exports.removeSharedPersonalNoteFromWorkspaceMember = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const noteId = String(request.data?.noteId || "").trim();
+  const targetUserId = String(request.data?.targetUserId || request.data?.targetUid || "").trim();
+  const targetEmail = normalizedPersonalNoteEmail(request.data?.targetEmail || "");
+
+  if (!companyId || !noteId || !targetUserId) {
+    throw new HttpsError("invalid-argument", "companyId, noteId and targetUserId are required.");
+  }
+
+  const { companyData } = await requireNotificationWorkspaceAccess(request, companyId);
+
+  if (!isWorkspaceMemberTarget(companyData, targetUserId, targetEmail)) {
+    throw new HttpsError("permission-denied", "The selected user is not a member of this workspace.");
+  }
+
+  const sourceRef = personalNoteDocRef(companyId, uid, noteId);
+  const sourceSnap = await sourceRef.get();
+  const sourceData = sourceSnap.data() || {};
+  const ownerUserId = String(sourceData.ownerUserId || uid).trim();
+
+  if (ownerUserId !== uid && !uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the note owner can remove collaborators.");
+  }
+
+  const sharedWith = cleanPersonalNoteStringArray(sourceData.sharedWith || [])
+    .map(normalizedPersonalNoteEmail)
+    .filter((email) => email && email !== targetEmail);
+
+  const collaboratorEmails = cleanPersonalNoteStringArray(sourceData.collaboratorEmails || [])
+    .map(normalizedPersonalNoteEmail)
+    .filter((email) => email && email !== targetEmail);
+
+  const batch = admin.firestore().batch();
+  batch.set(sourceRef, {
+    sharedWith,
+    collaboratorEmails,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  batch.delete(personalNoteDocRef(companyId, targetUserId, noteId));
+  await batch.commit();
+
+  return { ok: true, noteId, targetUserId, targetEmail };
+});
+
+
 const PLAN_ENTITLEMENTS = {
   demo: {
     plan: "demo",

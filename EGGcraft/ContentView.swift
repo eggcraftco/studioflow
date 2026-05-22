@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
 import FirebaseFirestore
+import FirebaseFunctions
 import FirebaseAuth
 #if canImport(EventKit)
 import EventKit
@@ -1416,6 +1417,9 @@ struct StudioKeepNote: Identifiable, Equatable {
     var ownerUserId: String
     var sharedWith: [String]
     var collaboratorEmails: [String]
+    var activeEditorUserId: String
+    var activeEditorEmail: String
+    var activeEditorUpdatedAt: Date?
     var isPinned: Bool
     var isArchived: Bool
     var isDeleted: Bool
@@ -1433,6 +1437,9 @@ struct StudioKeepNote: Identifiable, Equatable {
          ownerUserId: String = "",
          sharedWith: [String] = [],
          collaboratorEmails: [String] = [],
+         activeEditorUserId: String = "",
+         activeEditorEmail: String = "",
+         activeEditorUpdatedAt: Date? = nil,
          isPinned: Bool = false,
          isArchived: Bool = false,
          isDeleted: Bool = false,
@@ -1449,6 +1456,9 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.ownerUserId = ownerUserId
         self.sharedWith = sharedWith
         self.collaboratorEmails = collaboratorEmails
+        self.activeEditorUserId = activeEditorUserId
+        self.activeEditorEmail = activeEditorEmail
+        self.activeEditorUpdatedAt = activeEditorUpdatedAt
         self.isPinned = isPinned
         self.isArchived = isArchived
         self.isDeleted = isDeleted
@@ -1469,6 +1479,13 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.ownerUserId = data["ownerUserId"] as? String ?? ""
         self.sharedWith = data["sharedWith"] as? [String] ?? []
         self.collaboratorEmails = data["collaboratorEmails"] as? [String] ?? []
+        self.activeEditorUserId = data["activeEditorUserId"] as? String ?? ""
+        self.activeEditorEmail = data["activeEditorEmail"] as? String ?? ""
+        if let timestamp = data["activeEditorUpdatedAt"] as? Timestamp {
+            self.activeEditorUpdatedAt = timestamp.dateValue()
+        } else {
+            self.activeEditorUpdatedAt = nil
+        }
         self.isPinned = data["isPinned"] as? Bool ?? false
         self.isArchived = data["isArchived"] as? Bool ?? false
         self.isDeleted = data["isDeleted"] as? Bool ?? false
@@ -1611,6 +1628,29 @@ private struct KeepTooltipIconMenu<Content: View>: View {
     }
 }
 
+
+private struct KeepWorkspaceMember: Identifiable, Equatable {
+    let id: String
+    let userId: String
+    let email: String
+    let name: String
+    let role: String
+
+    var displayName: String {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanName.isEmpty { return cleanName }
+
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanEmail.isEmpty { return cleanEmail }
+
+        return "Team member"
+    }
+
+    var normalizedEmail: String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
 struct StudioKeepNotesView: View {
     var onOpenProject: ((String) -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
@@ -1635,8 +1675,11 @@ struct StudioKeepNotesView: View {
     @State private var composerReminderDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
     @State private var composerExpanded: Bool = false
     @State private var selectedNote: StudioKeepNote?
+    @State private var lastOpenedKeepNoteId: String? = nil
     @State private var collaboratorNote: StudioKeepNote?
     @State private var collaboratorEmailText: String = ""
+    @State private var keepWorkspaceMembers: [KeepWorkspaceMember] = []
+    @State private var membersListener: ListenerRegistration?
     @AppStorage("studioKeepGridMode") private var gridMode: Bool = true
     @State private var showLabelManager: Bool = false
     @State private var newLabelText: String = ""
@@ -1964,6 +2007,7 @@ struct StudioKeepNotesView: View {
                 }
             }
             startNotesListener()
+            loadWorkspaceMembersForNotes()
         }
         .onDisappear {
             listener?.remove()
@@ -1987,6 +2031,16 @@ struct StudioKeepNotesView: View {
                     togglePin(note)
                 }
             )
+            .onAppear {
+                lastOpenedKeepNoteId = note.id
+                markNoteEditing(note)
+            }
+            .onDisappear {
+                if let lastOpenedKeepNoteId {
+                    clearNoteEditing(lastOpenedKeepNoteId)
+                    self.lastOpenedKeepNoteId = nil
+                }
+            }
         }
         .sheet(isPresented: $showLabelManager) {
             labelManagerSheet
@@ -2262,6 +2316,8 @@ struct StudioKeepNotesView: View {
             case "Reminder": return "Hatırlatma"
             case "Labels": return "Etiketler"
             case "Collaborators": return "Ortak çalışanlar"
+            case "Workspace members": return "Workspace üyeleri"
+            case "Added": return "Eklendi"
             case "collaborator": return "ortak çalışan"
             case "collaborators": return "ortak çalışan"
             case "Archive note": return "Arşivle"
@@ -2280,6 +2336,8 @@ struct StudioKeepNotesView: View {
             case "List view": return "Liste görünümü"
             case "Close": return "Kapat"
             case "Undo": return "Geri al"
+            case "is editing": return "düzenliyor"
+            case "Someone": return "Birisi"
             default: return t(key, lang: seciliDil)
             }
         }
@@ -2359,7 +2417,7 @@ struct StudioKeepNotesView: View {
     }
 
     private func canEditKeepNote(_ note: StudioKeepNote) -> Bool {
-        note.ownerUserId.isEmpty || note.ownerUserId == keepCurrentUserId
+        canSeeKeepNote(note)
     }
 
     private func normalizedCollaboratorEmail(_ email: String) -> String {
@@ -2369,6 +2427,163 @@ struct StudioKeepNotesView: View {
     private func openCollaboratorSheet(_ note: StudioKeepNote) {
         collaboratorEmailText = ""
         collaboratorNote = note
+    }
+
+    private func noteReference(for userId: String, noteId: String) -> DocumentReference? {
+        let cleanUserId = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanUserId.isEmpty, !noteId.isEmpty else { return nil }
+
+        return Firestore.firestore()
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("personal_notes")
+            .document(cleanUserId)
+            .collection("notes")
+            .document(noteId)
+    }
+
+    private func sharedNotePayload(from note: StudioKeepNote, sharedWith emails: [String]) -> [String: Any] {
+        var payload: [String: Any] = [
+            "title": note.title,
+            "text": note.text,
+            "colorName": note.colorName,
+            "ownerUserId": note.ownerUserId.isEmpty ? keepCurrentUserId : note.ownerUserId,
+            "companyId": cleanCompanyId,
+            "sharedWith": emails,
+            "collaboratorEmails": note.collaboratorEmails,
+            "activeEditorUserId": note.activeEditorUserId,
+            "activeEditorEmail": note.activeEditorEmail,
+            "isPinned": note.isPinned,
+            "isArchived": note.isArchived,
+            "isDeleted": note.isDeleted,
+            "labels": note.labels,
+            "links": note.links,
+            "manualOrder": note.manualOrder,
+            "createdAt": Timestamp(date: note.createdAt),
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        if let reminderDate = note.reminderDate {
+            payload["reminderDate"] = Timestamp(date: reminderDate)
+        } else {
+            payload["reminderDate"] = FieldValue.delete()
+        }
+
+        if let activeEditorUpdatedAt = note.activeEditorUpdatedAt {
+            payload["activeEditorUpdatedAt"] = Timestamp(date: activeEditorUpdatedAt)
+        } else {
+            payload["activeEditorUpdatedAt"] = FieldValue.delete()
+        }
+
+        return payload
+    }
+
+    private func cloudNotePayload(_ note: StudioKeepNote) -> [String: Any] {
+        var payload: [String: Any] = [
+            "title": note.title,
+            "text": note.text,
+            "colorName": note.colorName,
+            "ownerUserId": note.ownerUserId.isEmpty ? keepCurrentUserId : note.ownerUserId,
+            "companyId": cleanCompanyId,
+            "sharedWith": note.sharedWith,
+            "collaboratorEmails": note.collaboratorEmails,
+            "isPinned": note.isPinned,
+            "isArchived": note.isArchived,
+            "isDeleted": note.isDeleted,
+            "labels": note.labels,
+            "links": note.links,
+            "manualOrder": note.manualOrder
+        ]
+
+        if let reminderDate = note.reminderDate {
+            payload["reminderDateMillis"] = Int(reminderDate.timeIntervalSince1970 * 1000)
+        }
+
+        return payload
+    }
+
+    private func mirrorSharedNote(_ note: StudioKeepNote, to member: KeepWorkspaceMember) {
+        guard !note.id.isEmpty else { return }
+        guard !cleanCompanyId.isEmpty else { return }
+        guard !member.userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("sharePersonalNoteWithWorkspaceMember")
+            .call([
+                "companyId": cleanCompanyId,
+                "noteId": note.id,
+                "targetUserId": member.userId,
+                "targetEmail": member.normalizedEmail,
+                "note": cloudNotePayload(note)
+            ]) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+    }
+
+    private func removeMirroredSharedNote(_ note: StudioKeepNote, from member: KeepWorkspaceMember) {
+        guard !note.id.isEmpty else { return }
+        guard !cleanCompanyId.isEmpty else { return }
+        guard !member.userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("removeSharedPersonalNoteFromWorkspaceMember")
+            .call([
+                "companyId": cleanCompanyId,
+                "noteId": note.id,
+                "targetUserId": member.userId,
+                "targetEmail": member.normalizedEmail
+            ]) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+    }
+
+
+    private func createSharedNoteNotification(for member: KeepWorkspaceMember, note: StudioKeepNote) {
+        let cleanUserId = member.userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanUserId.isEmpty else { return }
+
+        let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("Untitled note", lang: seciliDil) : note.title
+
+        let payload: [String: Any] = [
+            "type": "shared_note",
+            "title": "Shared note",
+            "message": "\(keepCurrentUserEmail) shared a note with you: \(title)",
+            "noteId": note.id,
+            "fromUserId": keepCurrentUserId,
+            "fromEmail": keepCurrentUserEmail,
+            "toUserId": cleanUserId,
+            "toEmail": member.normalizedEmail,
+            "companyId": cleanCompanyId,
+            "isRead": false,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+
+        Firestore.firestore()
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("users")
+            .document(cleanUserId)
+            .collection("notifications")
+            .addDocument(data: payload)
+
+        Firestore.firestore()
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("notifications")
+            .addDocument(data: payload)
+    }
+
+    private func workspaceMember(for email: String) -> KeepWorkspaceMember? {
+        let clean = normalizedCollaboratorEmail(email)
+        return keepWorkspaceMembers.first { $0.normalizedEmail.caseInsensitiveCompare(clean) == .orderedSame }
     }
 
     private func addCollaborator(to note: StudioKeepNote) {
@@ -2384,12 +2599,17 @@ struct StudioKeepNotesView: View {
             updated.collaboratorEmails.append(email)
         }
 
-        if !updated.sharedWith.contains(email) {
+        if !updated.sharedWith.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) {
             updated.sharedWith.append(email)
         }
 
         collaboratorEmailText = ""
         saveNote(updated)
+
+        if let member = workspaceMember(for: email) {
+            mirrorSharedNote(updated, to: member)
+        }
+
         collaboratorNote = updated
     }
 
@@ -2399,6 +2619,118 @@ struct StudioKeepNotesView: View {
         updated.collaboratorEmails.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
         updated.sharedWith.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
         saveNote(updated)
+
+        if let member = workspaceMember(for: clean) {
+            removeMirroredSharedNote(note, from: member)
+        }
+
+        collaboratorNote = updated
+    }
+
+    private func isNoteActivelyEditedByOther(_ note: StudioKeepNote) -> Bool {
+        guard !note.activeEditorUserId.isEmpty else { return false }
+        guard note.activeEditorUserId != keepCurrentUserId else { return false }
+        guard let updatedAt = note.activeEditorUpdatedAt else { return false }
+        return Date().timeIntervalSince(updatedAt) < 120
+    }
+
+    private func activeEditorDisplayName(for note: StudioKeepNote) -> String {
+        let email = note.activeEditorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        if email.isEmpty { return t("Someone", lang: seciliDil) }
+        return email
+    }
+
+    private func markNoteEditing(_ note: StudioKeepNote) {
+        guard !note.id.isEmpty else { return }
+        guard let collection = notesCollection else { return }
+
+        collection.document(note.id).setData([
+            "activeEditorUserId": keepCurrentUserId,
+            "activeEditorEmail": keepCurrentUserEmail,
+            "activeEditorUpdatedAt": Timestamp(date: Date())
+        ], merge: true)
+    }
+
+    private func clearNoteEditing(_ noteId: String) {
+        guard !noteId.isEmpty else { return }
+        guard let collection = notesCollection else { return }
+
+        collection.document(noteId).setData([
+            "activeEditorUserId": "",
+            "activeEditorEmail": "",
+            "activeEditorUpdatedAt": FieldValue.delete()
+        ], merge: true)
+    }
+
+    private func canSeeKeepNote(_ note: StudioKeepNote) -> Bool {
+        let userId = keepCurrentUserId
+        let email = keepCurrentUserEmail
+
+        if note.ownerUserId.isEmpty { return true }
+        if note.ownerUserId == userId { return true }
+        if !email.isEmpty && note.sharedWith.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) { return true }
+        if !email.isEmpty && note.collaboratorEmails.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) { return true }
+
+        return false
+    }
+
+    private var selectableWorkspaceMembers: [KeepWorkspaceMember] {
+        let currentEmail = keepCurrentUserEmail
+        return keepWorkspaceMembers
+            .filter { !$0.normalizedEmail.isEmpty }
+            .filter { $0.normalizedEmail.caseInsensitiveCompare(currentEmail) != .orderedSame }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private func loadWorkspaceMembersForNotes() {
+        membersListener?.remove()
+
+        let db = Firestore.firestore()
+        let companyId = cleanCompanyId
+        guard !companyId.isEmpty else { return }
+
+        membersListener = db.collection("companies")
+            .document(companyId)
+            .collection("members")
+            .addSnapshotListener { snapshot, _ in
+                DispatchQueue.main.async {
+                    keepWorkspaceMembers = snapshot?.documents.compactMap { document in
+                        let data = document.data()
+                        let email = (data["email"] as? String ?? data["userEmail"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let name = (data["name"] as? String ?? data["displayName"] as? String ?? data["fullName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let role = data["role"] as? String ?? ""
+                        guard !email.isEmpty else { return nil }
+
+                        let userId = (data["userId"] as? String ?? data["uid"] as? String ?? document.documentID).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        return KeepWorkspaceMember(
+                            id: document.documentID,
+                            userId: userId,
+                            email: email,
+                            name: name,
+                            role: role
+                        )
+                    } ?? []
+                }
+            }
+    }
+
+    private func addWorkspaceMember(_ member: KeepWorkspaceMember, to note: StudioKeepNote) {
+        collaboratorEmailText = member.normalizedEmail
+        addCollaborator(to: note)
+
+        var updated = note
+        updated.ownerUserId = updated.ownerUserId.isEmpty ? keepCurrentUserId : updated.ownerUserId
+
+        if !updated.collaboratorEmails.contains(where: { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }) {
+            updated.collaboratorEmails.append(member.normalizedEmail)
+        }
+
+        if !updated.sharedWith.contains(where: { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }) {
+            updated.sharedWith.append(member.normalizedEmail)
+        }
+
+        mirrorSharedNote(updated, to: member)
         collaboratorNote = updated
     }
 
@@ -3005,6 +3337,54 @@ struct StudioKeepNotesView: View {
                 .background(Color.primary.opacity(0.045))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
+                if !selectableWorkspaceMembers.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(t("Workspace members", lang: seciliDil))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        ForEach(selectableWorkspaceMembers) { member in
+                            let alreadyAdded = note.collaboratorEmails.contains { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }
+
+                            Button {
+                                addWorkspaceMember(member, to: note)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: alreadyAdded ? "checkmark.circle.fill" : "person.crop.circle")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(alreadyAdded ? .green : .secondary)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(member.displayName)
+                                            .font(.system(size: 13.5, weight: .semibold))
+                                            .foregroundColor(.primary)
+                                        Text(member.email)
+                                            .font(.system(size: 11.5))
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    if alreadyAdded {
+                                        Text(t("Added", lang: seciliDil))
+                                            .font(.system(size: 11.5, weight: .bold))
+                                            .foregroundColor(.green)
+                                    } else {
+                                        Text(t("Add", lang: seciliDil))
+                                            .font(.system(size: 11.5, weight: .bold))
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .padding(10)
+                                .background(Color.primary.opacity(0.035))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(alreadyAdded)
+                        }
+                    }
+                }
+
                 if note.collaboratorEmails.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "person.2")
@@ -3045,7 +3425,7 @@ struct StudioKeepNotesView: View {
                     }
                 }
 
-                Text(t("Shared notes will appear for collaborators when they sign in with the same email in this workspace.", lang: seciliDil))
+                Text(t("Shared notes are visible to selected workspace members connected to the same owner/workspace.", lang: seciliDil))
                     .font(.system(size: 11.5))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3575,6 +3955,17 @@ struct StudioKeepNotesView: View {
                     .clipShape(Capsule())
             }
 
+
+            if isNoteActivelyEditedByOther(note) {
+                Label("\(activeEditorDisplayName(for: note)) \(t("is editing", lang: seciliDil))", systemImage: "pencil.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.blue.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+
             Spacer(minLength: 6)
 
             HStack(spacing: 7) {
@@ -3773,7 +4164,8 @@ struct StudioKeepNotesView: View {
                         return
                     }
 
-                    notes = snapshot?.documents.map { StudioKeepNote(document: $0) } ?? []
+                    let loadedNotes = snapshot?.documents.map { StudioKeepNote(document: $0) } ?? []
+                    notes = loadedNotes.filter { canSeeKeepNote($0) }
                 }
             }
     }
@@ -3865,7 +4257,15 @@ struct StudioKeepNotesView: View {
         }
     }
 
-    private func saveNote(_ note: StudioKeepNote) {
+        private func syncMirrorsForSharedNote(_ note: StudioKeepNote) {
+        for email in note.collaboratorEmails {
+            if let member = workspaceMember(for: email) {
+                mirrorSharedNote(note, to: member)
+            }
+        }
+    }
+
+private func saveNote(_ note: StudioKeepNote) {
         guard let collection = notesCollection else { return }
         var updated = note
         updated.updatedAt = Date()
