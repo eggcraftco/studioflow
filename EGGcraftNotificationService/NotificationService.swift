@@ -25,7 +25,10 @@ final class NotificationService: UNNotificationServiceExtension {
             return
         }
 
-        downloadTask = URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, _, _ in
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 10
+        configuration.timeoutIntervalForResource = 15
+        downloadTask = URLSession(configuration: configuration).downloadTask(with: url) { [weak self] temporaryURL, _, _ in
             guard let self else { return }
             defer { self.contentHandler?(self.bestAttemptContent ?? request.content) }
 
@@ -55,11 +58,16 @@ final class NotificationService: UNNotificationServiceExtension {
 
     private func senderPhotoURL(from userInfo: [AnyHashable: Any]) -> URL? {
         let candidates: [String?] = [
-            userInfo["senderPhotoURL"] as? String,
+            userInfo["richImageURL"] as? String,
+            userInfo["richImageUrl"] as? String,
+            userInfo["previewImageURL"] as? String,
+            userInfo["previewImageUrl"] as? String,
             userInfo["imageUrl"] as? String,
             userInfo["imageURL"] as? String,
+            userInfo["senderPhotoURL"] as? String,
             (userInfo["fcm_options"] as? [String: Any])?["image"] as? String,
-            (userInfo["fcm_options"] as? [String: Any])?["imageUrl"] as? String
+            (userInfo["fcm_options"] as? [String: Any])?["imageUrl"] as? String,
+            (userInfo["fcm_options"] as? [String: Any])?["imageURL"] as? String
         ]
 
         for candidate in candidates {

@@ -60,7 +60,29 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
     var lastMessageByRole: String = ""
     var lastMessagePreview: String = ""
     var readBy: [String: Date] = [:]
+    var mutedUntilBy: [String: Date] = [:]
+    var pinnedMessageIds: [String] = []
     var isUnread: Bool = false
+    var assignedToUid: String = ""
+    var assignedToName: String = ""
+    var assignedToEmail: String = ""
+    var assignedByUid: String = ""
+    var assignedByName: String = ""
+    var assignedByEmail: String = ""
+    var assignedAt: Date?
+
+    var isAssigned: Bool {
+        !assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var assignedDisplayName: String {
+        let name = assignedToName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let email = assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !email.isEmpty { return email }
+        return assignedToUid
+    }
 
     func isUnread(for uid: String) -> Bool {
         let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -96,6 +118,13 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
         self.lastMessageByEmail = data["lastMessageByEmail"] as? String ?? ""
         self.lastMessageByRole = data["lastMessageByRole"] as? String ?? ""
         self.lastMessagePreview = data["lastMessagePreview"] as? String ?? ""
+        self.assignedToUid = data["assignedToUid"] as? String ?? ""
+        self.assignedToName = data["assignedToName"] as? String ?? ""
+        self.assignedToEmail = data["assignedToEmail"] as? String ?? ""
+        self.assignedByUid = data["assignedByUid"] as? String ?? ""
+        self.assignedByName = data["assignedByName"] as? String ?? ""
+        self.assignedByEmail = data["assignedByEmail"] as? String ?? ""
+        if let timestamp = data["assignedAt"] as? Timestamp { self.assignedAt = timestamp.dateValue() }
         if let readByMap = data["readBy"] as? [String: Timestamp] {
             self.readBy = readByMap.mapValues { $0.dateValue() }
         }
@@ -129,6 +158,14 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
         self.lastMessageByEmail = data["lastMessageByEmail"] as? String ?? ""
         self.lastMessageByRole = data["lastMessageByRole"] as? String ?? ""
         self.lastMessagePreview = data["lastMessagePreview"] as? String ?? ""
+        self.assignedToUid = data["assignedToUid"] as? String ?? ""
+        self.assignedToName = data["assignedToName"] as? String ?? ""
+        self.assignedToEmail = data["assignedToEmail"] as? String ?? ""
+        self.assignedByUid = data["assignedByUid"] as? String ?? ""
+        self.assignedByName = data["assignedByName"] as? String ?? ""
+        self.assignedByEmail = data["assignedByEmail"] as? String ?? ""
+        if let millis = data["assignedAtMillis"] as? Double, millis > 0 { self.assignedAt = Date(timeIntervalSince1970: millis / 1000) }
+        if let millis = data["assignedAtMillis"] as? Int, millis > 0 { self.assignedAt = Date(timeIntervalSince1970: Double(millis) / 1000) }
         self.isUnread = data["isUnread"] as? Bool ?? false
         if let readByMillis = data["readByMillis"] as? [String: Any] {
             var parsedReadBy: [String: Date] = [:]
@@ -173,6 +210,56 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
 
 }
 
+struct StudioSupportTicketAttachment: Identifiable, Codable, Equatable {
+    var id: String = UUID().uuidString
+    var fileName: String = ""
+    var fileURL: String = ""
+    var fileType: String = ""
+    var fileSize: Int64 = 0
+
+    var isImage: Bool {
+        let normalized = fileType.lowercased()
+        let name = fileName.lowercased()
+        return normalized.hasPrefix("image/")
+            || name.hasSuffix(".jpg")
+            || name.hasSuffix(".jpeg")
+            || name.hasSuffix(".png")
+            || name.hasSuffix(".gif")
+            || name.hasSuffix(".heic")
+            || name.hasSuffix(".heif")
+            || name.hasSuffix(".webp")
+    }
+
+    init() {}
+
+    init?(data: [String: Any]) {
+        self.id = data["id"] as? String ?? UUID().uuidString
+        self.fileName = data["fileName"] as? String ?? data["name"] as? String ?? ""
+        self.fileURL = data["fileURL"] as? String ?? data["url"] as? String ?? ""
+        self.fileType = data["fileType"] as? String ?? data["type"] as? String ?? "application/octet-stream"
+
+        if let intValue = data["fileSize"] as? Int64 {
+            self.fileSize = intValue
+        } else if let intValue = data["fileSize"] as? Int {
+            self.fileSize = Int64(intValue)
+        } else if let doubleValue = data["fileSize"] as? Double {
+            self.fileSize = Int64(doubleValue)
+        }
+
+        guard !fileURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    }
+
+    func asPayload() -> [String: Any] {
+        [
+            "id": id,
+            "fileName": fileName,
+            "fileURL": fileURL,
+            "fileType": fileType,
+            "fileSize": fileSize
+        ]
+    }
+}
+
 struct StudioSupportTicketMessage: Identifiable, Codable, Equatable {
     var id: String = UUID().uuidString
     var ticketId: String = ""
@@ -182,6 +269,7 @@ struct StudioSupportTicketMessage: Identifiable, Codable, Equatable {
     var authorName: String = ""
     var authorPhotoURL: String = ""
     var authorRole: String = "user"
+    var attachments: [StudioSupportTicketAttachment] = []
     var createdAt: Date = Date()
 
     init() {}
@@ -195,6 +283,9 @@ struct StudioSupportTicketMessage: Identifiable, Codable, Equatable {
         self.authorName = data["authorName"] as? String ?? ""
         self.authorPhotoURL = data["authorPhotoURL"] as? String ?? data["authorAvatarURL"] as? String ?? data["senderPhotoURL"] as? String ?? ""
         self.authorRole = data["authorRole"] as? String ?? "user"
+        if let rawAttachments = data["attachments"] as? [[String: Any]] {
+            self.attachments = rawAttachments.compactMap { StudioSupportTicketAttachment(data: $0) }
+        }
 
         if let millis = data["createdAtMillis"] as? Double, millis > 0 {
             self.createdAt = Date(timeIntervalSince1970: millis / 1000)
@@ -219,6 +310,8 @@ struct StudioMessageThread: Identifiable, Codable, Equatable {
     var lastMessageByName: String = ""
     var lastMessageByPhotoURL: String = ""
     var readBy: [String: Date] = [:]
+    var mutedUntilBy: [String: Date] = [:]
+    var pinnedMessageIds: [String] = []
     var isUnread: Bool = false
 
     init() {}
@@ -230,6 +323,7 @@ struct StudioMessageThread: Identifiable, Codable, Equatable {
         self.title = data["title"] as? String ?? (type == "team" ? "Team Chat" : "Direct Message")
         self.memberUids = data["memberUids"] as? [String] ?? []
         self.memberEmails = data["memberEmails"] as? [String] ?? []
+        self.pinnedMessageIds = data["pinnedMessageIds"] as? [String] ?? []
         self.lastMessageText = data["lastMessageText"] as? String ?? ""
         self.lastMessageByUid = data["lastMessageByUid"] as? String ?? ""
         self.lastMessageByName = data["lastMessageByName"] as? String ?? ""
@@ -253,6 +347,18 @@ struct StudioMessageThread: Identifiable, Codable, Equatable {
             }
             self.readBy = parsed
         }
+
+        if let mutedMillis = data["mutedUntilByMillis"] as? [String: Any] {
+            var parsed: [String: Date] = [:]
+            for (uid, rawValue) in mutedMillis {
+                if let millis = rawValue as? Double, millis > 0 {
+                    parsed[uid] = Date(timeIntervalSince1970: millis / 1000)
+                } else if let millis = rawValue as? Int, millis > 0 {
+                    parsed[uid] = Date(timeIntervalSince1970: Double(millis) / 1000)
+                }
+            }
+            self.mutedUntilBy = parsed
+        }
     }
 }
 
@@ -270,8 +376,51 @@ struct StudioMessageItem: Identifiable, Codable, Equatable {
     var fileURL: String = ""
     var fileType: String = ""
     var fileSize: Int64 = 0
+    var deletedForEveryone: Bool = false
+    var deletedByUid: String = ""
+    var deletedAt: Date? = nil
+    var pinned: Bool = false
+    var pinnedByUid: String = ""
+    var pinnedByName: String = ""
+    var pinnedAt: Date? = nil
+    var replyToMessageId: String = ""
+    var replyToText: String = ""
+    var replyToSenderName: String = ""
+    var replyToSenderUid: String = ""
+    var replyToFileName: String = ""
+    var replyToType: String = ""
+    var reactions: [String: [String: String]] = [:]
+    var mentionedUids: [String] = []
+    var edited: Bool = false
+    var editedAt: Date? = nil
+    var editedByUid: String = ""
 
     init() {}
+
+    static func parseReactions(_ raw: Any?) -> [String: [String: String]] {
+        guard let dictionary = raw as? [String: Any] else { return [:] }
+        var output: [String: [String: String]] = [:]
+        for (emojiKey, value) in dictionary {
+            let emoji = emojiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !emoji.isEmpty else { continue }
+            if let userMap = value as? [String: Any] {
+                var parsedUsers: [String: String] = [:]
+                for (uidKey, nameValue) in userMap {
+                    let uid = uidKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !uid.isEmpty else { continue }
+                    if let name = nameValue as? String {
+                        parsedUsers[uid] = name
+                    } else if let nested = nameValue as? [String: Any] {
+                        parsedUsers[uid] = (nested["name"] as? String) ?? (nested["email"] as? String) ?? uid
+                    } else {
+                        parsedUsers[uid] = uid
+                    }
+                }
+                if !parsedUsers.isEmpty { output[emoji] = parsedUsers }
+            }
+        }
+        return output
+    }
 
     init?(callableData data: [String: Any]) {
         self.id = data["id"] as? String ?? UUID().uuidString
@@ -288,6 +437,36 @@ struct StudioMessageItem: Identifiable, Codable, Equatable {
         if let size = data["fileSize"] as? Int64 { self.fileSize = size }
         if let size = data["fileSize"] as? Int { self.fileSize = Int64(size) }
         if let size = data["fileSize"] as? Double { self.fileSize = Int64(size) }
+        self.deletedForEveryone = data["deletedForEveryone"] as? Bool ?? false
+        self.deletedByUid = data["deletedByUid"] as? String ?? ""
+        self.pinned = data["pinned"] as? Bool ?? false
+        self.pinnedByUid = data["pinnedByUid"] as? String ?? ""
+        self.pinnedByName = data["pinnedByName"] as? String ?? ""
+        if let millis = data["pinnedAtMillis"] as? Double, millis > 0 {
+            self.pinnedAt = Date(timeIntervalSince1970: millis / 1000)
+        } else if let millis = data["pinnedAtMillis"] as? Int, millis > 0 {
+            self.pinnedAt = Date(timeIntervalSince1970: Double(millis) / 1000)
+        }
+        self.replyToMessageId = data["replyToMessageId"] as? String ?? ""
+        self.replyToText = data["replyToText"] as? String ?? ""
+        self.replyToSenderName = data["replyToSenderName"] as? String ?? ""
+        self.replyToSenderUid = data["replyToSenderUid"] as? String ?? ""
+        self.replyToFileName = data["replyToFileName"] as? String ?? ""
+        self.replyToType = data["replyToType"] as? String ?? ""
+        self.reactions = StudioMessageItem.parseReactions(data["reactions"])
+        self.mentionedUids = data["mentionedUids"] as? [String] ?? []
+        self.edited = data["edited"] as? Bool ?? false
+        self.editedByUid = data["editedByUid"] as? String ?? ""
+        if let millis = data["editedAtMillis"] as? Double, millis > 0 {
+            self.editedAt = Date(timeIntervalSince1970: millis / 1000)
+        } else if let millis = data["editedAtMillis"] as? Int, millis > 0 {
+            self.editedAt = Date(timeIntervalSince1970: Double(millis) / 1000)
+        }
+        if let millis = data["deletedAtMillis"] as? Double, millis > 0 {
+            self.deletedAt = Date(timeIntervalSince1970: millis / 1000)
+        } else if let millis = data["deletedAtMillis"] as? Int, millis > 0 {
+            self.deletedAt = Date(timeIntervalSince1970: Double(millis) / 1000)
+        }
 
         if let millis = data["createdAtMillis"] as? Double, millis > 0 {
             self.createdAt = Date(timeIntervalSince1970: millis / 1000)
@@ -320,6 +499,21 @@ struct StudioMessageTeamMember: Identifiable, Codable, Equatable {
     }
 }
 
+struct StudioMessageTypingUser: Identifiable, Codable, Equatable {
+    var id: String
+    var name: String
+    var email: String
+    var photoURL: String
+    var updatedAt: Date
+
+    init(id: String, name: String = "", email: String = "", photoURL: String = "", updatedAt: Date = Date()) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.photoURL = photoURL
+        self.updatedAt = updatedAt
+    }
+}
 
 
 private enum StudioHistoryAction {
@@ -564,6 +758,127 @@ private struct StudioPendingClientFileUpload: Codable, Identifiable, Equatable {
     var createdAt: Date = Date()
 }
 
+
+struct StudioActivityNotification: Identifiable, Codable, Equatable {
+    var id: String = UUID().uuidString
+    var companyId: String = ""
+    var type: String = "update"
+    var title: String = ""
+    var message: String = ""
+    var route: String = ""
+    var orderId: String = ""
+    var ticketId: String = ""
+    var ticketType: String = ""
+    var threadId: String = ""
+    var messageId: String = ""
+    var senderUid: String = ""
+    var senderName: String = ""
+    var senderEmail: String = ""
+    var senderPhotoURL: String = ""
+    var priority: String = ""
+    var status: String = ""
+    var source: String = ""
+    var recipientUids: [String] = []
+    var recipientEmails: [String] = []
+    var readBy: [String: Date] = [:]
+    var dismissedBy: [String: Date] = [:]
+    var read: Bool = false
+    var createdAt: Date = Date()
+
+    init() {}
+
+    init(id: String, data: [String: Any]) {
+        self.id = id
+        self.companyId = data["companyId"] as? String ?? ""
+        self.type = data["type"] as? String ?? "update"
+        self.title = data["title"] as? String ?? "Notification"
+        self.message = data["message"] as? String ?? data["body"] as? String ?? ""
+        self.route = data["route"] as? String ?? ""
+        self.orderId = data["orderId"] as? String ?? ""
+        self.ticketId = data["ticketId"] as? String ?? ""
+        self.ticketType = data["ticketType"] as? String ?? ""
+        self.threadId = data["threadId"] as? String ?? ""
+        self.messageId = data["messageId"] as? String ?? ""
+        self.senderUid = data["senderUid"] as? String ?? ""
+        self.senderName = data["senderName"] as? String ?? ""
+        self.senderEmail = data["senderEmail"] as? String ?? ""
+        self.senderPhotoURL = data["senderPhotoURL"] as? String ?? data["imageUrl"] as? String ?? ""
+        self.priority = data["priority"] as? String ?? ""
+        self.status = data["status"] as? String ?? ""
+        self.source = data["source"] as? String ?? ""
+        self.recipientUids = data["recipientUids"] as? [String] ?? data["recipients"] as? [String] ?? []
+        self.recipientEmails = data["recipientEmails"] as? [String] ?? []
+        self.read = data["read"] as? Bool ?? false
+
+        if let timestamp = data["createdAt"] as? Timestamp {
+            self.createdAt = timestamp.dateValue()
+        } else if let milliseconds = data["createdAtMillis"] as? Double {
+            self.createdAt = Date(timeIntervalSince1970: milliseconds / 1000.0)
+        }
+
+        if let rawReadBy = data["readBy"] as? [String: Any] {
+            var parsed: [String: Date] = [:]
+            for (key, value) in rawReadBy {
+                if let timestamp = value as? Timestamp {
+                    parsed[key] = timestamp.dateValue()
+                } else if let date = value as? Date {
+                    parsed[key] = date
+                }
+            }
+            self.readBy = parsed
+        }
+
+        if let rawDismissedBy = data["dismissedBy"] as? [String: Any] {
+            var parsed: [String: Date] = [:]
+            for (key, value) in rawDismissedBy {
+                if let timestamp = value as? Timestamp {
+                    parsed[key] = timestamp.dateValue()
+                } else if let date = value as? Date {
+                    parsed[key] = date
+                }
+            }
+            self.dismissedBy = parsed
+        }
+    }
+
+    func isVisible(for uid: String, email: String) -> Bool {
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let emails = recipientEmails.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        if recipientUids.isEmpty && emails.isEmpty { return true }
+        if !cleanUid.isEmpty && recipientUids.contains(cleanUid) { return true }
+        if !cleanEmail.isEmpty && emails.contains(cleanEmail) { return true }
+        return false
+    }
+
+    func isDismissed(for uid: String, email: String) -> Bool {
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let emailDismissKey = cleanEmail
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "@", with: "_at_")
+
+        if !cleanUid.isEmpty && dismissedBy[cleanUid] != nil { return true }
+        if !cleanEmail.isEmpty && dismissedBy[cleanEmail] != nil { return true }
+        if !emailDismissKey.isEmpty && dismissedBy[emailDismissKey] != nil { return true }
+        return false
+    }
+
+    func isUnread(for uid: String, email: String) -> Bool {
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let emailReadKey = cleanEmail
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "@", with: "_at_")
+        if read { return false }
+        if !cleanUid.isEmpty && readBy[cleanUid] != nil { return false }
+        if !cleanEmail.isEmpty && readBy[cleanEmail] != nil { return false }
+        if !emailReadKey.isEmpty && readBy[emailReadKey] != nil { return false }
+        return true
+    }
+}
+
+
 class FirebaseManager: ObservableObject {
     
     @Published var siparisler: [Siparis] = []
@@ -587,6 +902,13 @@ class FirebaseManager: ObservableObject {
     @Published var isLoadingSupportTicketMessages: Bool = false
     @Published var supportTicketUnreadCount: Int = 0
     @Published var workspaceTicketUnreadCount: Int = 0
+    @Published var workspaceSupportManagerUids: [String] = []
+    @Published var workspaceSupportManagerEmails: [String] = []
+    @Published var canManageWorkspaceSupportManagers: Bool = false
+    @Published var isCurrentUserWorkspaceSupportManager: Bool = false
+    @Published var isLoadingWorkspaceSupportManagers: Bool = false
+    @Published var isSavingWorkspaceSupportManagers: Bool = false
+    @Published var isAssigningWorkspaceTicket: Bool = false
     @Published var messageThreads: [StudioMessageThread] = []
     @Published var messageTeamMembers: [StudioMessageTeamMember] = []
     @Published var messageItemsByThreadId: [String: [StudioMessageItem]] = [:]
@@ -595,6 +917,11 @@ class FirebaseManager: ObservableObject {
     @Published var messageStatus: String = ""
     @Published var isLoadingMessages: Bool = false
     @Published var isSendingMessage: Bool = false
+    @Published var messageTypingUsersByThreadId: [String: [StudioMessageTypingUser]] = [:]
+    @Published var activityNotifications: [StudioActivityNotification] = []
+    @Published var activityNotificationUnreadCount: Int = 0
+    @Published var isLoadingActivityNotifications: Bool = false
+    @Published var activityNotificationError: String = ""
 
     private var db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
@@ -602,6 +929,15 @@ class FirebaseManager: ObservableObject {
     private var supportTicketsListenerRegistration: ListenerRegistration?
     private var messageThreadsListenerRegistration: ListenerRegistration?
     private var messageThreadsListenerCompanyId: String = ""
+    private var messageItemsListenerRegistration: ListenerRegistration?
+    private var messageItemsListenerKey: String = ""
+    private var messageTypingListenerRegistration: ListenerRegistration?
+    private var messageTypingListenerKey: String = ""
+    private var activityNotificationsListenerRegistration: ListenerRegistration?
+    private var activityNotificationsCompanyId: String = ""
+    private var locallyReadActivityNotificationIds: Set<String> = []
+    private var locallyPinnedMessageIdsByThreadId: [String: Set<String>] = [:]
+    private var locallyUnpinnedMessageIdsByThreadId: [String: Set<String>] = [:]
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "uk.co.eggcraft.studioflow.network-monitor")
     private var pendingSyncOperations: [StudioPendingSyncOperation] = []
@@ -810,6 +1146,10 @@ class FirebaseManager: ObservableObject {
         pendingOfflineChanges = 0
         pendingClientFileUploadsCount = 0
         offlineStatusMessage = "Online"
+        workspaceSupportManagerUids = []
+        workspaceSupportManagerEmails = []
+        canManageWorkspaceSupportManagers = false
+        isCurrentUserWorkspaceSupportManager = false
         messageThreads = []
         messageTeamMembers = []
         messageItemsByThreadId = [:]
@@ -2406,6 +2746,8 @@ class FirebaseManager: ObservableObject {
         supportTicketsListenerRegistration = nil
         messageThreadsListenerRegistration = nil
         messageThreadsListenerCompanyId = ""
+        messageItemsListenerRegistration = nil
+        messageItemsListenerKey = ""
     }
 
     func listenSupportTickets(companyId: String, userId: String) {
@@ -2465,6 +2807,9 @@ class FirebaseManager: ObservableObject {
                     }
 
                     let payload = result?.data as? [String: Any]
+                    if let canSeeQueue = payload?["canSeeWorkspaceQueue"] as? Bool {
+                        self?.isCurrentUserWorkspaceSupportManager = canSeeQueue
+                    }
                     let items = payload?["tickets"] as? [[String: Any]] ?? []
                     self?.workspaceTickets = items.compactMap { item in
                         StudioSupportTicket(callableData: item)
@@ -2518,6 +2863,356 @@ class FirebaseManager: ObservableObject {
         refreshLocalSupportUnreadCounts()
         #endif
     }
+
+
+
+    private var currentActivityUserId: String {
+        Auth.auth().currentUser?.uid ?? ""
+    }
+
+    private var currentActivityUserEmail: String {
+        Auth.auth().currentUser?.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    }
+
+    private var currentActivityUserEmailReadKey: String {
+        currentActivityUserEmail
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "@", with: "_at_")
+    }
+
+    private var activityLocalReadCacheKey: String {
+        let companyId = activityNotificationsCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = currentActivityUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "studioActivityReadIds_\(companyId)_\(uid)"
+    }
+
+    private func loadLocalActivityReadCache() {
+        let key = activityLocalReadCacheKey
+        guard !key.hasSuffix("_") else {
+            locallyReadActivityNotificationIds = []
+            return
+        }
+        let raw = UserDefaults.standard.stringArray(forKey: key) ?? []
+        locallyReadActivityNotificationIds = Set(raw)
+    }
+
+    private func saveLocalActivityReadCache() {
+        let key = activityLocalReadCacheKey
+        guard !key.hasSuffix("_") else { return }
+        let trimmed = Array(locallyReadActivityNotificationIds.prefix(500))
+        UserDefaults.standard.set(trimmed, forKey: key)
+    }
+
+    private func markActivityNotificationLocallyRead(_ notificationId: String) {
+        let cleanId = notificationId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanId.isEmpty else { return }
+        locallyReadActivityNotificationIds.insert(cleanId)
+        saveLocalActivityReadCache()
+    }
+
+    private func activityNotificationIsUnread(_ item: StudioActivityNotification) -> Bool {
+        if locallyReadActivityNotificationIds.contains(item.id) { return false }
+        return item.isUnread(for: currentActivityUserId, email: currentActivityUserEmail)
+    }
+
+    private func applyLocalActivityReadCache(to items: [StudioActivityNotification]) -> [StudioActivityNotification] {
+        items.map { item in
+            guard locallyReadActivityNotificationIds.contains(item.id) else { return item }
+            var updated = item
+            let uid = currentActivityUserId
+            let emailKey = currentActivityUserEmailReadKey
+            if !uid.isEmpty { updated.readBy[uid] = Date() }
+            if !emailKey.isEmpty { updated.readBy[emailKey] = Date() }
+            updated.read = false
+            return updated
+        }
+    }
+
+    private func refreshActivityNotificationUnreadCount() {
+        let uid = currentActivityUserId
+        let email = currentActivityUserEmail
+        activityNotificationUnreadCount = activityNotifications.filter { activityNotificationIsUnread($0) }.count
+    }
+
+    func startActivityNotificationsRealtime(companyId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty else {
+            stopActivityNotificationsRealtime(clearData: true)
+            return
+        }
+
+        if activityNotificationsCompanyId == cleanCompanyId, activityNotificationsListenerRegistration != nil {
+            return
+        }
+
+        stopActivityNotificationsRealtime(clearData: false)
+        activityNotificationsCompanyId = cleanCompanyId
+        loadLocalActivityReadCache()
+        isLoadingActivityNotifications = true
+        activityNotificationError = ""
+
+        activityNotificationsListenerRegistration = db
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("notifications")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
+            .addSnapshotListener { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.isLoadingActivityNotifications = false
+
+                    if let error {
+                        self.activityNotificationError = error.localizedDescription
+                        return
+                    }
+
+                    let uid = self.currentActivityUserId
+                    let email = self.currentActivityUserEmail
+                    let items = snapshot?.documents
+                        .map { StudioActivityNotification(id: $0.documentID, data: $0.data()) }
+                        .filter { $0.isVisible(for: uid, email: email) }
+                        .sorted { $0.createdAt > $1.createdAt } ?? []
+
+                    self.activityNotifications = self.applyLocalActivityReadCache(to: items)
+                    self.refreshActivityNotificationUnreadCount()
+                }
+            }
+    }
+
+    func stopActivityNotificationsRealtime(clearData: Bool = false) {
+        activityNotificationsListenerRegistration?.remove()
+        activityNotificationsListenerRegistration = nil
+        activityNotificationsCompanyId = ""
+        isLoadingActivityNotifications = false
+        if clearData {
+            activityNotifications = []
+            activityNotificationUnreadCount = 0
+            locallyReadActivityNotificationIds = []
+        }
+    }
+
+    func markActivityNotificationRead(companyId: String, notificationId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanNotificationId = notificationId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = currentActivityUserId
+        guard !cleanCompanyId.isEmpty, !cleanNotificationId.isEmpty, !uid.isEmpty else { return }
+
+        // Optimistic local update so the UI responds immediately.
+        markActivityNotificationLocallyRead(cleanNotificationId)
+        activityNotifications = activityNotifications.map { item in
+            var updated = item
+            if updated.id == cleanNotificationId {
+                updated.readBy[uid] = Date()
+                let emailKey = self.currentActivityUserEmailReadKey
+                if !emailKey.isEmpty { updated.readBy[emailKey] = Date() }
+                updated.read = false
+            }
+            return updated
+        }
+        refreshActivityNotificationUnreadCount()
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("markActivityNotificationRead")
+            .call([
+                "companyId": cleanCompanyId,
+                "notificationId": cleanNotificationId
+            ]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.activityNotificationError = error.localizedDescription
+                        self?.startActivityNotificationsRealtime(companyId: cleanCompanyId)
+                    }
+                }
+            }
+        #else
+        db.collection("companies")
+            .document(cleanCompanyId)
+            .collection("notifications")
+            .document(cleanNotificationId)
+            .setData([
+                "readBy.\(uid)": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        #endif
+    }
+
+    func markAllActivityNotificationsRead(companyId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = currentActivityUserId
+        guard !cleanCompanyId.isEmpty, !uid.isEmpty else { return }
+
+        let unreadItems = activityNotifications.filter { $0.isUnread(for: uid, email: currentActivityUserEmail) }
+        guard !unreadItems.isEmpty else { return }
+
+        // Optimistic local update so badges disappear immediately.
+        for item in unreadItems {
+            markActivityNotificationLocallyRead(item.id)
+        }
+        activityNotifications = activityNotifications.map { item in
+            var updated = item
+            updated.readBy[uid] = Date()
+            let emailKey = currentActivityUserEmailReadKey
+            if !emailKey.isEmpty { updated.readBy[emailKey] = Date() }
+            updated.read = false
+            return updated
+        }
+        refreshActivityNotificationUnreadCount()
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("markAllActivityNotificationsRead")
+            .call(["companyId": cleanCompanyId]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.activityNotificationError = error.localizedDescription
+                        self?.startActivityNotificationsRealtime(companyId: cleanCompanyId)
+                    }
+                }
+            }
+        #else
+        let batch = db.batch()
+        for item in unreadItems {
+            let ref = db.collection("companies")
+                .document(cleanCompanyId)
+                .collection("notifications")
+                .document(item.id)
+            batch.setData([
+                "readBy.\(uid)": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], forDocument: ref, merge: true)
+        }
+        batch.commit()
+        #endif
+    }
+
+
+
+    func dismissActivityNotification(companyId: String, notificationId: String) {
+        dismissActivityNotifications(companyId: companyId, notificationIds: [notificationId])
+    }
+
+    func dismissActivityNotifications(companyId: String, notificationIds: [String]) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanIds = Array(Set(notificationIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+        let uid = currentActivityUserId
+        let emailKey = currentActivityUserEmailReadKey
+        guard !cleanCompanyId.isEmpty, !cleanIds.isEmpty, !uid.isEmpty else { return }
+
+        activityNotifications = activityNotifications.map { item in
+            var updated = item
+            if cleanIds.contains(updated.id) {
+                updated.dismissedBy[uid] = Date()
+                updated.readBy[uid] = Date()
+                if !emailKey.isEmpty {
+                    updated.dismissedBy[emailKey] = Date()
+                    updated.readBy[emailKey] = Date()
+                }
+                updated.read = false
+            }
+            return updated
+        }
+        refreshActivityNotificationUnreadCount()
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("dismissActivityNotifications")
+            .call([
+                "companyId": cleanCompanyId,
+                "notificationIds": cleanIds
+            ]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.activityNotificationError = error.localizedDescription
+                        self?.startActivityNotificationsRealtime(companyId: cleanCompanyId)
+                    }
+                }
+            }
+        #endif
+    }
+
+
+    func loadWorkspaceSupportManagers(companyId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty else {
+            workspaceSupportManagerUids = []
+            workspaceSupportManagerEmails = []
+            canManageWorkspaceSupportManagers = false
+            isCurrentUserWorkspaceSupportManager = false
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        isLoadingWorkspaceSupportManagers = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("getWorkspaceSupportManagers")
+            .call(["companyId": cleanCompanyId]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isLoadingWorkspaceSupportManagers = false
+                    if let error {
+                        print("Workspace support managers load failed: \(error.localizedDescription)")
+                        return
+                    }
+
+                    let payload = result?.data as? [String: Any]
+                    self?.workspaceSupportManagerUids = payload?["supportManagerUids"] as? [String] ?? []
+                    self?.workspaceSupportManagerEmails = payload?["supportManagerEmails"] as? [String] ?? []
+                    self?.canManageWorkspaceSupportManagers = payload?["canManageSupportManagers"] as? Bool ?? false
+                    self?.isCurrentUserWorkspaceSupportManager = payload?["isSupportManager"] as? Bool ?? false
+                }
+            }
+        #endif
+    }
+
+    func setWorkspaceSupportManagers(
+        companyId: String,
+        supportManagerUids: [String],
+        supportManagerEmails: [String] = [],
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty else {
+            supportTicketError = "Workspace is not ready yet."
+            completion?(false)
+            return
+        }
+
+        let cleanUids = Array(Set(supportManagerUids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })).sorted()
+        let cleanEmails = Array(Set(supportManagerEmails.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { $0.contains("@") })).sorted()
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        isSavingWorkspaceSupportManagers = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("setWorkspaceSupportManagers")
+            .call([
+                "companyId": cleanCompanyId,
+                "supportManagerUids": cleanUids,
+                "supportManagerEmails": cleanEmails
+            ]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isSavingWorkspaceSupportManagers = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let payload = result?.data as? [String: Any]
+                    self?.workspaceSupportManagerUids = payload?["supportManagerUids"] as? [String] ?? cleanUids
+                    self?.workspaceSupportManagerEmails = payload?["supportManagerEmails"] as? [String] ?? cleanEmails
+                    self?.supportTicketMessage = payload?["message"] as? String ?? "Support managers updated."
+                    self?.loadWorkspaceTickets(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+        #endif
+    }
+
 
     func markSupportTicketRead(companyId: String, ticketId: String, ticketType: String) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2657,6 +3352,57 @@ class FirebaseManager: ObservableObject {
     }
 
 
+    func assignWorkspaceTicket(
+        companyId: String,
+        ticketId: String,
+        assignedToUid: String,
+        assignedToName: String,
+        assignedToEmail: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanTicketId.isEmpty else {
+            supportTicketError = "Workspace ticket is not ready yet."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        isAssigningWorkspaceTicket = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("assignWorkspaceTicket")
+            .call([
+                "companyId": cleanCompanyId,
+                "ticketId": cleanTicketId,
+                "assignedToUid": assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines),
+                "assignedToName": assignedToName.trimmingCharacters(in: .whitespacesAndNewlines),
+                "assignedToEmail": assignedToEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            ]) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isAssigningWorkspaceTicket = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Ticket assignment updated."
+                    self?.loadWorkspaceTickets(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false)
+        #endif
+    }
+
+
+
+
     func loadSupportTicketMessages(
         companyId: String,
         ticketId: String,
@@ -2702,6 +3448,8 @@ class FirebaseManager: ObservableObject {
         ticketType: String,
         message: String,
         userPhotoURL: String = "",
+        attachments: [StudioSupportTicketAttachment] = [],
+        suppressNotification: Bool = false,
         completion: ((Bool) -> Void)? = nil
     ) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2714,8 +3462,8 @@ class FirebaseManager: ObservableObject {
             return
         }
 
-        guard !cleanMessage.isEmpty else {
-            supportTicketError = "Please write a reply."
+        guard !cleanMessage.isEmpty || !attachments.isEmpty else {
+            supportTicketError = "Please write a reply or attach a file."
             completion?(false)
             return
         }
@@ -2731,6 +3479,12 @@ class FirebaseManager: ObservableObject {
             "message": cleanMessage,
             "userPhotoURL": userPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines)
         ]
+        if !attachments.isEmpty {
+            payload["attachments"] = attachments.map { $0.asPayload() }
+        }
+        if suppressNotification {
+            payload["suppressNotification"] = true
+        }
         if ticketType == "workspace" {
             payload["companyId"] = cleanCompanyId
         }
@@ -2765,6 +3519,113 @@ class FirebaseManager: ObservableObject {
 
 
 
+
+    func uploadSupportTicketFilesAndReply(
+        companyId: String,
+        ticketId: String,
+        ticketType: String,
+        localURLs: [URL],
+        message: String = "",
+        userPhotoURL: String = "",
+        suppressNotification: Bool = false,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTicketId = ticketId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanTicketId.isEmpty else {
+            supportTicketError = "Support ticket is not ready yet."
+            completion?(false)
+            return
+        }
+
+        let urls = localURLs.filter { !$0.path.isEmpty }
+        guard !urls.isEmpty else {
+            addSupportTicketReply(
+                companyId: cleanCompanyId,
+                ticketId: cleanTicketId,
+                ticketType: ticketType,
+                message: message,
+                userPhotoURL: userPhotoURL,
+                suppressNotification: suppressNotification,
+                completion: completion
+            )
+            return
+        }
+
+        supportTicketError = ""
+        isSendingSupportTicketReply = true
+
+        var uploaded: [StudioSupportTicketAttachment] = []
+        var remaining = urls
+
+        func uploadNext() {
+            guard !remaining.isEmpty else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.isSendingSupportTicketReply = false
+                    self?.addSupportTicketReply(
+                        companyId: cleanCompanyId,
+                        ticketId: cleanTicketId,
+                        ticketType: ticketType,
+                        message: message,
+                        userPhotoURL: userPhotoURL,
+                        attachments: uploaded,
+                        suppressNotification: suppressNotification,
+                        completion: completion
+                    )
+                }
+                return
+            }
+
+            let localURL = remaining.removeFirst()
+            let fileName = localURL.lastPathComponent.isEmpty ? "Support Attachment" : localURL.lastPathComponent
+            let contentType = UTType(filenameExtension: localURL.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+            let safeFileName = fileName.replacingOccurrences(of: "/", with: "_")
+            let storagePath = "companies/\(cleanCompanyId)/support_files/\(cleanTicketId)/\(UUID().uuidString)_\(safeFileName)"
+            let ref = Storage.storage().reference().child(storagePath)
+            let metadata = StorageMetadata()
+            metadata.contentType = contentType
+
+            let shouldStopAccess = localURL.startAccessingSecurityScopedResource()
+            ref.putFile(from: localURL, metadata: metadata) { [weak self] _, error in
+                if shouldStopAccess {
+                    localURL.stopAccessingSecurityScopedResource()
+                }
+
+                if let error {
+                    DispatchQueue.main.async {
+                        self?.isSendingSupportTicketReply = false
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false)
+                    }
+                    return
+                }
+
+                ref.downloadURL { url, error in
+                    if let error {
+                        DispatchQueue.main.async {
+                            self?.isSendingSupportTicketReply = false
+                            self?.supportTicketError = error.localizedDescription
+                            completion?(false)
+                        }
+                        return
+                    }
+
+                    let fileSize = (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+                    var attachment = StudioSupportTicketAttachment()
+                    attachment.id = UUID().uuidString
+                    attachment.fileName = fileName
+                    attachment.fileURL = url?.absoluteString ?? ""
+                    attachment.fileType = contentType
+                    attachment.fileSize = fileSize
+                    uploaded.append(attachment)
+                    uploadNext()
+                }
+            }
+        }
+
+        uploadNext()
+    }
+
     private func messageDateValue(_ rawValue: Any?) -> Date {
         if let timestamp = rawValue as? Timestamp { return timestamp.dateValue() }
         if let date = rawValue as? Date { return date }
@@ -2796,12 +3657,14 @@ class FirebaseManager: ObservableObject {
         thread.title = data["title"] as? String ?? (thread.type == "team" ? "Team Chat" : "Direct Message")
         thread.memberUids = data["memberUids"] as? [String] ?? []
         thread.memberEmails = data["memberEmails"] as? [String] ?? []
+        thread.pinnedMessageIds = mergedPinnedMessageIds(for: id, serverIds: data["pinnedMessageIds"] as? [String] ?? [])
         thread.lastMessageText = data["lastMessageText"] as? String ?? data["lastMessagePreview"] as? String ?? ""
         thread.lastMessageAt = messageDateValue(data["lastMessageAt"])
         thread.lastMessageByUid = data["lastMessageByUid"] as? String ?? ""
         thread.lastMessageByName = data["lastMessageByName"] as? String ?? ""
         thread.lastMessageByPhotoURL = data["lastMessageByPhotoURL"] as? String ?? ""
         thread.readBy = messageReadByMap(data["readBy"])
+        thread.mutedUntilBy = messageReadByMap(data["mutedUntilBy"])
 
         let cleanUid = currentUid.trimmingCharacters(in: .whitespacesAndNewlines)
         if !cleanUid.isEmpty, thread.lastMessageAt != .distantPast, thread.lastMessageByUid != cleanUid {
@@ -2814,6 +3677,62 @@ class FirebaseManager: ObservableObject {
             thread.isUnread = false
         }
         return thread
+    }
+
+
+    private func studioMessageItemFromSnapshot(id: String, data: [String: Any], threadId: String, currentUid: String) -> StudioMessageItem? {
+        let hiddenForUids = data["hiddenForUids"] as? [String] ?? data["deletedForUids"] as? [String] ?? data["hiddenFor"] as? [String] ?? []
+        if !currentUid.isEmpty && hiddenForUids.contains(currentUid) {
+            return nil
+        }
+
+        var item = StudioMessageItem()
+        item.id = id
+        item.threadId = data["threadId"] as? String ?? threadId
+        item.text = data["text"] as? String ?? data["message"] as? String ?? ""
+        item.senderUid = data["senderUid"] as? String ?? ""
+        item.senderEmail = data["senderEmail"] as? String ?? ""
+        item.senderName = data["senderName"] as? String ?? item.senderEmail
+        item.senderPhotoURL = data["senderPhotoURL"] as? String ?? data["senderAvatarURL"] as? String ?? ""
+        item.createdAt = messageDateValue(data["createdAt"])
+        if item.createdAt == .distantPast { item.createdAt = Date() }
+        item.type = data["type"] as? String ?? "text"
+        item.fileName = data["fileName"] as? String ?? ""
+        item.fileURL = data["fileURL"] as? String ?? ""
+        item.fileType = data["fileType"] as? String ?? ""
+        if let size = data["fileSize"] as? Int64 { item.fileSize = size }
+        if let size = data["fileSize"] as? Int { item.fileSize = Int64(size) }
+        if let size = data["fileSize"] as? Double { item.fileSize = Int64(size) }
+        item.deletedForEveryone = data["deletedForEveryone"] as? Bool ?? data["isDeleted"] as? Bool ?? false
+        item.deletedByUid = data["deletedByUid"] as? String ?? ""
+        item.pinned = data["pinned"] as? Bool ?? false
+        item.pinnedByUid = data["pinnedByUid"] as? String ?? ""
+        item.pinnedByName = data["pinnedByName"] as? String ?? ""
+        let pinnedAt = messageDateValue(data["pinnedAt"])
+        if pinnedAt != .distantPast { item.pinnedAt = pinnedAt }
+        item.replyToMessageId = data["replyToMessageId"] as? String ?? ""
+        item.replyToText = data["replyToText"] as? String ?? ""
+        item.replyToSenderName = data["replyToSenderName"] as? String ?? ""
+        item.replyToSenderUid = data["replyToSenderUid"] as? String ?? ""
+        item.replyToFileName = data["replyToFileName"] as? String ?? ""
+        item.replyToType = data["replyToType"] as? String ?? ""
+        item.reactions = StudioMessageItem.parseReactions(data["reactions"])
+        item.mentionedUids = data["mentionedUids"] as? [String] ?? []
+        item.edited = data["edited"] as? Bool ?? false
+        item.editedByUid = data["editedByUid"] as? String ?? ""
+        let editedAt = messageDateValue(data["editedAt"])
+        if editedAt != .distantPast { item.editedAt = editedAt }
+        let deletedAt = messageDateValue(data["deletedAt"])
+        if deletedAt != .distantPast { item.deletedAt = deletedAt }
+        if item.deletedForEveryone {
+            item.text = ""
+            item.fileName = ""
+            item.fileURL = ""
+            item.fileType = ""
+            item.fileSize = 0
+            item.type = "deleted"
+        }
+        return item
     }
 
     private static func sortedMessageThreadsForDisplay(_ threads: [StudioMessageThread]) -> [StudioMessageThread] {
@@ -2863,6 +3782,7 @@ class FirebaseManager: ObservableObject {
 
         messageThreadsListenerRegistration?.remove()
         messageThreadsListenerCompanyId = listenerKey
+        loadLocalMessageThreadReadCache()
 
         messageThreadsListenerRegistration = db
             .collection("companies")
@@ -2893,6 +3813,7 @@ class FirebaseManager: ObservableObject {
                     if let localReadAt = localReadTimes[thread.id], thread.lastMessageAt <= localReadAt {
                         thread.isUnread = false
                     }
+                    thread = self.applyLocalReadState(to: thread)
                     threads.append(thread)
                 }
 
@@ -2900,6 +3821,9 @@ class FirebaseManager: ObservableObject {
 
                 DispatchQueue.main.async {
                     self.messageThreads = sortedThreads
+                    for thread in sortedThreads {
+                        self.applyThreadPinnedStateToLocalMessages(threadId: thread.id)
+                    }
                     self.refreshLocalMessageUnreadCount()
                 }
             }
@@ -2909,12 +3833,67 @@ class FirebaseManager: ObservableObject {
         messageThreadsListenerRegistration?.remove()
         messageThreadsListenerRegistration = nil
         messageThreadsListenerCompanyId = ""
+        messageItemsListenerRegistration?.remove()
+        messageItemsListenerRegistration = nil
+        messageItemsListenerKey = ""
+        messageTypingListenerRegistration?.remove()
+        messageTypingListenerRegistration = nil
+        messageTypingListenerKey = ""
         if clearData {
             messageThreads = []
             messageItemsByThreadId = [:]
+            messageTypingUsersByThreadId = [:]
             messageUnreadCount = 0
             locallyReadMessageThreadReadTimes.removeAll()
+            locallyPinnedMessageIdsByThreadId.removeAll()
+            locallyUnpinnedMessageIdsByThreadId.removeAll()
         }
+    }
+
+    private var messageThreadLocalReadCacheKey: String {
+        let companyId = currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "studioMessageThreadReadTimes_\(companyId)_\(uid)"
+    }
+
+    private func loadLocalMessageThreadReadCache() {
+        let key = messageThreadLocalReadCacheKey
+        guard !key.hasSuffix("_") else {
+            locallyReadMessageThreadReadTimes = [:]
+            return
+        }
+        let raw = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+        var output: [String: Date] = [:]
+        for (threadId, seconds) in raw {
+            guard !threadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            output[threadId] = Date(timeIntervalSince1970: seconds)
+        }
+        locallyReadMessageThreadReadTimes = output
+    }
+
+    private func saveLocalMessageThreadReadCache() {
+        let key = messageThreadLocalReadCacheKey
+        guard !key.hasSuffix("_") else { return }
+        let raw = locallyReadMessageThreadReadTimes.reduce(into: [String: Double]()) { result, pair in
+            result[pair.key] = pair.value.timeIntervalSince1970
+        }
+        UserDefaults.standard.set(raw, forKey: key)
+    }
+
+    private func markMessageThreadLocallyRead(threadId: String, at date: Date = Date()) {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty else { return }
+        locallyReadMessageThreadReadTimes[cleanThreadId] = date
+        saveLocalMessageThreadReadCache()
+    }
+
+    private func applyLocalReadState(to thread: StudioMessageThread) -> StudioMessageThread {
+        guard let localReadAt = locallyReadMessageThreadReadTimes[thread.id] else { return thread }
+        var updated = thread
+        if updated.lastMessageAt <= localReadAt {
+            updated.isUnread = false
+        }
+        return updated
     }
 
     private func refreshLocalMessageUnreadCount() {
@@ -2950,6 +3929,11 @@ class FirebaseManager: ObservableObject {
                     let localReadTimes = self?.locallyReadMessageThreadReadTimes ?? [:]
                     let currentUid = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     var parsedThreads = threadItems.compactMap { StudioMessageThread(callableData: $0) }
+                    parsedThreads = parsedThreads.map { thread in
+                        var updated = thread
+                        updated.pinnedMessageIds = self?.mergedPinnedMessageIds(for: updated.id, serverIds: updated.pinnedMessageIds) ?? updated.pinnedMessageIds
+                        return updated
+                    }
                     parsedThreads = parsedThreads.filter { thread in
                         thread.id == "team" || currentUid.isEmpty || thread.memberUids.contains(currentUid)
                     }
@@ -2958,9 +3942,14 @@ class FirebaseManager: ObservableObject {
                         if let localReadAt = localReadTimes[updated.id], updated.lastMessageAt <= localReadAt {
                             updated.isUnread = false
                         }
+                        updated = self?.applyLocalReadState(to: updated) ?? updated
                         return updated
                     }
-                    self?.messageThreads = FirebaseManager.sortedMessageThreadsForDisplay(parsedThreads)
+                    let sortedThreads = FirebaseManager.sortedMessageThreadsForDisplay(parsedThreads)
+                    self?.messageThreads = sortedThreads
+                    for thread in sortedThreads {
+                        self?.applyThreadPinnedStateToLocalMessages(threadId: thread.id)
+                    }
                     self?.messageTeamMembers = memberItems.compactMap { StudioMessageTeamMember(callableData: $0) }
                     self?.refreshLocalMessageUnreadCount()
                 }
@@ -3004,10 +3993,188 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+
+    func startThreadMessagesRealtime(companyId: String, threadId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentUid: String = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !currentUid.isEmpty else {
+            stopThreadMessagesRealtime()
+            return
+        }
+
+        let listenerKey = "\(cleanCompanyId)|\(cleanThreadId)|\(currentUid)"
+        if messageItemsListenerKey == listenerKey, messageItemsListenerRegistration != nil {
+            return
+        }
+
+        messageItemsListenerRegistration?.remove()
+        messageItemsListenerKey = listenerKey
+        isLoadingMessages = true
+
+        messageItemsListenerRegistration = db
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("messageThreads")
+            .document(cleanThreadId)
+            .collection("messages")
+            .order(by: "createdAt", descending: false)
+            .limit(to: 300)
+            .addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
+                guard let self else { return }
+                if let error {
+                    DispatchQueue.main.async {
+                        self.isLoadingMessages = false
+                        self.messageError = error.localizedDescription
+                    }
+                    return
+                }
+
+                let documents = snapshot?.documents ?? []
+                var items: [StudioMessageItem] = []
+                items.reserveCapacity(documents.count)
+                for document in documents {
+                    if let item = self.studioMessageItemFromSnapshot(
+                        id: document.documentID,
+                        data: document.data(),
+                        threadId: cleanThreadId,
+                        currentUid: currentUid
+                    ) {
+                        items.append(item)
+                    }
+                }
+
+                DispatchQueue.main.async {
+                    self.isLoadingMessages = false
+                    self.messageItemsByThreadId[cleanThreadId] = self.applyThreadPinnedState(items, threadId: cleanThreadId)
+                }
+            }
+    }
+
+
+    private func studioMessageTypingUserFromSnapshot(id: String, data: [String: Any], currentUid: String) -> StudioMessageTypingUser? {
+        let cleanId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanId.isEmpty, cleanId != currentUid else { return nil }
+        let isTyping = data["isTyping"] as? Bool ?? true
+        guard isTyping else { return nil }
+
+        var updatedAt = Date.distantPast
+        if let timestamp = data["updatedAt"] as? Timestamp {
+            updatedAt = timestamp.dateValue()
+        } else if let date = data["updatedAt"] as? Date {
+            updatedAt = date
+        }
+        guard updatedAt > Date().addingTimeInterval(-9) else { return nil }
+
+        return StudioMessageTypingUser(
+            id: cleanId,
+            name: data["name"] as? String ?? data["displayName"] as? String ?? "",
+            email: data["email"] as? String ?? "",
+            photoURL: data["photoURL"] as? String ?? data["senderPhotoURL"] as? String ?? "",
+            updatedAt: updatedAt
+        )
+    }
+
+    func startMessageTypingRealtime(companyId: String, threadId: String) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentUid: String = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !currentUid.isEmpty else {
+            stopMessageTypingRealtime()
+            return
+        }
+
+        let listenerKey = "\(cleanCompanyId)|\(cleanThreadId)|\(currentUid)"
+        if messageTypingListenerKey == listenerKey, messageTypingListenerRegistration != nil { return }
+
+        messageTypingListenerRegistration?.remove()
+        messageTypingListenerKey = listenerKey
+
+        messageTypingListenerRegistration = db
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("messageThreads")
+            .document(cleanThreadId)
+            .collection("typing")
+            .addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
+                guard let self else { return }
+                if let error {
+                    DispatchQueue.main.async { self.messageError = error.localizedDescription }
+                    return
+                }
+
+                let users = (snapshot?.documents ?? [])
+                    .compactMap { document in
+                        self.studioMessageTypingUserFromSnapshot(id: document.documentID, data: document.data(), currentUid: currentUid)
+                    }
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+                DispatchQueue.main.async {
+                    self.messageTypingUsersByThreadId[cleanThreadId] = users
+                }
+            }
+    }
+
+    func stopMessageTypingRealtime(clearData: Bool = false) {
+        let threadId = messageTypingListenerKey.split(separator: "|").dropFirst().first.map(String.init) ?? ""
+        messageTypingListenerRegistration?.remove()
+        messageTypingListenerRegistration = nil
+        messageTypingListenerKey = ""
+        if clearData, !threadId.isEmpty {
+            messageTypingUsersByThreadId[threadId] = []
+        }
+    }
+
+    func setMessageTypingStatus(
+        companyId: String,
+        threadId: String,
+        isTyping: Bool,
+        userName: String = "",
+        userPhotoURL: String = ""
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty else { return }
+
+        #if canImport(FirebaseFunctions)
+        let functionName = isTyping ? "setMessageTypingStatus" : "clearMessageTypingStatus"
+        var payload: [String: Any] = [
+            "companyId": cleanCompanyId,
+            "threadId": cleanThreadId,
+            "isTyping": isTyping,
+            "userName": userName.trimmingCharacters(in: .whitespacesAndNewlines),
+            "userPhotoURL": userPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        ]
+        if !isTyping { payload["isTyping"] = false }
+        Functions.functions(region: "europe-west2")
+            .httpsCallable(functionName)
+            .call(payload) { [weak self] _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        self?.messageError = error.localizedDescription
+                    }
+                }
+            }
+        #endif
+    }
+
+    func stopThreadMessagesRealtime(clearData: Bool = false) {
+        let threadId = messageItemsListenerKey.split(separator: "|").dropFirst().first.map(String.init) ?? ""
+        messageItemsListenerRegistration?.remove()
+        messageItemsListenerRegistration = nil
+        messageItemsListenerKey = ""
+        stopMessageTypingRealtime(clearData: clearData)
+        if clearData, !threadId.isEmpty {
+            messageItemsByThreadId[threadId] = []
+        }
+    }
+
     func loadThreadMessages(companyId: String, threadId: String) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty else { return }
+
+        startThreadMessagesRealtime(companyId: cleanCompanyId, threadId: cleanThreadId)
 
         #if canImport(FirebaseFunctions)
         isLoadingMessages = true
@@ -3023,7 +4190,10 @@ class FirebaseManager: ObservableObject {
 
                     let payload = result?.data as? [String: Any]
                     let items = payload?["messages"] as? [[String: Any]] ?? []
-                    self?.messageItemsByThreadId[cleanThreadId] = items.compactMap { StudioMessageItem(callableData: $0) }
+                    let parsedItems = items.compactMap { StudioMessageItem(callableData: $0) }
+                    if let self {
+                        self.messageItemsByThreadId[cleanThreadId] = self.applyThreadPinnedState(parsedItems, threadId: cleanThreadId)
+                    }
                 }
             }
         #endif
@@ -3034,7 +4204,8 @@ class FirebaseManager: ObservableObject {
         let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty else { return }
 
-        locallyReadMessageThreadReadTimes[cleanThreadId] = Date()
+        let readAt = Date()
+        markMessageThreadLocallyRead(threadId: cleanThreadId, at: readAt)
         messageThreads = messageThreads.map { thread in
             var updated = thread
             if updated.id == cleanThreadId { updated.isUnread = false }
@@ -3045,7 +4216,11 @@ class FirebaseManager: ObservableObject {
         #if canImport(FirebaseFunctions)
         Functions.functions(region: "europe-west2")
             .httpsCallable("markMessageThreadRead")
-            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId]) { [weak self] _, _ in
+            .call([
+                "companyId": cleanCompanyId,
+                "threadId": cleanThreadId,
+                "readAtMillis": Int(readAt.timeIntervalSince1970 * 1000)
+            ]) { [weak self] _, _ in
                 DispatchQueue.main.async {
                     self?.messageThreads = self?.messageThreads.map { thread in
                         var updated = thread
@@ -3058,6 +4233,553 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+    func addMembersToMessageThread(
+        companyId: String,
+        threadId: String,
+        memberUids: [String],
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMemberUids = Array(Set(memberUids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMemberUids.isEmpty else {
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        messageStatus = "Adding people..."
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("addMembersToMessageThread")
+            .call([
+                "companyId": cleanCompanyId,
+                "threadId": cleanThreadId,
+                "memberUids": cleanMemberUids
+            ]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.messageStatus = ""
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "People added."
+                    self?.loadMessageThreads(companyId: cleanCompanyId)
+                    self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+
+    func renameMessageThread(
+        companyId: String,
+        threadId: String,
+        title: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanTitle.isEmpty else {
+            completion?(false)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        messageStatus = "Renaming group..."
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("renameMessageThread")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId, "title": cleanTitle]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.messageStatus = ""
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "Group renamed."
+                    self?.loadMessageThreads(companyId: cleanCompanyId)
+                    self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+    func leaveMessageThread(
+        companyId: String,
+        threadId: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty else {
+            completion?(false)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        messageStatus = "Leaving group..."
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("leaveMessageThread")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.messageStatus = ""
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "Left group."
+                    self?.messageItemsByThreadId[cleanThreadId] = []
+                    self?.loadMessageThreads(companyId: cleanCompanyId)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+    func removeMemberFromMessageThread(
+        companyId: String,
+        threadId: String,
+        memberUid: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMemberUid = memberUid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMemberUid.isEmpty else {
+            completion?(false)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        messageStatus = "Removing member..."
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("removeMemberFromMessageThread")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId, "memberUid": cleanMemberUid]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.messageStatus = ""
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "Member removed."
+                    self?.loadMessageThreads(companyId: cleanCompanyId)
+                    self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+    private func cleanPinnedIds(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        var output: [String] = []
+        for id in ids {
+            let clean = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty, !seen.contains(clean) else { continue }
+            seen.insert(clean)
+            output.append(clean)
+        }
+        return Array(output.prefix(20))
+    }
+
+    private func mergedPinnedMessageIds(for threadId: String, serverIds: [String]) -> [String] {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty else { return cleanPinnedIds(serverIds) }
+
+        var merged = cleanPinnedIds(serverIds)
+        let locallyPinned = locallyPinnedMessageIdsByThreadId[cleanThreadId] ?? []
+        let locallyUnpinned = locallyUnpinnedMessageIdsByThreadId[cleanThreadId] ?? []
+
+        for id in locallyPinned where !merged.contains(id) {
+            merged.insert(id, at: 0)
+        }
+        if !locallyUnpinned.isEmpty {
+            merged.removeAll { locallyUnpinned.contains($0) }
+        }
+        return Array(merged.prefix(20))
+    }
+
+    private func rememberLocalPinOverride(threadId: String, messageId: String, pinned: Bool) {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else { return }
+
+        if pinned {
+            var pinnedSet = locallyPinnedMessageIdsByThreadId[cleanThreadId] ?? []
+            pinnedSet.insert(cleanMessageId)
+            locallyPinnedMessageIdsByThreadId[cleanThreadId] = pinnedSet
+
+            var unpinnedSet = locallyUnpinnedMessageIdsByThreadId[cleanThreadId] ?? []
+            unpinnedSet.remove(cleanMessageId)
+            locallyUnpinnedMessageIdsByThreadId[cleanThreadId] = unpinnedSet
+        } else {
+            var unpinnedSet = locallyUnpinnedMessageIdsByThreadId[cleanThreadId] ?? []
+            unpinnedSet.insert(cleanMessageId)
+            locallyUnpinnedMessageIdsByThreadId[cleanThreadId] = unpinnedSet
+
+            var pinnedSet = locallyPinnedMessageIdsByThreadId[cleanThreadId] ?? []
+            pinnedSet.remove(cleanMessageId)
+            locallyPinnedMessageIdsByThreadId[cleanThreadId] = pinnedSet
+        }
+    }
+
+    private func pinnedMessageIdsForThread(_ threadId: String) -> Set<String> {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty else { return [] }
+        if let thread = messageThreads.first(where: { $0.id == cleanThreadId }) {
+            return Set(thread.pinnedMessageIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+        }
+        return []
+    }
+
+    private func applyThreadPinnedStateToLocalMessages(threadId: String) {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty else { return }
+        let pinnedIds = pinnedMessageIdsForThread(cleanThreadId)
+        guard !pinnedIds.isEmpty || !(messageItemsByThreadId[cleanThreadId] ?? []).isEmpty else { return }
+
+        messageItemsByThreadId[cleanThreadId] = (messageItemsByThreadId[cleanThreadId] ?? []).map { item in
+            var updated = item
+            let shouldBePinned = pinnedIds.contains(updated.id)
+            if shouldBePinned {
+                updated.pinned = true
+                updated.pinnedAt = updated.pinnedAt ?? Date()
+            } else if updated.pinned {
+                updated.pinned = false
+                updated.pinnedAt = nil
+                updated.pinnedByUid = ""
+                updated.pinnedByName = ""
+            }
+            return updated
+        }
+    }
+
+    private func applyThreadPinnedState(_ items: [StudioMessageItem], threadId: String) -> [StudioMessageItem] {
+        let pinnedIds = pinnedMessageIdsForThread(threadId)
+        return items.map { item in
+            var updated = item
+            let shouldBePinned = pinnedIds.contains(updated.id)
+            updated.pinned = shouldBePinned
+            if shouldBePinned {
+                updated.pinnedAt = updated.pinnedAt ?? Date()
+            } else {
+                updated.pinnedAt = nil
+                updated.pinnedByUid = ""
+                updated.pinnedByName = ""
+            }
+            return updated
+        }
+    }
+
+    private func markLocalMessagePinned(threadId: String, messageId: String, pinned: Bool) {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else { return }
+
+        rememberLocalPinOverride(threadId: cleanThreadId, messageId: cleanMessageId, pinned: pinned)
+
+        messageThreads = messageThreads.map { thread in
+            var updated = thread
+            guard updated.id == cleanThreadId else { return updated }
+            var ids = cleanPinnedIds(updated.pinnedMessageIds)
+            if pinned {
+                ids.removeAll { $0 == cleanMessageId }
+                ids.insert(cleanMessageId, at: 0)
+            } else {
+                ids.removeAll { $0 == cleanMessageId }
+            }
+            updated.pinnedMessageIds = ids
+            return updated
+        }
+
+        messageItemsByThreadId[cleanThreadId] = (messageItemsByThreadId[cleanThreadId] ?? []).map { item in
+            var updated = item
+            if updated.id == cleanMessageId {
+                updated.pinned = pinned
+                if pinned {
+                    updated.pinnedAt = updated.pinnedAt ?? Date()
+                } else {
+                    updated.pinnedAt = nil
+                    updated.pinnedByUid = ""
+                    updated.pinnedByName = ""
+                }
+            }
+            return updated
+        }
+    }
+
+
+    func toggleMessageReaction(companyId: String, threadId: String, messageId: String, emoji: String, userName: String = "", completion: ((Bool) -> Void)? = nil) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmoji = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMessageId.isEmpty, !cleanEmoji.isEmpty else {
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("toggleMessageReaction")
+            .call([
+                "companyId": cleanCompanyId,
+                "threadId": cleanThreadId,
+                "messageId": cleanMessageId,
+                "emoji": cleanEmoji,
+                "userName": userName.trimmingCharacters(in: .whitespacesAndNewlines)
+            ]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+
+    func pinMessageInThread(companyId: String, threadId: String, messageId: String, completion: ((Bool) -> Void)? = nil) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else {
+            completion?(false)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        messageStatus = "Pinning message..."
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("pinMessageInThread")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId, "messageId": cleanMessageId]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.messageStatus = ""
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "Message pinned."
+                    self?.markLocalMessagePinned(threadId: cleanThreadId, messageId: cleanMessageId, pinned: true)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+    func unpinMessageInThread(companyId: String, threadId: String, messageId: String, completion: ((Bool) -> Void)? = nil) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else {
+            completion?(false)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        messageStatus = "Unpinning message..."
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("unpinMessageInThread")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId, "messageId": cleanMessageId]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.messageStatus = ""
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "Message unpinned."
+                    self?.markLocalMessagePinned(threadId: cleanThreadId, messageId: cleanMessageId, pinned: false)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+
+    func muteUntilDate(for threadId: String, uid: String? = nil) -> Date? {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUid = (uid ?? Auth.auth().currentUser?.uid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty, !cleanUid.isEmpty else { return nil }
+        guard let thread = messageThreads.first(where: { $0.id == cleanThreadId }) else { return nil }
+        guard let date = thread.mutedUntilBy[cleanUid], date > Date() else { return nil }
+        return date
+    }
+
+    func isMessageThreadMuted(threadId: String, uid: String? = nil) -> Bool {
+        muteUntilDate(for: threadId, uid: uid) != nil
+    }
+
+    private func applyLocalMuteState(threadId: String, uid: String, mutedUntil: Date?) {
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanThreadId.isEmpty, !cleanUid.isEmpty else { return }
+        messageThreads = messageThreads.map { thread in
+            var updated = thread
+            if updated.id == cleanThreadId {
+                if let mutedUntil, mutedUntil > Date() {
+                    updated.mutedUntilBy[cleanUid] = mutedUntil
+                } else {
+                    updated.mutedUntilBy.removeValue(forKey: cleanUid)
+                }
+            }
+            return updated
+        }
+    }
+
+    private func writeMessageThreadMuteDirectly(
+        companyId: String,
+        threadId: String,
+        uid: String,
+        mutedUntil: Date?,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let threadRef = db.collection("companies").document(companyId).collection("messageThreads").document(threadId)
+
+        if let mutedUntil, mutedUntil > Date() {
+            threadRef.setData([
+                "mutedUntilBy": [uid: Timestamp(date: mutedUntil)],
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { [weak self] error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        completion?(false)
+                    } else {
+                        completion?(true)
+                    }
+                }
+            }
+            return
+        }
+
+        var remainingMuteMap: [String: Timestamp] = [:]
+        if let thread = messageThreads.first(where: { $0.id == threadId }) {
+            for (key, value) in thread.mutedUntilBy where key != uid && value > Date() {
+                remainingMuteMap[key] = Timestamp(date: value)
+            }
+        }
+
+        threadRef.setData([
+            "mutedUntilBy": remainingMuteMap,
+            "updatedAt": FieldValue.serverTimestamp()
+        ], merge: true) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error {
+                    self?.messageError = error.localizedDescription
+                    completion?(false)
+                } else {
+                    completion?(true)
+                }
+            }
+        }
+    }
+
+    func setMessageThreadActive(
+        companyId: String,
+        threadId: String,
+        isActive: Bool
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty else { return }
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("setMessageThreadActive")
+            .call([
+                "companyId": cleanCompanyId,
+                "threadId": cleanThreadId,
+                "isActive": isActive
+            ]) { _, _ in }
+        #endif
+    }
+
+    func setMessageThreadMute(
+        companyId: String,
+        threadId: String,
+        mode: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMode = mode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentUid = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !currentUid.isEmpty else {
+            messageError = "Conversation is not ready."
+            completion?(false)
+            return
+        }
+
+        let now = Date()
+        let mutedUntil: Date?
+        switch cleanMode {
+        case "oneHour", "1h", "hour":
+            mutedUntil = now.addingTimeInterval(60 * 60)
+        case "today":
+            mutedUntil = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now.addingTimeInterval(12 * 60 * 60)
+        case "forever", "untilOn", "untilIUnmute":
+            mutedUntil = now.addingTimeInterval(3650 * 24 * 60 * 60)
+        case "unmute", "off", "none":
+            mutedUntil = nil
+        default:
+            mutedUntil = now.addingTimeInterval(60 * 60)
+        }
+
+        applyLocalMuteState(threadId: cleanThreadId, uid: currentUid, mutedUntil: mutedUntil)
+        messageStatus = mutedUntil == nil ? "Conversation unmuted." : "Conversation muted."
+
+        let payload: [String: Any] = [
+            "companyId": cleanCompanyId,
+            "threadId": cleanThreadId,
+            "mode": cleanMode
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("setMessageThreadMute")
+            .call(payload) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if error == nil {
+                        completion?(true)
+                        return
+                    }
+
+                    self?.writeMessageThreadMuteDirectly(
+                        companyId: cleanCompanyId,
+                        threadId: cleanThreadId,
+                        uid: currentUid,
+                        mutedUntil: mutedUntil,
+                        completion: completion
+                    )
+                }
+            }
+    }
+
     func sendThreadMessage(
         companyId: String,
         threadId: String,
@@ -3068,6 +4790,8 @@ class FirebaseManager: ObservableObject {
         fileName: String = "",
         fileType: String = "",
         fileSize: Int64 = 0,
+        replyTo: StudioMessageItem? = nil,
+        mentionedUids: [String] = [],
         completion: ((Bool) -> Void)? = nil
     ) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3100,6 +4824,13 @@ class FirebaseManager: ObservableObject {
             payload["fileType"] = fileType
             payload["fileSize"] = fileSize
         }
+        if let replyTo, !replyTo.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            payload["replyToMessageId"] = replyTo.id
+        }
+        let cleanMentionedUids = Array(Set(mentionedUids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+        if !cleanMentionedUids.isEmpty {
+            payload["mentionedUids"] = cleanMentionedUids
+        }
 
         Functions.functions(region: "europe-west2")
             .httpsCallable("sendThreadMessage")
@@ -3113,13 +4844,131 @@ class FirebaseManager: ObservableObject {
                     }
 
                     self?.messageStatus = "Message sent."
+                    self?.setMessageTypingStatus(companyId: cleanCompanyId, threadId: cleanThreadId, isTyping: false)
+                    // The realtime thread listener updates the conversation list.
+                    // Avoid forcing a callable refresh here, because a stale thread payload can briefly hide pinned messages.
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+    func editThreadMessage(
+        companyId: String,
+        threadId: String,
+        messageId: String,
+        text: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else {
+            messageError = "Message is not ready."
+            completion?(false)
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        messageError = ""
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("editThreadMessage")
+            .call([
+                "companyId": cleanCompanyId,
+                "threadId": cleanThreadId,
+                "messageId": cleanMessageId,
+                "text": cleanText
+            ]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        completion?(false)
+                        return
+                    }
+                    self?.messageStatus = "Message edited."
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
+    func deleteMessageForMe(companyId: String, threadId: String, messageId: String, completion: ((Bool) -> Void)? = nil) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else {
+            completion?(false)
+            return
+        }
+
+        messageItemsByThreadId[cleanThreadId] = (messageItemsByThreadId[cleanThreadId] ?? []).filter { $0.id != cleanMessageId }
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("deleteMessageForMe")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId, "messageId": cleanMessageId]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
+                        completion?(false)
+                        return
+                    }
+                    self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(true)
+        #endif
+    }
+
+    func deleteMessageForEveryone(companyId: String, threadId: String, messageId: String, completion: ((Bool) -> Void)? = nil) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanThreadId = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, !cleanThreadId.isEmpty, !cleanMessageId.isEmpty else {
+            completion?(false)
+            return
+        }
+
+        messageItemsByThreadId[cleanThreadId] = (messageItemsByThreadId[cleanThreadId] ?? []).map { item in
+            var updated = item
+            if updated.id == cleanMessageId {
+                updated.deletedForEveryone = true
+                updated.text = ""
+                updated.fileURL = ""
+                updated.fileName = ""
+                updated.fileType = ""
+                updated.fileSize = 0
+                updated.type = "deleted"
+            }
+            return updated
+        }
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("deleteMessageForEveryone")
+            .call(["companyId": cleanCompanyId, "threadId": cleanThreadId, "messageId": cleanMessageId]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.messageError = error.localizedDescription
+                        self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
+                        completion?(false)
+                        return
+                    }
                     self?.loadThreadMessages(companyId: cleanCompanyId, threadId: cleanThreadId)
                     self?.loadMessageThreads(companyId: cleanCompanyId)
                     completion?(true)
                 }
             }
         #else
-        completion?(false)
+        completion?(true)
         #endif
     }
 
@@ -3130,6 +4979,8 @@ class FirebaseManager: ObservableObject {
         text: String = "",
         userName: String = "",
         userPhotoURL: String = "",
+        replyTo: StudioMessageItem? = nil,
+        mentionedUids: [String] = [],
         completion: ((Bool) -> Void)? = nil
     ) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3180,6 +5031,8 @@ class FirebaseManager: ObservableObject {
                         fileName: fileName,
                         fileType: contentType,
                         fileSize: fileSize,
+                        replyTo: replyTo,
+                        mentionedUids: mentionedUids,
                         completion: completion
                     )
                 }
@@ -3195,6 +5048,83 @@ class FirebaseManager: ObservableObject {
         supportTicketMessagesByTicketId = [:]
         supportTicketUnreadCount = 0
         workspaceTicketUnreadCount = 0
+    }
+
+
+    func submitSupportTicketReturningId(
+        companyId: String,
+        companyName: String,
+        userId: String,
+        userEmail: String,
+        userName: String,
+        userPhotoURL: String = "",
+        title: String,
+        message: String,
+        category: String,
+        priority: String,
+        language: String,
+        completion: ((Bool, String) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanCompanyId.isEmpty else {
+            supportTicketError = "Workspace is not ready yet."
+            completion?(false, "")
+            return
+        }
+
+        guard !cleanTitle.isEmpty, !cleanMessage.isEmpty else {
+            supportTicketError = "Please add a subject and message."
+            completion?(false, "")
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isSubmittingSupportTicket = true
+
+        let payload: [String: Any] = [
+            "companyId": cleanCompanyId,
+            "companyName": companyName,
+            "userEmail": userEmail,
+            "userName": userName,
+            "userPhotoURL": userPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            "title": cleanTitle,
+            "message": cleanMessage,
+            "category": category,
+            "priority": priority,
+            "ticketType": "appSupport",
+            "platform": studioFlowSupportPlatform,
+            "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            "deviceInfo": studioFlowSupportDeviceInfo(),
+            "language": language
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("createSupportTicket")
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isSubmittingSupportTicket = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false, "")
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    let ticketId = response?["ticketId"] as? String ?? ""
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Ticket sent. We will review it as soon as possible."
+                    self?.loadMySupportTickets(companyId: cleanCompanyId)
+                    completion?(true, ticketId)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false, "")
+        #endif
     }
 
     func submitSupportTicket(
@@ -3270,6 +5200,83 @@ class FirebaseManager: ObservableObject {
         supportTicketError = "Firebase Functions is not available in this build."
         completion?(false)
 
+        #endif
+    }
+
+
+    func submitWorkspaceTicketReturningId(
+        companyId: String,
+        companyName: String,
+        userId: String,
+        userEmail: String,
+        userName: String,
+        userPhotoURL: String = "",
+        title: String,
+        message: String,
+        category: String,
+        priority: String,
+        language: String,
+        completion: ((Bool, String) -> Void)? = nil
+    ) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanCompanyId.isEmpty else {
+            supportTicketError = "Workspace is not ready yet."
+            completion?(false, "")
+            return
+        }
+
+        guard !cleanTitle.isEmpty, !cleanMessage.isEmpty else {
+            supportTicketError = "Please add a subject and message."
+            completion?(false, "")
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        supportTicketError = ""
+        supportTicketMessage = ""
+        isSubmittingSupportTicket = true
+
+        let payload: [String: Any] = [
+            "companyId": cleanCompanyId,
+            "companyName": companyName,
+            "userEmail": userEmail,
+            "userName": userName,
+            "userPhotoURL": userPhotoURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            "title": cleanTitle,
+            "message": cleanMessage,
+            "category": category,
+            "priority": priority,
+            "ticketType": "workspace",
+            "platform": studioFlowSupportPlatform,
+            "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            "deviceInfo": studioFlowSupportDeviceInfo(),
+            "language": language
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("createWorkspaceTicket")
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isSubmittingSupportTicket = false
+                    if let error {
+                        self?.supportTicketError = error.localizedDescription
+                        completion?(false, "")
+                        return
+                    }
+
+                    let response = result?.data as? [String: Any]
+                    let ticketId = response?["ticketId"] as? String ?? ""
+                    self?.supportTicketMessage = response?["message"] as? String ?? "Workspace ticket sent to the workspace owner."
+                    self?.loadWorkspaceTickets(companyId: cleanCompanyId)
+                    completion?(true, ticketId)
+                }
+            }
+        #else
+        supportTicketError = "Firebase Functions is not available in this build."
+        completion?(false, "")
         #endif
     }
 

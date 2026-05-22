@@ -234,6 +234,19 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
 
   const title = String(notification.title || "NivaDesk").slice(0, 120);
   const body = String(notification.message || notification.body || "You have a new update.").slice(0, 240);
+  const richImageURL = cleanSupportPhotoURL(
+    notification.richImageURL ||
+    notification.richImageUrl ||
+    notification.previewImageURL ||
+    notification.previewImageUrl ||
+    notification.imageUrl ||
+    notification.imageURL ||
+    notification.senderPhotoURL ||
+    ""
+  );
+  const notificationPayload = richImageURL
+    ? { title, body, imageUrl: richImageURL }
+    : { title, body };
   const data = toPushStringMap({
     companyId,
     orderId: notification.orderId || "",
@@ -242,17 +255,24 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
     trackingNumber: notification.trackingNumber || "",
     carrier: notification.carrier || "",
     priority: notification.priority || "",
-    dueAt: notification.dueAt || ""
+    dueAt: notification.dueAt || "",
+    senderPhotoURL: notification.senderPhotoURL || "",
+    imageUrl: richImageURL,
+    richImageURL,
+    previewImageURL: notification.previewImageURL || notification.previewImageUrl || ""
   });
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
-    notification: { title, body },
+    notification: notificationPayload,
     data,
+    android: richImageURL ? { notification: { imageUrl: richImageURL } } : undefined,
     apns: {
       headers: { "apns-priority": "10" },
-      payload: { aps: { sound: "default", badge: 1, "mutable-content": 1 } }
-    }
+      payload: { aps: { sound: "default", badge: 1, "mutable-content": 1 } },
+      fcmOptions: richImageURL ? { imageUrl: richImageURL } : undefined
+    },
+    webpush: richImageURL ? { notification: { image: richImageURL } } : undefined
   });
 
   const cleanupBatch = admin.firestore().batch();
@@ -367,6 +387,21 @@ async function sendPushNotificationToRecipients(companyId, notification = {}, re
   const title = String(notification.title || "NivaDesk").slice(0, 120);
   const body = String(notification.message || notification.body || "You have a new update.").slice(0, 240);
   const senderPhotoURL = cleanSupportPhotoURL(notification.senderPhotoURL || notification.imageUrl || notification.imageURL || "");
+  const richImageURL = cleanSupportPhotoURL(
+    notification.richImageURL ||
+    notification.richImageUrl ||
+    notification.previewImageURL ||
+    notification.previewImageUrl ||
+    notification.attachmentImageURL ||
+    notification.attachmentImageUrl ||
+    notification.imageUrl ||
+    notification.imageURL ||
+    notification.senderPhotoURL ||
+    ""
+  );
+  const notificationPayload = richImageURL
+    ? { title, body, imageUrl: richImageURL }
+    : { title, body };
   const data = toPushStringMap({
     companyId,
     orderId: notification.orderId || "",
@@ -383,19 +418,24 @@ async function sendPushNotificationToRecipients(companyId, notification = {}, re
     senderEmail: notification.senderEmail || "",
     senderUid: notification.senderUid || "",
     senderPhotoURL,
-    imageUrl: senderPhotoURL,
+    imageUrl: richImageURL || senderPhotoURL,
+    richImageURL,
+    previewImageURL: notification.previewImageURL || notification.previewImageUrl || "",
     priority: notification.priority || "",
     status: notification.status || ""
   });
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
-    notification: { title, body },
+    notification: notificationPayload,
     data,
+    android: richImageURL ? { notification: { imageUrl: richImageURL } } : undefined,
     apns: {
       headers: { "apns-priority": "10" },
-      payload: { aps: { sound: "default", badge: 1, "mutable-content": 1 } }
-    }
+      payload: { aps: { sound: "default", badge: 1, "mutable-content": 1 } },
+      fcmOptions: richImageURL ? { imageUrl: richImageURL } : undefined
+    },
+    webpush: richImageURL ? { notification: { image: richImageURL } } : undefined
   });
 
   const cleanupBatch = admin.firestore().batch();
@@ -497,6 +537,171 @@ async function writeSupportTicketNotification(companyId, notification = {}, reci
   return { notificationId: notificationRef.id, pushResult };
 }
 
+
+async function requireNotificationWorkspaceAccess(request, companyId = "") {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const cleanCompanyId = String(companyId || request.data?.companyId || "").trim();
+  if (!cleanCompanyId) {
+    throw new HttpsError("invalid-argument", "companyId is required.");
+  }
+
+  const companyRef = admin.firestore().collection("companies").doc(cleanCompanyId);
+  const companySnap = await companyRef.get();
+  if (!companySnap.exists) {
+    throw new HttpsError("not-found", "Workspace not found.");
+  }
+
+  const companyData = companySnap.data() || {};
+  companyData.__workspaceId = cleanCompanyId;
+  if (!uidHasCompanyAccess(companyData, uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to this workspace.");
+  }
+
+  return { uid, companyId: cleanCompanyId, companyRef, companyData };
+}
+
+function notificationReadEmailKey(email = "") {
+  return String(email || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, "_")
+    .replace(/@/g, "_at_");
+}
+
+function notificationMatchesCurrentUser(notificationData = {}, request = {}) {
+  const uid = String(request.auth?.uid || "").trim();
+  const email = supportUserEmail(request);
+  const recipientUids = Array.isArray(notificationData.recipientUids) ? notificationData.recipientUids.map((item) => String(item || "").trim()) : [];
+  const recipientEmails = Array.isArray(notificationData.recipientEmails) ? notificationData.recipientEmails.map((item) => String(item || "").trim().toLowerCase()) : [];
+
+  if (recipientUids.length === 0 && recipientEmails.length === 0) return true;
+  if (uid && recipientUids.includes(uid)) return true;
+  if (email && recipientEmails.includes(email)) return true;
+  return false;
+}
+
+exports.markActivityNotificationRead = onCall({ region: "europe-west2" }, async (request) => {
+  const notificationId = String(request.data?.notificationId || "").trim();
+  if (!notificationId) {
+    throw new HttpsError("invalid-argument", "notificationId is required.");
+  }
+
+  const { uid, companyId } = await requireNotificationWorkspaceAccess(request);
+  const notificationRef = notificationCollectionRef(companyId).doc(notificationId);
+  const notificationSnap = await notificationRef.get();
+
+  if (!notificationSnap.exists) {
+    throw new HttpsError("not-found", "Notification not found.");
+  }
+
+  const notificationData = notificationSnap.data() || {};
+  if (!notificationMatchesCurrentUser(notificationData, request)) {
+    throw new HttpsError("permission-denied", "This notification is not assigned to your account.");
+  }
+
+  const emailKey = notificationReadEmailKey(supportUserEmail(request));
+  const readPayload = {
+    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+  if (emailKey) {
+    readPayload[`readBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  await notificationRef.set(readPayload, { merge: true });
+
+  return { ok: true, notificationId };
+});
+
+exports.markAllActivityNotificationsRead = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId } = await requireNotificationWorkspaceAccess(request);
+
+  const snap = await notificationCollectionRef(companyId)
+    .orderBy("createdAt", "desc")
+    .limit(200)
+    .get();
+
+  const batch = admin.firestore().batch();
+  let updated = 0;
+
+  const emailKey = notificationReadEmailKey(supportUserEmail(request));
+
+  snap.forEach((doc) => {
+    const data = doc.data() || {};
+    if (!notificationMatchesCurrentUser(data, request)) return;
+    const readBy = data.readBy && typeof data.readBy === "object" && !Array.isArray(data.readBy) ? data.readBy : {};
+    if (readBy[uid] || (emailKey && readBy[emailKey])) return;
+
+    const readPayload = {
+      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    if (emailKey) {
+      readPayload[`readBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+    }
+
+    batch.set(doc.ref, readPayload, { merge: true });
+    updated += 1;
+  });
+
+  if (updated > 0) {
+    await batch.commit();
+  }
+
+  return { ok: true, updated };
+});
+
+
+
+exports.dismissActivityNotifications = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId } = await requireNotificationWorkspaceAccess(request);
+
+  const rawIds = Array.isArray(request.data?.notificationIds) ? request.data.notificationIds : [];
+  const notificationIds = supportUniqueStrings(rawIds.map((item) => String(item || "").trim()).filter(Boolean)).slice(0, 100);
+  if (notificationIds.length === 0) {
+    throw new HttpsError("invalid-argument", "notificationIds is required.");
+  }
+
+  const emailKey = notificationReadEmailKey(supportUserEmail(request));
+  const batch = admin.firestore().batch();
+  let updated = 0;
+
+  for (const notificationId of notificationIds) {
+    const notificationRef = notificationCollectionRef(companyId).doc(notificationId);
+    const notificationSnap = await notificationRef.get();
+
+    if (!notificationSnap.exists) continue;
+    const notificationData = notificationSnap.data() || {};
+    if (!notificationMatchesCurrentUser(notificationData, request)) continue;
+
+    const payload = {
+      [`dismissedBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (emailKey) {
+      payload[`dismissedBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+      payload[`readBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+    }
+
+    batch.set(notificationRef, payload, { merge: true });
+    updated += 1;
+  }
+
+  if (updated > 0) {
+    await batch.commit();
+  }
+
+  return { ok: true, updated };
+});
+
+
+
 function workspaceSupportRecipientEntries(companyData = {}, excludeUid = "") {
   const cleanExcludeUid = String(excludeUid || "").trim();
   const recipients = [];
@@ -526,6 +731,17 @@ function workspaceSupportRecipientEntries(companyData = {}, excludeUid = "") {
     if (role === "owner" || role === "admin") addRecipient(uid, "");
   }
 
+  if (companyData.__supportSettings && typeof companyData.__supportSettings === "object") {
+    for (const managerUid of cleanSupportManagerUidList(companyData.__supportSettings.supportManagerUids || [])) {
+      const member = companyMembersMap(companyData)[managerUid];
+      const email = member && typeof member === "object" && !Array.isArray(member) ? member.email || member.userEmail || "" : "";
+      addRecipient(managerUid, email);
+    }
+    for (const managerEmail of cleanSupportManagerEmailList(companyData.__supportSettings.supportManagerEmails || [])) {
+      addRecipient("", managerEmail);
+    }
+  }
+
   return recipients;
 }
 
@@ -535,6 +751,72 @@ function supportRecipientObject(entries = []) {
     emails: supportUniqueStrings(entries.map((item) => item.email)).map((item) => item.toLowerCase())
   };
 }
+
+function supportSettingsDocRef(companyId = "") {
+  return admin.firestore().collection("companies").doc(String(companyId || "").trim()).collection("supportSettings").doc("general");
+}
+
+async function workspaceSupportSettings(companyId = "") {
+  const cleanCompanyId = String(companyId || "").trim();
+  if (!cleanCompanyId) return {};
+  try {
+    const snap = await supportSettingsDocRef(cleanCompanyId).get();
+    return snap.data() || {};
+  } catch (error) {
+    console.warn("workspaceSupportSettings failed:", error?.message || error);
+    return {};
+  }
+}
+
+function cleanSupportManagerUidList(value = []) {
+  if (!Array.isArray(value)) return [];
+  return supportUniqueStrings(value).slice(0, 50);
+}
+
+function cleanSupportManagerEmailList(value = []) {
+  if (!Array.isArray(value)) return [];
+  return supportUniqueStrings(value).map((item) => item.toLowerCase()).filter((item) => item.includes("@")).slice(0, 50);
+}
+
+function isWorkspaceSupportManagerFromSettings(settings = {}, request = {}) {
+  const uid = String(request.auth?.uid || "").trim();
+  const email = supportUserEmail(request);
+  const managerUids = new Set(cleanSupportManagerUidList(settings.supportManagerUids || settings.managerUids || []));
+  const managerEmails = new Set(cleanSupportManagerEmailList(settings.supportManagerEmails || settings.managerEmails || []));
+  return Boolean((uid && managerUids.has(uid)) || (email && managerEmails.has(email)));
+}
+
+async function canManageWorkspaceSupportQueue(companyId = "", companyData = {}, request = {}) {
+  const uid = String(request.auth?.uid || "").trim();
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  if (uidIsCompanyOwner(companyData, uid) || role === "admin") return true;
+  const settings = await workspaceSupportSettings(companyId);
+  return isWorkspaceSupportManagerFromSettings(settings, request);
+}
+
+async function canAccessWorkspaceTicket(ticketData = {}, companyId = "", companyData = {}, request = {}) {
+  const uid = String(request.auth?.uid || "").trim();
+  if (String(ticketData.createdByUid || "") === uid) return true;
+  return canManageWorkspaceSupportQueue(companyId, companyData, request);
+}
+
+async function canAssignWorkspaceTicketTo(companyId = "", companyData = {}, target = {}) {
+  const targetUid = String(target.uid || target.userId || "").trim();
+  const targetEmail = String(target.email || "").trim().toLowerCase();
+  if (!targetUid && !targetEmail) return false;
+
+  if (targetUid) {
+    const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, targetUid, "member"), "member");
+    if (uidIsCompanyOwner(companyData, targetUid) || role === "admin") return true;
+  }
+
+  const settings = await workspaceSupportSettings(companyId);
+  const managerUids = new Set(cleanSupportManagerUidList(settings.supportManagerUids || settings.managerUids || []));
+  const managerEmails = new Set(cleanSupportManagerEmailList(settings.supportManagerEmails || settings.managerEmails || []));
+  return Boolean((targetUid && managerUids.has(targetUid)) || (targetEmail && managerEmails.has(targetEmail)));
+}
+
+
 
 async function notifySupportAdminsForTicket(companyId, ticketId, ticketData = {}, eventType = "new_ticket") {
   const subject = eventType === "reply"
@@ -595,10 +877,12 @@ async function notifySupportTicketCreator(companyId, ticketId, ticketData = {}, 
 }
 
 async function notifyWorkspaceTicketRecipients(companyId, companyData = {}, ticketId, ticketData = {}, senderUid = "", eventType = "reply", message = "") {
+  const supportSettings = await workspaceSupportSettings(companyId);
+  const companyWithSupportSettings = { ...companyData, __supportSettings: supportSettings };
   const creatorUid = String(ticketData.createdByUid || "").trim();
   const senderIsCreator = senderUid && senderUid === creatorUid;
   const recipientEntries = senderIsCreator
-    ? workspaceSupportRecipientEntries(companyData, senderUid)
+    ? workspaceSupportRecipientEntries(companyWithSupportSettings, senderUid)
     : [{ uid: creatorUid, email: ticketData.createdByEmail || "" }];
 
   const recipient = supportRecipientObject(recipientEntries);
@@ -1358,6 +1642,35 @@ function supportLastMessagePreview(value = "") {
   return cleanSupportText(value, 180);
 }
 
+
+function cleanSupportAttachments(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 6).map((item) => {
+    const raw = item && typeof item === "object" && !Array.isArray(item) ? item : {};
+    const fileURL = cleanSupportPhotoURL(raw.fileURL || raw.url || "");
+    if (!fileURL) return null;
+    const fileName = cleanSupportText(raw.fileName || raw.name || "Attachment", 180) || "Attachment";
+    const fileType = cleanSupportText(raw.fileType || raw.type || "application/octet-stream", 120) || "application/octet-stream";
+    const fileSize = Math.max(0, Math.round(Number(raw.fileSize || raw.size || 0) || 0));
+    return {
+      id: cleanSupportText(raw.id || "", 120) || crypto.randomUUID(),
+      fileName,
+      fileURL,
+      fileType,
+      fileSize
+    };
+  }).filter(Boolean);
+}
+
+function supportMessagePreviewWithAttachments(message = "", attachments = []) {
+  const preview = supportLastMessagePreview(message || "");
+  if (preview) return preview;
+  if (attachments.length === 1) return `Attachment: ${attachments[0].fileName || "file"}`;
+  if (attachments.length > 1) return `${attachments.length} attachments`;
+  return "";
+}
+
+
 function supportNotificationPreview(value = "", fallback = "You have a new support update.") {
   return supportLastMessagePreview(value || fallback).slice(0, 140);
 }
@@ -1565,6 +1878,13 @@ function supportTicketFromDoc(doc, ticketType = "appSupport", currentUid = "") {
     lastMessageByEmail: String(data.lastMessageByEmail || ""),
     lastMessageByRole: String(data.lastMessageByRole || ""),
     lastMessagePreview: String(data.lastMessagePreview || ""),
+    assignedToUid: String(data.assignedToUid || ""),
+    assignedToName: String(data.assignedToName || ""),
+    assignedToEmail: String(data.assignedToEmail || ""),
+    assignedByUid: String(data.assignedByUid || ""),
+    assignedByName: String(data.assignedByName || ""),
+    assignedByEmail: String(data.assignedByEmail || ""),
+    assignedAtMillis: supportTimestampMillis(data.assignedAt),
     readByMillis: supportReadByMillisMap(data.readBy || {}),
     isUnread: supportTicketIsUnreadForUid(data, currentUid)
   };
@@ -1680,6 +2000,64 @@ exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (reques
   return { ok: true, ticketId: ticketRef.id, message: "Workspace ticket sent to the workspace owner." };
 });
 
+
+exports.getWorkspaceSupportManagers = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to read support managers.");
+  }
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  const canManageSupportManagers = uidIsCompanyOwner(companyData, uid) || role === "admin";
+  const settings = await workspaceSupportSettings(companyId);
+  const supportManagerUids = cleanSupportManagerUidList(settings.supportManagerUids || settings.managerUids || []);
+  const supportManagerEmails = cleanSupportManagerEmailList(settings.supportManagerEmails || settings.managerEmails || []);
+  const isSupportManager = isWorkspaceSupportManagerFromSettings({ supportManagerUids, supportManagerEmails }, request);
+
+  return {
+    ok: true,
+    companyId,
+    supportManagerUids,
+    supportManagerEmails,
+    canManageSupportManagers,
+    isSupportManager
+  };
+});
+
+exports.setWorkspaceSupportManagers = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to manage support managers.");
+  }
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  if (!uidIsCompanyOwner(companyData, uid) && role !== "admin") {
+    throw new HttpsError("permission-denied", "Only the workspace owner or admins can manage support managers.");
+  }
+
+  const supportManagerUids = cleanSupportManagerUidList(request.data?.supportManagerUids || []);
+  const supportManagerEmails = cleanSupportManagerEmailList(request.data?.supportManagerEmails || []);
+  await supportSettingsDocRef(companyId).set({
+    supportManagerUids,
+    supportManagerEmails,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid,
+    updatedByEmail: supportUserEmail(request),
+    supportSchemaVersion: 2
+  }, { merge: true });
+
+  return {
+    ok: true,
+    companyId,
+    supportManagerUids,
+    supportManagerEmails,
+    canManageSupportManagers: true,
+    isSupportManager: isWorkspaceSupportManagerFromSettings({ supportManagerUids, supportManagerEmails }, request)
+  };
+});
+
 exports.listWorkspaceTickets = onCall({ region: "europe-west2" }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -1687,8 +2065,7 @@ exports.listWorkspaceTickets = onCall({ region: "europe-west2" }, async (request
   }
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
-  const canSeeWorkspaceQueue = uidIsCompanyOwner(companyData, uid) || role === "admin";
+  const canSeeWorkspaceQueue = await canManageWorkspaceSupportQueue(companyId, companyData, request);
   const collection = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets");
   const query = canSeeWorkspaceQueue ? collection.limit(200) : collection.where("createdByUid", "==", uid).limit(100);
   const snapshot = await query.get();
@@ -1740,10 +2117,9 @@ exports.updateWorkspaceTicketStatus = onCall({ region: "europe-west2" }, async (
   }
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
-  const canManageWorkspaceQueue = uidIsCompanyOwner(companyData, uid) || role === "admin";
+  const canManageWorkspaceQueue = await canManageWorkspaceSupportQueue(companyId, companyData, request);
   if (!canManageWorkspaceQueue) {
-    throw new HttpsError("permission-denied", "Only the workspace owner or admins can update workspace ticket status.");
+    throw new HttpsError("permission-denied", "Only the workspace owner, admins or support managers can update workspace ticket status.");
   }
 
   const ticketId = cleanSupportText(request.data?.ticketId, 160);
@@ -1758,6 +2134,7 @@ exports.updateWorkspaceTicketStatus = onCall({ region: "europe-west2" }, async (
     throw new HttpsError("not-found", "Workspace ticket not found.");
   }
 
+  const oldStatus = String((ticketSnap.data() || {}).status || "open");
   await ticketRef.set({
     status,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1765,6 +2142,11 @@ exports.updateWorkspaceTicketStatus = onCall({ region: "europe-west2" }, async (
     lastStatusChangedByUid: uid,
     lastStatusChangedByEmail: supportUserEmail(request)
   }, { merge: true });
+
+  if (oldStatus !== status) {
+    const actorName = cleanSupportText(request.auth?.token?.name || supportUserEmail(request) || uid, 120);
+    await addWorkspaceTicketSystemMessage(companyId, ticketId, `${actorName} changed status from ${oldStatus} to ${status}.`);
+  }
 
   return { ok: true, ticketId, status, message: "Workspace ticket status updated." };
 });
@@ -1790,6 +2172,7 @@ function supportTicketMessageFromDoc(doc, ticketId = "") {
     authorName: String(data.authorName || ""),
     authorPhotoURL: String(data.authorPhotoURL || data.authorAvatarURL || data.senderPhotoURL || ""),
     authorRole: String(data.authorRole || "user"),
+    attachments: cleanSupportAttachments(data.attachments || []),
     createdAtMillis: toMillis(data.createdAt)
   };
 }
@@ -1811,6 +2194,7 @@ function supportTicketInitialMessage(ticketId = "", ticketData = {}, ticketType 
     authorName: String(ticketData.createdByName || ticketData.createdByEmail || ""),
     authorPhotoURL: String(ticketData.createdByPhotoURL || ticketData.authorPhotoURL || ""),
     authorRole: "user",
+    attachments: cleanSupportAttachments(ticketData.attachments || []),
     createdAtMillis: toMillis(ticketData.createdAt)
   };
 }
@@ -1896,8 +2280,10 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
 
     const ticketId = cleanSupportText(request.data?.ticketId, 160);
     const message = cleanSupportMultiline(request.data?.message, 5000);
-    if (!ticketId || !message) {
-      throw new HttpsError("invalid-argument", "ticketId and message are required.");
+    const attachments = cleanSupportAttachments(request.data?.attachments || []);
+    const suppressNotification = request.data?.suppressNotification === true;
+    if (!ticketId || (!message && attachments.length === 0)) {
+      throw new HttpsError("invalid-argument", "ticketId and message or attachments are required.");
     }
 
     const ticketRef = admin.firestore().collection("supportTickets").doc(ticketId);
@@ -1918,6 +2304,7 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
     const payload = {
       ticketId,
       message,
+      attachments,
       ...supportAuthorPayload(request, isAdmin ? "supportAdmin" : "user"),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       source: "callable",
@@ -1936,26 +2323,28 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
       lastMessageByRole: isAdmin ? "supportAdmin" : "user",
       lastMessageByName: payload.authorName,
       lastMessageByPhotoURL: payload.authorPhotoURL || "",
-      lastMessagePreview: supportLastMessagePreview(message),
+      lastMessagePreview: supportMessagePreviewWithAttachments(message, attachments),
       status: nextStatus
     }, { merge: true });
     await batch.commit();
 
-    await safeSupportNotification("support ticket reply notification", () => {
-      const nextTicketData = {
-        ...ticketData,
-        status: nextStatus,
-        lastMessagePreview: supportLastMessagePreview(message),
-        lastMessageByUid: uid,
-        lastMessageByEmail: supportUserEmail(request),
-        lastMessageByRole: isAdmin ? "supportAdmin" : "user",
-        lastMessageByName: payload.authorName,
-        lastMessageByPhotoURL: payload.authorPhotoURL || ""
-      };
-      return isAdmin
-        ? notifySupportTicketCreator(String(ticketData.companyId || ""), ticketId, nextTicketData, message)
-        : notifySupportAdminsForTicket(String(ticketData.companyId || ""), ticketId, nextTicketData, "reply");
-    });
+    if (!suppressNotification) {
+      await safeSupportNotification("support ticket reply notification", () => {
+        const nextTicketData = {
+          ...ticketData,
+          status: nextStatus,
+          lastMessagePreview: supportMessagePreviewWithAttachments(message, attachments),
+          lastMessageByUid: uid,
+          lastMessageByEmail: supportUserEmail(request),
+          lastMessageByRole: isAdmin ? "supportAdmin" : "user",
+          lastMessageByName: payload.authorName,
+          lastMessageByPhotoURL: payload.authorPhotoURL || ""
+        };
+        return isAdmin
+          ? notifySupportTicketCreator(String(ticketData.companyId || ""), ticketId, nextTicketData, message)
+          : notifySupportAdminsForTicket(String(ticketData.companyId || ""), ticketId, nextTicketData, "reply");
+      });
+    }
 
     return { ok: true, ticketId, messageId: messageRef.id, status: nextStatus, message: "Reply sent." };
   } catch (error) {
@@ -1983,7 +2372,7 @@ exports.listWorkspaceTicketMessages = onCall({ region: "europe-west2" }, async (
     }
 
     const ticketData = ticketSnap.data() || {};
-    if (!canReplyWorkspaceTicket(ticketData, companyData, request)) {
+    if (!(await canAccessWorkspaceTicket(ticketData, companyId, companyData, request))) {
       throw new HttpsError("permission-denied", "You do not have access to this workspace ticket.");
     }
 
@@ -2010,8 +2399,9 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
     const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
     const ticketId = cleanSupportText(request.data?.ticketId, 160);
     const message = cleanSupportMultiline(request.data?.message, 5000);
-    if (!ticketId || !message) {
-      throw new HttpsError("invalid-argument", "ticketId and message are required.");
+    const attachments = cleanSupportAttachments(request.data?.attachments || []);
+    if (!ticketId || (!message && attachments.length === 0)) {
+      throw new HttpsError("invalid-argument", "ticketId and message or attachments are required.");
     }
 
     const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc(ticketId);
@@ -2021,18 +2411,18 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
     }
 
     const ticketData = ticketSnap.data() || {};
-    if (!canReplyWorkspaceTicket(ticketData, companyData, request)) {
+    if (!(await canAccessWorkspaceTicket(ticketData, companyId, companyData, request))) {
       throw new HttpsError("permission-denied", "You do not have access to reply to this workspace ticket.");
     }
 
-    const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
-    const isManager = uidIsCompanyOwner(companyData, uid) || role === "admin";
+    const isManager = await canManageWorkspaceSupportQueue(companyId, companyData, request);
     const messageRef = ticketRef.collection("messages").doc();
     const currentStatus = String(ticketData.status || "open");
     const nextStatus = isManager ? "waitingForUser" : (["resolved", "closed"].includes(currentStatus) ? "open" : currentStatus);
     const payload = {
       ticketId,
       message,
+      attachments,
       ...supportAuthorPayload(request, isManager ? "workspaceAdmin" : "user"),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       source: "callable",
@@ -2050,28 +2440,173 @@ exports.addWorkspaceTicketReply = onCall({ region: "europe-west2" }, async (requ
       lastMessageByRole: isManager ? "workspaceAdmin" : "user",
       lastMessageByName: payload.authorName,
       lastMessageByPhotoURL: payload.authorPhotoURL || "",
-      lastMessagePreview: supportLastMessagePreview(message),
+      lastMessagePreview: supportMessagePreviewWithAttachments(message, attachments),
       status: nextStatus
     }, { merge: true });
     await batch.commit();
 
-    await safeSupportNotification("workspace ticket reply notification", () => {
-      const nextTicketData = {
-        ...ticketData,
-        status: nextStatus,
-        lastMessagePreview: supportLastMessagePreview(message),
-        lastMessageByUid: uid,
-        lastMessageByEmail: supportUserEmail(request),
-        lastMessageByRole: isManager ? "workspaceAdmin" : "user",
-        lastMessageByName: payload.authorName,
-        lastMessageByPhotoURL: payload.authorPhotoURL || ""
-      };
-      return notifyWorkspaceTicketRecipients(companyId, companyData, ticketId, nextTicketData, uid, "reply", message);
-    });
+    if (!suppressNotification) {
+      await safeSupportNotification("workspace ticket reply notification", () => {
+        const nextTicketData = {
+          ...ticketData,
+          status: nextStatus,
+          lastMessagePreview: supportMessagePreviewWithAttachments(message, attachments),
+          lastMessageByUid: uid,
+          lastMessageByEmail: supportUserEmail(request),
+          lastMessageByRole: isManager ? "workspaceAdmin" : "user",
+          lastMessageByName: payload.authorName,
+          lastMessageByPhotoURL: payload.authorPhotoURL || ""
+        };
+        return notifyWorkspaceTicketRecipients(companyId, companyData, ticketId, nextTicketData, uid, "reply", message);
+      });
+    }
 
     return { ok: true, ticketId, messageId: messageRef.id, status: nextStatus, message: "Reply sent." };
   } catch (error) {
     throw supportCallableInternalError("addWorkspaceTicketReply", error);
+  }
+});
+
+
+
+
+async function addWorkspaceTicketSystemMessage(companyId, ticketId, message) {
+  const cleanCompanyId = cleanSupportText(companyId, 160);
+  const cleanTicketId = cleanSupportText(ticketId, 160);
+  const cleanMessage = cleanSupportText(message, 500);
+  if (!cleanCompanyId || !cleanTicketId || !cleanMessage) return { ok: false, reason: "missing_parameters" };
+
+  const messageRef = admin.firestore()
+    .collection("companies")
+    .doc(cleanCompanyId)
+    .collection("workspaceTickets")
+    .doc(cleanTicketId)
+    .collection("messages")
+    .doc();
+
+  await messageRef.set({
+    ticketId: cleanTicketId,
+    message: cleanMessage,
+    authorUid: "system",
+    authorEmail: "",
+    authorName: "System",
+    authorPhotoURL: "",
+    authorRole: "system",
+    attachments: [],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "system",
+    supportSchemaVersion: 2
+  });
+
+  return { ok: true, messageId: messageRef.id };
+}
+
+
+exports.assignWorkspaceTicket = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to assign workspace tickets.");
+    }
+
+    const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const canManageWorkspaceQueue = await canManageWorkspaceSupportQueue(companyId, companyData, request);
+    if (!canManageWorkspaceQueue) {
+      throw new HttpsError("permission-denied", "Only the workspace owner, admins or support managers can assign workspace tickets.");
+    }
+
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    if (!ticketId) {
+      throw new HttpsError("invalid-argument", "ticketId is required.");
+    }
+
+    const ticketRef = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Workspace ticket not found.");
+    }
+
+    const assignedToUid = cleanSupportText(request.data?.assignedToUid || "", 160);
+    const assignedToEmail = cleanSupportText(request.data?.assignedToEmail || "", 240).toLowerCase();
+    const assignedToName = cleanSupportText(request.data?.assignedToName || assignedToEmail || assignedToUid || "", 160);
+
+    if (!assignedToUid && !assignedToEmail) {
+      const previousAssignee = cleanSupportText((ticketSnap.data() || {}).assignedToName || (ticketSnap.data() || {}).assignedToEmail || "", 160);
+      await ticketRef.set({
+        assignedToUid: admin.firestore.FieldValue.delete(),
+        assignedToEmail: admin.firestore.FieldValue.delete(),
+        assignedToName: admin.firestore.FieldValue.delete(),
+        assignedAt: admin.firestore.FieldValue.delete(),
+        assignedByUid: admin.firestore.FieldValue.delete(),
+        assignedByEmail: admin.firestore.FieldValue.delete(),
+        assignedByName: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        assignmentUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      const actorName = cleanSupportText(request.auth?.token?.name || supportUserEmail(request) || uid, 120);
+      await addWorkspaceTicketSystemMessage(companyId, ticketId, previousAssignee ? `${actorName} unassigned this ticket from ${previousAssignee}.` : `${actorName} unassigned this ticket.`);
+
+      return { ok: true, ticketId, assigned: false, message: "Ticket unassigned." };
+    }
+
+    const canAssignTarget = await canAssignWorkspaceTicketTo(companyId, companyData, {
+      uid: assignedToUid,
+      email: assignedToEmail
+    });
+    if (!canAssignTarget) {
+      throw new HttpsError("permission-denied", "Tickets can only be assigned to the owner, admins or support managers.");
+    }
+
+    const assignerName = cleanSupportText(request.auth?.token?.name || supportUserEmail(request) || uid, 160);
+    await ticketRef.set({
+      assignedToUid,
+      assignedToEmail,
+      assignedToName,
+      assignedAt: admin.firestore.FieldValue.serverTimestamp(),
+      assignedByUid: uid,
+      assignedByEmail: supportUserEmail(request),
+      assignedByName: assignerName,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      assignmentUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    await addWorkspaceTicketSystemMessage(companyId, ticketId, `${assignerName} assigned this ticket to ${assignedToName}.`);
+
+    if (assignedToUid !== uid || (assignedToEmail && assignedToEmail !== supportUserEmail(request))) {
+      await safeSupportNotification("workspace ticket assigned notification", () =>
+        writeSupportTicketNotification(companyId, {
+          type: "workspace_ticket_assigned",
+          title: "Ticket assigned to you",
+          message: `${assignerName} assigned you: ${cleanSupportText((ticketSnap.data() || {}).title || "Workspace ticket", 120)}`,
+          ticketId,
+          ticketType: "workspace",
+          ticketTitle: (ticketSnap.data() || {}).title || "",
+          route: "supportTicket",
+          senderUid: uid,
+          senderEmail: supportUserEmail(request),
+          senderName: assignerName,
+          senderPhotoURL: supportPhotoURLFromRequest(request),
+          priority: (ticketSnap.data() || {}).priority || "",
+          status: (ticketSnap.data() || {}).status || ""
+        }, {
+          userIds: assignedToUid ? [assignedToUid] : [],
+          emails: assignedToEmail ? [assignedToEmail] : []
+        })
+      );
+    }
+
+    return {
+      ok: true,
+      ticketId,
+      assigned: true,
+      assignedToUid,
+      assignedToEmail,
+      assignedToName,
+      message: "Ticket assigned."
+    };
+  } catch (error) {
+    throw supportCallableInternalError("assignWorkspaceTicket", error);
   }
 });
 
@@ -2130,7 +2665,7 @@ exports.markWorkspaceTicketRead = onCall({ region: "europe-west2" }, async (requ
     }
 
     const ticketData = ticketSnap.data() || {};
-    if (!canReplyWorkspaceTicket(ticketData, companyData, request)) {
+    if (!(await canAccessWorkspaceTicket(ticketData, companyId, companyData, request))) {
       throw new HttpsError("permission-denied", "You do not have access to this workspace ticket.");
     }
 
@@ -2157,8 +2692,7 @@ exports.getSupportTicketUnreadSummary = onCall({ region: "europe-west2" }, async
       ? admin.firestore().collection("supportTickets").limit(200)
       : admin.firestore().collection("supportTickets").where("companyId", "==", companyId).where("createdByUid", "==", uid).limit(100);
 
-    const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
-    const canSeeWorkspaceQueue = uidIsCompanyOwner(companyData, uid) || role === "admin";
+    const canSeeWorkspaceQueue = await canManageWorkspaceSupportQueue(companyId, companyData, request);
     const workspaceCollection = admin.firestore().collection("companies").doc(companyId).collection("workspaceTickets");
     const workspaceQuery = canSeeWorkspaceQueue ? workspaceCollection.limit(200) : workspaceCollection.where("createdByUid", "==", uid).limit(100);
 
@@ -10178,6 +10712,8 @@ function messageThreadFromDoc(doc, currentUid = "") {
     lastMessageByName: String(data.lastMessageByName || ""),
     lastMessageByPhotoURL: String(data.lastMessageByPhotoURL || ""),
     readByMillis: Object.fromEntries(Object.entries(readBy).map(([uid, ts]) => [uid, messageMillis(ts)])),
+    mutedUntilByMillis: Object.fromEntries(Object.entries(data.mutedUntilBy && typeof data.mutedUntilBy === "object" && !Array.isArray(data.mutedUntilBy) ? data.mutedUntilBy : {}).map(([uid, ts]) => [uid, messageMillis(ts)])),
+    pinnedMessageIds: Array.isArray(data.pinnedMessageIds) ? data.pinnedMessageIds.map(String) : [],
     isUnread: Boolean(lastMessageAt > 0 && lastMessageAt > currentReadAt && lastMessageByUid !== currentUid)
   };
 }
@@ -10197,9 +10733,92 @@ function messageFromDoc(doc, threadId = "") {
     fileName: String(data.fileName || ""),
     fileURL: String(data.fileURL || ""),
     fileType: String(data.fileType || ""),
-    fileSize: Number(data.fileSize || 0)
+    fileSize: Number(data.fileSize || 0),
+    deletedForEveryone: data.deletedForEveryone === true,
+    deletedByUid: String(data.deletedByUid || ""),
+    deletedAtMillis: messageMillis(data.deletedAt),
+    pinned: data.pinned === true,
+    pinnedByUid: String(data.pinnedByUid || ""),
+    pinnedByName: String(data.pinnedByName || ""),
+    pinnedAtMillis: messageMillis(data.pinnedAt),
+    replyToMessageId: String(data.replyToMessageId || ""),
+    replyToText: String(data.replyToText || ""),
+    replyToSenderName: String(data.replyToSenderName || ""),
+    replyToSenderUid: String(data.replyToSenderUid || ""),
+    replyToFileName: String(data.replyToFileName || ""),
+    replyToType: String(data.replyToType || ""),
+    reactions: data.reactions && typeof data.reactions === "object" && !Array.isArray(data.reactions) ? data.reactions : {},
+    mentionedUids: Array.isArray(data.mentionedUids) ? data.mentionedUids.map(String) : [],
+    edited: data.edited === true,
+    editedAtMillis: messageMillis(data.editedAt),
+    editedByUid: String(data.editedByUid || "")
   };
 }
+
+
+const DEFAULT_MESSAGE_WORKSPACE_SETTINGS = Object.freeze({
+  directMessagesEnabled: true,
+  groupConversationsEnabled: true,
+  attachmentsEnabled: true
+});
+
+function messageWorkspaceSettingsRef(companyId) {
+  return admin.firestore().collection("companies").doc(companyId).collection("messageSettings").doc("general");
+}
+
+function cleanMessageWorkspaceSettings(value = {}) {
+  const settings = { ...DEFAULT_MESSAGE_WORKSPACE_SETTINGS };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return settings;
+  for (const key of Object.keys(settings)) {
+    if (typeof value[key] === "boolean") settings[key] = value[key];
+  }
+  return settings;
+}
+
+async function loadMessageWorkspaceSettings(companyId) {
+  try {
+    const snap = await messageWorkspaceSettingsRef(companyId).get();
+    return cleanMessageWorkspaceSettings(snap.data() || {});
+  } catch (error) {
+    console.warn("Could not read message workspace settings:", error?.message || error);
+    return { ...DEFAULT_MESSAGE_WORKSPACE_SETTINGS };
+  }
+}
+
+function canManageMessageWorkspaceSettings(companyData = {}, uid = "") {
+  if (uidIsCompanyOwner(companyData, uid)) return true;
+  return normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member") === "admin";
+}
+
+exports.getMessageWorkspaceSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to read message settings.");
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const settings = await loadMessageWorkspaceSettings(companyId);
+  return {
+    ok: true,
+    companyId,
+    settings,
+    canManage: canManageMessageWorkspaceSettings(companyData, uid)
+  };
+});
+
+exports.setMessageWorkspaceSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update message settings.");
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!canManageMessageWorkspaceSettings(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner or admins can update message settings.");
+  }
+  const settings = cleanMessageWorkspaceSettings(request.data || {});
+  await messageWorkspaceSettingsRef(companyId).set({
+    ...settings,
+    companyId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid
+  }, { merge: true });
+  return { ok: true, companyId, settings };
+});
 
 async function ensureTeamMessageThread(companyId, companyData = {}) {
   const threadRef = messageThreadsRef(companyId).doc("team");
@@ -10253,10 +10872,15 @@ exports.createMessageThread = onCall({ region: "europe-west2" }, async (request)
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
   const type = String(request.data?.type || "team").trim() === "direct" ? "direct" : "team";
+  const messageSettings = await loadMessageWorkspaceSettings(companyId);
 
   if (type === "team") {
     await ensureTeamMessageThread(companyId, companyData);
     return { ok: true, threadId: "team" };
+  }
+
+  if (messageSettings.directMessagesEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Direct messages are disabled for this workspace.");
   }
 
   const otherUid = cleanSupportText(request.data?.memberUid || request.data?.otherUid || "", 160);
@@ -10271,7 +10895,13 @@ exports.createMessageThread = onCall({ region: "europe-west2" }, async (request)
   const otherEntry = members.find((item) => item.uid === otherUid) || {};
   const otherEmail = cleanSupportText(otherEntry.email || "", 240).toLowerCase();
 
-  await messageThreadsRef(companyId).doc(threadId).set({
+  const existingThreadRef = messageThreadsRef(companyId).doc(threadId);
+  const existingThreadSnap = await existingThreadRef.get();
+  if (existingThreadSnap.exists) {
+    return { ok: true, threadId };
+  }
+
+  await existingThreadRef.set({
     companyId,
     type: "direct",
     title: cleanSupportText(otherEntry.name || otherEntry.email || "Direct message", 120),
@@ -10319,7 +10949,13 @@ exports.listThreadMessages = onCall({ region: "europe-west2" }, async (request) 
   const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
 
   const snap = await threadRef.collection("messages").orderBy("createdAt", "asc").limit(300).get();
-  const messages = snap.docs.map((doc) => messageFromDoc(doc, threadId));
+  const messages = snap.docs
+    .filter((doc) => {
+      const data = doc.data() || {};
+      const hiddenFor = data.hiddenFor && typeof data.hiddenFor === "object" && !Array.isArray(data.hiddenFor) ? data.hiddenFor : {};
+      return hiddenFor[uid] !== true;
+    })
+    .map((doc) => messageFromDoc(doc, threadId));
   return { ok: true, threadId, messages };
 });
 
@@ -10332,24 +10968,140 @@ exports.markMessageThreadRead = onCall({ region: "europe-west2" }, async (reques
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
   const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
 
+  const requestedReadAtMillis = Number(request.data?.readAtMillis || 0);
+  const readAt = Number.isFinite(requestedReadAtMillis) && requestedReadAtMillis > 0
+    ? admin.firestore.Timestamp.fromMillis(requestedReadAtMillis)
+    : admin.firestore.FieldValue.serverTimestamp();
+
   await threadRef.set({
-    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    [`readBy.${uid}`]: readAt,
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
   return { ok: true, threadId };
 });
 
+function mutedUntilMillisForUid(threadData = {}, uid = "") {
+  const cleanUid = String(uid || "").trim();
+  if (!cleanUid) return 0;
+  const mutedMap = threadData.mutedUntilBy && typeof threadData.mutedUntilBy === "object" && !Array.isArray(threadData.mutedUntilBy)
+    ? threadData.mutedUntilBy
+    : {};
+  return messageMillis(mutedMap[cleanUid]);
+}
+
+function activeUntilMillisForUid(threadData = {}, uid = "") {
+  const cleanUid = String(uid || "").trim();
+  if (!cleanUid) return 0;
+  const activeMap = threadData.activeUntilBy && typeof threadData.activeUntilBy === "object" && !Array.isArray(threadData.activeUntilBy)
+    ? threadData.activeUntilBy
+    : {};
+  return messageMillis(activeMap[cleanUid]);
+}
+
+function pushEligibleMessageRecipients(threadData = {}, recipientUids = [], mentionedUids = []) {
+  const mentionSet = new Set((mentionedUids || []).map((item) => String(item || "").trim()).filter(Boolean));
+  const now = Date.now();
+  return supportUniqueStrings(recipientUids).filter((uid) => {
+    const cleanUid = String(uid || "").trim();
+    if (!cleanUid) return false;
+
+    // If the recipient is actively viewing this exact conversation, do not send a push.
+    // The unread state still updates in Firestore, but the device will not receive a duplicate alert.
+    const activeUntil = activeUntilMillisForUid(threadData, cleanUid);
+    if (activeUntil > now) return false;
+
+    // Mentions can bypass mute, but not the active-viewing suppression above.
+    if (mentionSet.has(cleanUid)) return true;
+
+    const mutedUntil = mutedUntilMillisForUid(threadData, cleanUid);
+    return !(mutedUntil > now);
+  });
+}
+
+exports.setMessageThreadActive = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update conversation presence.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const isActive = request.data?.isActive === true;
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+
+  const activeField = new admin.firestore.FieldPath("activeUntilBy", uid);
+  if (isActive) {
+    await threadRef.update(
+      activeField, admin.firestore.Timestamp.fromMillis(Date.now() + 90 * 1000),
+      "activeUpdatedAt", admin.firestore.FieldValue.serverTimestamp()
+    );
+  } else {
+    await threadRef.update(
+      activeField, admin.firestore.FieldValue.delete(),
+      "activeUpdatedAt", admin.firestore.FieldValue.serverTimestamp()
+    );
+  }
+
+  return { ok: true, threadId, isActive };
+});
+
+exports.setMessageThreadMute = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to mute a conversation.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const mode = cleanSupportText(request.data?.mode || "oneHour", 40);
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+
+  const now = Date.now();
+  let mutedUntilMillis = 0;
+  if (["oneHour", "1h", "hour"].includes(mode)) {
+    mutedUntilMillis = now + 60 * 60 * 1000;
+  } else if (mode === "today") {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    mutedUntilMillis = end.getTime();
+  } else if (["forever", "untilOn", "untilIUnmute"].includes(mode)) {
+    mutedUntilMillis = now + 3650 * 24 * 60 * 60 * 1000;
+  } else if (["unmute", "off", "none"].includes(mode)) {
+    mutedUntilMillis = 0;
+  }
+
+  const muteField = new admin.firestore.FieldPath("mutedUntilBy", uid);
+  if (mutedUntilMillis > 0) {
+    await threadRef.update(
+      muteField, admin.firestore.Timestamp.fromMillis(mutedUntilMillis),
+      "updatedAt", admin.firestore.FieldValue.serverTimestamp()
+    );
+  } else {
+    await threadRef.update(
+      muteField, admin.firestore.FieldValue.delete(),
+      "updatedAt", admin.firestore.FieldValue.serverTimestamp()
+    );
+  }
+
+  return { ok: true, threadId, mutedUntilMillis };
+});
+
 async function notifyMessageRecipients(companyId, threadId, threadData, messageId, messageData, recipientUids = []) {
   const cleanRecipientUids = supportUniqueStrings(recipientUids);
   if (cleanRecipientUids.length === 0) return { sent: 0, failed: 0, reason: "no_recipients" };
 
-  const title = `${messageData.senderName || "Team member"} • ${threadData.title || "Messages"}`.slice(0, 120);
+  const mentionedUids = Array.isArray(messageData.mentionedUids) ? messageData.mentionedUids.map(String) : [];
+  const pushRecipientUids = pushEligibleMessageRecipients(threadData, cleanRecipientUids, mentionedUids);
+  const hasMention = mentionedUids.some((item) => cleanRecipientUids.includes(item));
+  const title = `${hasMention ? "@ " : ""}${messageData.senderName || "Team member"} • ${threadData.title || "Messages"}`.slice(0, 120);
   const body = cleanSupportText(messageData.text || messageData.fileName || "Sent a file", 240);
+  const messageType = String(messageData.type || "").toLowerCase();
+  const messageFileURL = cleanSupportPhotoURL(messageData.fileURL || "");
+  const messageSenderPhotoURL = cleanSupportPhotoURL(messageData.senderPhotoURL || "");
+  const messageRichImageURL = messageType === "image" && messageFileURL ? messageFileURL : messageSenderPhotoURL;
   const notificationRef = notificationCollectionRef(companyId).doc();
   const payload = {
     companyId,
-    type: "message",
+    type: hasMention ? "message_mention" : "message",
     title,
     message: body,
     route: "messageThread",
@@ -10359,10 +11111,13 @@ async function notifyMessageRecipients(companyId, threadId, threadData, messageI
     senderUid: messageData.senderUid || "",
     senderEmail: messageData.senderEmail || "",
     senderName: messageData.senderName || "",
-    senderPhotoURL: messageData.senderPhotoURL || "",
-    imageUrl: messageData.senderPhotoURL || "",
+    senderPhotoURL: messageSenderPhotoURL,
+    imageUrl: messageRichImageURL,
+    richImageURL: messageRichImageURL,
+    previewImageURL: messageType === "image" ? messageFileURL : "",
     recipientUids: cleanRecipientUids,
     recipientEmails: [],
+    mentionedUids,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     read: false,
     actioned: false,
@@ -10374,11 +11129,15 @@ async function notifyMessageRecipients(companyId, threadId, threadData, messageI
 
   let pushResult = { sent: 0, failed: 0, reason: "not_attempted" };
   try {
-    pushResult = await sendPushNotificationToRecipients(companyId, {
-      ...payload,
-      notificationId: notificationRef.id,
-      body
-    }, { userIds: cleanRecipientUids, emails: [] });
+    if (pushRecipientUids.length === 0) {
+      pushResult = { sent: 0, failed: 0, reason: "all_recipients_muted", muted: true };
+    } else {
+      pushResult = await sendPushNotificationToRecipients(companyId, {
+        ...payload,
+        notificationId: notificationRef.id,
+        body
+      }, { userIds: pushRecipientUids, emails: [] });
+    }
   } catch (error) {
     console.error("Message push failed:", notificationRef.id, error?.message || error);
     pushResult = { sent: 0, failed: 1, error: error?.message || String(error) };
@@ -10393,6 +11152,498 @@ async function notifyMessageRecipients(companyId, threadId, threadData, messageI
   return pushResult;
 }
 
+
+const MESSAGE_REACTION_EMOJIS = new Set(["👍", "❤️", "😂", "✅", "👀", "🙏"]);
+
+function cleanMessageReactionEmoji(value = "") {
+  const emoji = String(value || "").trim();
+  return MESSAGE_REACTION_EMOJIS.has(emoji) ? emoji : "";
+}
+
+function cleanMentionedMessageUids(value = [], allowedUids = [], senderUid = "") {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set((allowedUids || []).map((item) => String(item || "").trim()).filter(Boolean));
+  const sender = String(senderUid || "").trim();
+  const out = [];
+  for (const raw of value) {
+    const uid = String(raw || "").trim();
+    if (!uid || uid === sender || !allowed.has(uid) || out.includes(uid)) continue;
+    out.push(uid);
+  }
+  return out.slice(0, 25);
+}
+
+exports.toggleMessageReaction = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to react to messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const messageId = cleanSupportText(request.data?.messageId, 220);
+  const emoji = cleanMessageReactionEmoji(request.data?.emoji || "");
+  if (!messageId || !emoji) {
+    throw new HttpsError("invalid-argument", "Please choose a valid message reaction.");
+  }
+
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const messageRef = threadRef.collection("messages").doc(messageId);
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const userLabel = cleanSupportText(request.data?.userName || sender.name || sender.email || "Team member", 120);
+
+  await admin.firestore().runTransaction(async (transaction) => {
+    const messageSnap = await transaction.get(messageRef);
+    if (!messageSnap.exists) {
+      throw new HttpsError("not-found", "Message not found.");
+    }
+    const messageData = messageSnap.data() || {};
+    if (messageData.deletedForEveryone === true) {
+      throw new HttpsError("failed-precondition", "Deleted messages cannot receive reactions.");
+    }
+
+    const reactions = messageData.reactions && typeof messageData.reactions === "object" && !Array.isArray(messageData.reactions)
+      ? { ...messageData.reactions }
+      : {};
+    const existingForEmoji = reactions[emoji] && typeof reactions[emoji] === "object" && !Array.isArray(reactions[emoji])
+      ? { ...reactions[emoji] }
+      : {};
+
+    if (Object.prototype.hasOwnProperty.call(existingForEmoji, uid)) {
+      delete existingForEmoji[uid];
+    } else {
+      existingForEmoji[uid] = userLabel;
+    }
+
+    if (Object.keys(existingForEmoji).length === 0) {
+      delete reactions[emoji];
+    } else {
+      reactions[emoji] = existingForEmoji;
+    }
+
+    transaction.set(messageRef, {
+      reactions,
+      reactionsUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      messageSchemaVersion: 2
+    }, { merge: true });
+  });
+
+  return { ok: true, threadId, messageId, emoji };
+});
+
+
+exports.setMessageTypingStatus = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update typing status.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const isTyping = request.data?.isTyping === true;
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const typingRef = threadRef.collection("typing").doc(uid);
+
+  if (!isTyping) {
+    await typingRef.delete().catch(async () => {
+      await typingRef.set({ isTyping: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    });
+    return { ok: true, threadId, isTyping: false };
+  }
+
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  await typingRef.set({
+    uid,
+    name: sender.name || sender.email || "Team member",
+    email: sender.email || "",
+    photoURL: sender.photoURL || "",
+    isTyping: true,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 9000),
+    source: "workspaceMessagesTyping",
+    messageSchemaVersion: 1
+  }, { merge: true });
+
+  return { ok: true, threadId, isTyping: true };
+});
+
+exports.clearMessageTypingStatus = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update typing status.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  await threadRef.collection("typing").doc(uid).delete().catch(() => null);
+  return { ok: true, threadId, isTyping: false };
+});
+
+
+exports.deleteMessageForMe = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to delete messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const messageId = cleanSupportText(request.data?.messageId, 220);
+  if (!messageId) throw new HttpsError("invalid-argument", "messageId is required.");
+
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const messageRef = threadRef.collection("messages").doc(messageId);
+  const messageSnap = await messageRef.get();
+  if (!messageSnap.exists) throw new HttpsError("not-found", "Message not found.");
+
+  await messageRef.set({
+    [`hiddenFor.${uid}`]: true,
+    [`hiddenAt.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { ok: true, threadId, messageId };
+});
+
+exports.deleteMessageForEveryone = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to delete messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const messageId = cleanSupportText(request.data?.messageId, 220);
+  if (!messageId) throw new HttpsError("invalid-argument", "messageId is required.");
+
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const messageRef = threadRef.collection("messages").doc(messageId);
+  const messageSnap = await messageRef.get();
+  if (!messageSnap.exists) throw new HttpsError("not-found", "Message not found.");
+
+  const messageData = messageSnap.data() || {};
+  if (String(messageData.senderUid || "") !== uid) {
+    throw new HttpsError("permission-denied", "You can only delete your own messages for everyone.");
+  }
+
+  const batch = admin.firestore().batch();
+  batch.set(messageRef, {
+    deletedForEveryone: true,
+    deletedByUid: uid,
+    deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+    text: "",
+    fileURL: "",
+    fileName: "",
+    fileType: "",
+    fileSize: 0,
+    type: "deleted",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  try {
+    const latestSnap = await threadRef.collection("messages").orderBy("createdAt", "desc").limit(1).get();
+    if (!latestSnap.empty && latestSnap.docs[0].id === messageId) {
+      batch.set(threadRef, {
+        lastMessageText: "This message was deleted",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+  } catch (error) {
+    console.warn("Could not update deleted last message preview:", error?.message || error);
+  }
+
+  await batch.commit();
+  return { ok: true, threadId, messageId };
+});
+
+exports.addMembersToMessageThread = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to add people to a conversation.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const messageSettings = await loadMessageWorkspaceSettings(companyId);
+  if (messageSettings.groupConversationsEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Group conversations are disabled for this workspace.");
+  }
+  const threadId = cleanSupportText(request.data?.threadId, 220);
+  const requestedMemberUids = Array.isArray(request.data?.memberUids)
+    ? request.data.memberUids.map((item) => cleanSupportText(item, 160)).filter(Boolean)
+    : [];
+
+  if (!threadId) throw new HttpsError("invalid-argument", "threadId is required.");
+  if (threadId === "team") throw new HttpsError("failed-precondition", "Team Chat already includes the workspace team.");
+  if (requestedMemberUids.length === 0) throw new HttpsError("invalid-argument", "Please choose at least one team member.");
+
+  const { threadRef, threadData } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const existingUids = Array.isArray(threadData.memberUids) ? threadData.memberUids.map(String).filter(Boolean) : [];
+  if (!existingUids.includes(uid)) {
+    throw new HttpsError("permission-denied", "You must be a member of this conversation to add people.");
+  }
+
+  const entries = messageWorkspaceMemberEntries(companyData);
+  const entryByUid = new Map(entries.map((entry) => [String(entry.uid || ""), entry]));
+  const addedUids = [];
+  for (const memberUid of supportUniqueStrings(requestedMemberUids)) {
+    if (!memberUid || memberUid === uid || existingUids.includes(memberUid)) continue;
+    if (!uidHasCompanyAccess(companyData, memberUid)) {
+      throw new HttpsError("permission-denied", "Only workspace members can be added to a conversation.");
+    }
+    addedUids.push(memberUid);
+  }
+
+  if (addedUids.length === 0) {
+    return { ok: true, threadId, addedUids: [], message: "No new members to add." };
+  }
+
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const addedEntries = addedUids.map((memberUid) => entryByUid.get(memberUid) || { uid: memberUid, email: "", name: "Team member", photoURL: "" });
+  const allUids = supportUniqueStrings([...existingUids, ...addedUids]);
+  const allEmails = supportUniqueStrings([
+    ...(Array.isArray(threadData.memberEmails) ? threadData.memberEmails.map(String) : []),
+    ...addedEntries.map((entry) => entry.email || "")
+  ]).map((item) => item.toLowerCase());
+
+  const participantPhotoURLs = threadData.participantPhotoURLs && typeof threadData.participantPhotoURLs === "object" && !Array.isArray(threadData.participantPhotoURLs)
+    ? { ...threadData.participantPhotoURLs }
+    : {};
+  for (const entry of addedEntries) {
+    participantPhotoURLs[entry.uid] = await supportPhotoURLForUser(companyId, companyData, entry.uid, entry.email || "", entry.photoURL || "");
+  }
+
+  const addedNames = addedEntries.map((entry) => cleanSupportText(entry.name || entry.email || entry.uid || "Team member", 80));
+  const systemText = `${sender.name || sender.email || "Someone"} added ${addedNames.join(", ")}`.slice(0, 240);
+  const messageRef = threadRef.collection("messages").doc();
+  const messagePayload = {
+    threadId,
+    companyId,
+    text: systemText,
+    senderUid: uid,
+    senderEmail: sender.email || "",
+    senderName: sender.name || sender.email || "Team member",
+    senderPhotoURL: sender.photoURL || "",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    type: "system",
+    source: "addMembersToMessageThread",
+    messageSchemaVersion: 1
+  };
+
+  const batch = admin.firestore().batch();
+  batch.set(threadRef, {
+    type: "group",
+    title: cleanSupportText(threadData.title || "Group chat", 120) || "Group chat",
+    memberUids: allUids,
+    memberEmails: allEmails,
+    participantPhotoURLs,
+    lastMessageText: systemText,
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageByUid: uid,
+    lastMessageByName: sender.name || sender.email || "Team member",
+    lastMessageByPhotoURL: sender.photoURL || "",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    messageSchemaVersion: 1
+  }, { merge: true });
+  batch.set(messageRef, messagePayload);
+  await batch.commit();
+
+  await notifyMessageRecipients(companyId, threadId, { ...threadData, type: "group", title: "Group chat", memberUids: allUids }, messageRef.id, {
+    ...messagePayload,
+    createdAt: Date.now()
+  }, addedUids);
+
+  return { ok: true, threadId, addedUids, message: "People added." };
+});
+
+
+
+
+exports.renameMessageThread = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to rename a group.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220);
+  const title = cleanSupportText(request.data?.title, 80);
+  if (!threadId || !title) throw new HttpsError("invalid-argument", "threadId and title are required.");
+  if (threadId === "team") throw new HttpsError("failed-precondition", "Team Chat cannot be renamed here.");
+
+  const { threadRef, threadData } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const memberUids = Array.isArray(threadData.memberUids) ? threadData.memberUids.map(String).filter(Boolean) : [];
+  const isGroup = String(threadData.type || "") === "group" || memberUids.length > 2;
+  if (!isGroup) throw new HttpsError("failed-precondition", "Only group conversations can be renamed.");
+  if (!memberUids.includes(uid)) throw new HttpsError("permission-denied", "You must be a member of this group.");
+
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const systemText = `${sender.name || sender.email || "Someone"} renamed the group to ${title}`.slice(0, 240);
+  const messageRef = threadRef.collection("messages").doc();
+  const messagePayload = {
+    threadId,
+    companyId,
+    text: systemText,
+    senderUid: uid,
+    senderEmail: sender.email || "",
+    senderName: sender.name || sender.email || "Team member",
+    senderPhotoURL: sender.photoURL || "",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    type: "system",
+    source: "renameMessageThread",
+    messageSchemaVersion: 1
+  };
+
+  const batch = admin.firestore().batch();
+  batch.set(threadRef, {
+    type: "group",
+    title,
+    lastMessageText: systemText,
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageByUid: uid,
+    lastMessageByName: sender.name || sender.email || "Team member",
+    lastMessageByPhotoURL: sender.photoURL || "",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  batch.set(messageRef, messagePayload);
+  await batch.commit();
+
+  const recipients = memberUids.filter((memberUid) => memberUid && memberUid !== uid);
+  await notifyMessageRecipients(companyId, threadId, { ...threadData, type: "group", title, memberUids }, messageRef.id, messagePayload, recipients);
+  return { ok: true, threadId, title };
+});
+
+exports.leaveMessageThread = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to leave a group.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220);
+  if (!threadId) throw new HttpsError("invalid-argument", "threadId is required.");
+  if (threadId === "team") throw new HttpsError("failed-precondition", "You cannot leave Team Chat.");
+
+  const { threadRef, threadData } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const memberUids = Array.isArray(threadData.memberUids) ? threadData.memberUids.map(String).filter(Boolean) : [];
+  const isGroup = String(threadData.type || "") === "group" || memberUids.length > 2;
+  if (!isGroup) throw new HttpsError("failed-precondition", "Only group conversations can be left.");
+  if (!memberUids.includes(uid)) throw new HttpsError("permission-denied", "You are not a member of this group.");
+  if (memberUids.length <= 2) throw new HttpsError("failed-precondition", "A group must keep at least two members.");
+
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const remainingUids = memberUids.filter((memberUid) => memberUid !== uid);
+  const senderEmail = String(sender.email || "").toLowerCase();
+  const remainingEmails = Array.isArray(threadData.memberEmails)
+    ? threadData.memberEmails.map(String).filter((email) => String(email || "").toLowerCase() !== senderEmail)
+    : [];
+  const systemText = `${sender.name || sender.email || "Someone"} left the group`.slice(0, 240);
+  const messageRef = threadRef.collection("messages").doc();
+  const messagePayload = {
+    threadId,
+    companyId,
+    text: systemText,
+    senderUid: uid,
+    senderEmail: sender.email || "",
+    senderName: sender.name || sender.email || "Team member",
+    senderPhotoURL: sender.photoURL || "",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    type: "system",
+    source: "leaveMessageThread",
+    messageSchemaVersion: 1
+  };
+
+  const participantPhotoURLs = threadData.participantPhotoURLs && typeof threadData.participantPhotoURLs === "object" && !Array.isArray(threadData.participantPhotoURLs)
+    ? { ...threadData.participantPhotoURLs }
+    : {};
+  delete participantPhotoURLs[uid];
+
+  const batch = admin.firestore().batch();
+  batch.set(threadRef, {
+    type: "group",
+    memberUids: remainingUids,
+    memberEmails: supportUniqueStrings(remainingEmails).map((item) => item.toLowerCase()),
+    participantPhotoURLs,
+    lastMessageText: systemText,
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageByUid: uid,
+    lastMessageByName: sender.name || sender.email || "Team member",
+    lastMessageByPhotoURL: sender.photoURL || "",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  batch.set(messageRef, messagePayload);
+  await batch.commit();
+
+  await notifyMessageRecipients(companyId, threadId, { ...threadData, type: "group", memberUids: remainingUids }, messageRef.id, messagePayload, remainingUids);
+  return { ok: true, threadId };
+});
+
+exports.removeMemberFromMessageThread = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to remove a group member.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220);
+  const memberUid = cleanSupportText(request.data?.memberUid, 160);
+  if (!threadId || !memberUid) throw new HttpsError("invalid-argument", "threadId and memberUid are required.");
+  if (threadId === "team") throw new HttpsError("failed-precondition", "Team Chat members cannot be removed here.");
+  if (memberUid === uid) throw new HttpsError("invalid-argument", "Use Leave Group to remove yourself.");
+
+  const { threadRef, threadData } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const memberUids = Array.isArray(threadData.memberUids) ? threadData.memberUids.map(String).filter(Boolean) : [];
+  const isGroup = String(threadData.type || "") === "group" || memberUids.length > 2;
+  if (!isGroup) throw new HttpsError("failed-precondition", "Only group conversations can be managed.");
+  if (!memberUids.includes(uid)) throw new HttpsError("permission-denied", "You must be a member of this group.");
+  if (!memberUids.includes(memberUid)) throw new HttpsError("not-found", "This user is not in the group.");
+  if (memberUids.length <= 2) throw new HttpsError("failed-precondition", "A group must keep at least two members.");
+
+  const requesterRole = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  const canRemove = uidIsCompanyOwner(companyData, uid) || requesterRole === "admin";
+  if (!canRemove) {
+    throw new HttpsError("permission-denied", "Only the workspace owner or admins can remove group members.");
+  }
+
+  const entries = messageWorkspaceMemberEntries(companyData);
+  const removedEntry = entries.find((entry) => entry.uid === memberUid) || { uid: memberUid, email: "", name: "Team member", photoURL: "" };
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const remainingUids = memberUids.filter((item) => item !== memberUid);
+  const removedEmail = String(removedEntry.email || "").toLowerCase();
+  const remainingEmails = Array.isArray(threadData.memberEmails)
+    ? threadData.memberEmails.map(String).filter((email) => String(email || "").toLowerCase() !== removedEmail)
+    : [];
+  const removedName = cleanSupportText(removedEntry.name || removedEntry.email || memberUid || "Team member", 80);
+  const systemText = `${sender.name || sender.email || "Someone"} removed ${removedName}`.slice(0, 240);
+  const messageRef = threadRef.collection("messages").doc();
+  const messagePayload = {
+    threadId,
+    companyId,
+    text: systemText,
+    senderUid: uid,
+    senderEmail: sender.email || "",
+    senderName: sender.name || sender.email || "Team member",
+    senderPhotoURL: sender.photoURL || "",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    type: "system",
+    source: "removeMemberFromMessageThread",
+    messageSchemaVersion: 1
+  };
+  const participantPhotoURLs = threadData.participantPhotoURLs && typeof threadData.participantPhotoURLs === "object" && !Array.isArray(threadData.participantPhotoURLs)
+    ? { ...threadData.participantPhotoURLs }
+    : {};
+  delete participantPhotoURLs[memberUid];
+
+  const batch = admin.firestore().batch();
+  batch.set(threadRef, {
+    type: "group",
+    memberUids: remainingUids,
+    memberEmails: supportUniqueStrings(remainingEmails).map((item) => item.toLowerCase()),
+    participantPhotoURLs,
+    lastMessageText: systemText,
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageByUid: uid,
+    lastMessageByName: sender.name || sender.email || "Team member",
+    lastMessageByPhotoURL: sender.photoURL || "",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  batch.set(messageRef, messagePayload);
+  await batch.commit();
+
+  await notifyMessageRecipients(companyId, threadId, { ...threadData, type: "group", memberUids: remainingUids }, messageRef.id, messagePayload, remainingUids);
+  return { ok: true, threadId, removedUid: memberUid };
+});
+
 exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to send messages.");
@@ -10404,9 +11655,18 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
   const fileName = cleanSupportText(request.data?.fileName || "", 240);
   const fileType = cleanSupportText(request.data?.fileType || "", 160);
   const fileSize = Math.max(0, Number(request.data?.fileSize || 0) || 0);
+  const replyToMessageId = cleanSupportText(request.data?.replyToMessageId || "", 220);
+  const requestedMentionedUids = Array.isArray(request.data?.mentionedUids) ? request.data.mentionedUids.map(String) : [];
 
   if (!text && !fileURL) {
     throw new HttpsError("invalid-argument", "Please write a message or attach a file.");
+  }
+
+  if (fileURL) {
+    const messageSettings = await loadMessageWorkspaceSettings(companyId);
+    if (messageSettings.attachmentsEnabled !== true) {
+      throw new HttpsError("failed-precondition", "File sharing is disabled for this workspace.");
+    }
   }
 
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
@@ -10414,6 +11674,32 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
   const sender = await messageSenderProfile(companyId, companyData, request);
   const messageRef = threadRef.collection("messages").doc();
   const messageType = fileURL ? (String(fileType).toLowerCase().startsWith("image/") ? "image" : "file") : "text";
+  const threadMemberUids = Array.isArray(threadData.memberUids) ? threadData.memberUids.map(String) : [];
+  const mentionedUids = cleanMentionedMessageUids(requestedMentionedUids, threadMemberUids, uid);
+
+  const replyPayload = {};
+  if (replyToMessageId) {
+    try {
+      const replySnap = await threadRef.collection("messages").doc(replyToMessageId).get();
+      if (replySnap.exists) {
+        const replyData = replySnap.data() || {};
+        replyPayload.replyToMessageId = replyToMessageId;
+        replyPayload.replyToSenderUid = String(replyData.senderUid || "");
+        replyPayload.replyToSenderName = cleanSupportText(replyData.senderName || replyData.senderEmail || "Original message", 120);
+        replyPayload.replyToType = String(replyData.deletedForEveryone === true ? "deleted" : (replyData.type || "text"));
+        if (replyData.deletedForEveryone === true) {
+          replyPayload.replyToText = "Original message was deleted";
+          replyPayload.replyToFileName = "";
+        } else {
+          replyPayload.replyToText = cleanSupportText(replyData.text || "", 240);
+          replyPayload.replyToFileName = cleanSupportText(replyData.fileName || "", 240);
+        }
+      }
+    } catch (error) {
+      console.warn("Could not hydrate reply message", replyToMessageId, error?.message || error);
+    }
+  }
+
   const messagePayload = {
     threadId,
     companyId,
@@ -10429,6 +11715,8 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
     fileType,
     fileSize,
     source: "callable",
+    ...replyPayload,
+    mentionedUids,
     messageSchemaVersion: 1
   };
 
@@ -10440,6 +11728,7 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
     lastMessageByUid: sender.uid,
     lastMessageByName: sender.name,
     lastMessageByPhotoURL: sender.photoURL,
+    lastMessageId: messageRef.id,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
@@ -10453,4 +11742,58 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
   }, recipientUids);
 
   return { ok: true, threadId, messageId: messageRef.id, message: "Message sent." };
+});
+
+exports.editThreadMessage = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to edit messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "";
+  const messageId = cleanSupportText(request.data?.messageId, 220) || "";
+  const text = cleanMessageText(request.data?.text || "", 5000);
+
+  if (!threadId || !messageId) {
+    throw new HttpsError("invalid-argument", "threadId and messageId are required.");
+  }
+
+  const { threadRef, threadData } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const messageRef = threadRef.collection("messages").doc(messageId);
+  const messageSnap = await messageRef.get();
+  if (!messageSnap.exists) {
+    throw new HttpsError("not-found", "Message not found.");
+  }
+
+  const messageData = messageSnap.data() || {};
+  if (String(messageData.senderUid || "") !== uid) {
+    throw new HttpsError("permission-denied", "You can only edit your own messages.");
+  }
+  if (messageData.deletedForEveryone === true) {
+    throw new HttpsError("failed-precondition", "Deleted messages cannot be edited.");
+  }
+
+  const hasFile = Boolean(cleanSupportPhotoURL(messageData.fileURL || ""));
+  if (!hasFile && !text) {
+    throw new HttpsError("invalid-argument", "Text messages cannot be empty.");
+  }
+
+  const batch = admin.firestore().batch();
+  batch.set(messageRef, {
+    text,
+    edited: true,
+    editedAt: admin.firestore.FieldValue.serverTimestamp(),
+    editedByUid: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  const lastMessageId = String(threadData.lastMessageId || "");
+  if (lastMessageId === messageId) {
+    batch.set(threadRef, {
+      lastMessageText: text || (messageData.fileName ? `File: ${messageData.fileName}` : "Sent a file"),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+
+  await batch.commit();
+  return { ok: true, threadId, messageId, message: "Message edited." };
 });

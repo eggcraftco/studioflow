@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function companyPath(companyId) {
+      return /databases/$(database)/documents/companies/$(companyId);
+    }
+
+    function isOwnWorkspace(companyId) {
+      return signedIn() && companyId == request.auth.uid;
+    }
+
+    function companyExists(companyId) {
+      return exists(companyPath(companyId));
+    }
+
+    function memberRole(companyId) {
+      return get(companyPath(companyId)).data.members[request.auth.uid].role;
+    }
+
+    function isCompanyOwner(companyId) {
+      return isOwnWorkspace(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && get(companyPath(companyId)).data.ownerUid == request.auth.uid
+        );
+    }
+
+    function canReadCompany(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow']
+        );
+    }
+
+    function canWriteCompanyData(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member']
+        );
+    }
+
+    function isOwnMessagePreferenceDoc(userId) {
+      return signedIn() && userId == request.auth.uid;
+    }
+
+    function validMessagePreferenceWrite(companyId, userId) {
+      return isOwnMessagePreferenceDoc(userId)
+        && canReadCompany(companyId)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.companyId == companyId;
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && userId == request.auth.uid;
+
+      match /workspaceAccess/{companyId} {
+        allow read: if signedIn() && userId == request.auth.uid;
+
+        allow create, update, delete: if signedIn()
+          && (
+            userId == request.auth.uid
+            || isCompanyOwner(companyId)
+          );
+      }
+    }
+
+    match /workspaceJoinRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.requesterUid == request.auth.uid
+        && request.resource.data.targetCompanyId is string
+        && request.resource.data.status == 'pending';
+
+      allow read: if signedIn()
+        && (
+          resource.data.requesterUid == request.auth.uid
+          || resource.data.targetCompanyId == request.auth.uid
+        );
+
+      allow update, delete: if signedIn()
+        && (
+          resource.data.requesterUid == request.auth.uid
+          || resource.data.targetCompanyId == request.auth.uid
+        );
+    }
+
+    match /companies/{companyId} {
+      allow create: if signedIn()
+        && companyId == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow read: if canReadCompany(companyId);
+      allow update, delete: if isCompanyOwner(companyId);
+    }
+
+    match /companies/{companyId}/messageUserPreferences/{userId} {
+      allow read: if isOwnMessagePreferenceDoc(userId) && canReadCompany(companyId);
+      allow create, update: if validMessagePreferenceWrite(companyId, userId);
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/{collectionId}/{document=**} {
+      allow read: if collectionId != 'messageUserPreferences' && canReadCompany(companyId);
+      allow write: if collectionId != 'messageUserPreferences' && canWriteCompanyData(companyId);
+    }
+
+    match /siparisler/{orderId} {
+      allow create: if signedIn()
+        && request.resource.data.companyId is string
+        && canWriteCompanyData(request.resource.data.companyId);
+
+      allow read: if resource.data.companyId is string
+        && canReadCompany(resource.data.companyId);
+
+      allow update: if resource.data.companyId is string
+        && request.resource.data.companyId == resource.data.companyId
+        && canWriteCompanyData(resource.data.companyId);
+
+      allow delete: if resource.data.companyId is string
+        && canWriteCompanyData(resource.data.companyId);
+    }
+
+    match /musteriler/{customerId} {
+      allow create: if signedIn()
+        && request.resource.data.companyId is string
+        && canWriteCompanyData(request.resource.data.companyId);
+
+      allow read: if resource.data.companyId is string
+        && canReadCompany(resource.data.companyId);
+
+      allow update: if resource.data.companyId is string
+        && request.resource.data.companyId == resource.data.companyId
+        && canWriteCompanyData(resource.data.companyId);
+
+      allow delete: if resource.data.companyId is string
+        && canWriteCompanyData(resource.data.companyId);
+    }
+
+    match /companySettings/{companyId} {
+      allow read: if canReadCompany(companyId);
+      allow write: if canWriteCompanyData(companyId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -305,6 +305,3385 @@ extension Siparis: Equatable {
     }
 }
 
+
+enum StudioActivityPresentationStyle {
+    case page
+    case drawer
+}
+
+struct StudioActivityCenterView: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
+    @Environment(\.colorScheme) private var activityColorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @State private var filter: String = "all"
+    @State private var typeFilter: String = "all"
+    @State private var searchText: String = ""
+    @State private var filtersExpanded: Bool = false
+    @State private var expandedActivityGroupKeys: Set<String> = []
+    @State private var dismissedActivityNotificationIds: Set<String> = []
+    @State private var hoveredActivityNotificationId: String = ""
+    @State private var hoveredActivityGroupId: String = ""
+
+    var presentationStyle: StudioActivityPresentationStyle = .page
+    var onClose: (() -> Void)? = nil
+    let onOpenNotification: (StudioActivityNotification) -> Void
+
+    private var companyId: String {
+        authVM.currentCompanyId ?? firebaseManager.currentCompanyId
+    }
+
+    private var currentUid: String {
+        authVM.currentUserId ?? ""
+    }
+
+    private var currentEmail: String {
+        authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func activityMatchesSearch(_ item: StudioActivityNotification) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return true }
+
+        return [
+            item.title,
+            item.message,
+            item.type,
+            item.route,
+            item.senderName,
+            item.senderEmail,
+            item.priority,
+            item.status
+        ]
+        .joined(separator: " ")
+        .lowercased()
+        .contains(query)
+    }
+
+    private func activityMatchesType(_ item: StudioActivityNotification, key: String) -> Bool {
+        guard key != "all" else { return true }
+        let type = item.type.lowercased()
+        let route = item.route.lowercased()
+
+        switch key {
+        case "messages":
+            return route.contains("message") || type.contains("message")
+        case "support":
+            return route.contains("support") || type.contains("ticket") || type.contains("support")
+        case "orders":
+            return route.contains("order") || type.contains("order") || type.contains("delivery") || type.contains("tracking")
+        case "tasks":
+            return type.contains("task") || route.contains("task") || type.contains("reminder")
+        case "files":
+            return type.contains("file") || type.contains("attachment") || route.contains("file")
+        case "system":
+            return type.contains("system") || type.contains("plan") || type.contains("workspace")
+        default:
+            return true
+        }
+    }
+
+    private func activityTypeCount(for key: String) -> Int {
+        firebaseManager.activityNotifications.filter { activityMatchesType($0, key: key) }.count
+    }
+
+    private var filteredNotifications: [StudioActivityNotification] {
+        firebaseManager.activityNotifications.filter { item in
+            guard !dismissedActivityNotificationIds.contains(item.id) else { return false }
+            guard !item.isDismissed(for: currentUid, email: currentEmail) else { return false }
+            let matchesReadState = filter == "all" || item.isUnread(for: currentUid, email: currentEmail)
+            let matchesType = activityMatchesType(item, key: typeFilter)
+            let matchesSearch = activityMatchesSearch(item)
+            return matchesReadState && matchesType && matchesSearch
+        }
+    }
+
+    private var unreadCount: Int {
+        firebaseManager.activityNotificationUnreadCount
+    }
+
+    private struct StudioActivityNotificationGroup: Identifiable {
+        let id: String
+        let title: String
+        let items: [StudioActivityNotification]
+        let latestDate: Date
+
+        var count: Int { items.count }
+        var latest: StudioActivityNotification? { items.first }
+        var isStacked: Bool { items.count > 1 }
+    }
+
+    private struct StudioActivityNotificationSection: Identifiable {
+        let id: String
+        let title: String
+        let groups: [StudioActivityNotificationGroup]
+    }
+
+    private var activityDismissCacheKey: String {
+        let companyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = currentUid.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "studioActivityDismissedIds_\(companyId)_\(uid)"
+    }
+
+    private func loadDismissedActivityNotifications() {
+        let key = activityDismissCacheKey
+        guard !key.hasSuffix("_") else {
+            dismissedActivityNotificationIds = []
+            return
+        }
+        dismissedActivityNotificationIds = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+    }
+
+    private func saveDismissedActivityNotifications() {
+        let key = activityDismissCacheKey
+        guard !key.hasSuffix("_") else { return }
+        UserDefaults.standard.set(Array(dismissedActivityNotificationIds.prefix(500)), forKey: key)
+    }
+
+    private func dismissActivityNotificationGroup(_ group: StudioActivityNotificationGroup) {
+        let ids = group.items.map { $0.id }
+        dismissActivityNotificationIds(ids)
+        _ = expandedActivityGroupKeys.remove(group.id)
+    }
+
+    private func dismissSingleActivityNotification(_ item: StudioActivityNotification) {
+        dismissActivityNotificationIds([item.id])
+    }
+
+    private func dismissVisibleActivityNotifications() {
+        let ids = filteredNotifications.map { $0.id }
+        dismissActivityNotificationIds(ids)
+        expandedActivityGroupKeys.removeAll()
+    }
+
+    private func dismissActivityNotificationIds(_ ids: [String]) {
+        let cleanIds = Array(Set(ids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+        guard !cleanIds.isEmpty else { return }
+
+        for id in cleanIds {
+            dismissedActivityNotificationIds.insert(id)
+        }
+        saveDismissedActivityNotifications()
+        firebaseManager.dismissActivityNotifications(companyId: companyId, notificationIds: cleanIds)
+    }
+
+    private func activityStackKey(for item: StudioActivityNotification) -> String {
+        let route = item.route.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let type = item.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if !item.threadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "message:\(item.threadId)"
+        }
+
+        if !item.ticketId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let cleanTicketType = item.ticketType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return "support:\(cleanTicketType):\(item.ticketId)"
+        }
+
+        if !item.orderId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "order:\(item.orderId)"
+        }
+
+        if route.contains("message") || type.contains("message") { return "area:messages" }
+        if route.contains("support") || type.contains("ticket") || type.contains("support") { return "area:support" }
+        if route.contains("order") || type.contains("order") || type.contains("delivery") || type.contains("tracking") { return "area:orders" }
+        if type.contains("task") || route.contains("task") || type.contains("reminder") { return "area:tasks" }
+        if type.contains("file") || type.contains("attachment") || route.contains("file") { return "area:files" }
+        if type.contains("system") || type.contains("plan") || type.contains("workspace") { return "area:system" }
+        return "area:activity"
+    }
+
+    private func activityStackTitle(for item: StudioActivityNotification) -> String {
+        let route = item.route.lowercased()
+        let type = item.type.lowercased()
+
+        if !item.threadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || route.contains("message") || type.contains("message") {
+            return "Messages"
+        }
+        if !item.ticketId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || route.contains("support") || type.contains("ticket") || type.contains("support") {
+            return "Support"
+        }
+        if !item.orderId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || route.contains("order") || type.contains("order") {
+            return "Orders"
+        }
+        if type.contains("task") || route.contains("task") || type.contains("reminder") {
+            return "Tasks"
+        }
+        if type.contains("file") || type.contains("attachment") || route.contains("file") {
+            return "Files"
+        }
+        if type.contains("system") || type.contains("plan") || type.contains("workspace") {
+            return "System"
+        }
+        return "Activity"
+    }
+
+    private func makeActivityNotificationGroups(from items: [StudioActivityNotification], dateKey: String) -> [StudioActivityNotificationGroup] {
+        let grouped = Dictionary(grouping: items, by: activityStackKey(for:))
+        return grouped.map { key, values in
+            let sortedItems = values.sorted { $0.createdAt > $1.createdAt }
+            let title = sortedItems.first.map(activityStackTitle(for:)) ?? "Activity"
+            return StudioActivityNotificationGroup(
+                id: "\(dateKey)|\(key)",
+                title: title,
+                items: sortedItems,
+                latestDate: sortedItems.first?.createdAt ?? .distantPast
+            )
+        }
+        .sorted { left, right in
+            if left.latestDate != right.latestDate { return left.latestDate > right.latestDate }
+            return left.title < right.title
+        }
+    }
+
+    private var groupedFilteredNotifications: [StudioActivityNotificationSection] {
+        let calendar = Calendar.current
+        let now = Date()
+
+        let today = filteredNotifications.filter { calendar.isDateInToday($0.createdAt) }
+        let yesterday = filteredNotifications.filter { calendar.isDateInYesterday($0.createdAt) }
+        let earlier = filteredNotifications.filter {
+            !calendar.isDateInToday($0.createdAt) && !calendar.isDateInYesterday($0.createdAt)
+        }
+
+        var sections: [StudioActivityNotificationSection] = []
+
+        if !today.isEmpty {
+            sections.append(
+                StudioActivityNotificationSection(
+                    id: "today",
+                    title: "Today",
+                    groups: makeActivityNotificationGroups(from: today, dateKey: "today")
+                )
+            )
+        }
+
+        if !yesterday.isEmpty {
+            sections.append(
+                StudioActivityNotificationSection(
+                    id: "yesterday",
+                    title: "Yesterday",
+                    groups: makeActivityNotificationGroups(from: yesterday, dateKey: "yesterday")
+                )
+            )
+        }
+
+        if !earlier.isEmpty {
+            let recentEarlier = earlier.filter {
+                guard let days = calendar.dateComponents([.day], from: $0.createdAt, to: now).day else { return true }
+                return days <= 7
+            }
+            let older = earlier.filter {
+                guard let days = calendar.dateComponents([.day], from: $0.createdAt, to: now).day else { return false }
+                return days > 7
+            }
+
+            if !recentEarlier.isEmpty {
+                sections.append(
+                    StudioActivityNotificationSection(
+                        id: "earlierWeek",
+                        title: "Earlier this week",
+                        groups: makeActivityNotificationGroups(from: recentEarlier, dateKey: "earlierWeek")
+                    )
+                )
+            }
+
+            if !older.isEmpty {
+                sections.append(
+                    StudioActivityNotificationSection(
+                        id: "older",
+                        title: "Older",
+                        groups: makeActivityNotificationGroups(from: older, dateKey: "older")
+                    )
+                )
+            }
+        }
+
+        return sections
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: presentationStyle == .drawer ? 12 : 14) {
+            activityTopControlArea
+
+            if firebaseManager.isLoadingActivityNotifications && firebaseManager.activityNotifications.isEmpty {
+                Spacer()
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                Spacer()
+            } else if filteredNotifications.isEmpty {
+                Spacer()
+                emptyState
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: presentationStyle == .drawer ? 14 : 12) {
+                        ForEach(groupedFilteredNotifications) { section in
+                            VStack(alignment: .leading, spacing: presentationStyle == .drawer ? 10 : 9) {
+                                Text(section.title)
+                                    .font(.system(size: 11.5, weight: .bold))
+                                    .foregroundColor(.white.opacity(presentationStyle == .drawer ? 0.78 : 1.0))
+                                    .textCase(.uppercase)
+                                    .tracking(0.6)
+                                    .padding(.horizontal, 2)
+
+                                ForEach(section.groups) { group in
+                                    notificationGroupRow(group)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .padding(presentationStyle == .drawer ? 10 : 20)
+        .background(Color.clear)
+        .onAppear {
+            loadDismissedActivityNotifications()
+            firebaseManager.startActivityNotificationsRealtime(companyId: companyId)
+        }
+    }
+
+    private func activityTopControlFill() -> Color {
+        guard presentationStyle == .drawer else { return Color.clear }
+        if activityColorScheme == .dark {
+            return Color(white: 0.155)
+        }
+        return Color.white
+    }
+
+    private func activityTopControlStroke() -> Color {
+        guard presentationStyle == .drawer else { return Color.clear }
+        if activityColorScheme == .dark {
+            return Color.white.opacity(0.16)
+        }
+        return Color.black.opacity(0.08)
+    }
+
+    private func activityTopControlShadow() -> Color {
+        guard presentationStyle == .drawer else { return Color.clear }
+        if activityColorScheme == .dark {
+            return Color.black.opacity(0.24)
+        }
+        return Color.black.opacity(0.08)
+    }
+
+    private var activityTopControlArea: some View {
+        let fill = activityTopControlFill()
+        let stroke = activityTopControlStroke()
+        let shadow = activityTopControlShadow()
+
+        return VStack(alignment: .leading, spacing: presentationStyle == .drawer ? 11 : 14) {
+            header
+            searchField
+            filterRow
+        }
+        .padding(presentationStyle == .drawer ? 12 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(fill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(stroke, lineWidth: presentationStyle == .drawer ? 1 : 0)
+        )
+        .shadow(color: shadow, radius: 10, x: 0, y: 4)
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Notification Centre")
+                    .font(.system(size: presentationStyle == .drawer ? 20 : 28, weight: .bold))
+                    .lineLimit(1)
+                Text("Latest activity and workflow updates")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if unreadCount > 0 {
+                Button {
+                    firebaseManager.markAllActivityNotificationsRead(companyId: companyId)
+                } label: {
+                    Text("Mark all read")
+                        .font(.system(size: 11.5, weight: .bold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.blue.opacity(0.10))
+                        .foregroundColor(.blue)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if !filteredNotifications.isEmpty {
+                Button {
+                    dismissVisibleActivityNotifications()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.065))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Clear visible notifications")
+            }
+
+            if presentationStyle == .drawer {
+                Button {
+                    onClose?()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.045))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+            }
+        }
+        .padding(.horizontal, presentationStyle == .drawer ? 4 : 0)
+        .padding(.top, presentationStyle == .drawer ? 4 : 0)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            TextField("Search notifications", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+
+            if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, presentationStyle == .drawer ? 8 : 9)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(presentationStyle == .drawer ? Color.white : Color.primary.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(presentationStyle == .drawer ? Color.white.opacity(0.30) : Color.primary.opacity(0.07), lineWidth: 1)
+        )
+    }
+
+    private var hasActiveActivityFilters: Bool {
+        filter != "all"
+            || typeFilter != "all"
+            || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var activeActivityFilterSummary: String {
+        var parts: [String] = []
+        if filter == "unread" { parts.append("Unread") }
+        if typeFilter != "all" {
+            switch typeFilter {
+            case "messages": parts.append("Messages")
+            case "support": parts.append("Support")
+            case "orders": parts.append("Orders")
+            case "tasks": parts.append("Tasks")
+            case "files": parts.append("Files")
+            case "system": parts.append("System")
+            default: break
+            }
+        }
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("Search")
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    private func clearActivityFilters() {
+        searchText = ""
+        filter = "all"
+        typeFilter = "all"
+        filtersExpanded = false
+    }
+
+    private var filterRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        filtersExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: filtersExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Filters")
+                            .font(.system(size: 12, weight: .bold))
+                        if hasActiveActivityFilters {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(filtersExpanded ? Color.blue.opacity(0.12) : Color.primary.opacity(0.045))
+                    )
+                    .foregroundColor(filtersExpanded ? .blue : .secondary)
+                }
+                .buttonStyle(.plain)
+
+                if hasActiveActivityFilters {
+                    Text(activeActivityFilterSummary)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 6)
+
+                    Button {
+                        clearActivityFilters()
+                    } label: {
+                        Text("Clear")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.blue)
+                } else {
+                    Spacer(minLength: 6)
+                }
+            }
+
+            if filtersExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        filterButton(title: "All", key: "all", count: firebaseManager.activityNotifications.count)
+                        filterButton(title: "Unread", key: "unread", count: unreadCount)
+                        Spacer()
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            typeFilterButton(title: "All types", key: "all")
+                            typeFilterButton(title: "Messages", key: "messages")
+                            typeFilterButton(title: "Support", key: "support")
+                            typeFilterButton(title: "Orders", key: "orders")
+                            typeFilterButton(title: "Tasks", key: "tasks")
+                            typeFilterButton(title: "Files", key: "files")
+                            typeFilterButton(title: "System", key: "system")
+                        }
+                        .padding(.vertical, 1)
+                    }
+                }
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.primary.opacity(0.025))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func filterButton(title: String, key: String, count: Int) -> some View {
+        Button {
+            filter = key
+        } label: {
+            Text("\(title) (\(count))")
+                .font(.system(size: 12, weight: .bold))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(filter == key ? Color.blue.opacity(0.14) : Color.primary.opacity(0.045))
+                )
+                .foregroundColor(filter == key ? .blue : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func typeFilterButton(title: String, key: String) -> some View {
+        Button {
+            typeFilter = key
+        } label: {
+            Text("\(title) (\(activityTypeCount(for: key)))")
+                .font(.system(size: 11.5, weight: .bold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(typeFilter == key ? Color.purple.opacity(0.14) : Color.primary.opacity(0.045))
+                )
+                .foregroundColor(typeFilter == key ? .purple : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: filter == "unread" ? "bell.slash" : "bell")
+                .font(.system(size: 38, weight: .semibold))
+                .foregroundColor(.secondary)
+            Text(filter == "unread" ? "No unread notifications" : "No notifications yet")
+                .font(.system(size: 17, weight: .bold))
+            Text(!searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No notifications match your search." : (typeFilter == "all" ? "Important updates from messages, support tickets, orders and workflow will appear here." : "No notifications match the selected type filter."))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func notificationTimeText(_ item: StudioActivityNotification) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(item.createdAt) {
+            return item.createdAt.formatted(date: .omitted, time: .shortened)
+        }
+        if calendar.isDateInYesterday(item.createdAt) {
+            return "Yesterday"
+        }
+        return item.createdAt.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private func notificationGroupRow(_ group: StudioActivityNotificationGroup) -> some View {
+        let isExpanded = expandedActivityGroupKeys.contains(group.id)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            if group.isStacked && !isExpanded, let latest = group.latest {
+                Button {
+                    withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                        _ = expandedActivityGroupKeys.insert(group.id)
+                    }
+                } label: {
+                    stackedNotificationSummaryRow(group: group, latest: latest)
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    hoveredActivityGroupId = hovering ? group.id : ""
+                }
+                .overlay(alignment: .topLeading) {
+                    if hoveredActivityGroupId == group.id {
+                        Button {
+                            dismissActivityNotificationGroup(group)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 22, height: 22)
+                                .background(.regularMaterial)
+                                .clipShape(Circle())
+                                .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 1)
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: -7, y: -7)
+                        .transition(.opacity)
+                    }
+                }
+            } else {
+                if group.isStacked {
+                    HStack(spacing: 8) {
+                        Text(group.title)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        Text("\(group.count)")
+                            .font(.system(size: 10.5, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(Capsule().fill(Color.secondary.opacity(0.75)))
+
+                        Spacer()
+
+                        Button {
+                            withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                                _ = expandedActivityGroupKeys.remove(group.id)
+                            }
+                        } label: {
+                            Text("Show less")
+                                .font(.system(size: 11.5, weight: .bold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.primary.opacity(0.055))
+                                .foregroundColor(.secondary)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            dismissActivityNotificationGroup(group)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 24, height: 24)
+                                .background(Color.primary.opacity(0.055))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.bottom, 2)
+                    .onHover { hovering in
+                        hoveredActivityGroupId = hovering ? group.id : ""
+                    }
+                }
+
+                ForEach(group.items) { item in
+                    notificationRow(item)
+                }
+            }
+        }
+    }
+
+    private func activityCardFillColor(isUnread: Bool) -> Color {
+        if presentationStyle == .drawer {
+            return Color.white.opacity(isUnread ? 0.82 : 0.74)
+        }
+        return isUnread ? Color.blue.opacity(0.045) : Color.primary.opacity(0.025)
+    }
+
+    private func activityCardStrokeColor(isUnread: Bool) -> Color {
+        if presentationStyle == .drawer {
+            return Color.white.opacity(0.34)
+        }
+        return isUnread ? Color.blue.opacity(0.12) : Color.primary.opacity(0.07)
+    }
+
+    private func activityCardShadowColor() -> Color {
+        presentationStyle == .drawer ? Color.black.opacity(0.075) : Color.clear
+    }
+
+    private func activityStackLayerFillColor(level: Int) -> Color {
+        if presentationStyle == .drawer {
+            return Color.white.opacity(level == 1 ? 0.60 : 0.46)
+        }
+        return Color.primary.opacity(level == 1 ? 0.060 : 0.042)
+    }
+
+    private func activityDrawerCardFillColor(isUnread: Bool) -> Color {
+        if presentationStyle == .drawer {
+            if activityColorScheme == .dark {
+                return isUnread ? Color(white: 0.17) : Color(white: 0.155)
+            } else {
+                return Color.white
+            }
+        }
+        return isUnread ? Color.blue.opacity(0.045) : Color.primary.opacity(0.025)
+    }
+
+    private func activityDrawerCardStrokeColor(isUnread: Bool) -> Color {
+        if presentationStyle == .drawer {
+            if activityColorScheme == .dark {
+                return Color.white.opacity(isUnread ? 0.18 : 0.12)
+            } else {
+                return Color.black.opacity(isUnread ? 0.12 : 0.08)
+            }
+        }
+        return isUnread ? Color.blue.opacity(0.12) : Color.primary.opacity(0.07)
+    }
+
+    private func activityDrawerCardShadowColor() -> Color {
+        if presentationStyle != .drawer { return Color.clear }
+        return activityColorScheme == .dark ? Color.black.opacity(0.28) : Color.black.opacity(0.08)
+    }
+
+    private func activityDrawerStackLayerColor(level: Int) -> Color {
+        if presentationStyle == .drawer {
+            if activityColorScheme == .dark {
+                return level == 1 ? Color(white: 0.135) : Color(white: 0.115)
+            } else {
+                return level == 1 ? Color(white: 0.92) : Color(white: 0.86)
+            }
+        }
+        return Color.primary.opacity(level == 1 ? 0.060 : 0.042)
+    }
+
+    private func stackedNotificationSummaryRow(group: StudioActivityNotificationGroup, latest: StudioActivityNotification) -> some View {
+        let unreadCountInGroup = group.items.filter { $0.isUnread(for: currentUid, email: currentEmail) }.count
+        let groupIsUnread = unreadCountInGroup > 0
+        let fillColor = activityDrawerCardFillColor(isUnread: groupIsUnread)
+        let strokeColor = activityDrawerCardStrokeColor(isUnread: groupIsUnread)
+        let shadowColor = activityDrawerCardShadowColor()
+        let stackLayerOneColor = activityDrawerStackLayerColor(level: 1)
+        let stackLayerTwoColor = activityDrawerStackLayerColor(level: 2)
+
+        return HStack(alignment: .top, spacing: 12) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: iconName(for: latest))
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(iconColor(for: latest))
+                    .frame(width: 38, height: 38)
+                    .background(presentationStyle == .drawer ? Color.primary.opacity(activityColorScheme == .dark ? 0.16 : 0.08) : iconColor(for: latest).opacity(0.10))
+                    .clipShape(Circle())
+
+                if unreadCountInGroup > 0 {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 9, height: 9)
+                        .offset(x: 1, y: -1)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(group.title)
+                        .font(.system(size: 14.5, weight: unreadCountInGroup > 0 ? .bold : .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    Text("\(group.count)")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .background(Capsule().fill(Color.secondary.opacity(0.75)))
+
+                    Spacer(minLength: 8)
+
+                    Text(notificationTimeText(latest))
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                }
+
+                Text(latest.title.isEmpty ? latest.message : latest.title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                if !latest.message.isEmpty, latest.message != latest.title {
+                    Text(latest.message)
+                        .font(.system(size: 12.2))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 6) {
+                    Text("Tap to show \(group.count) notifications")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.055))
+                        .foregroundColor(.secondary)
+                        .clipShape(Capsule())
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(presentationStyle == .drawer ? 10 : 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(fillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(strokeColor, lineWidth: 1)
+        )
+        .shadow(color: shadowColor, radius: 10, x: 0, y: 4)
+        .padding(.bottom, group.count > 1 ? 10 : 0)
+        .background(alignment: .bottom) {
+            if group.count > 1 {
+                ZStack(alignment: .top) {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(stackLayerOneColor)
+                        .frame(height: 14)
+                        .padding(.horizontal, 12)
+                        .offset(y: 4)
+
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(stackLayerTwoColor)
+                        .frame(height: 12)
+                        .padding(.horizontal, 24)
+                        .offset(y: 8)
+                }
+                .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func notificationRow(_ item: StudioActivityNotification) -> some View {
+        let unread = item.isUnread(for: currentUid, email: currentEmail)
+        let fillColor = activityDrawerCardFillColor(isUnread: unread)
+        let strokeColor = activityDrawerCardStrokeColor(isUnread: unread)
+        let shadowColor = activityDrawerCardShadowColor()
+
+        return Button {
+            onOpenNotification(item)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: iconName(for: item))
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(iconColor(for: item))
+                        .frame(width: 38, height: 38)
+                        .background(presentationStyle == .drawer ? Color.primary.opacity(activityColorScheme == .dark ? 0.16 : 0.08) : iconColor(for: item).opacity(0.10))
+                        .clipShape(Circle())
+
+                    if unread {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 9, height: 9)
+                            .offset(x: 1, y: -1)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(item.title.isEmpty ? "Notification" : item.title)
+                            .font(.system(size: 14.5, weight: unread ? .bold : .semibold))
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+
+                        Spacer(minLength: 8)
+
+                        Text(notificationTimeText(item))
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    if !item.message.isEmpty {
+                        Text(item.message)
+                            .font(.system(size: 12.5))
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(typeLabel(for: item))
+                            .font(.system(size: 10.5, weight: .bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.primary.opacity(0.055))
+                            .foregroundColor(.secondary)
+                            .clipShape(Capsule())
+
+                        if !item.status.isEmpty {
+                            Text(item.status)
+                                .font(.system(size: 10.5, weight: .bold))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.075))
+                                .foregroundColor(.blue)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+            .padding(presentationStyle == .drawer ? 10 : 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(fillColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(strokeColor, lineWidth: 1)
+            )
+            .shadow(color: shadowColor, radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredActivityNotificationId = hovering ? item.id : ""
+        }
+        .overlay(alignment: .topLeading) {
+            if hoveredActivityNotificationId == item.id {
+                Button {
+                    dismissSingleActivityNotification(item)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 22, height: 22)
+                        .background(.regularMaterial)
+                        .clipShape(Circle())
+                        .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 1)
+                }
+                .buttonStyle(.plain)
+                .offset(x: -7, y: -7)
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func iconName(for item: StudioActivityNotification) -> String {
+        let type = item.type.lowercased()
+        let route = item.route.lowercased()
+        if route.contains("message") || type.contains("message") { return "message.fill" }
+        if route.contains("support") || type.contains("ticket") || type.contains("support") { return "questionmark.bubble.fill" }
+        if route.contains("order") || type.contains("order") { return "shippingbox.fill" }
+        if type.contains("file") { return "paperclip" }
+        if type.contains("task") { return "checklist" }
+        return "bell.fill"
+    }
+
+    private func iconColor(for item: StudioActivityNotification) -> Color {
+        let type = item.type.lowercased()
+        let route = item.route.lowercased()
+        if route.contains("message") || type.contains("message") { return .green }
+        if route.contains("support") || type.contains("ticket") || type.contains("support") { return .purple }
+        if route.contains("order") || type.contains("order") { return .orange }
+        if type.contains("file") { return .blue }
+        if type.contains("task") { return .pink }
+        return .secondary
+    }
+
+    private func typeLabel(for item: StudioActivityNotification) -> String {
+        let type = item.type.replacingOccurrences(of: "_", with: " ")
+        if !type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return type.capitalized
+        }
+        return item.route.isEmpty ? "Activity" : item.route.capitalized
+    }
+}
+
+
+struct StudioProjectNoteItem: Identifiable, Equatable {
+    let id: String
+    let orderId: String
+    let orderKey: String
+    let projectTitle: String
+    let customerName: String
+    let noteType: String
+    let text: String
+    let updatedAt: Date?
+
+    var displayProjectTitle: String {
+        if !projectTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return projectTitle
+        }
+        if !customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return customerName
+        }
+        return "Project"
+    }
+}
+
+struct StudioProjectNoteGroup: Identifiable, Equatable {
+    let id: String
+    let orderKey: String
+    let projectTitle: String
+    let customerName: String
+    let items: [StudioProjectNoteItem]
+
+    var displayProjectTitle: String {
+        if !projectTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return projectTitle
+        }
+        if !customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return customerName
+        }
+        return "Project"
+    }
+
+    var latestUpdatedAt: Date? {
+        items.compactMap { $0.updatedAt }.max()
+    }
+}
+
+struct StudioKeepNote: Identifiable, Equatable {
+    var id: String
+    var title: String
+    var text: String
+    var colorName: String
+    var isPinned: Bool
+    var isArchived: Bool
+    var isDeleted: Bool
+    var labels: [String]
+    var links: [String]
+    var reminderDate: Date?
+    var manualOrder: Double
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(id: String = UUID().uuidString,
+         title: String = "",
+         text: String = "",
+         colorName: String = "default",
+         isPinned: Bool = false,
+         isArchived: Bool = false,
+         isDeleted: Bool = false,
+         labels: [String] = [],
+         links: [String] = [],
+         reminderDate: Date? = nil,
+         manualOrder: Double = Date().timeIntervalSince1970,
+         createdAt: Date = Date(),
+         updatedAt: Date = Date()) {
+        self.id = id
+        self.title = title
+        self.text = text
+        self.colorName = colorName
+        self.isPinned = isPinned
+        self.isArchived = isArchived
+        self.isDeleted = isDeleted
+        self.labels = labels
+        self.links = links
+        self.reminderDate = reminderDate
+        self.manualOrder = manualOrder
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    init(document: QueryDocumentSnapshot) {
+        let data = document.data()
+        self.id = document.documentID
+        self.title = data["title"] as? String ?? ""
+        self.text = data["text"] as? String ?? ""
+        self.colorName = data["colorName"] as? String ?? "default"
+        self.isPinned = data["isPinned"] as? Bool ?? false
+        self.isArchived = data["isArchived"] as? Bool ?? false
+        self.isDeleted = data["isDeleted"] as? Bool ?? false
+        self.labels = data["labels"] as? [String] ?? []
+        self.links = data["links"] as? [String] ?? []
+
+        if let timestamp = data["reminderDate"] as? Timestamp {
+            self.reminderDate = timestamp.dateValue()
+        } else {
+            self.reminderDate = nil
+        }
+
+        self.manualOrder = data["manualOrder"] as? Double ?? 0
+
+        if let timestamp = data["createdAt"] as? Timestamp {
+            self.createdAt = timestamp.dateValue()
+        } else {
+            self.createdAt = Date()
+        }
+
+        if let timestamp = data["updatedAt"] as? Timestamp {
+            self.updatedAt = timestamp.dateValue()
+        } else {
+            self.updatedAt = self.createdAt
+        }
+
+        if self.manualOrder == 0 {
+            self.manualOrder = self.updatedAt.timeIntervalSince1970
+        }
+    }
+
+    var isEmpty: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+struct StudioKeepNotesView: View {
+    var onOpenProject: ((String) -> Void)? = nil
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
+    @Environment(\.colorScheme) private var keepColorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+
+    @State private var notes: [StudioKeepNote] = []
+    @State private var selectedSection: String = "notes"
+    @State private var searchText: String = ""
+    @State private var isLoading: Bool = true
+    @State private var errorMessage: String = ""
+    @State private var listener: ListenerRegistration?
+
+    @State private var composerTitle: String = ""
+    @State private var composerText: String = ""
+    @State private var composerColor: String = "default"
+    @State private var composerPinned: Bool = false
+    @State private var composerLabelText: String = ""
+    @State private var composerLinkText: String = ""
+    @State private var composerReminderEnabled: Bool = false
+    @State private var composerReminderDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    @State private var composerExpanded: Bool = false
+    @State private var selectedNote: StudioKeepNote?
+    @State private var gridMode: Bool = true
+    @State private var showLabelManager: Bool = false
+    @State private var newLabelText: String = ""
+    @State private var reminderPickerNote: StudioKeepNote?
+    @State private var reminderPickerDate: Date = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
+    @State private var expandedProjectNoteKeys: Set<String> = []
+    @State private var hoveredKeepNoteId: String? = nil
+    @State private var draggingKeepNoteId: String? = nil
+
+    private let noteColors = ["default", "yellow", "green", "blue", "pink", "purple"]
+
+    private var cleanCompanyId: String {
+        (authVM.currentCompanyId ?? firebaseManager.currentCompanyId).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var cleanUserId: String {
+        (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var notesCollection: CollectionReference? {
+        guard !cleanCompanyId.isEmpty, !cleanUserId.isEmpty else { return nil }
+        return Firestore.firestore()
+            .collection("companies")
+            .document(cleanCompanyId)
+            .collection("personal_notes")
+            .document(cleanUserId)
+            .collection("notes")
+    }
+
+    private var visibleNotes: [StudioKeepNote] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return notes
+            .filter { note in
+                switch selectedSection {
+                case "archive":
+                    if note.isDeleted { return false }
+                    if !note.isArchived { return false }
+                case "trash":
+                    if !note.isDeleted { return false }
+                case "reminders":
+                    if note.isDeleted || note.isArchived { return false }
+                    if note.reminderDate == nil { return false }
+                case "projectnotes":
+                    return false
+                default:
+                    if selectedSection.hasPrefix("label:") {
+                        let labelName = String(selectedSection.dropFirst("label:".count))
+                        if note.isDeleted || note.isArchived { return false }
+                        if !note.labels.contains(where: { $0.caseInsensitiveCompare(labelName) == .orderedSame }) { return false }
+                    } else {
+                        if note.isDeleted || note.isArchived { return false }
+                    }
+                }
+
+                guard !query.isEmpty else { return true }
+                return note.title.lowercased().contains(query) ||
+                    note.text.lowercased().contains(query)
+            }
+            .sorted { first, second in
+                if selectedSection == "reminders" {
+                    let firstDate = first.reminderDate ?? Date.distantFuture
+                    let secondDate = second.reminderDate ?? Date.distantFuture
+                    return firstDate < secondDate
+                }
+
+                if selectedSection == "notes", first.isPinned != second.isPinned {
+                    return first.isPinned && !second.isPinned
+                }
+
+                if selectedSection == "notes" {
+                    return first.manualOrder < second.manualOrder
+                }
+
+                return first.updatedAt > second.updatedAt
+            }
+    }
+
+    private var allLabels: [String] {
+        let values = notes.flatMap { $0.labels }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return Array(Set(values)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func noteCount(for section: String) -> Int {
+        switch section {
+        case "notes":
+            return notes.filter { !$0.isDeleted && !$0.isArchived }.count
+        case "reminders":
+            return notes.filter { !$0.isDeleted && !$0.isArchived && $0.reminderDate != nil }.count
+        case "projectnotes":
+            return projectNoteGroups.count
+        case "archive":
+            return notes.filter { !$0.isDeleted && $0.isArchived }.count
+        case "trash":
+            return notes.filter { $0.isDeleted }.count
+        default:
+            if section.hasPrefix("label:") {
+                let labelName = String(section.dropFirst("label:".count))
+                return notes.filter { note in
+                    !note.isDeleted &&
+                    !note.isArchived &&
+                    note.labels.contains(where: { $0.caseInsensitiveCompare(labelName) == .orderedSame })
+                }.count
+            }
+            return 0
+        }
+    }
+
+    private func sectionDisplayTitle(_ section: String) -> String {
+        switch section {
+        case "notes": return "Notes"
+        case "reminders": return "Reminders"
+        case "projectnotes": return "Project Notes"
+        case "archive": return "Archive"
+        case "trash": return "Trash"
+        default:
+            if section.hasPrefix("label:") {
+                return String(section.dropFirst("label:".count))
+            }
+            return "Notes"
+        }
+    }
+
+    private var activeSectionCountText: String {
+        if selectedSection == "projectnotes" {
+            let count = projectNoteGroups.count
+            return "\(count) \(t(count == 1 ? "project" : "projects", lang: seciliDil))"
+        }
+
+        let count = visibleNotes.count
+        return "\(count) \(t(count == 1 ? "note" : "notes", lang: seciliDil))"
+    }
+
+    private var projectNotes: [StudioProjectNoteItem] {
+        firebaseManager.siparisler.flatMap { order in
+            projectNoteItems(for: order)
+        }
+        .filter { item in
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !query.isEmpty else { return true }
+
+            return [
+                item.projectTitle,
+                item.customerName,
+                item.noteType,
+                item.text
+            ]
+            .joined(separator: " ")
+            .lowercased()
+            .contains(query)
+        }
+        .sorted { first, second in
+            (first.updatedAt ?? .distantPast) > (second.updatedAt ?? .distantPast)
+        }
+    }
+
+    private var projectNoteGroups: [StudioProjectNoteGroup] {
+        let grouped = Dictionary(grouping: projectNotes, by: { $0.orderKey })
+
+        return grouped.compactMap { key, values in
+            guard let first = values.first else { return nil }
+            let sortedItems = values.sorted { lhs, rhs in
+                (lhs.updatedAt ?? .distantPast) > (rhs.updatedAt ?? .distantPast)
+            }
+
+            return StudioProjectNoteGroup(
+                id: key,
+                orderKey: key,
+                projectTitle: first.projectTitle,
+                customerName: first.customerName,
+                items: sortedItems
+            )
+        }
+        .sorted { lhs, rhs in
+            (lhs.latestUpdatedAt ?? .distantPast) > (rhs.latestUpdatedAt ?? .distantPast)
+        }
+    }
+
+    private func projectNoteItems(for order: Siparis) -> [StudioProjectNoteItem] {
+        let orderKey = orderSelectionKeyForNotes(order)
+        let projectTitle = notesProjectTitle(for: order)
+        let customerName = order.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedAt = notesProjectUpdatedAt(for: order)
+        var items: [StudioProjectNoteItem] = []
+
+        func appendNote(type: String, value: String, suffix: String) {
+            let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty else { return }
+
+            items.append(
+                StudioProjectNoteItem(
+                    id: "\(orderKey)-\(suffix)-\(abs(clean.hashValue))",
+                    orderId: order.id ?? "",
+                    orderKey: orderKey,
+                    projectTitle: projectTitle,
+                    customerName: customerName,
+                    noteType: type,
+                    text: clean,
+                    updatedAt: updatedAt
+                )
+            )
+        }
+
+        appendNote(type: "Project Note", value: order.notes, suffix: "notes")
+        appendNote(type: "Inventory Note", value: order.invNotes, suffix: "invNotes")
+
+        for pair in (order.customFields ?? [:]).sorted(by: { $0.key < $1.key }) {
+            if pair.key.hasPrefix("specialNote::") {
+                let rawTitle = String(pair.key.dropFirst("specialNote::".count))
+                let cleanTitle = rawTitle.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                let title = cleanTitle.isEmpty ? "Special Note" : rawTitle
+                appendNote(type: title, value: pair.value, suffix: pair.key)
+            }
+        }
+
+        return items
+    }
+
+    private func notesProjectTitle(for order: Siparis) -> String {
+        let designName = order.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !designName.isEmpty { return designName }
+
+        let watchRef = order.watchRef.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !watchRef.isEmpty { return watchRef }
+
+        let customerName = order.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !customerName.isEmpty { return customerName }
+
+        return "Project"
+    }
+
+    private func notesProjectUpdatedAt(for order: Siparis) -> Date? {
+        return nil
+    }
+
+    private func orderSelectionKeyForNotes(_ order: Siparis) -> String {
+        if let id = order.id, !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return id
+        }
+        return UUID().uuidString
+    }
+
+    private var pinnedNotes: [StudioKeepNote] {
+        guard selectedSection == "notes", searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        return visibleNotes.filter { $0.isPinned }
+    }
+
+    private var otherNotes: [StudioKeepNote] {
+        guard selectedSection == "notes", searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return visibleNotes }
+        return visibleNotes.filter { !$0.isPinned }
+    }
+
+    private var pageBackground: Color {
+        keepColorScheme == .dark ? Color(white: 0.075) : Color(white: 0.965)
+    }
+
+    private var surfaceColor: Color {
+        keepColorScheme == .dark ? Color(white: 0.13) : Color.white
+    }
+
+    private var softSurfaceColor: Color {
+        keepColorScheme == .dark ? Color(white: 0.10) : Color(white: 0.985)
+    }
+
+    private var borderColor: Color {
+        keepColorScheme == .dark ? Color.white.opacity(0.11) : Color(red: 0, green: 0, blue: 0).opacity(0.09)
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let isWide = geometry.size.width >= 820
+
+            HStack(spacing: 0) {
+                if isWide {
+                    keepSidebar
+                        .frame(width: 230)
+                    Divider().opacity(0.25)
+                }
+
+                VStack(spacing: 0) {
+                    keepTopBar(isWide: isWide)
+                    ScrollView {
+                        VStack(spacing: 22) {
+                            notesSectionHeader
+                                .padding(.top, 20)
+
+                            if selectedSection == "notes" {
+                                quickComposer
+                                    .frame(maxWidth: composerExpanded ? 820 : 620)
+                            }
+
+                            if selectedSection == "projectnotes" {
+                                projectNotesContent
+                            } else if isLoading {
+                                ProgressView(t("Loading notes...", lang: seciliDil))
+                                    .padding(.top, 60)
+                            } else if visibleNotes.isEmpty {
+                                emptyState
+                                    .padding(.top, 70)
+                            } else if gridMode {
+                                notesGrid
+                            } else {
+                                notesList
+                            }
+                        }
+                        .padding(.horizontal, isWide ? 28 : 16)
+                        .padding(.bottom, 36)
+                    }
+                }
+            }
+            .background(pageBackground)
+        }
+        .onAppear { startNotesListener() }
+        .onDisappear {
+            listener?.remove()
+            listener = nil
+        }
+        .sheet(item: $selectedNote) { note in
+            StudioKeepNoteEditor(
+                note: note,
+                noteColors: noteColors,
+                colorForNote: noteCardColor,
+                onSave: { updated in
+                    saveNote(updated)
+                },
+                onDelete: { note in
+                    moveToTrash(note)
+                },
+                onArchive: { note in
+                    toggleArchive(note)
+                },
+                onPin: { note in
+                    togglePin(note)
+                }
+            )
+        }
+        .sheet(isPresented: $showLabelManager) {
+            labelManagerSheet
+        }
+        .sheet(item: $reminderPickerNote) { note in
+            reminderPickerSheet(for: note)
+        }
+    }
+
+    private func keepTopBar(isWide: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                if !isWide {
+                    Menu {
+                        sidebarMenuButton(title: "Notes", icon: "lightbulb", section: "notes")
+                        sidebarMenuButton(title: "Reminders", icon: "bell", section: "reminders")
+                        sidebarMenuButton(title: "Project Notes", icon: "doc.text.magnifyingglass", section: "projectnotes")
+                        ForEach(allLabels, id: \.self) { label in
+                            sidebarMenuButton(title: label, icon: "tag", section: "label:\(label)")
+                        }
+                        Button {
+                            showLabelManager = true
+                        } label: {
+                            Label(t("Edit labels", lang: seciliDil), systemImage: "pencil")
+                        }
+                        sidebarMenuButton(title: "Archive", icon: "archivebox", section: "archive")
+                        sidebarMenuButton(title: "Trash", icon: "trash", section: "trash")
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Image(systemName: "lightbulb.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.yellow)
+                    .frame(width: 38, height: 38)
+                    .background(Color.yellow.opacity(0.18))
+                    .clipShape(Circle())
+
+                Text(t("Notes", lang: seciliDil))
+                    .font(.system(size: 22, weight: .bold))
+
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+
+                    TextField(t("Search notes", lang: seciliDil), text: $searchText)
+                        .textFieldStyle(.plain)
+
+                    if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(softSurfaceColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(maxWidth: 760)
+
+                Spacer()
+
+                Button {
+                    startNotesListener()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    gridMode.toggle()
+                } label: {
+                    Image(systemName: gridMode ? "rectangle.grid.2x2" : "list.bullet")
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            Divider().opacity(0.28)
+        }
+        .background(keepColorScheme == .dark ? Color(white: 0.095) : Color.white)
+    }
+
+    private var keepSidebar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sidebarRow(title: "Notes", icon: "lightbulb", section: "notes")
+            sidebarRow(title: "Reminders", icon: "bell", section: "reminders")
+            sidebarRow(title: "Project Notes", icon: "doc.text.magnifyingglass", section: "projectnotes")
+
+            if !allLabels.isEmpty {
+                Text(t("Labels", lang: seciliDil).uppercased())
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .tracking(1.2)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+
+                ForEach(allLabels, id: \.self) { label in
+                    sidebarRow(title: label, icon: "tag", section: "label:\(label)")
+                }
+            }
+
+            Button {
+                showLabelManager = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 26)
+                    Text(t("Edit labels", lang: seciliDil))
+                        .font(.system(size: 13.5, weight: .bold))
+                    Spacer()
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+
+            sidebarRow(title: "Archive", icon: "archivebox", section: "archive")
+            sidebarRow(title: "Trash", icon: "trash", section: "trash")
+            Spacer()
+        }
+        .padding(.top, 18)
+        .padding(.horizontal, 10)
+        .background(keepColorScheme == .dark ? Color(white: 0.09) : Color.white)
+    }
+
+    private func sidebarMenuButton(title: String, icon: String, section: String) -> some View {
+        Button {
+            selectedSection = section
+        } label: {
+            Label(t(title, lang: seciliDil), systemImage: icon)
+        }
+    }
+
+    private func sidebarRow(title: String, icon: String, section: String) -> some View {
+        let count = noteCount(for: section)
+
+        return Button {
+            selectedSection = section
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 26)
+
+                Text(t(title, lang: seciliDil))
+                    .font(.system(size: 13.5, weight: .bold))
+                    .lineLimit(1)
+
+                Spacer()
+
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
+                }
+            }
+            .foregroundColor(selectedSection == section ? .primary : .secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(selectedSection == section ? Color.yellow.opacity(keepColorScheme == .dark ? 0.18 : 0.25) : Color.clear)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var notesSectionHeader: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t(sectionDisplayTitle(selectedSection), lang: seciliDil))
+                    .font(.system(size: 24, weight: .bold))
+                Text(activeSectionCountText)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            if selectedSection == "trash" && !visibleNotes.isEmpty {
+                Button(role: .destructive) {
+                    emptyTrash()
+                } label: {
+                    Label(t("Empty trash", lang: seciliDil), systemImage: "trash.slash")
+                        .font(.system(size: 12.5, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.red.opacity(0.10))
+                .clipShape(Capsule())
+            }
+
+            if selectedSection != "notes" {
+                Button {
+                    selectedSection = "notes"
+                } label: {
+                    Label(t("Back to notes", lang: seciliDil), systemImage: "arrow.left")
+                        .font(.system(size: 12.5, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: 920)
+    }
+
+    private func reminderPickerSheet(for note: StudioKeepNote) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "bell")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.orange)
+                    .frame(width: 38, height: 38)
+                    .background(Color.orange.opacity(0.14))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Pick reminder", lang: seciliDil))
+                        .font(.system(size: 20, weight: .bold))
+                    Text(note.title.isEmpty ? t("Untitled note", lang: seciliDil) : note.title)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button {
+                    reminderPickerNote = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Divider().opacity(0.35)
+
+            VStack(alignment: .leading, spacing: 18) {
+                DatePicker(
+                    t("Reminder date and time", lang: seciliDil),
+                    selection: $reminderPickerDate,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.graphical)
+
+                HStack(spacing: 10) {
+                    Button {
+                        reminderPickerDate = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: Date()) ?? Date()
+                    } label: {
+                        Label(t("Today evening", lang: seciliDil), systemImage: "sunset")
+                    }
+
+                    Button {
+                        reminderPickerDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                    } label: {
+                        Label(t("Tomorrow", lang: seciliDil), systemImage: "calendar.badge.plus")
+                    }
+
+                    Button {
+                        reminderPickerDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+                    } label: {
+                        Label(t("Next week", lang: seciliDil), systemImage: "calendar")
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundColor(.secondary)
+
+                HStack {
+                    Button(role: .destructive) {
+                        setReminder(note, date: nil)
+                        reminderPickerNote = nil
+                    } label: {
+                        Label(t("Remove reminder", lang: seciliDil), systemImage: "bell.slash")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(note.reminderDate == nil)
+
+                    Spacer()
+
+                    Button {
+                        setReminder(note, date: reminderPickerDate)
+                        reminderPickerNote = nil
+                    } label: {
+                        Text(t("Save reminder", lang: seciliDil))
+                            .font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(Color.orange.opacity(0.18))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+        }
+        .frame(minWidth: 440, minHeight: 520)
+        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
+        .onAppear {
+            reminderPickerDate = note.reminderDate ?? (Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date())
+        }
+    }
+
+    private var labelManagerSheet: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(t("Edit labels", lang: seciliDil))
+                    .font(.system(size: 20, weight: .bold))
+
+                Spacer()
+
+                Button {
+                    showLabelManager = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Divider().opacity(0.35)
+
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .foregroundColor(.secondary)
+
+                TextField(t("Create new label", lang: seciliDil), text: $newLabelText)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        createLabelFromInput()
+                    }
+
+                Button {
+                    createLabelFromInput()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(newLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(14)
+            .background(Color.primary.opacity(0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(18)
+
+            if allLabels.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "tag")
+                        .font(.system(size: 36))
+                        .foregroundColor(.secondary.opacity(0.6))
+                    Text(t("No labels yet", lang: seciliDil))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(allLabels, id: \.self) { label in
+                        HStack(spacing: 12) {
+                            Image(systemName: "tag")
+                                .foregroundColor(.secondary)
+                            Text(label)
+                                .font(.system(size: 14, weight: .semibold))
+                            Spacer()
+                            Text("\(noteCount(for: "label:\(label)"))")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.primary.opacity(0.055))
+                                .clipShape(Capsule())
+
+                            Button(role: .destructive) {
+                                deleteLabel(label)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+        .frame(minWidth: 420, minHeight: 480)
+        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
+    }
+
+    private var projectNotesContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "info.circle")
+                    .foregroundColor(.secondary)
+                Text(t("Project notes are grouped by project. Open a group to review all notes from the same project.", lang: seciliDil))
+                    .font(.system(size: 12.5))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            .padding(12)
+            .background(Color.primary.opacity(0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            if projectNoteGroups.isEmpty {
+                emptyState
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 70)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(projectNoteGroups) { group in
+                        projectNoteGroupCard(group)
+                    }
+                }
+                .frame(maxWidth: 920)
+            }
+        }
+        .padding(.top, 8)
+    }
+
+
+    private func projectNoteGroupCard(_ group: StudioProjectNoteGroup) -> some View {
+        let isExpanded = expandedProjectNoteKeys.contains(group.id)
+        let previewText = group.items.first?.text ?? ""
+        let count = group.items.count
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(group.displayProjectTitle)
+                        .font(.system(size: 15.5, weight: .bold))
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        if !group.customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(group.customerName)
+                        }
+                        Text("\(count) \(t(count == 1 ? "note" : "notes", lang: seciliDil))")
+                    }
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                }
+
+                Spacer()
+
+                if isExpanded {
+                    Button {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                            _ = expandedProjectNoteKeys.remove(group.id)
+                        }
+                    } label: {
+                        Text(t("Show less", lang: seciliDil))
+                            .font(.system(size: 12, weight: .bold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    if let firstItem = group.items.first {
+                        openProjectFromNote(firstItem)
+                    }
+                } label: {
+                    Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .bold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(t("Open project", lang: seciliDil))
+            }
+
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(group.items) { item in
+                        projectNoteCard(item)
+                    }
+                }
+            } else {
+                Text(previewText)
+                    .font(.system(size: 14.5))
+                    .foregroundColor(.primary.opacity(0.88))
+                    .lineLimit(4)
+
+                if count > 1 {
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.primary.opacity(0.10))
+                            .frame(height: 9)
+                            .padding(.horizontal, 12)
+
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.primary.opacity(0.065))
+                            .frame(height: 9)
+                            .padding(.horizontal, 24)
+                    }
+                    .frame(height: 14)
+                    .allowsHitTesting(false)
+                }
+            }
+        }
+        .padding(16)
+        .background(surfaceColor)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.045), radius: 8, x: 0, y: 3)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onTapGesture {
+            guard count > 1 else { return }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                if expandedProjectNoteKeys.contains(group.id) {
+                    _ = expandedProjectNoteKeys.remove(group.id)
+                } else {
+                    expandedProjectNoteKeys.insert(group.id)
+                }
+            }
+        }
+    }
+
+    private func projectNoteCard(_ item: StudioProjectNoteItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.displayProjectTitle)
+                        .font(.system(size: 15.5, weight: .bold))
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        if !item.customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(item.customerName)
+                        }
+                        Text(item.noteType)
+                    }
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                }
+
+                Spacer()
+
+                HStack(spacing: 8) {
+                    Button {
+                        copyProjectNoteToClipboard(item)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 30, height: 30)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(t("Copy note", lang: seciliDil))
+
+                    Button {
+                        createPersonalNote(from: item)
+                    } label: {
+                        Image(systemName: "plus.rectangle.on.folder")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 30, height: 30)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(t("Save as personal note", lang: seciliDil))
+
+                    Button {
+                        openProjectFromNote(item)
+                    } label: {
+                        Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
+                            .font(.system(size: 12, weight: .bold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(t("Open project", lang: seciliDil))
+                }
+            }
+
+            Text(item.text)
+                .font(.system(size: 14.5))
+                .foregroundColor(.primary.opacity(0.88))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(8)
+
+            if let updatedAt = item.updatedAt {
+                Text(updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(16)
+        .background(surfaceColor)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.045), radius: 8, x: 0, y: 3)
+    }
+
+    private func copyProjectNoteToClipboard(_ item: StudioProjectNoteItem) {
+        let combined = [
+            item.displayProjectTitle,
+            item.noteType,
+            item.text
+        ]
+        .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        .joined(separator: "\n\n")
+
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(combined, forType: .string)
+        #elseif canImport(UIKit)
+        UIPasteboard.general.string = combined
+        #endif
+    }
+
+    private func createPersonalNote(from item: StudioProjectNoteItem) {
+        let titleParts = [
+            item.displayProjectTitle,
+            item.noteType
+        ]
+        .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        let title = titleParts.joined(separator: " • ")
+        let text = item.text
+
+        let personalNote = StudioKeepNote(
+            title: title,
+            text: text,
+            colorName: "blue",
+            isPinned: composerPinned,
+            isArchived: false,
+            isDeleted: false,
+            labels: ["Project Notes"],
+            reminderDate: nil,
+            manualOrder: nextManualOrderValue(),
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        saveNote(personalNote)
+        selectedSection = "notes"
+    }
+
+    private func openProjectFromNote(_ item: StudioProjectNoteItem) {
+        onOpenProject?(item.orderKey)
+    }
+
+    private var quickComposer: some View {
+        VStack(spacing: 0) {
+            if composerExpanded {
+                HStack(alignment: .center, spacing: 12) {
+                    TextField(t("Title", lang: seciliDil), text: $composerTitle)
+                        .font(.system(size: 21, weight: .bold))
+                        .textFieldStyle(.plain)
+                        .onSubmit {
+                            saveComposerIfNeeded()
+                        }
+
+                    Button {
+                        composerPinned.toggle()
+                    } label: {
+                        Image(systemName: composerPinned ? "pin.fill" : "pin")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 34, height: 34)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(t(composerPinned ? "Unpin note" : "Pin note", lang: seciliDil))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 6)
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                TextField(t("Take a note...", lang: seciliDil), text: $composerText, axis: .vertical)
+                    .font(.system(size: composerExpanded ? 16.5 : 15.5, weight: composerExpanded ? .regular : .semibold))
+                    .textFieldStyle(.plain)
+                    .lineLimit(composerExpanded ? 8...20 : 1...1)
+                    .padding(.top, composerExpanded ? 0 : 1)
+                    .onSubmit {
+                        saveComposerIfNeeded()
+                    }
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                            composerExpanded = true
+                        }
+                    }
+
+                if !composerExpanded {
+                    HStack(spacing: 16) {
+                        Button {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                                composerExpanded = true
+                            }
+                            if !composerText.hasSuffix("\n") && !composerText.isEmpty {
+                                composerText += "\n"
+                            }
+                            composerText += "☐ "
+                        } label: {
+                            Image(systemName: "checklist")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Checklist", lang: seciliDil))
+
+                        Button {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                                composerExpanded = true
+                            }
+                        } label: {
+                            Image(systemName: "photo")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Image", lang: seciliDil))
+                    }
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, composerExpanded ? 16 : 14)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                    composerExpanded = true
+                }
+            }
+
+            if composerExpanded {
+                VStack(spacing: 12) {
+                    if composerReminderEnabled ||
+                        !composerLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        !composerLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        HStack(spacing: 8) {
+                            if composerReminderEnabled {
+                                Label(composerReminderDate.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.primary.opacity(0.055))
+                                    .clipShape(Capsule())
+                            }
+
+                            if !composerLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Label(composerLabelText, systemImage: "tag")
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.primary.opacity(0.055))
+                                    .clipShape(Capsule())
+                            }
+
+                            if !composerLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Label(t("Link attached", lang: seciliDil), systemImage: "link")
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.primary.opacity(0.055))
+                                    .clipShape(Capsule())
+                            }
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                    }
+
+                    HStack(spacing: 18) {
+                        Button {
+                            // Text formatting placeholder, kept for Google Keep-like toolbar.
+                        } label: {
+                            Image(systemName: "textformat")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Text options", lang: seciliDil))
+
+                        Menu {
+                            ForEach(noteColors, id: \.self) { color in
+                                Button(t(color.capitalized, lang: seciliDil)) {
+                                    composerColor = color
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "paintpalette")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Change colour", lang: seciliDil))
+
+                        Button {
+                            if !composerText.hasSuffix("\n") && !composerText.isEmpty {
+                                composerText += "\n"
+                            }
+                            composerText += "☐ "
+                        } label: {
+                            Image(systemName: "checklist")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Checklist", lang: seciliDil))
+
+                        Menu {
+                            Toggle(t("Reminder", lang: seciliDil), isOn: $composerReminderEnabled)
+                            DatePicker(t("Date", lang: seciliDil), selection: $composerReminderDate, displayedComponents: [.date, .hourAndMinute])
+                        } label: {
+                            Image(systemName: composerReminderEnabled ? "bell.fill" : "bell")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("Reminder", lang: seciliDil))
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "tag")
+                                .font(.system(size: 12, weight: .bold))
+                            TextField(t("Label", lang: seciliDil), text: $composerLabelText)
+                                .textFieldStyle(.plain)
+                                .frame(width: 92)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "link")
+                                .font(.system(size: 12, weight: .bold))
+                            TextField(t("Link", lang: seciliDil), text: $composerLinkText)
+                                .textFieldStyle(.plain)
+                                .frame(width: 120)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
+
+                        Menu {
+                            Button(t("Duplicate note", lang: seciliDil)) {
+                                saveComposerIfNeeded()
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.vertical")
+                        }
+                        .buttonStyle(.plain)
+                        .help(t("More", lang: seciliDil))
+
+                        Spacer()
+
+                        Button {
+                            saveComposerIfNeeded()
+                        } label: {
+                            Text(t("Close", lang: seciliDil))
+                                .font(.system(size: 14, weight: .bold))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 9)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 14)
+                }
+            }
+        }
+        .background(noteCardColor(composerColor))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.24 : 0.16), radius: composerExpanded ? 16 : 8, x: 0, y: composerExpanded ? 6 : 3)
+        .frame(maxWidth: composerExpanded ? 880 : 620)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            if !composerExpanded {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                    composerExpanded = true
+                }
+            }
+        }
+        .animation(.spring(response: 0.25, dampingFraction: 0.88), value: composerExpanded)
+    }
+
+
+    private var notesGrid: some View {
+        let columns = [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 20, alignment: .top)]
+
+        return LazyVStack(alignment: .leading, spacing: 22) {
+            if !pinnedNotes.isEmpty {
+                sectionTitle("Pinned")
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
+                    ForEach(pinnedNotes) { note in
+                        noteCard(note)
+                    }
+                }
+            }
+
+            if !otherNotes.isEmpty {
+                if !pinnedNotes.isEmpty { sectionTitle("Others") }
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
+                    ForEach(otherNotes) { note in
+                        noteCard(note)
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private var notesList: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(visibleNotes) { note in
+                noteCard(note)
+                    .frame(maxWidth: 760)
+            }
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(t(title, lang: seciliDil).uppercased())
+            .font(.system(size: 11.5, weight: .bold))
+            .foregroundColor(.secondary)
+            .tracking(1.2)
+            .padding(.horizontal, 4)
+    }
+
+    private func keepText(_ key: String) -> String {
+        if seciliDil == "Türkçe" {
+            switch key {
+            case "Edit note": return "Notu düzenle"
+            case "Pin note": return "Notu sabitle"
+            case "Unpin note": return "Sabitlemeyi kaldır"
+            case "Duplicate note": return "Notu çoğalt"
+            case "Copy note": return "Notu kopyala"
+            case "Change colour": return "Rengi değiştir"
+            case "Reminder": return "Hatırlatma"
+            case "Labels": return "Etiketler"
+            case "Archive note": return "Arşivle"
+            case "Unarchive note": return "Arşivden çıkar"
+            case "Move to trash": return "Çöpe taşı"
+            case "Restore note": return "Geri yükle"
+            case "Delete forever": return "Kalıcı sil"
+            default: return t(key, lang: seciliDil)
+            }
+        }
+        return t(key, lang: seciliDil)
+    }
+
+    private func keepIconButton(
+        _ systemImage: String,
+        helpKey: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role) {
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(role == .destructive ? .red : .secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(keepText(helpKey))
+        .accessibilityLabel(keepText(helpKey))
+    }
+
+    private func keepIconMenu<Content: View>(
+        _ systemImage: String,
+        helpKey: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu {
+            content()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(keepText(helpKey))
+        .accessibilityLabel(keepText(helpKey))
+    }
+
+    private func keepActionText(_ key: String) -> String {
+        if seciliDil == "Türkçe" {
+            switch key {
+            case "Pin note": return "Notu sabitle"
+            case "Unpin note": return "Sabitlemeyi kaldır"
+            case "Duplicate note": return "Notu çoğalt"
+            case "Copy note": return "Notu kopyala"
+            case "Change colour": return "Rengi değiştir"
+            case "Reminder": return "Hatırlatma"
+            case "Labels": return "Etiketler"
+            case "Archive note": return "Arşivle"
+            case "Unarchive note": return "Arşivden çıkar"
+            case "Move to trash": return "Çöpe taşı"
+            case "Restore note": return "Geri yükle"
+            case "Delete forever": return "Kalıcı sil"
+            default: return t(key, lang: seciliDil)
+            }
+        }
+        return t(key, lang: seciliDil)
+    }
+
+    private func keepCardIconButton(
+        _ systemImage: String,
+        helpKey: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role) {
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(role == .destructive ? .red : .secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(keepActionText(helpKey))
+        .accessibilityLabel(keepActionText(helpKey))
+    }
+
+    private func keepCardIconMenu<Content: View>(
+        _ systemImage: String,
+        helpKey: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu {
+            content()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(keepActionText(helpKey))
+        .accessibilityLabel(keepActionText(helpKey))
+    }
+
+    private func noteCard(_ note: StudioKeepNote) -> some View {
+        let showActions = hoveredKeepNoteId == note.id
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(note.title)
+                            .font(.system(size: 15.5, weight: .bold))
+                            .foregroundColor(.primary)
+                            .lineLimit(3)
+                    }
+
+                    if !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(note.text)
+                            .font(.system(size: 14.2))
+                            .foregroundColor(.primary.opacity(0.86))
+                            .lineLimit(9)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                ZStack {
+                    keepIconButton(note.isPinned ? "pin.fill" : "pin", helpKey: note.isPinned ? "Unpin note" : "Pin note") {
+                        togglePin(note)
+                    }
+                    .opacity((showActions || note.isPinned) ? 1 : 0)
+                    .allowsHitTesting(showActions || note.isPinned)
+                }
+                .frame(width: 28, height: 28)
+            }
+
+            if let reminderDate = note.reminderDate {
+                Label(reminderDate.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(reminderDate < Date() ? .orange : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background((reminderDate < Date() ? Color.orange.opacity(0.14) : Color.primary.opacity(0.055)))
+                    .clipShape(Capsule())
+            }
+
+            if !note.labels.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(note.labels.prefix(3), id: \.self) { label in
+                        Text(label)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            if !note.links.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(note.links.prefix(2), id: \.self) { link in
+                        Button {
+                            openNoteLink(link)
+                        } label: {
+                            Label(cleanLinkTitle(link), systemImage: "link")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .lineLimit(1)
+                                .foregroundColor(.blue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(Color.blue.opacity(0.10))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 7) {
+                if !note.updatedAt.formatted(date: .abbreviated, time: .shortened).isEmpty {
+                    Text(note.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary.opacity(0.85))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                keepCardIconButton(note.isPinned ? "pin.slash" : "pin", helpKey: note.isPinned ? "Unpin note" : "Pin note") {
+                    togglePin(note)
+                }
+
+                keepCardIconButton("plus.square.on.square", helpKey: "Duplicate note") {
+                    duplicateNote(note)
+                }
+
+                keepCardIconButton("doc.on.doc", helpKey: "Copy note") {
+                    copyNoteToClipboard(note)
+                }
+
+                keepCardIconMenu("paintpalette", helpKey: "Change colour") {
+                    ForEach(noteColors, id: \.self) { color in
+                        Button(t(color.capitalized, lang: seciliDil)) {
+                            var updated = note
+                            updated.colorName = color
+                            saveNote(updated)
+                        }
+                    }
+                }
+
+                keepCardIconMenu(note.reminderDate == nil ? "bell" : "bell.fill", helpKey: "Reminder") {
+                    Button(t("Tomorrow", lang: seciliDil)) {
+                        setReminder(note, date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+                    }
+                    Button(t("Next week", lang: seciliDil)) {
+                        setReminder(note, date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date())
+                    }
+                    Button(t("Pick date", lang: seciliDil)) {
+                        reminderPickerDate = note.reminderDate ?? (Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date())
+                        reminderPickerNote = note
+                    }
+                    Button(t("Remove reminder", lang: seciliDil)) {
+                        setReminder(note, date: nil)
+                    }
+                }
+
+                keepCardIconMenu("tag", helpKey: "Labels") {
+                    ForEach(allLabels, id: \.self) { label in
+                        Button(label) {
+                            toggleLabel(label, for: note)
+                        }
+                    }
+                    Button(t("Add label", lang: seciliDil)) {
+                        addDefaultLabel(to: note)
+                    }
+                }
+
+                keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") {
+                    toggleArchive(note)
+                }
+
+                if selectedSection == "trash" {
+                    keepCardIconButton("arrow.uturn.backward", helpKey: "Restore note") {
+                        restoreNote(note)
+                    }
+
+                    keepCardIconButton("trash.fill", helpKey: "Delete forever", role: .destructive) {
+                        permanentlyDelete(note)
+                    }
+                } else {
+                    keepCardIconButton("trash", helpKey: "Move to trash", role: .destructive) {
+                        moveToTrash(note)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
+            .opacity(showActions ? 1 : 0)
+            .allowsHitTesting(showActions)
+        }
+        .padding(16)
+        .frame(minHeight: 126, alignment: .topLeading)
+        .background(noteCardColor(note.colorName))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.055), radius: 8, x: 0, y: 3)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            selectedNote = note
+        }
+        .onHover { isHovering in
+            hoveredKeepNoteId = isHovering ? note.id : nil
+        }
+        .opacity(draggingKeepNoteId == note.id ? 0.55 : 1)
+        .onDrag {
+            draggingKeepNoteId = note.id
+            return NSItemProvider(object: note.id as NSString)
+        }
+        .onDrop(of: [.text], delegate: KeepNoteDropDelegate(
+            targetNoteId: note.id,
+            draggingNoteId: $draggingKeepNoteId,
+            moveAction: { draggedId, targetId in
+                moveKeepNote(draggedId, before: targetId)
+            }
+        ))
+
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: selectedSection == "trash" ? "trash" : selectedSection == "archive" ? "archivebox" : selectedSection == "reminders" ? "bell" : selectedSection == "projectnotes" ? "doc.text.magnifyingglass" : "lightbulb")
+                .font(.system(size: 46))
+                .foregroundColor(.secondary.opacity(0.65))
+            Text(t(selectedSection == "trash" ? "Trash is empty" : selectedSection == "archive" ? "No archived notes" : selectedSection == "reminders" ? "No reminders" : selectedSection == "projectnotes" ? "No project notes found" : "Notes you add appear here", lang: seciliDil))
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func noteCardColor(_ name: String) -> Color {
+        let dark = keepColorScheme == .dark
+        switch name {
+        case "yellow": return dark ? Color(red: 0.30, green: 0.25, blue: 0.10) : Color(red: 1.0, green: 0.96, blue: 0.72)
+        case "green": return dark ? Color(red: 0.12, green: 0.27, blue: 0.18) : Color(red: 0.82, green: 0.95, blue: 0.84)
+        case "blue": return dark ? Color(red: 0.12, green: 0.22, blue: 0.34) : Color(red: 0.82, green: 0.91, blue: 1.0)
+        case "pink": return dark ? Color(red: 0.32, green: 0.14, blue: 0.22) : Color(red: 1.0, green: 0.86, blue: 0.91)
+        case "purple": return dark ? Color(red: 0.24, green: 0.17, blue: 0.34) : Color(red: 0.91, green: 0.86, blue: 1.0)
+        default: return dark ? Color(white: 0.15) : Color.white
+        }
+    }
+
+    private func cleanLinkTitle(_ link: String) -> String {
+        let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), let host = url.host else {
+            return trimmed
+        }
+        return host.replacingOccurrences(of: "www.", with: "")
+    }
+
+    private func openNoteLink(_ link: String) {
+        let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let normalized: String
+        if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://") {
+            normalized = trimmed
+        } else {
+            normalized = "https://\(trimmed)"
+        }
+
+        guard let url = URL(string: normalized) else { return }
+
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #elseif canImport(UIKit)
+        UIApplication.shared.open(url)
+        #endif
+    }
+
+    private func startNotesListener() {
+        listener?.remove()
+        guard let collection = notesCollection else {
+            isLoading = false
+            errorMessage = t("Unable to load notes for this account.", lang: seciliDil)
+            return
+        }
+
+        isLoading = true
+        listener = collection
+            .order(by: "updatedAt", descending: true)
+            .addSnapshotListener { snapshot, error in
+                DispatchQueue.main.async {
+                    isLoading = false
+
+                    if let error {
+                        errorMessage = error.localizedDescription
+                        return
+                    }
+
+                    notes = snapshot?.documents.map { StudioKeepNote(document: $0) } ?? []
+                }
+            }
+    }
+
+    private func saveComposerIfNeeded() {
+        let title = composerTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !title.isEmpty || !text.isEmpty else {
+            composerExpanded = false
+            composerColor = "default"
+            composerPinned = false
+            composerLabelText = ""
+            composerLinkText = ""
+            composerReminderEnabled = false
+            return
+        }
+
+        let labels = composerLabelText
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let links = composerLinkText
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let note = StudioKeepNote(
+            title: title,
+            text: text,
+            colorName: composerColor,
+            labels: labels,
+            links: links,
+            reminderDate: composerReminderEnabled ? composerReminderDate : nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        saveNote(note)
+        composerTitle = ""
+        composerText = ""
+        composerColor = "default"
+        composerPinned = false
+        composerLabelText = ""
+        composerLinkText = ""
+        composerReminderEnabled = false
+        composerExpanded = false
+    }
+
+    private func nextManualOrderValue() -> Double {
+        let activeOrders = notes
+            .filter { !$0.isDeleted && !$0.isArchived }
+            .map { $0.manualOrder }
+
+        let currentMin = activeOrders.min() ?? Date().timeIntervalSince1970
+        return currentMin - 1
+    }
+
+    private func moveKeepNote(_ draggedId: String, before targetId: String) {
+        guard selectedSection == "notes" else { return }
+        guard draggedId != targetId else { return }
+
+        var active = notes
+            .filter { !$0.isDeleted && !$0.isArchived }
+            .sorted { first, second in
+                if first.isPinned != second.isPinned {
+                    return first.isPinned && !second.isPinned
+                }
+                return first.manualOrder < second.manualOrder
+            }
+
+        guard let fromIndex = active.firstIndex(where: { $0.id == draggedId }),
+              let toIndex = active.firstIndex(where: { $0.id == targetId }) else {
+            return
+        }
+
+        let moved = active.remove(at: fromIndex)
+        active.insert(moved, at: toIndex)
+
+        let timestamp = Date().timeIntervalSince1970
+        for index in active.indices {
+            var updated = active[index]
+            updated.manualOrder = timestamp + Double(index)
+            saveNote(updated)
+        }
+    }
+
+    private func saveNote(_ note: StudioKeepNote) {
+        guard let collection = notesCollection else { return }
+        var updated = note
+        updated.updatedAt = Date()
+
+        var payload: [String: Any] = [
+            "title": updated.title,
+            "text": updated.text,
+            "colorName": updated.colorName,
+            "isPinned": updated.isPinned,
+            "isArchived": updated.isArchived,
+            "isDeleted": updated.isDeleted,
+            "labels": updated.labels,
+            "links": updated.links,
+            "manualOrder": updated.manualOrder,
+            "createdAt": Timestamp(date: updated.createdAt),
+            "updatedAt": FieldValue.serverTimestamp(),
+            "companyId": cleanCompanyId,
+            "userId": cleanUserId
+        ]
+
+        if let reminderDate = updated.reminderDate {
+            payload["reminderDate"] = Timestamp(date: reminderDate)
+        } else {
+            payload["reminderDate"] = FieldValue.delete()
+        }
+
+        collection.document(updated.id).setData(payload, merge: true)
+    }
+
+    private func togglePin(_ note: StudioKeepNote) {
+        var updated = note
+        updated.isPinned.toggle()
+        saveNote(updated)
+    }
+
+    private func toggleArchive(_ note: StudioKeepNote) {
+        var updated = note
+        updated.isArchived.toggle()
+        updated.isDeleted = false
+        saveNote(updated)
+    }
+
+    private func createLabelFromInput() {
+        let clean = newLabelText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        newLabelText = ""
+
+        if allLabels.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) {
+            selectedSection = "label:\(clean)"
+            return
+        }
+
+        let placeholder = StudioKeepNote(
+            title: "",
+            text: "",
+            colorName: "default",
+            isPinned: composerPinned,
+            isArchived: false,
+            isDeleted: true,
+            labels: [clean],
+            reminderDate: nil,
+            manualOrder: nextManualOrderValue(),
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        saveNote(placeholder)
+        selectedSection = "label:\(clean)"
+    }
+
+    private func deleteLabel(_ label: String) {
+        let clean = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+
+        for note in notes where note.labels.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) {
+            var updated = note
+            updated.labels.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
+
+            if updated.isEmpty && updated.isDeleted {
+                permanentlyDelete(updated)
+            } else {
+                saveNote(updated)
+            }
+        }
+
+        if selectedSection == "label:\(clean)" {
+            selectedSection = "notes"
+        }
+    }
+
+    private func emptyTrash() {
+        for note in notes where note.isDeleted {
+            permanentlyDelete(note)
+        }
+    }
+
+    private func duplicateNote(_ note: StudioKeepNote) {
+        let duplicate = StudioKeepNote(
+            title: note.title.isEmpty ? "Copy" : "\(note.title) Copy",
+            text: note.text,
+            colorName: note.colorName,
+            isPinned: composerPinned,
+            isArchived: false,
+            isDeleted: false,
+            labels: note.labels,
+            links: note.links,
+            reminderDate: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        saveNote(duplicate)
+    }
+
+    private func copyNoteToClipboard(_ note: StudioKeepNote) {
+        let combined = [note.title, note.text]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
+
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(combined, forType: .string)
+        #elseif canImport(UIKit)
+        UIPasteboard.general.string = combined
+        #endif
+    }
+
+    private func setReminder(_ note: StudioKeepNote, date: Date?) {
+        var updated = note
+        updated.reminderDate = date
+        saveNote(updated)
+    }
+
+    private func toggleLabel(_ label: String, for note: StudioKeepNote) {
+        let clean = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+
+        var updated = note
+        if updated.labels.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) {
+            updated.labels.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
+        } else {
+            updated.labels.append(clean)
+        }
+        saveNote(updated)
+    }
+
+    private func addDefaultLabel(to note: StudioKeepNote) {
+        let existing = Set(allLabels.map { $0.lowercased() })
+        let base = "Personal"
+        let label = existing.contains(base.lowercased()) ? "Quick" : base
+        toggleLabel(label, for: note)
+    }
+
+    private func moveToTrash(_ note: StudioKeepNote) {
+        var updated = note
+        updated.isDeleted = true
+        updated.isArchived = false
+        saveNote(updated)
+    }
+
+    private func restoreNote(_ note: StudioKeepNote) {
+        var updated = note
+        updated.isDeleted = false
+        saveNote(updated)
+    }
+
+    private func permanentlyDelete(_ note: StudioKeepNote) {
+        notesCollection?.document(note.id).delete()
+    }
+}
+
+
+struct KeepNoteDropDelegate: DropDelegate {
+    let targetNoteId: String
+    @Binding var draggingNoteId: String?
+    let moveAction: (String, String) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingNoteId, draggingNoteId != targetNoteId else { return }
+        moveAction(draggingNoteId, targetNoteId)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingNoteId = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        // Keep current order preview.
+    }
+}
+
+
+struct StudioKeepNoteEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var editorColorScheme
+
+    @State var note: StudioKeepNote
+    let noteColors: [String]
+    let colorForNote: (String) -> Color
+    let onSave: (StudioKeepNote) -> Void
+    let onDelete: (StudioKeepNote) -> Void
+    let onArchive: (StudioKeepNote) -> Void
+    let onPin: (StudioKeepNote) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .frame(width: 34, height: 34)
+                        .background(Color.primary.opacity(0.07))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button {
+                    onPin(note)
+                    note.isPinned.toggle()
+                } label: {
+                    Image(systemName: note.isPinned ? "pin.fill" : "pin")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    let copy = StudioKeepNote(
+                        title: note.title.isEmpty ? "Copy" : "\(note.title) Copy",
+                        text: note.text,
+                        colorName: note.colorName,
+                        isPinned: false,
+                        isArchived: false,
+                        isDeleted: false,
+                        labels: note.labels,
+                        reminderDate: nil,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                    onSave(copy)
+                } label: {
+                    Image(systemName: "plus.square.on.square")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    onArchive(note)
+                    note.isArchived.toggle()
+                } label: {
+                    Image(systemName: "archivebox")
+                }
+                .buttonStyle(.plain)
+
+                Button(role: .destructive) {
+                    onDelete(note)
+                    dismiss()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(14)
+
+            TextField("Title", text: $note.title)
+                .font(.system(size: 20, weight: .bold))
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+
+            TextEditor(text: $note.text)
+                .font(.system(size: 15.5))
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(note.reminderDate == nil ? "No reminder" : note.reminderDate!.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Button("Tomorrow") {
+                        note.reminderDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                    }
+
+                    Button("Clear") {
+                        note.reminderDate = nil
+                    }
+                }
+
+                TextField("Labels, comma separated", text: Binding(
+                    get: { note.labels.joined(separator: ", ") },
+                    set: { value in
+                        note.labels = value
+                            .split(separator: ",")
+                            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                    }
+                ))
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                TextField("Links, comma separated", text: Binding(
+                    get: { note.links.joined(separator: ", ") },
+                    set: { value in
+                        note.links = value
+                            .split(separator: ",")
+                            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                    }
+                ))
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Color.primary.opacity(0.055))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .padding(.horizontal, 16)
+
+            HStack {
+                Menu {
+                    ForEach(noteColors, id: \.self) { color in
+                        Button(color.capitalized) {
+                            note.colorName = color
+                        }
+                    }
+                } label: {
+                    Label("Colour", systemImage: "paintpalette")
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button("Done") {
+                    onSave(note)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(16)
+        }
+        .frame(minWidth: 460, minHeight: 420)
+        .background(colorForNote(note.colorName))
+        .onDisappear {
+            if !note.isEmpty {
+                onSave(note)
+            }
+        }
+    }
+}
+
+
+
 struct ContentView: View {
     @Environment(\.colorScheme) var systemColorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -326,6 +3705,7 @@ struct ContentView: View {
     @State private var seciliSiralama: SiralamaTuru = .akilli
     @State private var aktifSiparisFiltresi: SiparisHizliFiltre = .all
     @State private var aktifSekme: String = UserDefaults.standard.string(forKey: "studioRequestedStartTab") ?? "Orders"
+    @State private var isActivityDrawerOpen: Bool = false
     @FocusState private var orderListFocused: Bool
     @FocusState private var searchFocused: Bool
     @State private var orderSelectionShouldScroll: Bool = false
@@ -1048,6 +4428,7 @@ struct ContentView: View {
                             message: cloudSyncMessage,
                             lastSyncDate: lastCloudSyncDate
                         )
+                        activityTopNavigationButton
                         if canEditWorkflowFields { newOrderButton }
                         topAccountAvatarIfAvailable
                     }
@@ -1070,6 +4451,7 @@ struct ContentView: View {
                                 message: cloudSyncMessage,
                                 lastSyncDate: lastCloudSyncDate
                             )
+                            activityTopNavigationButton
                             if canEditWorkflowFields { newOrderButton }
                             topAccountAvatarIfAvailable
                         }
@@ -1180,6 +4562,29 @@ struct ContentView: View {
                 }
             }
 
+            Button {
+                aktifSekme = "Messages"
+                phoneShowsOrderDetail = false
+            } label: {
+                Label(phoneMessagesMenuTitle, systemImage: "message.fill")
+            }
+
+            Button {
+                aktifSekme = "Notes"
+                phoneShowsOrderDetail = false
+            } label: {
+                Label(t("Notes", lang: seciliDil), systemImage: "note.text")
+            }
+
+            Button {
+                phoneShowsOrderDetail = false
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isActivityDrawerOpen = true
+                }
+            } label: {
+                Label(phoneActivityMenuTitle, systemImage: "bell.fill")
+            }
+
             if canAccessSettings {
                 Button {
                     settingsStartSection = "Account"
@@ -1205,12 +4610,26 @@ struct ContentView: View {
                 Label(t("Sign Out", lang: seciliDil), systemImage: "arrow.right.square")
             }
         } label: {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.primary)
-                .frame(width: 34, height: 34)
-                .background(Color.primary.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.primary)
+                    .frame(width: 34, height: 34)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                if (messageUnreadCountForBadge + activityUnreadCountForBadge) > 0 {
+                    Text((messageUnreadCountForBadge + activityUnreadCountForBadge) > 99 ? "99+" : "\(messageUnreadCountForBadge + activityUnreadCountForBadge)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 17, minHeight: 17)
+                        .background(Capsule().fill(Color.red))
+                        .offset(x: 5, y: -5)
+                }
+            }
         }
     }
 
@@ -1315,6 +4734,129 @@ struct ContentView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
+    private var messageUnreadCountForBadge: Int {
+        max(0, firebaseManager.messageUnreadCount)
+    }
+
+    private var messageUnreadBadgeText: String {
+        let count = messageUnreadCountForBadge
+        return count > 99 ? "99+" : "\(count)"
+    }
+
+    private var phoneMessagesMenuTitle: String {
+        messageUnreadCountForBadge > 0 ? "Messages  \(messageUnreadBadgeText)" : "Messages"
+    }
+
+    private var activityUnreadCountForBadge: Int {
+        max(0, firebaseManager.activityNotificationUnreadCount)
+    }
+
+    private var activityUnreadBadgeText: String {
+        let count = activityUnreadCountForBadge
+        return count > 99 ? "99+" : "\(count)"
+    }
+
+    private var phoneActivityMenuTitle: String {
+        activityUnreadCountForBadge > 0 ? "Activity  \(activityUnreadBadgeText)" : "Activity"
+    }
+
+    private var activityTopNavigationButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                isActivityDrawerOpen.toggle()
+            }
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(isActivityDrawerOpen ? .blue : .gray)
+                    .frame(width: 38, height: 38)
+                    .background(isActivityDrawerOpen ? Color.blue.opacity(0.14) : Color.primary.opacity(0.06))
+                    .clipShape(Circle())
+
+                if activityUnreadCountForBadge > 0 {
+                    Text(activityUnreadBadgeText)
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 17, minHeight: 17)
+                        .background(Capsule().fill(Color.red))
+                        .offset(x: 5, y: -5)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Activity")
+    }
+
+    private var messagesTopNavigationButton: some View {
+        Button {
+            aktifSekme = "Messages"
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "message.fill")
+                Text("Messages")
+                    .font(.system(size: 14, weight: .medium))
+                if messageUnreadCountForBadge > 0 {
+                    Text(messageUnreadBadgeText)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .background(Capsule().fill(Color.red))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(aktifSekme == "Messages" ? Color.blue.opacity(0.2) : Color.clear)
+            .foregroundColor(aktifSekme == "Messages" ? .blue : .gray)
+            .cornerRadius(20)
+        }
+        .buttonStyle(.plain)
+    }
+
+
+    @ViewBuilder
+    private var activityNotificationDrawerOverlay: some View {
+        if isActivityDrawerOpen {
+            ZStack(alignment: .trailing) {
+                Color.black.opacity(isPhoneLayout ? 0.92 : 0.0)
+                    .ignoresSafeArea()
+                    .background(.ultraThinMaterial.opacity(isPhoneLayout ? 0.0 : 0.0))
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            isActivityDrawerOpen = false
+                        }
+                    }
+
+                StudioActivityCenterView(
+                    presentationStyle: .drawer,
+                    onClose: {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            isActivityDrawerOpen = false
+                        }
+                    },
+                    onOpenNotification: handleActivityNotificationTap
+                )
+                .environmentObject(firebaseManager)
+                .environmentObject(authVM)
+                .frame(width: isPhoneLayout ? nil : 430)
+                .frame(maxWidth: isPhoneLayout ? .infinity : 430)
+                .frame(maxHeight: isPhoneLayout ? .infinity : nil)
+                .background(isPhoneLayout ? Color.primary.opacity(0.03) : Color.clear)
+                .padding(.trailing, isPhoneLayout ? 0 : 18)
+                .padding(.top, isPhoneLayout ? 0 : 94)
+                .padding(.bottom, isPhoneLayout ? 0 : 18)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+            .zIndex(500)
+        }
+    }
+
     private var topNavigationView: some View {
         HStack(spacing: 10) {
             if canAccessOrders {
@@ -1332,7 +4874,8 @@ struct ContentView: View {
             if canAccessQuickReply {
                 UstMenuButonu(title: t("Quick Reply", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
             }
-            UstMenuButonuWithBadge(title: "Messages", icon: "message.fill", isSelected: aktifSekme == "Messages", badgeCount: firebaseManager.messageUnreadCount) { aktifSekme = "Messages" }
+            messagesTopNavigationButton
+            UstMenuButonu(title: t("Notes", lang: seciliDil), icon: "note.text", isSelected: aktifSekme == "Notes") { aktifSekme = "Notes" }
             if canAccessSettings {
                 UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
             }
@@ -1695,6 +5238,18 @@ struct ContentView: View {
                     .environmentObject(authVM)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(bgMain)
+            } else if aktifSekme == "Notes" {
+                StudioKeepNotesView(onOpenProject: { orderKey in
+                    if let order = firebaseManager.siparisler.first(where: { orderSelectionKey($0) == orderKey }) {
+                        handleOrderTap(order)
+                        aktifSekme = "Orders"
+                        orderSelectionShouldScroll = true
+                    }
+                })
+                    .environmentObject(firebaseManager)
+                    .environmentObject(authVM)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(bgMain)
             } else if aktifSekme == "QuickReply" {
                 if canAccessQuickReply {
                     AutoReplyView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
@@ -1725,6 +5280,9 @@ struct ContentView: View {
         .preferredColorScheme(aktifTema)
         .overlay(alignment: .topTrailing) {
             macFirstProjectGuideOverlay
+        }
+        .overlay(alignment: .trailing) {
+            activityNotificationDrawerOverlay
         }
         .onOpenURL { url in
             handleStudioFlowDeepLink(url)
@@ -1771,8 +5329,12 @@ struct ContentView: View {
             refreshMacFirstProjectGuideForCurrentAccount()
             consumePendingSupportTicketLaunchRoute()
             consumePendingMessageThreadLaunchRoute()
+            startActivityNotificationsIfPossible()
         }
-        .onDisappear { stopCompanySettingsListener() }
+        .onDisappear {
+            stopCompanySettingsListener()
+            firebaseManager.stopActivityNotificationsRealtime()
+        }
         .onChange(of: authVM.currentUserId) { _, _ in
             refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
         }
@@ -1782,12 +5344,14 @@ struct ContentView: View {
             scheduleBusinessOnboardingGate()
             enforceWorkspaceRoleAccess()
             refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
+            startActivityNotificationsIfPossible()
         }
         .onChange(of: firebaseManager.currentCompanyId) { _, _ in
             startCompanySettingsListener()
             scheduleBusinessOnboardingGate()
             enforceWorkspaceRoleAccess()
             refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
+            startActivityNotificationsIfPossible()
         }
         .onChange(of: authVM.currentWorkspaceRole) { _, _ in
             syncFirebaseManagerWithAuthCompany()
@@ -3186,6 +6750,46 @@ struct ContentView: View {
         }
     }
 
+
+    private func startActivityNotificationsIfPossible() {
+        let companyId = (authVM.currentCompanyId ?? firebaseManager.currentCompanyId).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard authVM.isLoggedIn, !companyId.isEmpty else {
+            firebaseManager.stopActivityNotificationsRealtime(clearData: true)
+            return
+        }
+        firebaseManager.startActivityNotificationsRealtime(companyId: companyId)
+    }
+
+    private func handleActivityNotificationTap(_ notification: StudioActivityNotification) {
+        let companyId = (authVM.currentCompanyId ?? firebaseManager.currentCompanyId).trimmingCharacters(in: .whitespacesAndNewlines)
+        firebaseManager.markActivityNotificationRead(companyId: companyId, notificationId: notification.id)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            isActivityDrawerOpen = false
+        }
+
+        let route = notification.route.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if route == "messagethread" || !notification.threadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            UserDefaults.standard.set(notification.threadId, forKey: "pendingMessageThreadId")
+            UserDefaults.standard.set(notification.messageId, forKey: "pendingMessageId")
+            UserDefaults.standard.set("Messages", forKey: "studioRequestedStartTab")
+            aktifSekme = "Messages"
+            return
+        }
+
+        if route == "supportticket" || !notification.ticketId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settingsStartSection = "Support"
+            UserDefaults.standard.set(notification.ticketId, forKey: "pendingSupportTicketId")
+            UserDefaults.standard.set(notification.ticketType.isEmpty ? "workspace" : notification.ticketType, forKey: "pendingSupportTicketType")
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "pendingSupportTicketOpenRequestedAt")
+            aktifSekme = "Settings"
+            return
+        }
+
+        if route == "order" || !notification.orderId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            aktifSekme = "Orders"
+        }
+    }
+
     private func canOpenTab(_ tab: String) -> Bool {
         switch tab {
         case "Orders": return canAccessOrders
@@ -3194,13 +6798,14 @@ struct ContentView: View {
         case "Customers": return canAccessCustomers
         case "QuickReply": return canAccessQuickReply
         case "Messages": return true
+        case "Notes": return true
         case "Settings": return canAccessSettings
         default: return false
         }
     }
 
     private var firstAccessibleWorkspaceTab: String {
-        ["Orders", "Dashboard", "Schedule", "Customers", "QuickReply", "Messages", "Settings"].first(where: canOpenTab) ?? "Orders"
+        ["Orders", "Dashboard", "Schedule", "Customers", "QuickReply", "Messages", "Notes", "Settings"].first(where: canOpenTab) ?? "Orders"
     }
 
     private func enforceWorkspaceRoleAccess() {
@@ -4255,43 +7860,6 @@ struct CloudSyncStatusBadge: View {
 
 
 struct UstMenuButonu: View { let title: String; let icon: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { HStack(spacing: 8) { Image(systemName: icon); Text(title).font(.system(size: 14, weight: .medium)) }.padding(.horizontal, 16).padding(.vertical, 8).background(isSelected ? Color.blue.opacity(0.2) : Color.clear).foregroundColor(isSelected ? .blue : .gray).cornerRadius(20) }.buttonStyle(.plain) } }
-
-struct UstMenuButonuWithBadge: View {
-    let title: String
-    let icon: String
-    let isSelected: Bool
-    let badgeCount: Int
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                if badgeCount > 0 {
-                    Text(badgeText)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.red)
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.blue.opacity(0.2) : Color.clear)
-            .foregroundColor(isSelected ? .blue : .gray)
-            .cornerRadius(20)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var badgeText: String {
-        badgeCount > 99 ? "99+" : String(badgeCount)
-    }
-}
 struct SolMenuSiralamaButonu: View { let title: String; let isSelected: Bool; let action: () -> Void; var body: some View { Button(action: action) { Text(title).font(.system(size: 12, weight: isSelected ? .bold : .regular)).padding(.horizontal, 16).padding(.vertical, 6).background(isSelected ? Color.blue : Color.clear).foregroundColor(isSelected ? .white : .gray).cornerRadius(15).overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)) }.buttonStyle(.plain) } }
 struct CustomStepDTOList: Codable { var id = UUID(); var title: String }
 
@@ -5686,7 +9254,7 @@ struct AccountProfileView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.06), radius: 16, y: 8)
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0 : 0.06), radius: 16, y: 8)
     }
 
     private var profileCard: some View {

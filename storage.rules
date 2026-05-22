@@ -134,6 +134,19 @@ service firebase.storage {
       allow delete: if canEditWorkspaceFiles(companyId);
     }
 
+
+    match /companies/{companyId}/support_files/{userId}/{fileName} {
+      allow read: if canReadWorkspace(companyId);
+      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if canEditWorkspaceFiles(companyId);
+    }
+
+    match /companies/{companyId}/support_files/{userId}/{subPath=**} {
+      allow read: if canReadWorkspace(companyId);
+      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if canEditWorkspaceFiles(companyId);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
