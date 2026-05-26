@@ -30,7 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
@@ -41,10 +41,10 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Percent
@@ -52,7 +52,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -162,6 +163,8 @@ fun SettingsScreen(
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
     onDeleteWorkspaceData: () -> Unit,
+    onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit = {},
+    onReloadMessageWorkspaceSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
@@ -311,6 +314,7 @@ private fun rememberSettingsSections(): List<SettingsSection> = remember {
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline),
         SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description),
         SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome),
+        SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat),
         SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent),
         SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart),
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
@@ -352,7 +356,7 @@ private fun SettingsRow(
             if (unreadCount > 0) {
                 SupportUnreadBadge(unreadCount)
             }
-            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -386,6 +390,8 @@ private fun SettingsDetailScreen(
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
     onDeleteWorkspaceData: () -> Unit,
+    onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit = {},
+    onReloadMessageWorkspaceSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -402,6 +408,7 @@ private fun SettingsDetailScreen(
                 "workflow" -> WorkflowStepsDetail(state, onUpdateWorkspaceSettings)
                 "pdf" -> PdfExportDetail(state, onUpdateWorkspaceSettings)
                 "quickReply" -> QuickReplySettingsDetail(state, onUpdateWorkspaceSettings)
+                "messages" -> MessageSettingsDetail(state, onSaveMessageWorkspaceSettings, onReloadMessageWorkspaceSettings)
                 "financial" -> FinancialSettingsDetail(state, onUpdateWorkspaceSettings, onRecalculateFinancialSettings)
                 "woo" -> WooCommerceDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
@@ -453,7 +460,7 @@ private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack:
         ) {
             if (showBack) {
                 TextButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Settings", fontWeight = FontWeight.Bold)
                 }
@@ -576,7 +583,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
         DetailCard(title = "Status Menu Options", icon = Icons.Filled.CheckCircle) {
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { statusExpanded = !statusExpanded }) {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue)
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue)
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(if (statusExpanded) "Hide Status Options" else "Show Status Options", fontWeight = FontWeight.ExtraBold)
@@ -612,81 +619,6 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                 addLabel = "Add Toggle",
                 values = settings.customToggles,
                 onChange = { onSave(mapOf("customTogglesJSON" to titleArrayJson(it)), "Production toggles saved.") }
-            )
-            SettingSwitch("Show Status Notes / Supplier", settings.showStatusNotesSupplier) {
-                onSave(mapOf("showStatusNotesSupplier" to it), "Status notes saved.")
-            }
-            OutlinedTextField(
-                value = settings.statusNotesSupplierLabel,
-                onValueChange = {
-                    onSave(mapOf("statusNotesSupplierLabel" to it), "Status notes label saved.")
-                },
-                label = { Text("Status Notes / Supplier Label") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            HorizontalDivider()
-            EditableNameList(
-                title = "Custom Fields",
-                addLabel = "Add Field",
-                values = settings.customFields,
-                onChange = { onSave(mapOf("customFieldsJSON" to titleArrayJson(it)), "Custom fields saved.") }
-            )
-            HorizontalDivider()
-            Text("Communication Fields", fontWeight = FontWeight.ExtraBold)
-            TwoColumnSwitches(
-                listOf(
-                    SwitchSpec("Telephone", settings.communicationShowTelephone, "communicationShowTelephone"),
-                    SwitchSpec("Email", settings.communicationShowEmail, "communicationShowEmail"),
-                    SwitchSpec("Address", settings.communicationShowAddress, "communicationShowAddress"),
-                    SwitchSpec("Channel Buttons", settings.communicationShowChannel, "communicationShowChannel"),
-                    SwitchSpec("Customer Notes", settings.communicationShowCustomerNotes, "communicationShowCustomerNotes")
-                ),
-                onSave = { key, value -> onSave(mapOf(key to value), "Communication fields saved.") }
-            )
-            EditableNameList(
-                title = "Channel Button Names",
-                addLabel = "Add Channel",
-                values = settings.communicationChannelLabels,
-                onChange = { onSave(mapOf("communicationChannelLabelsJSON" to stringArrayJson(it)), "Channel labels saved.") }
-            )
-            HorizontalDivider()
-            EditableHeadingItemList(
-                title = "Special Note Sections",
-                addLabel = "Add Note",
-                values = settings.specialNoteSections,
-                lockedIds = setOf(STUDIO_PRIMARY_SPECIAL_NOTE_ID),
-                onChange = { onSave(specialNoteSectionUpdates(it), "Special note sections saved.") }
-            )
-            HorizontalDivider()
-            EditableQuickReminderList(
-                title = "Quick Reminder Templates",
-                values = settings.scheduleQuickReminders,
-                onChange = { onSave(scheduleQuickReminderUpdates(it), "Quick reminders saved.") }
-            )
-            HorizontalDivider()
-            EditableNameList(
-                title = "Material Default Checks",
-                addLabel = "Add Check",
-                values = settings.materialsDefaultChecks,
-                onChange = { onSave(materialDefaultCheckUpdates(it), "Material checks saved.") }
-            )
-            HorizontalDivider()
-            EditableNameList(
-                title = "Materials Extra Yes/No Checks",
-                addLabel = "Add Check",
-                values = settings.materialsToggles,
-                onChange = { onSave(mapOf("materialsTogglesJSON" to titleArrayJson(it)), "Material toggles saved.") }
-            )
-            SettingSwitch("Show Notes / Supplier", settings.showMaterialsNotesSupplier) {
-                onSave(mapOf("showMaterialsNotesSupplier" to it), "Material notes saved.")
-            }
-            OutlinedTextField(
-                value = settings.materialsNotesSupplierLabel,
-                onValueChange = { onSave(mapOf("materialsNotesSupplierLabel" to it), "Material notes label saved.") },
-                label = { Text("Notes / Supplier Label") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
             )
             HorizontalDivider()
             Text("Dashboard Highlights", fontWeight = FontWeight.ExtraBold)
@@ -1533,7 +1465,7 @@ private fun AccountDetail(
                             Text("Send Password Reset Email", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         TextButton(onClick = onSignOut, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Filled.Logout, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Sign Out", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -1546,7 +1478,7 @@ private fun AccountDetail(
                             Text("Send Password Reset Email")
                         }
                         TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.Logout, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Sign Out")
                         }
@@ -1714,7 +1646,7 @@ private fun TeamAccessDetail(
                             }
                             CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                         }
-                        DetailCard(title = "Request Access", icon = Icons.Filled.Send) {
+                        DetailCard(title = "Request Access", icon = Icons.AutoMirrored.Filled.Send) {
                             Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedTextField(
@@ -1728,7 +1660,7 @@ private fun TeamAccessDetail(
                                     onRequestWorkspaceAccess(requestIdentifier)
                                     requestIdentifier = ""
                                 }) {
-                                    Icon(Icons.Filled.Send, contentDescription = null)
+                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Send")
                                 }
@@ -1753,7 +1685,7 @@ private fun TeamAccessDetail(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Advanced: connect with Company ID", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                                 Spacer(modifier = Modifier.weight(1f))
-                                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                             }
                         }
                         DetailCard(title = "Invite People", icon = Icons.Filled.ContentCopy) {
@@ -1784,7 +1716,7 @@ private fun TeamAccessDetail(
                         }
                         Text("Advanced: connect with Company ID", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                     }
-                    DetailCard(title = "Request Access", icon = Icons.Filled.Send) {
+                    DetailCard(title = "Request Access", icon = Icons.AutoMirrored.Filled.Send) {
                         Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedTextField(
@@ -1798,7 +1730,7 @@ private fun TeamAccessDetail(
                                 onRequestWorkspaceAccess(requestIdentifier)
                                 requestIdentifier = ""
                             }) {
-                                Icon(Icons.Filled.Send, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Send")
                             }
@@ -2420,7 +2352,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                     colors = ButtonDefaults.buttonColors(containerColor = StudioBlue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (sending) "Sending..." else "Send Ticket", fontWeight = FontWeight.ExtraBold)
                 }
@@ -2706,7 +2638,7 @@ private fun SupportTicketCard(
                         colors = ButtonDefaults.buttonColors(containerColor = StudioBlue),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Send Reply", fontWeight = FontWeight.ExtraBold)
                     }
@@ -2998,7 +2930,7 @@ private fun MenuChip(value: String, options: List<String>, modifier: Modifier = 
             Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(value, color = StudioBlue, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.width(4.dp))
-                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -4191,4 +4123,130 @@ private fun readPickedUpload(context: android.content.Context, uri: android.net.
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
     val contentType = context.contentResolver.getType(uri).orEmpty().ifBlank { "image/jpeg" }
     return PickedUpload(bytes = bytes, contentType = contentType)
+}
+
+@Composable
+private fun MessageSettingsDetail(
+    state: StudioFlowUiState,
+    onSave: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit,
+    onReload: () -> Unit
+) {
+    val canEdit = state.workspace?.isOwner == true || state.workspace?.role == "admin"
+    val current = state.messageWorkspaceSettings
+    var direct by remember(current) { mutableStateOf(current.directMessagesEnabled) }
+    var group by remember(current) { mutableStateOf(current.groupConversationsEnabled) }
+    var attachments by remember(current) { mutableStateOf(current.attachmentsEnabled) }
+    val dirty = direct != current.directMessagesEnabled ||
+        group != current.groupConversationsEnabled ||
+        attachments != current.attachmentsEnabled
+
+    androidx.compose.foundation.layout.Column(
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+    ) {
+        androidx.compose.material3.Text(
+            "Control workspace-wide messaging permissions for the team.",
+            fontSize = 12.sp,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            androidx.compose.foundation.layout.Column(
+                modifier = androidx.compose.ui.Modifier.padding(16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)
+            ) {
+                MessageSettingsToggle(
+                    title = "Allow Direct Messages",
+                    description = "Team members can start one-to-one conversations.",
+                    checked = direct,
+                    enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
+                    onChange = { direct = it }
+                )
+                MessageSettingsToggle(
+                    title = "Allow Group Conversations",
+                    description = "Team members can add people and create group chats.",
+                    checked = group,
+                    enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
+                    onChange = { group = it }
+                )
+                MessageSettingsToggle(
+                    title = "Allow File & Image Sending",
+                    description = "Team members can send images and files in Messages.",
+                    checked = attachments,
+                    enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
+                    onChange = { attachments = it }
+                )
+            }
+        }
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+        ) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = onReload,
+                enabled = !state.isSavingMessageWorkspaceSettings
+            ) { androidx.compose.material3.Text("Reload") }
+            androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.weight(1f))
+            androidx.compose.material3.Button(
+                onClick = {
+                    onSave(
+                        uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings(
+                            directMessagesEnabled = direct,
+                            groupConversationsEnabled = group,
+                            attachmentsEnabled = attachments
+                        )
+                    )
+                },
+                enabled = canEdit && dirty && !state.isSavingMessageWorkspaceSettings
+            ) {
+                androidx.compose.material3.Text(
+                    if (state.isSavingMessageWorkspaceSettings) "Saving…" else "Save"
+                )
+            }
+        }
+        if (!canEdit) {
+            androidx.compose.material3.Text(
+                "Only workspace owners or admins can change these settings.",
+                fontSize = 12.sp,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (state.messageWorkspaceSettingsStatus.isNotBlank()) {
+            androidx.compose.material3.Text(
+                state.messageWorkspaceSettingsStatus,
+                fontSize = 12.sp,
+                color = if (state.messageWorkspaceSettingsStatus.lowercase().contains("error"))
+                    androidx.compose.material3.MaterialTheme.colorScheme.error
+                else
+                    androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageSettingsToggle(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+            androidx.compose.material3.Text(
+                title,
+                fontSize = 14.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+            )
+            androidx.compose.material3.Text(
+                description,
+                fontSize = 11.sp,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+    }
 }

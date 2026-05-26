@@ -10780,7 +10780,7 @@ struct DetayKarti<Content: View>: View {
     private let previewMinBoyu: Double = 220
     private let ustBaslikAlani: Double = 54
     private let altTutamacAlani: Double = 16
-    private let guvenlikPayi: Double = 8
+    private let guvenlikPayi: Double = 18
     
     init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, forceLayoutUnlocked: Bool = false, guideHighlightActive: Bool = false, guideOptionsHighlightActive: Bool = false, guideOptionsBubbleActive: Bool = false, onGuideOptionsDone: (() -> Void)? = nil, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -10899,11 +10899,10 @@ struct DetayKarti<Content: View>: View {
     }
     private var etkiliYukseklik: Double { max(etkiliMinimumBoy, yukseklik ?? etkiliMinimumBoy) }
     private var shouldAutoAdjustHeightForContent: Bool {
-        #if os(macOS)
-        return false
-        #else
+        // Mac tarafında da kartlar içerikten kısa kalmamalı.
+        // Eskiden macOS için false dönüyordu; bu da fixed height + clipped birleşince
+        // kart içeriğinin kesilmiş / kapanmış görünmesine sebep oluyordu.
         return autoAdjustHeightOnContentChange
-        #endif
     }
     private func hesaplananMinimumBoy(icerikBoyu: Double) -> Double { if kartTipi == .preview { return previewMinBoyu }; let hesap = icerikBoyu + ustBaslikAlani + altTutamacAlani + guvenlikPayi; return max(minKartBoyu, ceil(hesap)) }
     private func sinirliYukseklik(_ deger: Double) -> Double { max(etkiliMinimumBoy, deger) }
@@ -11332,13 +11331,11 @@ struct DetayKarti<Content: View>: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 10)
                         .background(WorkspacePanSurface())
-                        #if !os(macOS)
                         .background(
                             GeometryReader { geo in
                                 Color.clear.preference(key: IcerikBoyuKey.self, value: Double(geo.size.height))
                             }
                         )
-                        #endif
                 } else if shouldAutoAdjustHeightForContent {
                     VStack(alignment: .leading, spacing: 15) { content }
                         .fixedSize(horizontal: false, vertical: true)
@@ -11379,13 +11376,11 @@ struct DetayKarti<Content: View>: View {
                         )
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
-                        #if !os(macOS)
                         .background(
                             GeometryReader { _ in
                                 Color.clear.preference(key: IcerikBoyuKey.self, value: minimumHeightOverride ?? minKartBoyu)
                             }
                         )
-                        #endif
                 }
             }
             
@@ -11419,7 +11414,6 @@ struct DetayKarti<Content: View>: View {
                 )
             }
         }
-        #if !os(macOS)
         .onPreferenceChange(IcerikBoyuKey.self) { boy in
             DispatchQueue.main.async {
                 // Some cards, such as History / Log, contain an internal ScrollView whose height is
@@ -11500,7 +11494,6 @@ struct DetayKarti<Content: View>: View {
                 }
             }
         }
-        #endif
         .frame(height: etkiliYukseklik, alignment: .top)
         .background(WorkspacePanSurface())
         .background(bgColor) // 🌟 KARTIN DİNAMİK ARKA PLANI 🌟

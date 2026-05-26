@@ -55,7 +55,12 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Percent
@@ -399,6 +404,17 @@ fun OrderDetailScreen(
         var resizingPhoneCard by remember(order.id) { mutableStateOf(false) }
         var draggingPhoneCard by remember(order.id) { mutableStateOf<OrderDetailCardId?>(null) }
         var phoneCardProfilesOpen by remember(order.id) { mutableStateOf(false) }
+        val phoneCtx = LocalContext.current
+        val phoneLockPrefs = remember(phoneCtx) {
+            phoneCtx.getSharedPreferences(OrderDetailPrefsName, Context.MODE_PRIVATE)
+        }
+        val phoneLockKey = remember(workspace?.id, currentUserId) {
+            orderCardsLockedPreferenceKey(workspace?.id, currentUserId)
+        }
+        var phoneCardsUnlocked by remember(phoneLockKey) {
+            mutableStateOf(!phoneLockPrefs.getBoolean(phoneLockKey, false))
+        }
+        val effectivePhoneCardsUnlocked = phoneCardsUnlocked && canManageCardLayout
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -416,6 +432,11 @@ fun OrderDetailScreen(
                     onBack = onBack,
                     showBack = showBack,
                     canManageCardLayout = canManageCardLayout,
+                    cardsUnlocked = phoneCardsUnlocked,
+                    onCardsUnlockedChange = { next ->
+                        phoneCardsUnlocked = next
+                        phoneLockPrefs.edit().putBoolean(phoneLockKey, !next).apply()
+                    },
                     onOpenCardProfiles = if (canManageCardLayout && currentUserId.isNotBlank()) {
                         { phoneCardProfilesOpen = true }
                     } else {
@@ -423,16 +444,7 @@ fun OrderDetailScreen(
                     }
                 )
             }
-            item {
-                DetailHero(
-                    order = order,
-                    assignee = assigneeLabelForDetail(order, teamMembers),
-                    canAssign = canAssign,
-                    teamMembers = teamMembers,
-                    onAssignOrder = onAssignOrder
-                )
-            }
-            if (hiddenPhoneCards.isNotEmpty() && canManageCardLayout) {
+            if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) {
                 item {
                     HiddenCardsBar(
                         hiddenCards = hiddenPhoneCards,
@@ -446,7 +458,7 @@ fun OrderDetailScreen(
                 item(key = cardId.raw) {
                     OrderLayoutCardFrame(
                         cardId = cardId,
-                        cardsUnlocked = canManageCardLayout,
+                        cardsUnlocked = effectivePhoneCardsUnlocked,
                         isDragging = draggingPhoneCard == cardId,
                         customizationActions = OrderCardCustomizationActions(
                             cardId = cardId,
@@ -544,6 +556,8 @@ private fun DetailTopBar(
     onBack: () -> Unit,
     showBack: Boolean,
     canManageCardLayout: Boolean,
+    cardsUnlocked: Boolean = false,
+    onCardsUnlockedChange: (Boolean) -> Unit = {},
     onOpenCardProfiles: (() -> Unit)?
 ) {
     val context = LocalContext.current
@@ -613,43 +627,75 @@ private fun DetailTopBar(
                 ActionsMenuButton()
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (showBack) {
-                    TextButton(onClick = onBack) {
-                        Text("Orders", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+            // Android phone: no back link row (system back button handles it).
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
-                        text = order.displayCustomerName,
+                        text = order.displayCustomerName.ifBlank { "New Project" },
+                        modifier = Modifier.weight(1f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp
+                        fontSize = 28.sp,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Text(
-                        text = order.designName.ifBlank { "New Project" },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp
-                    )
-                    OrderHeaderBadges(
-                        order = order,
+                    if (canManageCardLayout) {
+                        IconButton(
+                            onClick = { onCardsUnlockedChange(!cardsUnlocked) },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
+                        ) {
+                            Icon(
+                                imageVector = if (cardsUnlocked) Icons.Filled.LockOpen else Icons.Filled.Lock,
+                                contentDescription = if (cardsUnlocked) "Lock cards" else "Unlock cards",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { actionsOpen = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(StudioBlue)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreHoriz,
+                            contentDescription = "Actions",
+                            tint = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    OrderHeaderActionsMenu(
+                        expanded = actionsOpen,
+                        onDismiss = { actionsOpen = false },
+                        canCustomize = canManageCardLayout && onOpenCardProfiles != null,
                         canSeeFinancial = canSeeFinancial,
                         headerDetails = headerDetails,
-                        compact = true,
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .horizontalScroll(rememberScrollState())
+                        showHeaderDetailToggles = false,
+                        onCustomize = {
+                            actionsOpen = false
+                            onOpenCardProfiles?.invoke()
+                        },
+                        onExportPdf = {
+                            actionsOpen = false
+                            shareOrderPdf(
+                                context = context,
+                                order = order,
+                                settings = workspaceSettings,
+                                canSeeFinancial = canSeeFinancial,
+                                advancedFinanceEnabled = financeAdvancedEnabled
+                            )
+                        }
                     )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                ActionsMenuButton()
             }
         }
     }
@@ -1507,34 +1553,37 @@ private fun OrderHeaderActionsMenu(
     canSeeFinancial: Boolean,
     headerDetails: OrderHeaderDetailsState,
     onCustomize: () -> Unit,
-    onExportPdf: () -> Unit
+    onExportPdf: () -> Unit,
+    showHeaderDetailToggles: Boolean = true
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        Text(
-            text = "Order Header Details",
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-        HeaderDetailsToggleMenuItem(
-            label = "Delivery Time",
-            checked = headerDetails.showDeliveryTime,
-            onToggle = { headerDetails.setShowDeliveryTime(!headerDetails.showDeliveryTime) }
-        )
-        HeaderDetailsToggleMenuItem(
-            label = "Upcoming Schedule",
-            checked = headerDetails.showUpcomingSchedule,
-            onToggle = { headerDetails.setShowUpcomingSchedule(!headerDetails.showUpcomingSchedule) }
-        )
-        if (canSeeFinancial) {
-            HeaderDetailsToggleMenuItem(
-                label = "Order Value",
-                checked = headerDetails.showOrderValue,
-                onToggle = { headerDetails.setShowOrderValue(!headerDetails.showOrderValue) }
+        if (showHeaderDetailToggles) {
+            Text(
+                text = "Order Header Details",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold
             )
+            HeaderDetailsToggleMenuItem(
+                label = "Delivery Time",
+                checked = headerDetails.showDeliveryTime,
+                onToggle = { headerDetails.setShowDeliveryTime(!headerDetails.showDeliveryTime) }
+            )
+            HeaderDetailsToggleMenuItem(
+                label = "Upcoming Schedule",
+                checked = headerDetails.showUpcomingSchedule,
+                onToggle = { headerDetails.setShowUpcomingSchedule(!headerDetails.showUpcomingSchedule) }
+            )
+            if (canSeeFinancial) {
+                HeaderDetailsToggleMenuItem(
+                    label = "Order Value",
+                    checked = headerDetails.showOrderValue,
+                    onToggle = { headerDetails.setShowOrderValue(!headerDetails.showOrderValue) }
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
         }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
         DropdownMenuItem(
             text = { Text("Customize") },
             leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
@@ -4596,31 +4645,6 @@ private fun WorkflowEditCard(
     val productionLabel = workspaceSettings.customSteps.getOrNull(1)?.ifBlank { "Production" } ?: "Production"
 
     DetailCard(title = "Workflow Controls") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = {
-                    onUpdateOrderFields(
-                        order,
-                        mapOf("designStatus" to "Done", "paintingStatus" to "Done")
-                    )
-                },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Mark Done", fontWeight = FontWeight.ExtraBold)
-            }
-            TextButton(
-                onClick = {
-                    onUpdateOrderFields(
-                        order,
-                        mapOf("designStatus" to "Cancelled", "paintingStatus" to "Cancelled")
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Cancel", color = StudioRed, fontWeight = FontWeight.ExtraBold)
-            }
-        }
         ChoiceRow(
             label = designLabel,
             value = order.designStatus.ifBlank { "Not Yet" },
@@ -4663,151 +4687,6 @@ private fun WorkflowEditCard(
             ) {
                 Text("Save Status Notes", fontWeight = FontWeight.ExtraBold)
             }
-        }
-        HorizontalRule()
-        ChoiceRow(
-            label = "Priority",
-            value = order.priority.ifBlank { "Normal" },
-            options = priorityOptions(),
-            onSelect = { onUpdateOrderFields(order, mapOf("details" to mapOf("priority" to it))) }
-        )
-        ChoiceRow(
-            label = "Risk",
-            value = order.risk.ifBlank { "None" },
-            options = riskOptions(),
-            onSelect = { onUpdateOrderFields(order, mapOf("details" to mapOf("risk" to it))) }
-        )
-        OutlinedTextField(
-            value = riskReason,
-            onValueChange = { riskReason = it },
-            label = { Text("Risk Reason") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        TextButton(
-            onClick = {
-                onUpdateOrderFields(order, mapOf("details" to mapOf("riskReason" to riskReason.trim().ifBlank { "-" })))
-            }
-        ) {
-            Text("Save Risk Reason", fontWeight = FontWeight.ExtraBold)
-        }
-        Text("Materials & Inventory", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        materialLabels.forEachIndexed { index, label ->
-            YesNoChoiceRow(label, materialDefaultToggleValue(order, index, label)) {
-                onUpdateOrderFields(order, materialDefaultTogglePayload(index, label, it))
-            }
-        }
-        workspaceSettings.materialsToggles.forEach { label ->
-            YesNoChoiceRow(label, order.customToggles["materials::$label"] == true) {
-                onUpdateOrderFields(order, mapOf("details" to mapOf("materialsToggles" to mapOf(label to it))))
-            }
-        }
-        if (workspaceSettings.showMaterialsNotesSupplier) {
-            OutlinedTextField(
-                value = invNotes,
-                onValueChange = { invNotes = it },
-                label = { Text(workspaceSettings.materialsNotesSupplierLabel.ifBlank { "Notes / Supplier" }) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(92.dp)
-            )
-            TextButton(
-                onClick = { onUpdateOrderFields(order, mapOf("details" to mapOf("invNotes" to invNotes))) }
-            ) {
-                Text("Save Materials Notes", fontWeight = FontWeight.ExtraBold)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = deliveryTime,
-                onValueChange = { input -> deliveryTime = input.filter { it.isDigit() }.take(3) },
-                label = { Text("Delivery days") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    val next = deliveryTime.toIntOrNull()?.coerceIn(1, 365) ?: order.deliveryTime.coerceAtLeast(1)
-                    deliveryTime = next.toString()
-                    onUpdateOrderFields(order, mapOf("details" to mapOf("deliveryTime" to next)))
-                },
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Save")
-            }
-        }
-        OutlinedTextField(
-            value = courier,
-            onValueChange = { courier = it },
-            label = { Text("Courier") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = trackingNumber,
-            onValueChange = { trackingNumber = it },
-            label = { Text("Tracking Number") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = {
-                    onUpdateOrderFields(
-                        order,
-                        mapOf("details" to mapOf("courier" to courier.trim(), "trackingNumber" to trackingNumber.trim()))
-                    )
-                },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Save Shipping", fontWeight = FontWeight.ExtraBold)
-            }
-            TextButton(
-                onClick = {
-                    onUpdateOrderFields(
-                        order,
-                        mapOf("details" to mapOf("isDispatched" to true, "isDelivered" to false))
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Dispatched", fontWeight = FontWeight.ExtraBold)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(
-                onClick = { onUpdateOrderFields(order, mapOf("details" to mapOf("isDispatched" to false))) },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Not Dispatched", fontWeight = FontWeight.ExtraBold)
-            }
-            TextButton(
-                onClick = {
-                    onUpdateOrderFields(
-                        order,
-                        mapOf("details" to mapOf("isDelivered" to !order.isDelivered, "isDispatched" to true))
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(if (order.isDelivered) "Mark Undelivered" else "Delivered", fontWeight = FontWeight.ExtraBold)
-            }
-        }
-        OutlinedTextField(
-            value = notes,
-            onValueChange = { notes = it },
-            label = { Text("Notes") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-        )
-        Button(
-            onClick = { onUpdateOrderFields(order, mapOf("details" to mapOf("notes" to notes))) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp)
-        ) {
-            Text("Save Notes", fontWeight = FontWeight.ExtraBold)
         }
     }
 }

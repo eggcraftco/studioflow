@@ -29,6 +29,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
@@ -38,8 +45,9 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
@@ -49,7 +57,7 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.ListAlt
+import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +69,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -71,6 +80,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -115,11 +125,12 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
 enum class StudioSection(val title: String, val icon: ImageVector, val accessKey: String) {
     Dashboard("Dashboard", Icons.Filled.Dashboard, "dashboard"),
-    Orders("Orders", Icons.Outlined.ListAlt, "orders"),
+    Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
     Customers("Customers", Icons.Filled.People, "customers"),
     Messages("Messages", Icons.AutoMirrored.Filled.Chat, "messages"),
     Notifications("Notifications", Icons.Filled.Notifications, "notifications"),
+    Notes("Notes", Icons.AutoMirrored.Filled.Note, "notes"),
     QuickReply("Quick Reply", Icons.Outlined.AutoAwesome, "quickReply"),
     Settings("Settings", Icons.Filled.Settings, "settings")
 }
@@ -209,18 +220,27 @@ fun StudioFlowMainScreen(
     onMarkActivityNotificationRead: (String) -> Unit,
     onMarkAllActivityNotificationsRead: () -> Unit,
     onDismissActivityNotifications: (List<String>) -> Unit,
-    onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit
+    onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit,
+    onSetKeepNotesSearch: (String) -> Unit,
+    onSetKeepNotesSection: (String) -> Unit,
+    onSaveKeepNote: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote) -> Unit,
+    onDeleteKeepNote: (String) -> Unit,
+    onUploadKeepNoteImage: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote, ByteArray, String, String) -> Unit,
+    onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit,
+    onReloadMessageWorkspaceSettings: () -> Unit,
+    onConsumePendingActivityNavigation: () -> Unit
 ) {
     var section by rememberSaveable { mutableStateOf(StudioSection.Orders) }
     var settingsStartKey by rememberSaveable { mutableStateOf<String?>(null) }
     var focusedCustomerName by rememberSaveable { mutableStateOf("") }
+    var isNotificationDrawerOpen by rememberSaveable { mutableStateOf(false) }
     val preferredSectionOrder = listOf(
         StudioSection.Orders,
         StudioSection.Dashboard,
         StudioSection.Schedule,
         StudioSection.Customers,
         StudioSection.Messages,
-        StudioSection.Notifications,
+        StudioSection.Notes,
         StudioSection.QuickReply,
         StudioSection.Settings
     )
@@ -228,6 +248,13 @@ fun StudioFlowMainScreen(
         state.workspace?.memberAccess?.allows(item.accessKey) ?: true
     }
     val activeSection = section.takeIf { it in availableSections } ?: availableSections.firstOrNull()
+
+    // System back: if not on the home section (Orders), go home instead of exiting.
+    val homeSection = if (StudioSection.Orders in availableSections) StudioSection.Orders else availableSections.firstOrNull()
+    BackHandler(enabled = homeSection != null && activeSection != homeSection) {
+        settingsStartKey = null
+        section = homeSection!!
+    }
     val context = LocalContext.current
     val headerPrefs = remember(context) {
         context.getSharedPreferences(HeaderPrefsName, Context.MODE_PRIVATE)
@@ -282,6 +309,34 @@ fun StudioFlowMainScreen(
         }
     }
 
+    LaunchedEffect(state.pendingActivityNavigation) {
+        val pending = state.pendingActivityNavigation ?: return@LaunchedEffect
+        when (pending) {
+            is uk.co.eggcraft.studioflow.features.shell.PendingActivityNavigation.Messages -> {
+                if (StudioSection.Messages in availableSections) {
+                    settingsStartKey = null
+                    section = StudioSection.Messages
+                    isNotificationDrawerOpen = false
+                }
+            }
+            is uk.co.eggcraft.studioflow.features.shell.PendingActivityNavigation.Orders -> {
+                if (StudioSection.Orders in availableSections) {
+                    settingsStartKey = null
+                    section = StudioSection.Orders
+                    isNotificationDrawerOpen = false
+                }
+            }
+            is uk.co.eggcraft.studioflow.features.shell.PendingActivityNavigation.Support -> {
+                if (StudioSection.Settings in availableSections) {
+                    settingsStartKey = "support"
+                    section = StudioSection.Settings
+                    isNotificationDrawerOpen = false
+                }
+            }
+        }
+        onConsumePendingActivityNavigation()
+    }
+
     CompositionLocalProvider(LocalHideSensitiveNumbers provides hideSensitiveNumbers) {
         if (showWorkspaceOnboarding) {
             WorkspaceOnboardingScreen(
@@ -321,6 +376,7 @@ fun StudioFlowMainScreen(
                     compact = containerWidth < 1500.dp,
                     notificationUnreadCount = state.activityNotificationUnreadCount,
                     messageUnreadCount = state.messageUnreadCount,
+                    onOpenNotifications = { isNotificationDrawerOpen = true },
                     modifier = Modifier
                         .fillMaxWidth()
                 )
@@ -399,6 +455,13 @@ fun StudioFlowMainScreen(
                     onMarkAllActivityNotificationsRead = onMarkAllActivityNotificationsRead,
                     onDismissActivityNotifications = onDismissActivityNotifications,
                     onOpenActivityNotification = onOpenActivityNotification,
+                    onSetKeepNotesSearch = onSetKeepNotesSearch,
+                    onSetKeepNotesSection = onSetKeepNotesSection,
+                    onSaveKeepNote = onSaveKeepNote,
+                    onDeleteKeepNote = onDeleteKeepNote,
+                    onUploadKeepNoteImage = onUploadKeepNoteImage,
+                    onSaveMessageWorkspaceSettings = onSaveMessageWorkspaceSettings,
+                    onReloadMessageWorkspaceSettings = onReloadMessageWorkspaceSettings,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -421,7 +484,11 @@ fun StudioFlowMainScreen(
                     },
                     onOpenAccount = openAccount,
                     notificationUnreadCount = state.activityNotificationUnreadCount,
-                    messageUnreadCount = state.messageUnreadCount
+                    messageUnreadCount = state.messageUnreadCount,
+                    notesReminderCount = state.keepNotes.count {
+                        !it.isDeleted && !it.isArchived && it.reminderDate != null && it.reminderDate.before(java.util.Date())
+                    },
+                    onOpenNotifications = { isNotificationDrawerOpen = true }
                 )
                 StudioSectionContent(
                     activeSection = activeSection,
@@ -498,9 +565,57 @@ fun StudioFlowMainScreen(
                     onMarkAllActivityNotificationsRead = onMarkAllActivityNotificationsRead,
                     onDismissActivityNotifications = onDismissActivityNotifications,
                     onOpenActivityNotification = onOpenActivityNotification,
+                    onSetKeepNotesSearch = onSetKeepNotesSearch,
+                    onSetKeepNotesSection = onSetKeepNotesSection,
+                    onSaveKeepNote = onSaveKeepNote,
+                    onDeleteKeepNote = onDeleteKeepNote,
+                    onUploadKeepNoteImage = onUploadKeepNoteImage,
+                    onSaveMessageWorkspaceSettings = onSaveMessageWorkspaceSettings,
+                    onReloadMessageWorkspaceSettings = onReloadMessageWorkspaceSettings,
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+
+        // Right-side Notification drawer overlay (Mac-style — floating cards, no dim, no surface)
+        val drawerWidthDp = if (maxWidth >= 600.dp) 400.dp else maxWidth
+        if (isNotificationDrawerOpen) {
+            // Click-outside-to-close: transparent catcher covers area LEFT of drawer
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        ) { isNotificationDrawerOpen = false }
+                )
+                Spacer(modifier = Modifier.width(drawerWidthDp))
+            }
+        }
+        AnimatedVisibility(
+            visible = isNotificationDrawerOpen,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(drawerWidthDp)
+                .align(Alignment.TopEnd)
+        ) {
+            uk.co.eggcraft.studioflow.features.notifications.NotificationsScreen(
+                state = state,
+                onSetSearch = onSetActivityNotificationSearch,
+                onSetReadFilter = onSetActivityNotificationReadFilter,
+                onSetTypeFilter = onSetActivityNotificationTypeFilter,
+                onMarkRead = onMarkActivityNotificationRead,
+                onMarkAllRead = onMarkAllActivityNotificationsRead,
+                onDismiss = onDismissActivityNotifications,
+                onOpen = { item ->
+                    onOpenActivityNotification(item)
+                },
+                onClose = { isNotificationDrawerOpen = false }
+            )
         }
         }
         }
@@ -807,6 +922,13 @@ private fun StudioSectionContent(
     onMarkAllActivityNotificationsRead: () -> Unit,
     onDismissActivityNotifications: (List<String>) -> Unit,
     onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit,
+    onSetKeepNotesSearch: (String) -> Unit,
+    onSetKeepNotesSection: (String) -> Unit,
+    onSaveKeepNote: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote) -> Unit,
+    onDeleteKeepNote: (String) -> Unit,
+    onUploadKeepNoteImage: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote, ByteArray, String, String) -> Unit,
+    onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit,
+    onReloadMessageWorkspaceSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -873,6 +995,14 @@ private fun StudioSectionContent(
                 onLoadDraft = onLoadDraft,
                 onSaveDraft = onSaveDraft
             )
+            StudioSection.Notes -> uk.co.eggcraft.studioflow.features.notes.NotesScreen(
+                state = state,
+                onSetSearch = onSetKeepNotesSearch,
+                onSetSection = onSetKeepNotesSection,
+                onSave = onSaveKeepNote,
+                onDelete = onDeleteKeepNote,
+                onUploadImage = onUploadKeepNoteImage
+            )
             StudioSection.QuickReply -> QuickReplyScreen(
                 state = state,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
@@ -902,7 +1032,9 @@ private fun StudioSectionContent(
                 onSaveCustomRole = onSaveCustomRole,
                 onDeleteCustomRole = onDeleteCustomRole,
                 onImportBackup = onImportBackup,
-                onDeleteWorkspaceData = onDeleteWorkspaceData
+                onDeleteWorkspaceData = onDeleteWorkspaceData,
+                onSaveMessageWorkspaceSettings = onSaveMessageWorkspaceSettings,
+                onReloadMessageWorkspaceSettings = onReloadMessageWorkspaceSettings
             )
             null -> NoSectionAccessScreen()
         }
@@ -930,6 +1062,7 @@ private fun StudioLargeTopBar(
     compact: Boolean,
     notificationUnreadCount: Int = 0,
     messageUnreadCount: Int = 0,
+    onOpenNotifications: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
@@ -940,6 +1073,7 @@ private fun StudioLargeTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -1000,6 +1134,12 @@ private fun StudioLargeTopBar(
                 size = if (compact) 46.dp else 56.dp,
                 iconSize = if (compact) 27.dp else 31.dp
             )
+            HeaderNotificationButton(
+                unreadCount = notificationUnreadCount,
+                onClick = onOpenNotifications,
+                size = if (compact) 46.dp else 56.dp,
+                iconSize = if (compact) 26.dp else 30.dp
+            )
             HeaderAddProjectButton(
                 creatingOrder = creatingOrder,
                 onCreateOrder = onCreateOrder,
@@ -1025,7 +1165,7 @@ private fun StudioLargeTopBar(
                     )
                     DropdownMenuItem(
                         text = { Text("Sign Out", fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.Filled.Logout, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                         onClick = {
                             menuOpen = false
                             onSignOut()
@@ -1351,7 +1491,7 @@ private fun StudioLargeSidebar(
             }
             SidebarAction(
                 label = "Sign Out",
-                icon = Icons.Filled.Logout,
+                icon = Icons.AutoMirrored.Filled.Logout,
                 onClick = onSignOut
             )
         }
@@ -1433,7 +1573,9 @@ private fun StudioMobileHeader(
     onSelectSection: (StudioSection) -> Unit,
     onOpenAccount: () -> Unit,
     notificationUnreadCount: Int = 0,
-    messageUnreadCount: Int = 0
+    messageUnreadCount: Int = 0,
+    notesReminderCount: Int = 0,
+    onOpenNotifications: () -> Unit = {}
 ) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -1444,7 +1586,8 @@ private fun StudioMobileHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 12.dp, top = 18.dp, bottom = 12.dp),
+                .statusBarsPadding()
+                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             WorkspaceHeaderLogo(
@@ -1475,20 +1618,41 @@ private fun StudioMobileHeader(
                 compact = true
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 1.dp
-            ) {
-                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(46.dp)) {
-                    Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+            Box {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shadowElevation = 1.dp
+                ) {
+                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(46.dp)) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+                if (notificationUnreadCount > 0) {
+                    Surface(
+                        color = StudioRed,
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 6.dp, y = (-6).dp)
+                    ) {
+                        Text(
+                            text = if (notificationUnreadCount > 99) "99+" else notificationUnreadCount.toString(),
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                        )
+                    }
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     sections.forEach { item ->
                         val badge = when (item) {
                             StudioSection.Notifications -> notificationUnreadCount
                             StudioSection.Messages -> messageUnreadCount
+                            StudioSection.Notes -> notesReminderCount
                             else -> 0
                         }
                         DropdownMenuItem(
@@ -1516,6 +1680,29 @@ private fun StudioMobileHeader(
                         )
                     }
                     DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Notifications", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                if (notificationUnreadCount > 0) {
+                                    Surface(color = StudioRed, shape = RoundedCornerShape(50)) {
+                                        Text(
+                                            if (notificationUnreadCount > 99) "99+" else notificationUnreadCount.toString(),
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        leadingIcon = { Icon(Icons.Filled.Notifications, contentDescription = null, tint = StudioBlue) },
+                        onClick = {
+                            menuOpen = false
+                            onOpenNotifications()
+                        }
+                    )
+                    DropdownMenuItem(
                         text = { Text("Account", fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = StudioBlue) },
                         onClick = {
@@ -1525,7 +1712,7 @@ private fun StudioMobileHeader(
                     )
                     DropdownMenuItem(
                         text = { Text("Sign Out", fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.Filled.Logout, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                         onClick = {
                             menuOpen = false
                             onSignOut()
@@ -1580,6 +1767,44 @@ private fun HeaderPrivacyButton(
         iconSize = iconSize,
         onClick = onToggle
     )
+}
+
+@Composable
+private fun HeaderNotificationButton(
+    unreadCount: Int,
+    onClick: () -> Unit,
+    size: Dp,
+    iconSize: Dp
+) {
+    Box {
+        HeaderIconButton(
+            icon = Icons.Filled.Notifications,
+            contentDescription = "Notifications",
+            tint = StudioBlue,
+            container = StudioBlue.copy(alpha = 0.12f),
+            border = StudioBlue.copy(alpha = 0.24f),
+            size = size,
+            iconSize = iconSize,
+            onClick = onClick
+        )
+        if (unreadCount > 0) {
+            Surface(
+                color = StudioRed,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+            ) {
+                Text(
+                    if (unreadCount > 99) "99+" else unreadCount.toString(),
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable

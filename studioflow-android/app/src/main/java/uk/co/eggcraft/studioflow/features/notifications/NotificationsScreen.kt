@@ -1,7 +1,14 @@
 package uk.co.eggcraft.studioflow.features.notifications
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,13 +26,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsNone
@@ -54,9 +66,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import java.text.SimpleDateFormat
@@ -73,7 +89,8 @@ fun NotificationsScreen(
     onMarkRead: (String) -> Unit,
     onMarkAllRead: () -> Unit,
     onDismiss: (List<String>) -> Unit,
-    onOpen: (StudioActivityNotification) -> Unit
+    onOpen: (StudioActivityNotification) -> Unit,
+    onClose: (() -> Unit)? = null
 ) {
     val uid = state.user?.uid.orEmpty()
     val email = state.user?.email.orEmpty()
@@ -92,67 +109,103 @@ fun NotificationsScreen(
 
     val sections = buildSections(filtered)
     var filtersExpanded by remember { mutableStateOf(false) }
+    var expandedGroups by remember(state.workspace?.id) { mutableStateOf(emptySet<String>()) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp)
-    ) {
-        Header(
-            unreadCount = state.activityNotificationUnreadCount,
-            hasVisible = filtered.isNotEmpty(),
-            onMarkAllRead = onMarkAllRead,
-            onDismissAllVisible = { onDismiss(filtered.map { it.id }) }
-        )
-        SearchField(
-            query = state.activityNotificationSearch,
-            onQueryChange = onSetSearch
-        )
-        FilterRow(
-            filtersExpanded = filtersExpanded,
-            onToggleExpanded = { filtersExpanded = !filtersExpanded },
-            readFilter = state.activityNotificationReadFilter,
-            typeFilter = state.activityNotificationTypeFilter,
-            allCount = visible.size,
-            unreadCount = visible.count { it.isUnread(uid, email) },
-            onSetReadFilter = onSetReadFilter,
-            onSetTypeFilter = onSetTypeFilter,
-            typeCount = { key -> visible.count { matchesType(it, key) } }
-        )
-
-        Box(modifier = Modifier.fillMaxSize().padding(top = 8.dp)) {
-            if (filtered.isEmpty()) {
-                EmptyState(
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item("permission_banner") { PermissionBanner() }
+            item("header_card") {
+                HeaderCard(
+                    unreadCount = state.activityNotificationUnreadCount,
+                    hasVisible = filtered.isNotEmpty(),
+                    onMarkAllRead = onMarkAllRead,
+                    onDismissAllVisible = { onDismiss(filtered.map { it.id }) },
+                    onClose = onClose,
+                    query = state.activityNotificationSearch,
+                    onQueryChange = onSetSearch,
+                    filtersExpanded = filtersExpanded,
+                    onToggleExpanded = { filtersExpanded = !filtersExpanded },
                     readFilter = state.activityNotificationReadFilter,
-                    hasSearch = state.activityNotificationSearch.isNotBlank()
+                    typeFilter = state.activityNotificationTypeFilter,
+                    allCount = visible.size,
+                    unreadVisibleCount = visible.count { it.isUnread(uid, email) },
+                    onSetReadFilter = onSetReadFilter,
+                    onSetTypeFilter = onSetTypeFilter,
+                    typeCount = { key -> visible.count { matchesType(it, key) } }
                 )
+            }
+
+            if (filtered.isEmpty()) {
+                item("empty") {
+                    EmptyState(
+                        readFilter = state.activityNotificationReadFilter,
+                        hasSearch = state.activityNotificationSearch.isNotBlank()
+                    )
+                }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    sections.forEach { section ->
-                        item(key = "section_${section.id}") {
-                            Text(
-                                section.title.uppercase(Locale.getDefault()),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
-                            )
-                        }
-                        items(section.items, key = { it.id }) { item ->
-                            NotificationRow(
-                                item = item,
-                                isUnread = item.isUnread(uid, email),
-                                onClick = {
-                                    onMarkRead(item.id)
-                                    onOpen(item)
-                                },
-                                onDismiss = { onDismiss(listOf(item.id)) }
-                            )
+                sections.forEach { section ->
+                    item("section_${section.id}") {
+                        Text(
+                            section.title.uppercase(Locale.getDefault()),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF9D9DA3),
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
+                        )
+                    }
+                    val groups = groupBy(section.items)
+                    groups.forEach { group ->
+                        val groupId = "${section.id}_${group.key}"
+                        val isExpanded = expandedGroups.contains(groupId)
+                        if (group.items.size <= 1) {
+                            val latest = group.items.first()
+                            item(key = latest.id) {
+                                SingleNotificationCard(
+                                    item = latest,
+                                    isUnread = latest.isUnread(uid, email),
+                                    sectionId = section.id,
+                                    onClick = {
+                                        onMarkRead(latest.id)
+                                        onOpen(latest)
+                                    },
+                                    onDismiss = { onDismiss(listOf(latest.id)) }
+                                )
+                            }
+                        } else {
+                            item(key = "group_$groupId") {
+                                StackedNotificationCard(
+                                    latest = group.items.first(),
+                                    items = group.items,
+                                    isExpanded = isExpanded,
+                                    isUnread = group.items.any { it.isUnread(uid, email) },
+                                    sectionId = section.id,
+                                    onToggle = {
+                                        expandedGroups =
+                                            if (isExpanded) expandedGroups - groupId
+                                            else expandedGroups + groupId
+                                    },
+                                    onDismissAll = { onDismiss(group.items.map { it.id }) }
+                                )
+                            }
+                            if (isExpanded) {
+                                items(group.items, key = { "child_${it.id}" }) { child ->
+                                    SingleNotificationCard(
+                                        item = child,
+                                        isUnread = child.isUnread(uid, email),
+                                        sectionId = section.id,
+                                        indent = true,
+                                        onClick = {
+                                            onMarkRead(child.id)
+                                            onOpen(child)
+                                        },
+                                        onDismiss = { onDismiss(listOf(child.id)) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -162,65 +215,118 @@ fun NotificationsScreen(
 }
 
 @Composable
-private fun Header(
+private fun HeaderCard(
     unreadCount: Int,
     hasVisible: Boolean,
     onMarkAllRead: () -> Unit,
-    onDismissAllVisible: () -> Unit
+    onDismissAllVisible: () -> Unit,
+    onClose: (() -> Unit)?,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    filtersExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    readFilter: String,
+    typeFilter: String,
+    allCount: Int,
+    unreadVisibleCount: Int,
+    onSetReadFilter: (String) -> Unit,
+    onSetTypeFilter: (String) -> Unit,
+    typeCount: (String) -> Int
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Notification Centre", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-            Text(
-                "Latest activity and workflow updates",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Notification Centre",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 20.sp,
+                        maxLines = 1
+                    )
+                    Text(
+                        "Latest activity and workflow updates",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+                if (unreadCount > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable(onClick = onMarkAllRead)
+                    ) {
+                        Text(
+                            "Mark all read",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+                if (hasVisible) {
+                    CircleIconButton(icon = Icons.Filled.Close, onClick = onDismissAllVisible)
+                }
+                if (onClose != null) {
+                    Spacer(Modifier.width(6.dp))
+                    CircleIconButton(icon = Icons.AutoMirrored.Filled.KeyboardArrowRight, onClick = onClose)
+                }
+            }
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search notifications") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        }
+                    }
+                }
             )
-        }
-        if (unreadCount > 0) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                shape = RoundedCornerShape(50),
-                modifier = Modifier.clickable(onClick = onMarkAllRead)
-            ) {
-                Text(
-                    "Mark all read",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                )
-            }
-            Spacer(Modifier.width(6.dp))
-        }
-        if (hasVisible) {
-            IconButton(onClick = onDismissAllVisible) {
-                Icon(Icons.Filled.Close, contentDescription = "Clear visible")
-            }
+
+            FilterRow(
+                filtersExpanded = filtersExpanded,
+                onToggleExpanded = onToggleExpanded,
+                readFilter = readFilter,
+                typeFilter = typeFilter,
+                allCount = allCount,
+                unreadCount = unreadVisibleCount,
+                onSetReadFilter = onSetReadFilter,
+                onSetTypeFilter = onSetTypeFilter,
+                typeCount = typeCount
+            )
         }
     }
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Search notifications") },
-        singleLine = true,
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear")
-                }
-            }
+private fun CircleIconButton(icon: ImageVector, onClick: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = Color(0x14000000),
+        modifier = Modifier
+            .size(28.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
         }
-    )
+    }
 }
 
 @Composable
@@ -235,7 +341,7 @@ private fun FilterRow(
     onSetTypeFilter: (String) -> Unit,
     typeCount: (String) -> Int
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             FilterChip(
                 selected = filtersExpanded,
@@ -303,83 +409,58 @@ private fun FilterRow(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NotificationRow(
+private fun SingleNotificationCard(
     item: StudioActivityNotification,
     isUnread: Boolean,
+    sectionId: String,
+    indent: Boolean = false,
     onClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val background = if (isUnread) MaterialTheme.colorScheme.primary.copy(alpha = 0.06f) else Color.Transparent
 
-    Box {
-        Surface(
-            color = background,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                NotificationIcon(item)
-                Spacer(Modifier.width(10.dp))
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = if (indent) 16.dp else 0.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                NotificationAvatar(item = item, showUnreadDot = isUnread)
+                Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            shape = RoundedCornerShape(50)
-                        ) {
-                            Text(
-                                typeLabel(item.type.ifBlank { typeKeyFor(item) }),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
                         Text(
-                            notificationTimeText(item.createdAt),
-                            fontSize = 10.sp,
+                            senderLine(item),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            timeTextFor(item.createdAt, sectionId),
+                            fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (isUnread) {
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                        }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        item.title,
-                        fontSize = 14.sp,
-                        fontWeight = if (isUnread) FontWeight.ExtraBold else FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (item.message.isNotBlank()) {
+                    val body = item.message.ifBlank { item.title }
+                    if (body.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
                         Text(
-                            item.message,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            body,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 3
                         )
                     }
-                    val sender = item.senderName.trim().ifBlank { item.senderEmail.trim() }
-                    if (sender.isNotBlank()) {
-                        Text(
-                            "from $sender",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
+                    Spacer(Modifier.height(6.dp))
+                    TypePill(typeKeyFor(item))
                 }
             }
         }
@@ -389,24 +470,194 @@ private fun NotificationRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NotificationIcon(item: StudioActivityNotification) {
-    val (icon, tint) = iconAndTintFor(item)
-    Box(
+private fun StackedNotificationCard(
+    latest: StudioActivityNotification,
+    items: List<StudioActivityNotification>,
+    isExpanded: Boolean,
+    isUnread: Boolean,
+    sectionId: String,
+    onToggle: () -> Unit,
+    onDismissAll: () -> Unit
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val count = items.size
+    val typeKey = typeKeyFor(latest)
+    val typeTitle = typeLabel(typeKey)
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 1.dp,
         modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .background(tint.copy(alpha = 0.15f)),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true })
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                NotificationAvatar(item = latest, showUnreadDot = false, useCategoryIcon = true)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            typeTitle,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        CountPill(count)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            timeTextFor(latest.createdAt, sectionId),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    val title = latest.title.trim()
+                    if (title.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                    }
+                    val preview = latest.message.trim()
+                    if (preview.isNotBlank()) {
+                        Text(
+                            preview,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        color = Color(0x14000000),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (isExpanded) "Hide $count notifications" else "Tap to show $count notifications",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Icon(
+                                if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(text = { Text("Dismiss all") }, onClick = { menuOpen = false; onDismissAll() })
+        }
+    }
+}
+
+@Composable
+private fun NotificationAvatar(
+    item: StudioActivityNotification,
+    showUnreadDot: Boolean,
+    useCategoryIcon: Boolean = false
+) {
+    val (icon, tint) = iconAndTintFor(item)
+    val photo = item.senderPhotoURL.trim()
+
+    Box(modifier = Modifier.size(40.dp)) {
+        if (!useCategoryIcon && photo.isNotEmpty()) {
+            AsyncImage(
+                model = photo,
+                contentDescription = item.senderName.ifBlank { "Sender" },
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(tint.copy(alpha = 0.15f))
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(tint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+            }
+        }
+        if (showUnreadDot) {
+            Box(
+                modifier = Modifier
+                    .size(11.dp)
+                    .align(Alignment.TopEnd)
+                    .clip(CircleShape)
+                    .background(Color(0xFFEF4444))
+                    .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CountPill(count: Int) {
+    Surface(
+        color = Color(0x1A000000),
+        shape = RoundedCornerShape(50)
+    ) {
+        Text(
+            count.toString(),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp)
+        )
+    }
+}
+
+@Composable
+private fun TypePill(typeKey: String) {
+    val tint = colorForType(typeKey)
+    Surface(
+        color = tint.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(50)
+    ) {
+        Text(
+            typeLabel(typeKey),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = tint,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
     }
 }
 
 @Composable
 private fun EmptyState(readFilter: String, hasSearch: Boolean) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Icon(
                 if (readFilter == "unread") Icons.Filled.NotificationsNone else Icons.Filled.Notifications,
                 contentDescription = null,
@@ -430,9 +681,86 @@ private fun EmptyState(readFilter: String, hasSearch: Boolean) {
     }
 }
 
+@Composable
+private fun PermissionBanner() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val context = LocalContext.current
+    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+    if (granted) return
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.NotificationsNone,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Notifications are off",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Text(
+                    "Turn them on to get push alerts for new messages.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            TextButton(onClick = {
+                runCatching {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(intent)
+                }.onFailure {
+                    runCatching {
+                        val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(Uri.fromParts("package", context.packageName, null))
+                        fallback.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        context.startActivity(fallback)
+                    }
+                }
+            }) {
+                Text("Open Settings", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
 // --- helpers ---
 
 private data class Section(val id: String, val title: String, val items: List<StudioActivityNotification>)
+private data class NotificationGroup(val key: String, val items: List<StudioActivityNotification>)
+
+private fun stackKeyFor(item: StudioActivityNotification): String {
+    val threadId = item.threadId.trim()
+    if (threadId.isNotEmpty()) return "thread:$threadId"
+    val orderId = item.orderId.trim()
+    if (orderId.isNotEmpty()) return "order:$orderId"
+    val ticketId = item.ticketId.trim()
+    if (ticketId.isNotEmpty()) return "ticket:$ticketId"
+    return "id:${item.id}"
+}
+
+private fun groupBy(items: List<StudioActivityNotification>): List<NotificationGroup> {
+    if (items.isEmpty()) return emptyList()
+    val map = linkedMapOf<String, MutableList<StudioActivityNotification>>()
+    items.forEach { item ->
+        map.getOrPut(stackKeyFor(item)) { mutableListOf() }.add(item)
+    }
+    return map.map { (key, list) -> NotificationGroup(key, list) }
+}
 
 private fun buildSections(items: List<StudioActivityNotification>): List<Section> {
     if (items.isEmpty()) return emptyList()
@@ -440,8 +768,6 @@ private fun buildSections(items: List<StudioActivityNotification>): List<Section
     val yesterday = mutableListOf<StudioActivityNotification>()
     val earlierWeek = mutableListOf<StudioActivityNotification>()
     val older = mutableListOf<StudioActivityNotification>()
-    val cal = Calendar.getInstance()
-    val now = Calendar.getInstance()
     val startOfToday = Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.time
@@ -512,34 +838,51 @@ private fun typeLabel(key: String): String = when (key) {
     "files" -> "Files"
     "system" -> "System"
     "unread" -> "Unread"
+    "update" -> "Message"
     else -> "Update"
+}
+
+private fun colorForType(key: String): Color = when (key) {
+    "messages" -> Color(0xFF16A34A)
+    "support" -> Color(0xFF8B5CF6)
+    "orders" -> Color(0xFF2563EB)
+    "tasks" -> Color(0xFFCA8A04)
+    "files" -> Color(0xFF0EA5E9)
+    "system" -> Color(0xFF6B7280)
+    else -> Color(0xFF16A34A)
 }
 
 private fun iconAndTintFor(item: StudioActivityNotification): Pair<ImageVector, Color> {
     val key = typeKeyFor(item)
-    return when (key) {
-        "messages" -> Icons.Filled.Mail to Color(0xFF2563EB)
-        "support" -> Icons.Filled.SupportAgent to Color(0xFFDC2626)
-        "orders" -> Icons.Filled.CheckCircle to Color(0xFF16A34A)
-        "tasks" -> Icons.Filled.Task to Color(0xFFCA8A04)
-        "files" -> Icons.Filled.AttachFile to Color(0xFF7C3AED)
-        "system" -> Icons.Filled.Build to Color(0xFF6B7280)
-        else -> Icons.Filled.Update to Color(0xFF2563EB)
+    val tint = colorForType(key)
+    val icon = when (key) {
+        "messages" -> Icons.Filled.Mail
+        "support" -> Icons.Filled.SupportAgent
+        "orders" -> Icons.Filled.CheckCircle
+        "tasks" -> Icons.Filled.Task
+        "files" -> Icons.Filled.AttachFile
+        "system" -> Icons.Filled.Build
+        else -> Icons.Filled.Update
+    }
+    return icon to tint
+}
+
+private fun senderLine(item: StudioActivityNotification): String {
+    val name = item.senderName.trim()
+    val email = item.senderEmail.trim()
+    return when {
+        name.isNotEmpty() && email.isNotEmpty() -> "$name • $email"
+        name.isNotEmpty() -> name
+        email.isNotEmpty() -> email
+        else -> item.title.ifBlank { "Notification" }
     }
 }
 
-private fun notificationTimeText(date: Date?): String {
+private fun timeTextFor(date: Date?, sectionId: String): String {
     if (date == null) return ""
-    val now = System.currentTimeMillis()
-    val diff = now - date.time
-    val minute = 60_000L
-    val hour = 60 * minute
-    val day = 24 * hour
-    return when {
-        diff < minute -> "now"
-        diff < hour -> "${diff / minute}m"
-        diff < day -> "${diff / hour}h"
-        diff < 7 * day -> "${diff / day}d"
-        else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(date)
+    return when (sectionId) {
+        "today" -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+        "yesterday" -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+        else -> SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(date)
     }
 }

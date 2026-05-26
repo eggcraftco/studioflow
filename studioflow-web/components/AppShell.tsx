@@ -14,6 +14,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { auth } from "@/lib/firebase/client";
 import {
   loadDashboardFinanceOrders,
@@ -60,6 +61,8 @@ type NavIconName =
   | "dashboard"
   | "schedule"
   | "customers"
+  | "messages"
+  | "notes"
   | "reply"
   | "settings";
 
@@ -71,6 +74,8 @@ const NAV_ITEMS: Array<
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
   { href: "/customers", label: "Customers", icon: "customers" },
+  { href: "/messages", label: "Messages", icon: "messages" },
+  { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/quick-reply", label: "Quick Reply", icon: "reply" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
@@ -240,7 +245,7 @@ function syncSubtitle(
 function ToolbarIcon({
   name,
 }: {
-  name: "eye" | "eyeOff" | "cloud" | "cloudUpload" | "cloudError" | "wifiOff";
+  name: "eye" | "eyeOff" | "cloud" | "cloudUpload" | "cloudError" | "wifiOff" | "bell";
 }) {
   const paths = {
     eye: [
@@ -275,6 +280,10 @@ function ToolbarIcon({
       "M15 10.8A10 10 0 0 1 19 13",
       "M8.5 17a5 5 0 0 1 7 0",
       "M12 20h.01",
+    ],
+    bell: [
+      "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9",
+      "M13.7 21a2 2 0 0 1-3.4 0",
     ],
   }[name];
 
@@ -320,6 +329,15 @@ function NavIcon({ name }: { name: NavIconName }) {
       "M23 11h-6",
     ],
     reply: ["M4 5h16v10H8l-4 4V5Z", "M8 9h8M8 12h5"],
+    messages: [
+      "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z",
+    ],
+    notes: [
+      "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z",
+      "M14 3v6h6",
+      "M8 13h8",
+      "M8 17h5",
+    ],
     settings: [
       "M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z",
       "M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.9 3.2-.2-.1a1.7 1.7 0 0 0-2 .1 1.7 1.7 0 0 0-.8 1.7V22h-5.8v-.1a1.7 1.7 0 0 0-.8-1.7 1.7 1.7 0 0 0-2-.1l-.2.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1.1H3v-3.8h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.9-3.2.2.1a1.7 1.7 0 0 0 2-.1 1.7 1.7 0 0 0 .8-1.7V2h5.8v.1a1.7 1.7 0 0 0 .8 1.7 1.7 1.7 0 0 0 2 .1l.2-.1L19.8 7l-.1.1A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.5 1.1h.1v3.8h-.1a1.7 1.7 0 0 0-1.5 1.1Z",
@@ -520,6 +538,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   );
   const [lastCloudSyncDate, setLastCloudSyncDate] = useState<Date | null>(null);
   const [syncInfoOpen, setSyncInfoOpen] = useState(false);
+  const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
+  const [notifications, setNotifications] = useState<
+    import("@/lib/studioflow/notifications").StudioActivityNotification[]
+  >([]);
+  const [notifDismissedLocal, setNotifDismissedLocal] = useState<Set<string>>(new Set());
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [notesReminderCount, setNotesReminderCount] = useState(0);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [orderCreateError, setOrderCreateError] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -792,6 +817,109 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     setMobileNavOpen(false);
     setAvatarMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!workspace || !user) {
+      setNotifications([]);
+      return;
+    }
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      const mod = await import("@/lib/studioflow/notifications");
+      if (cancelled) return;
+      unsub = mod.listenToActivityNotifications(
+        workspace,
+        user.uid,
+        user.email ?? "",
+        (items) => setNotifications(items),
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [workspace, user]);
+
+  // Listen to message threads → derive unread count for sidebar badge
+  useEffect(() => {
+    if (!workspace || !user) {
+      setMessageUnreadCount(0);
+      return;
+    }
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      const mod = await import("@/lib/studioflow/messages");
+      if (cancelled) return;
+      unsub = mod.listenToMessageThreads(workspace, user.uid, (threads) => {
+        setMessageUnreadCount(threads.filter((t) => t.isUnread).length);
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [workspace, user]);
+
+  useEffect(() => {
+    if (!workspace || !user) {
+      setNotesReminderCount(0);
+      return;
+    }
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      const mod = await import("@/lib/studioflow/notes");
+      if (cancelled) return;
+      unsub = mod.listenToKeepNotes(workspace.id, user.uid, (items) => {
+        const now = Date.now();
+        setNotesReminderCount(
+          items.filter(
+            (n) =>
+              !n.isDeleted &&
+              !n.isArchived &&
+              n.reminderDateMillis != null &&
+              (n.reminderDateMillis as number) <= now
+          ).length
+        );
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [workspace, user]);
+
+  // FCM web push registration (silently no-ops if VAPID not configured)
+  useEffect(() => {
+    if (!workspace || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const mod = await import("@/lib/studioflow/pushNotifications");
+        if (cancelled) return;
+        await mod.registerWebPush(workspace, { uid: user.uid, email: user.email });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspace, user]);
+
+  const notifUnreadCount = useMemo(() => {
+    if (!user) return 0;
+    return notifications.filter((n) => {
+      if (notifDismissedLocal.has(n.id)) return false;
+      const uidClean = user.uid;
+      const emailClean = (user.email ?? "").toLowerCase();
+      if (n.dismissedByMillis[uidClean]) return false;
+      if (emailClean && n.dismissedByMillis[emailClean]) return false;
+      if (n.readByMillis[uidClean]) return false;
+      if (emailClean && n.readByMillis[emailClean]) return false;
+      return true;
+    }).length;
+  }, [notifications, notifDismissedLocal, user]);
 
   useEffect(() => {
     function refreshFirstProjectGuide() {
@@ -1164,6 +1292,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 const active =
                   pathname === item.href ||
                   pathname.startsWith(`${item.href}/`);
+                const showMsgBadge = item.href === "/messages" && messageUnreadCount > 0;
+                const showNotesBadge = item.href === "/notes" && notesReminderCount > 0;
                 return (
                   <Link
                     key={item.href}
@@ -1176,6 +1306,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   >
                     <NavIcon name={item.icon} />
                     {t(item.label)}
+                    {showMsgBadge && (
+                      <span className="nav-pill-badge">
+                        {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
+                      </span>
+                    )}
+                    {showNotesBadge && (
+                      <span className="nav-pill-badge">
+                        {notesReminderCount > 99 ? "99+" : notesReminderCount}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -1229,6 +1369,20 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </span>
                 ) : null}
               </span>
+              <button
+                className="toolbar-icon-button notif-bell-btn"
+                type="button"
+                title="Notifications"
+                aria-label="Notifications"
+                onClick={() => setNotifDrawerOpen(true)}
+              >
+                <ToolbarIcon name="bell" />
+                {notifUnreadCount > 0 && (
+                  <span className="notif-bell-badge">
+                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
+                  </span>
+                )}
+              </button>
               {canCreateToolbarOrder ? (
                 <button
                   ref={addProjectButtonRef}
@@ -1410,6 +1564,25 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
+      <NotificationsDrawer
+        open={notifDrawerOpen}
+        workspace={workspace}
+        uid={user?.uid ?? ""}
+        email={user?.email ?? ""}
+        notifications={notifications}
+        dismissedLocally={notifDismissedLocal}
+        onClose={() => setNotifDrawerOpen(false)}
+        onLocalDismiss={(ids) => setNotifDismissedLocal((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.add(id);
+          return next;
+        })}
+      />
+      <style jsx global>{`
+        .notif-bell-btn { position: relative; }
+        .notif-bell-badge { position: absolute; top: -4px; right: -4px; background: #ef4444; color: white; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 999px; min-width: 16px; text-align: center; line-height: 1.4; }
+        .nav-pill-badge { background: #ef4444; color: white; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 4px; line-height: 1.4; }
+      `}</style>
     </AppShellMountedContext.Provider>
   );
 }

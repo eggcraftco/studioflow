@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MailOutline
@@ -89,6 +91,21 @@ fun QuickReplyScreen(
     var replyError by rememberSaveable { mutableStateOf("") }
     var generating by rememberSaveable { mutableStateOf(false) }
     val detectedIntent = remember(input) { detectIntent(input) }
+
+    // Customer name + product/topic pickers (iPhone parity)
+    var customerName by rememberSaveable { mutableStateOf("") }
+    val categories = remember(settings.quickReplyProducts) {
+        settings.quickReplyProducts.map { it.title.trim() }.filter { it.isNotEmpty() }
+    }
+    val topics = remember(settings.quickReplyRules) {
+        listOf("Price & Info") + settings.quickReplyRules.map { it.title.trim() }.filter { it.isNotEmpty() }
+    }
+    var selectedCategory by rememberSaveable(categories.joinToString("|")) {
+        mutableStateOf(categories.firstOrNull().orEmpty())
+    }
+    var selectedTopic by rememberSaveable(topics.joinToString("|")) {
+        mutableStateOf(topics.firstOrNull() ?: "Price & Info")
+    }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
@@ -101,6 +118,10 @@ fun QuickReplyScreen(
                 replyError = "Apple On-Device mode is available on Mac, iPad and iPhone. On Android, switch to OpenAI Online or Offline Template in Quick Reply Settings."
             }
             "Offline" -> {
+                val filteredProducts = if (selectedCategory.isBlank()) settings.quickReplyProducts
+                    else settings.quickReplyProducts.filter { it.title.trim().equals(selectedCategory, ignoreCase = true) }
+                val filteredRules = if (selectedTopic.isBlank() || selectedTopic == "Price & Info") settings.quickReplyRules
+                    else settings.quickReplyRules.filter { it.title.trim().equals(selectedTopic, ignoreCase = true) }
                 output = generateOfflineReply(
                     message = input,
                     politeness = politeness,
@@ -108,8 +129,9 @@ fun QuickReplyScreen(
                     intent = detectedIntent,
                     studioName = workspaceName,
                     knowledge = settings.aiKnowledgeBase,
-                    products = settings.quickReplyProducts,
-                    rules = settings.quickReplyRules
+                    products = filteredProducts.ifEmpty { settings.quickReplyProducts },
+                    rules = filteredRules.ifEmpty { settings.quickReplyRules },
+                    customerName = customerName.trim()
                 )
             }
             else -> {
@@ -119,6 +141,10 @@ fun QuickReplyScreen(
                     return
                 }
                 generating = true
+                val filteredProducts = if (selectedCategory.isBlank()) settings.quickReplyProducts
+                    else settings.quickReplyProducts.filter { it.title.trim().equals(selectedCategory, ignoreCase = true) }
+                val filteredRules = if (selectedTopic.isBlank() || selectedTopic == "Price & Info") settings.quickReplyRules
+                    else settings.quickReplyRules.filter { it.title.trim().equals(selectedTopic, ignoreCase = true) }
                 scope.launch {
                     runCatching {
                         generateOpenAIReply(
@@ -129,8 +155,9 @@ fun QuickReplyScreen(
                             intent = detectedIntent,
                             studioName = workspaceName,
                             knowledge = settings.aiKnowledgeBase,
-                            products = settings.quickReplyProducts,
-                            rules = settings.quickReplyRules
+                            products = filteredProducts.ifEmpty { settings.quickReplyProducts },
+                            rules = filteredRules.ifEmpty { settings.quickReplyRules },
+                            customerName = customerName.trim()
                         )
                     }.onSuccess { reply ->
                         output = reply
@@ -178,6 +205,18 @@ fun QuickReplyScreen(
                         length = it
                         onUpdateWorkspaceSettings(mapOf("quickReplyLength" to it), "Reply style saved.")
                     }
+                )
+            }
+            item {
+                QuickReplyDetailsCard(
+                    customerName = customerName,
+                    onCustomerNameChange = { customerName = it },
+                    categories = categories,
+                    selectedCategory = selectedCategory,
+                    onCategoryChange = { selectedCategory = it },
+                    topics = topics,
+                    selectedTopic = selectedTopic,
+                    onTopicChange = { selectedTopic = it }
                 )
             }
             if (wide) {
@@ -248,29 +287,36 @@ private fun QuickReplyHeader(replyMode: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 18.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(62.dp)
+                .size(56.dp)
                 .background(
                     Brush.linearGradient(listOf(Color(0xFF8B35F6), Color(0xFFE031D9))),
                     RoundedCornerShape(14.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
+            Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
         }
-        Column {
-            Text(replyModeTitle(replyMode), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                replyModeTitle(replyMode),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                lineHeight = 26.sp
+            )
             Text(
                 replyModeSubtitle(replyMode),
-                color = Color(0xFF8385A8),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 20.sp
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }
@@ -386,6 +432,90 @@ private fun QuickReplyStyleCard(
             selected = length,
             onSelect = onLength
         )
+    }
+}
+
+@Composable
+private fun QuickReplyDetailsCard(
+    customerName: String,
+    onCustomerNameChange: (String) -> Unit,
+    categories: List<String>,
+    selectedCategory: String,
+    onCategoryChange: (String) -> Unit,
+    topics: List<String>,
+    selectedTopic: String,
+    onTopicChange: (String) -> Unit
+) {
+    QuickReplyCard {
+        SegmentTitle(Icons.Filled.PersonOutline, "Details")
+        OutlinedTextField(
+            value = customerName,
+            onValueChange = onCustomerNameChange,
+            label = { Text("Customer name") },
+            placeholder = { Text("e.g. John") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        if (categories.isNotEmpty()) {
+            DropdownPicker(
+                label = "Product / Service",
+                value = selectedCategory.ifBlank { categories.first() },
+                options = categories,
+                onSelect = onCategoryChange
+            )
+        } else {
+            Text(
+                "Add products/services in Settings → Quick Reply Settings to enable picker.",
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 12.sp
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        DropdownPicker(
+            label = "Topic / Rule",
+            value = selectedTopic.ifBlank { topics.firstOrNull() ?: "Price & Info" },
+            options = topics,
+            onSelect = onTopicChange
+        )
+    }
+}
+
+@Composable
+private fun DropdownPicker(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Box {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = {
+                    androidx.compose.material3.IconButton(onClick = { expanded = true }) {
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Open")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            androidx.compose.material3.DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { option ->
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = { onSelect(option); expanded = false }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -649,12 +779,14 @@ private fun generateOfflineReply(
     studioName: String,
     knowledge: String,
     products: List<QuickReplyTemplateItem>,
-    rules: List<QuickReplyTemplateItem>
+    rules: List<QuickReplyTemplateItem>,
+    customerName: String = ""
 ): String {
+    val name = customerName.trim()
     val greeting = when (politeness) {
-        "Direct" -> "Hi,"
-        "Very Polite" -> "Hello, thank you very much for your message."
-        else -> "Hi, thanks so much for your message."
+        "Direct" -> if (name.isNotEmpty()) "Hi $name," else "Hi,"
+        "Very Polite" -> if (name.isNotEmpty()) "Hello $name, thank you very much for your message." else "Hello, thank you very much for your message."
+        else -> if (name.isNotEmpty()) "Hi $name, thanks so much for your message." else "Hi, thanks so much for your message."
     }
     val intentLine = when (intent) {
         "Price / payment question" -> "I will check the project details and confirm the price/payment information clearly."
@@ -731,8 +863,13 @@ private suspend fun generateOpenAIReply(
     studioName: String,
     knowledge: String,
     products: List<QuickReplyTemplateItem>,
-    rules: List<QuickReplyTemplateItem>
+    rules: List<QuickReplyTemplateItem>,
+    customerName: String = ""
 ): String = withContext(Dispatchers.IO) {
+    val cleanName = customerName.trim()
+    val systemBase = openAiSystemPrompt(studioName, politeness, length, intent, knowledge, products, rules)
+    val systemContent = if (cleanName.isNotEmpty()) "$systemBase\n\nAddress the customer by their first name: $cleanName."
+        else systemBase
     val payload = JSONObject()
         .put("model", "gpt-4o-mini")
         .put("temperature", 0.2)
@@ -742,7 +879,7 @@ private suspend fun generateOpenAIReply(
                 .put(
                     JSONObject()
                         .put("role", "system")
-                        .put("content", openAiSystemPrompt(studioName, politeness, length, intent, knowledge, products, rules))
+                        .put("content", systemContent)
                 )
                 .put(
                     JSONObject()

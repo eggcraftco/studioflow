@@ -629,6 +629,12 @@ data class StudioActivityNotification(
     }
 }
 
+data class StudioMessageWorkspaceSettings(
+    val directMessagesEnabled: Boolean = true,
+    val groupConversationsEnabled: Boolean = true,
+    val attachmentsEnabled: Boolean = true
+)
+
 data class StudioMessageTypingUser(
     val id: String,
     val name: String = "",
@@ -636,6 +642,63 @@ data class StudioMessageTypingUser(
     val photoURL: String = "",
     val updatedAt: Date? = null
 )
+
+/** Keep-style personal note (per-user collection). Mirrors iOS StudioKeepNote. */
+data class StudioKeepNote(
+    val id: String = "",
+    val title: String = "",
+    val text: String = "",
+    val colorName: String = "default",
+    val ownerUserId: String = "",
+    val ownerEmail: String = "",
+    val ownerName: String = "",
+    val sharedWith: List<String> = emptyList(),
+    val collaboratorEmails: List<String> = emptyList(),
+    val activeEditorUserId: String = "",
+    val activeEditorEmail: String = "",
+    val activeEditorUpdatedAt: Date? = null,
+    val isPinned: Boolean = false,
+    val isArchived: Boolean = false,
+    val isDeleted: Boolean = false,
+    val labels: List<String> = emptyList(),
+    val links: List<String> = emptyList(),
+    val reminderDate: Date? = null,
+    val manualOrder: Double = 0.0,
+    val createdAt: Date? = null,
+    val updatedAt: Date? = null
+) {
+    val isEmpty: Boolean
+        get() = title.trim().isEmpty() && text.trim().isEmpty()
+}
+
+/** A note attached to an order (derived from order fields like notes/customerNotes/invNotes/design). */
+data class StudioProjectNoteItem(
+    val id: String,
+    val orderId: String,
+    val orderKey: String,
+    val projectTitle: String,
+    val customerName: String,
+    val noteType: String,
+    val text: String,
+    val updatedAt: Date? = null
+) {
+    val displayProjectTitle: String
+        get() = projectTitle.trim().ifBlank { customerName.trim().ifBlank { "Project" } }
+}
+
+data class StudioProjectNoteGroup(
+    val id: String,
+    val orderKey: String,
+    val projectTitle: String,
+    val customerName: String,
+    val items: List<StudioProjectNoteItem>
+) {
+    val displayProjectTitle: String
+        get() = projectTitle.trim().ifBlank { customerName.trim().ifBlank { "Project" } }
+
+    val latestUpdatedAt: Date?
+        get() = items.mapNotNull { it.updatedAt }.maxOrNull()
+}
 
 
 data class StudioCustomRole(

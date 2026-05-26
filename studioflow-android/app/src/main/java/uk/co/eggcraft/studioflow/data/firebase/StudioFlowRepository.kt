@@ -29,9 +29,11 @@ import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
 import com.google.firebase.firestore.Query
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
+import uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
@@ -1570,6 +1572,121 @@ class StudioFlowRepository(
         awaitClose { registration.remove() }
     }
 
+    // — Keep Notes (personal per-user notes) —
+    fun keepNotesFlow(workspaceId: String, userId: String): Flow<List<StudioKeepNote>> = callbackFlow {
+        if (workspaceId.isBlank() || userId.isBlank()) {
+            trySend(emptyList())
+            awaitClose {}
+            return@callbackFlow
+        }
+        val registration = db.collection("companies")
+            .document(workspaceId)
+            .collection("personal_notes")
+            .document(userId)
+            .collection("notes")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val items = snapshot?.documents
+                    ?.map { document -> keepNoteFromDocument(document.id, document.data.orEmpty()) }
+                    ?: emptyList()
+                trySend(items)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun saveKeepNote(workspaceId: String, userId: String, note: StudioKeepNote) {
+        if (workspaceId.isBlank() || userId.isBlank() || note.id.isBlank()) return
+        val now = java.util.Date()
+        val data = mapOf(
+            "title" to note.title,
+            "text" to note.text,
+            "colorName" to note.colorName,
+            "ownerUserId" to note.ownerUserId,
+            "ownerEmail" to note.ownerEmail,
+            "ownerName" to note.ownerName,
+            "sharedWith" to note.sharedWith,
+            "collaboratorEmails" to note.collaboratorEmails,
+            "activeEditorUserId" to note.activeEditorUserId,
+            "activeEditorEmail" to note.activeEditorEmail,
+            "activeEditorUpdatedAt" to note.activeEditorUpdatedAt,
+            "isPinned" to note.isPinned,
+            "isArchived" to note.isArchived,
+            "isDeleted" to note.isDeleted,
+            "labels" to note.labels,
+            "links" to note.links,
+            "reminderDate" to note.reminderDate,
+            "manualOrder" to note.manualOrder,
+            "createdAt" to (note.createdAt ?: now),
+            "updatedAt" to now
+        )
+        db.collection("companies")
+            .document(workspaceId)
+            .collection("personal_notes")
+            .document(userId)
+            .collection("notes")
+            .document(note.id)
+            .set(data)
+            .await()
+    }
+
+    suspend fun uploadKeepNoteImage(
+        workspaceId: String,
+        userId: String,
+        noteId: String,
+        bytes: ByteArray,
+        contentType: String,
+        fileName: String
+    ): String {
+        if (workspaceId.isBlank() || userId.isBlank() || noteId.isBlank() || bytes.isEmpty()) return ""
+        val ext = fileName.substringAfterLast('.', "jpg")
+        val key = "${System.currentTimeMillis()}_${UUID.randomUUID()}.$ext"
+        val ref = storage.reference.child("companies/$workspaceId/personal_notes/$userId/note_images/$noteId/$key")
+        val metadata = StorageMetadata.Builder().setContentType(contentType.ifBlank { "image/jpeg" }).build()
+        ref.putBytes(bytes, metadata).await()
+        return ref.downloadUrl.await().toString()
+    }
+
+    suspend fun deleteKeepNote(workspaceId: String, userId: String, noteId: String) {
+        if (workspaceId.isBlank() || userId.isBlank() || noteId.isBlank()) return
+        db.collection("companies")
+            .document(workspaceId)
+            .collection("personal_notes")
+            .document(userId)
+            .collection("notes")
+            .document(noteId)
+            .delete()
+            .await()
+    }
+
+    private fun keepNoteFromDocument(id: String, data: Map<String, Any?>): StudioKeepNote {
+        return StudioKeepNote(
+            id = id,
+            title = stringValue(data["title"], ""),
+            text = stringValue(data["text"], ""),
+            colorName = stringValue(data["colorName"], "default"),
+            ownerUserId = stringValue(data["ownerUserId"], ""),
+            ownerEmail = stringValue(data["ownerEmail"], ""),
+            ownerName = stringValue(data["ownerName"], ""),
+            sharedWith = (data["sharedWith"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+            collaboratorEmails = (data["collaboratorEmails"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+            activeEditorUserId = stringValue(data["activeEditorUserId"], ""),
+            activeEditorEmail = stringValue(data["activeEditorEmail"], ""),
+            activeEditorUpdatedAt = messageDateFromAny(data["activeEditorUpdatedAt"]),
+            isPinned = (data["isPinned"] as? Boolean) ?: false,
+            isArchived = (data["isArchived"] as? Boolean) ?: false,
+            isDeleted = (data["isDeleted"] as? Boolean) ?: false,
+            labels = (data["labels"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+            links = (data["links"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+            reminderDate = messageDateFromAny(data["reminderDate"]),
+            manualOrder = (data["manualOrder"] as? Number)?.toDouble() ?: 0.0,
+            createdAt = messageDateFromAny(data["createdAt"]),
+            updatedAt = messageDateFromAny(data["updatedAt"])
+        )
+    }
+
     suspend fun markActivityNotificationRead(workspace: StudioWorkspace, notificationId: String) {
         if (workspace.id.isBlank() || notificationId.isBlank()) return
         functions.getHttpsCallable("markActivityNotificationRead")
@@ -1589,6 +1706,34 @@ class StudioFlowRepository(
         if (workspace.id.isBlank() || cleanIds.isEmpty()) return
         functions.getHttpsCallable("dismissActivityNotifications")
             .call(mapOf("companyId" to workspace.id, "notificationIds" to cleanIds))
+            .await()
+    }
+
+    suspend fun getMessageWorkspaceSettings(workspace: StudioWorkspace): StudioMessageWorkspaceSettings {
+        if (workspace.id.isBlank()) return StudioMessageWorkspaceSettings()
+        val result = functions.getHttpsCallable("getMessageWorkspaceSettings")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *> ?: return StudioMessageWorkspaceSettings()
+        val settings = (data["settings"] as? Map<*, *>) ?: data
+        return StudioMessageWorkspaceSettings(
+            directMessagesEnabled = settings["directMessagesEnabled"] as? Boolean ?: true,
+            groupConversationsEnabled = settings["groupConversationsEnabled"] as? Boolean ?: true,
+            attachmentsEnabled = settings["attachmentsEnabled"] as? Boolean ?: true
+        )
+    }
+
+    suspend fun setMessageWorkspaceSettings(workspace: StudioWorkspace, settings: StudioMessageWorkspaceSettings) {
+        if (workspace.id.isBlank()) return
+        functions.getHttpsCallable("setMessageWorkspaceSettings")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "directMessagesEnabled" to settings.directMessagesEnabled,
+                    "groupConversationsEnabled" to settings.groupConversationsEnabled,
+                    "attachmentsEnabled" to settings.attachmentsEnabled
+                )
+            )
             .await()
     }
 

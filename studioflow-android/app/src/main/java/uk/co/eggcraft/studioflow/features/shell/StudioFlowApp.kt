@@ -66,6 +66,16 @@ fun StudioFlowApp(
     viewModel: StudioFlowViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    uk.co.eggcraft.studioflow.ui.theme.StudioFlowTheme(appTheme = state.workspaceSettings.appTheme) {
+        StudioFlowAppContent(viewModel = viewModel, state = state)
+    }
+}
+
+@Composable
+private fun StudioFlowAppContent(
+    viewModel: StudioFlowViewModel,
+    state: uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
@@ -89,22 +99,66 @@ fun StudioFlowApp(
     }
 
     fun requestLocalUnlock() {
-        val keyguardManager = context.getSystemService(KeyguardManager::class.java)
-        if (keyguardManager?.isDeviceSecure == true) {
-            val intent = keyguardManager.createConfirmDeviceCredentialIntent(
-                "Unlock NivaDesk",
-                "Use fingerprint, face unlock, PIN, pattern or password to continue."
-            )
-            if (intent != null) {
-                unlockLauncher.launch(intent)
-            } else {
-                localUnlockSatisfied = true
-                localUnlockMessage = "Device security is not available. NivaDesk was unlocked."
+        val activity = context.findActivity() as? androidx.fragment.app.FragmentActivity
+        if (activity == null) {
+            // Fallback to legacy keyguard if not a FragmentActivity (shouldn't happen — MainActivity should be one).
+            val keyguardManager = context.getSystemService(KeyguardManager::class.java)
+            if (keyguardManager?.isDeviceSecure == true) {
+                val intent = keyguardManager.createConfirmDeviceCredentialIntent("Unlock NivaDesk", "Use device screen lock to continue.")
+                if (intent != null) {
+                    unlockLauncher.launch(intent)
+                    return
+                }
             }
-        } else {
             localUnlockSatisfied = true
-            localUnlockMessage = "Device screen lock is not set on this Android device. NivaDesk was unlocked."
+            return
         }
+
+        val biometricManager = androidx.biometric.BiometricManager.from(context)
+        // Try the strongest combination first: STRONG + WEAK + DEVICE_CREDENTIAL (covers face, fingerprint, PIN).
+        val allowedAll = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+            androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        val allowedBiometric = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
+
+        val (authenticators, allowDeviceCredentialSeparately) = when {
+            biometricManager.canAuthenticate(allowedAll) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS -> allowedAll to false
+            biometricManager.canAuthenticate(allowedBiometric) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS -> allowedBiometric to true
+            else -> androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL to false
+        }
+
+        val executor = androidx.core.content.ContextCompat.getMainExecutor(context)
+        val prompt = androidx.biometric.BiometricPrompt(
+            activity, executor,
+            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
+                    localUnlockSatisfied = true
+                    localUnlockMessage = ""
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    if (errorCode == androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                        errorCode == androidx.biometric.BiometricPrompt.ERROR_USER_CANCELED ||
+                        errorCode == androidx.biometric.BiometricPrompt.ERROR_CANCELED) {
+                        localUnlockMessage = "Unlock cancelled."
+                    } else {
+                        localUnlockMessage = errString.toString()
+                    }
+                }
+            }
+        )
+
+        val builder = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock NivaDesk")
+            .setSubtitle("Use fingerprint, face unlock or your device screen lock to continue.")
+            .setAllowedAuthenticators(authenticators)
+        if (allowDeviceCredentialSeparately) {
+            builder.setNegativeButtonText("Use screen lock")
+        }
+        runCatching { prompt.authenticate(builder.build()) }
+            .onFailure {
+                localUnlockMessage = it.message ?: "Could not start biometric prompt."
+            }
     }
 
     fun startGoogleSignIn() {
@@ -267,7 +321,15 @@ fun StudioFlowApp(
             onMarkActivityNotificationRead = viewModel::markActivityNotificationRead,
             onMarkAllActivityNotificationsRead = viewModel::markAllActivityNotificationsRead,
             onDismissActivityNotifications = viewModel::dismissActivityNotifications,
-            onOpenActivityNotification = viewModel::openActivityNotification
+            onOpenActivityNotification = viewModel::openActivityNotification,
+            onSetKeepNotesSearch = viewModel::setKeepNotesSearch,
+            onSetKeepNotesSection = viewModel::setKeepNotesSection,
+            onSaveKeepNote = viewModel::saveKeepNote,
+            onDeleteKeepNote = viewModel::deleteKeepNote,
+            onUploadKeepNoteImage = viewModel::uploadKeepNoteImage,
+            onSaveMessageWorkspaceSettings = viewModel::saveMessageWorkspaceSettings,
+            onReloadMessageWorkspaceSettings = viewModel::reloadMessageWorkspaceSettings,
+            onConsumePendingActivityNavigation = viewModel::consumePendingActivityNavigation
         )
     }
 }

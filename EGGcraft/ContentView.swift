@@ -55,7 +55,7 @@ struct StudioFirstRunGuideBubble: View {
             .overlay(bubbleOuterStroke)
             .overlay(bubbleInnerStroke)
             .shadow(color: Color.blue.opacity(0.28), radius: 18, x: 0, y: 0)
-            .shadow(color: Color.black.opacity(0.18), radius: 26, x: 0, y: 16)
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.18), radius: 26, x: 0, y: 16)
             .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .onHover { hovering in
                 if hovering { setArrowCursor() }
@@ -604,6 +604,22 @@ struct StudioActivityCenterView: View {
         return sections
     }
 
+    private func activityCenterBackgroundColor() -> Color {
+        guard presentationStyle == .drawer else { return Color.clear }
+        if activityColorScheme == .dark {
+            return Color(white: 0.075)
+        }
+        return Color(red: 0.945, green: 0.945, blue: 0.955)
+    }
+
+    private func activitySectionTitleColor() -> Color {
+        guard presentationStyle == .drawer else { return .secondary }
+        if activityColorScheme == .dark {
+            return Color.white.opacity(0.78)
+        }
+        return Color(red: 0.18, green: 0.18, blue: 0.20).opacity(0.72)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: presentationStyle == .drawer ? 12 : 14) {
             activityTopControlArea
@@ -624,7 +640,7 @@ struct StudioActivityCenterView: View {
                             VStack(alignment: .leading, spacing: presentationStyle == .drawer ? 10 : 9) {
                                 Text(section.title)
                                     .font(.system(size: 11.5, weight: .bold))
-                                    .foregroundColor(.white.opacity(presentationStyle == .drawer ? 0.78 : 1.0))
+                                    .foregroundColor(activitySectionTitleColor())
                                     .textCase(.uppercase)
                                     .tracking(0.6)
                                     .padding(.horizontal, 2)
@@ -640,7 +656,10 @@ struct StudioActivityCenterView: View {
             }
         }
         .padding(presentationStyle == .drawer ? 10 : 20)
-        .background(Color.clear)
+        .background(
+            activityCenterBackgroundColor()
+                .ignoresSafeArea()
+        )
         .onAppear {
             loadDismissedActivityNotifications()
             firebaseManager.startActivityNotificationsRealtime(companyId: companyId)
@@ -660,15 +679,15 @@ struct StudioActivityCenterView: View {
         if activityColorScheme == .dark {
             return Color.white.opacity(0.16)
         }
-        return Color.black.opacity(0.08)
+        return Color(red: 0, green: 0, blue: 0).opacity(0.08)
     }
 
     private func activityTopControlShadow() -> Color {
         guard presentationStyle == .drawer else { return Color.clear }
         if activityColorScheme == .dark {
-            return Color.black.opacity(0.24)
+            return Color(red: 0, green: 0, blue: 0).opacity(0.24)
         }
-        return Color.black.opacity(0.08)
+        return Color(red: 0, green: 0, blue: 0).opacity(0.10)
     }
 
     private var activityTopControlArea: some View {
@@ -995,7 +1014,7 @@ struct StudioActivityCenterView: View {
                                 .frame(width: 22, height: 22)
                                 .background(.regularMaterial)
                                 .clipShape(Circle())
-                                .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 1)
+                                .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.12), radius: 4, x: 0, y: 1)
                         }
                         .buttonStyle(.plain)
                         .offset(x: -7, y: -7)
@@ -1074,12 +1093,18 @@ struct StudioActivityCenterView: View {
     }
 
     private func activityCardShadowColor() -> Color {
-        presentationStyle == .drawer ? Color.black.opacity(0.075) : Color.clear
+        guard presentationStyle == .drawer else { return Color.clear }
+        return activityColorScheme == .dark
+            ? Color(red: 0, green: 0, blue: 0).opacity(0.20)
+            : Color(red: 0, green: 0, blue: 0).opacity(0.08)
     }
 
     private func activityStackLayerFillColor(level: Int) -> Color {
         if presentationStyle == .drawer {
-            return Color.white.opacity(level == 1 ? 0.60 : 0.46)
+            if activityColorScheme == .dark {
+                return Color.white.opacity(level == 1 ? 0.10 : 0.07)
+            }
+            return Color(red: 0.82, green: 0.82, blue: 0.84).opacity(level == 1 ? 0.45 : 0.32)
         }
         return Color.primary.opacity(level == 1 ? 0.060 : 0.042)
     }
@@ -1100,7 +1125,7 @@ struct StudioActivityCenterView: View {
             if activityColorScheme == .dark {
                 return Color.white.opacity(isUnread ? 0.18 : 0.12)
             } else {
-                return Color.black.opacity(isUnread ? 0.12 : 0.08)
+                return Color(red: 0, green: 0, blue: 0).opacity(isUnread ? 0.12 : 0.08)
             }
         }
         return isUnread ? Color.blue.opacity(0.12) : Color.primary.opacity(0.07)
@@ -1108,7 +1133,7 @@ struct StudioActivityCenterView: View {
 
     private func activityDrawerCardShadowColor() -> Color {
         if presentationStyle != .drawer { return Color.clear }
-        return activityColorScheme == .dark ? Color.black.opacity(0.28) : Color.black.opacity(0.08)
+        return activityColorScheme == .dark ? Color(red: 0, green: 0, blue: 0).opacity(0.28) : Color(red: 0, green: 0, blue: 0).opacity(0.08)
     }
 
     private func activityDrawerStackLayerColor(level: Int) -> Color {
@@ -1325,7 +1350,7 @@ struct StudioActivityCenterView: View {
                         .frame(width: 22, height: 22)
                         .background(.regularMaterial)
                         .clipShape(Circle())
-                        .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 1)
+                        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.12), radius: 4, x: 0, y: 1)
                 }
                 .buttonStyle(.plain)
                 .offset(x: -7, y: -7)
@@ -1415,6 +1440,8 @@ struct StudioKeepNote: Identifiable, Equatable {
     var text: String
     var colorName: String
     var ownerUserId: String
+    var ownerEmail: String
+    var ownerName: String
     var sharedWith: [String]
     var collaboratorEmails: [String]
     var activeEditorUserId: String
@@ -1435,6 +1462,8 @@ struct StudioKeepNote: Identifiable, Equatable {
          text: String = "",
          colorName: String = "default",
          ownerUserId: String = "",
+         ownerEmail: String = "",
+         ownerName: String = "",
          sharedWith: [String] = [],
          collaboratorEmails: [String] = [],
          activeEditorUserId: String = "",
@@ -1454,6 +1483,8 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.text = text
         self.colorName = colorName
         self.ownerUserId = ownerUserId
+        self.ownerEmail = ownerEmail
+        self.ownerName = ownerName
         self.sharedWith = sharedWith
         self.collaboratorEmails = collaboratorEmails
         self.activeEditorUserId = activeEditorUserId
@@ -1477,6 +1508,8 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.text = data["text"] as? String ?? ""
         self.colorName = data["colorName"] as? String ?? "default"
         self.ownerUserId = data["ownerUserId"] as? String ?? ""
+        self.ownerEmail = data["ownerEmail"] as? String ?? ""
+        self.ownerName = data["ownerName"] as? String ?? ""
         self.sharedWith = data["sharedWith"] as? [String] ?? []
         self.collaboratorEmails = data["collaboratorEmails"] as? [String] ?? []
         self.activeEditorUserId = data["activeEditorUserId"] as? String ?? ""
@@ -1542,9 +1575,15 @@ private struct KeepShortcutTooltipBubble: View {
     }
 }
 
-private struct KeepTooltipIconButton: View {
+enum KeepTooltipPlacement {
+    case above
+    case below
+}
+
+struct KeepTooltipIconButton: View {
     let systemImage: String
     let tooltip: String
+    var tooltipPlacement: KeepTooltipPlacement = .above
     let role: ButtonRole?
     let action: () -> Void
 
@@ -1573,7 +1612,7 @@ private struct KeepTooltipIconButton: View {
         .overlay(alignment: .bottom) {
             if isHovering {
                 KeepShortcutTooltipBubble(text: tooltip)
-                    .offset(y: -34)
+                    .offset(y: tooltipPlacement == .below ? 34 : -34)
                     .zIndex(999)
                     .transition(.opacity)
             }
@@ -1581,7 +1620,6 @@ private struct KeepTooltipIconButton: View {
         .zIndex(isHovering ? 999 : 0)
     }
 }
-
 private struct KeepTooltipIconMenu<Content: View>: View {
     let systemImage: String
     let tooltip: String
@@ -1635,6 +1673,7 @@ private struct KeepWorkspaceMember: Identifiable, Equatable {
     let email: String
     let name: String
     let role: String
+    let photoURL: String
 
     var displayName: String {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1651,15 +1690,40 @@ private struct KeepWorkspaceMember: Identifiable, Equatable {
     }
 }
 
+
+private struct KeepCollaborationInvite: Identifiable, Equatable {
+    let id: String
+    let inviteId: String
+    let companyId: String
+    let noteId: String
+    let sourceUserId: String
+    let sourceEmail: String
+    let title: String
+    let text: String
+    let createdAtMillis: Double?
+
+    var displayTitle: String {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? "Untitled note" : clean
+    }
+}
+
+
+extension Notification.Name {
+    static let studioOpenNotesFromActivityNotification = Notification.Name("studioOpenNotesFromActivityNotification")
+}
+
 struct StudioKeepNotesView: View {
     var onOpenProject: ((String) -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
     @EnvironmentObject var authVM: AuthViewModel
     @Environment(\.colorScheme) private var keepColorScheme
     @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @FocusState private var isComposerTextFocused: Bool
 
     @State private var notes: [StudioKeepNote] = []
-    @AppStorage("studioKeepSelectedSection") private var selectedSection: String = "notes"
+    @State private var selectedSection: String = "notes"
     @State private var searchText: String = ""
     @State private var isLoading: Bool = true
     @State private var errorMessage: String = ""
@@ -1674,19 +1738,29 @@ struct StudioKeepNotesView: View {
     @State private var composerReminderEnabled: Bool = false
     @State private var composerReminderDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
     @State private var composerExpanded: Bool = false
+    @State private var isHoveringQuickComposer: Bool = false
     @State private var selectedNote: StudioKeepNote?
     @State private var lastOpenedKeepNoteId: String? = nil
     @State private var collaboratorNote: StudioKeepNote?
     @State private var collaboratorEmailText: String = ""
+    @State private var collaboratorMemberSearchText: String = ""
+    @State private var isWorkspaceMemberListExpanded: Bool = true
+    @State private var pendingCollaboratorInviteKeys: Set<String> = []
+    @State private var editingProjectNoteItem: StudioProjectNoteItem?
+    @State private var editingProjectNoteText: String = ""
     @State private var keepWorkspaceMembers: [KeepWorkspaceMember] = []
-    @State private var membersListener: ListenerRegistration?
-    @AppStorage("studioKeepGridMode") private var gridMode: Bool = true
+    @State private var keepCollaborationInvites: [KeepCollaborationInvite] = []
+    @State private var isLoadingKeepInvites: Bool = false
+    @State private var keepInviteRefreshTimer: Timer?
+    @State private var membersListeners: [ListenerRegistration] = []
+    @State private var gridMode: Bool = true
     @State private var showLabelManager: Bool = false
     @State private var newLabelText: String = ""
     @State private var reminderPickerNote: StudioKeepNote?
     @State private var reminderPickerDate: Date = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
     @State private var expandedProjectNoteKeys: Set<String> = []
     @State private var hoveredKeepNoteId: String? = nil
+    @State private var hoveredCollaboratorAvatarKey: String? = nil
     @State private var draggingKeepNoteId: String? = nil
     @State private var lastDropTargetKeepNoteId: String? = nil
     @State private var selectedKeepNoteIds: Set<String> = []
@@ -1861,7 +1935,12 @@ struct StudioKeepNotesView: View {
             )
         }
         .sorted { lhs, rhs in
-            (lhs.latestUpdatedAt ?? .distantPast) > (rhs.latestUpdatedAt ?? .distantPast)
+            let leftDate = lhs.latestUpdatedAt ?? .distantPast
+            let rightDate = rhs.latestUpdatedAt ?? .distantPast
+            if leftDate != rightDate {
+                return leftDate > rightDate
+            }
+            return lhs.id < rhs.id
         }
     }
 
@@ -1969,13 +2048,15 @@ struct StudioKeepNotesView: View {
                 VStack(spacing: 0) {
                     keepTopBar(isWide: isWide)
                     ScrollView {
-                        VStack(spacing: 22) {
+                        VStack(spacing: isCompactKeepPhoneLayout ? 16 : 24) {
                             notesSectionHeader
                                 .padding(.top, 20)
 
                             if selectedSection == "notes" {
-                                quickComposer
-                                    .frame(maxWidth: composerExpanded ? 820 : 620)
+                                collaborationInvitesSection
+
+            quickComposer
+                                    .frame(maxWidth: isCompactKeepPhoneLayout ? .infinity : (composerExpanded ? 820 : 620), alignment: .center)
                             }
 
                             if selectedSection == "projectnotes" {
@@ -1995,11 +2076,23 @@ struct StudioKeepNotesView: View {
                         .padding(.horizontal, isWide ? 28 : 16)
                         .padding(.bottom, 36)
                     }
+        .scrollIndicators(shouldHideKeepNotesScrollIndicator ? .hidden : .automatic)
                 }
             }
+                    #if os(macOS)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            if composerExpanded && !isHoveringQuickComposer {
+                                collapseQuickComposerIfNeeded()
+                            }
+                        }
+                    )
+                    #endif
             .background(pageBackground)
         }
         .onAppear {
+            loadKeepLocalUIState()
             if selectedSection.hasPrefix("label:") {
                 let labelName = String(selectedSection.dropFirst("label:".count))
                 if !allLabels.contains(where: { $0.caseInsensitiveCompare(labelName) == .orderedSame }) {
@@ -2008,6 +2101,26 @@ struct StudioKeepNotesView: View {
             }
             startNotesListener()
             loadWorkspaceMembersForNotes()
+            loadKeepCollaborationInvites()
+            startKeepInviteLiveRefresh()
+        }
+        .onChange(of: selectedSection) { _ in
+            saveKeepSelectedSectionState()
+            if selectedSection == "notes" {
+                loadKeepCollaborationInvites()
+                startKeepInviteLiveRefresh()
+            } else {
+                stopKeepInviteLiveRefresh()
+            }
+        }
+        .onChange(of: gridMode) { _ in
+            saveKeepGridModeState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .studioOpenNotesFromActivityNotification)) { _ in
+            UserDefaults.standard.set(false, forKey: "studioPendingOpenNotesFromNotification")
+            selectedSection = "notes"
+            loadKeepCollaborationInvites()
+            startKeepInviteLiveRefresh()
         }
         .onDisappear {
             listener?.remove()
@@ -2051,6 +2164,9 @@ struct StudioKeepNotesView: View {
         .sheet(item: $collaboratorNote) { note in
             collaboratorSheet(for: note)
         }
+        .sheet(item: $editingProjectNoteItem) { item in
+            projectNoteEditorSheet(for: item)
+        }
     }
 
     private func keepTopBar(isWide: Bool) -> some View {
@@ -2083,6 +2199,15 @@ struct StudioKeepNotesView: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.yellow)
                     .frame(width: 38, height: 38)
+                    #if os(macOS)
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            if composerExpanded && !isHoveringQuickComposer {
+                                collapseQuickComposerIfNeeded()
+                            }
+                        }
+                    )
+                    #endif
                     .background(Color.yellow.opacity(0.18))
                     .clipShape(Circle())
 
@@ -2126,13 +2251,13 @@ struct StudioKeepNotesView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    gridMode.toggle()
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) { gridMode.toggle() }
                 } label: {
-                    Image(systemName: gridMode ? "rectangle.grid.2x2" : "list.bullet")
+                    Image(systemName: gridMode ? "rectangle.split.1x2" : "square.grid.2x2")
                 }
                 .buttonStyle(.plain)
-                .help(keepShortcutText(gridMode ? "Grid view" : "List view"))
-                .accessibilityLabel(keepShortcutText(gridMode ? "Grid view" : "List view"))
+                .help(keepShortcutText(gridMode ? "List view" : "Grid view"))
+                .accessibilityLabel(keepShortcutText(gridMode ? "List view" : "Grid view"))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -2281,6 +2406,37 @@ struct StudioKeepNotesView: View {
         }
     }
 
+    private func bulkUnarchiveSelectedNotes() {
+        let affectedNotes = selectedKeepNotes()
+        for note in affectedNotes {
+            var updated = note
+            updated.isArchived = false
+            updated.isDeleted = false
+            saveNote(updated)
+        }
+        clearKeepNoteSelection()
+
+        if !affectedNotes.isEmpty {
+            showKeepUndo("Notes unarchived") {
+                for note in affectedNotes {
+                    var restored = note
+                    restored.isArchived = true
+                    restored.isDeleted = false
+                    saveNote(restored)
+                }
+            }
+        }
+    }
+
+    private func bulkArchiveOrUnarchiveSelectedNotes() {
+        if selectedSection == "archive" {
+            bulkUnarchiveSelectedNotes()
+        } else {
+            bulkArchiveSelectedNotes()
+        }
+    }
+
+
     private func bulkTrashSelectedNotes() {
         let affectedNotes = selectedKeepNotes()
         for note in affectedNotes {
@@ -2316,16 +2472,25 @@ struct StudioKeepNotesView: View {
             case "Reminder": return "Hatırlatma"
             case "Labels": return "Etiketler"
             case "Collaborators": return "Ortak çalışanlar"
+            case "Collaboration invitations": return "Ortak çalışma davetleri"
+            case "Accept": return "Kabul et"
+            case "Decline": return "Reddet"
+            case "invited you to collaborate on this note.": return "seni bu notta ortak çalışmaya davet etti."
             case "Workspace members": return "Workspace üyeleri"
             case "Added": return "Eklendi"
             case "collaborator": return "ortak çalışan"
             case "collaborators": return "ortak çalışan"
             case "Archive note": return "Arşivle"
             case "Unarchive note": return "Arşivden çıkar"
+            case "Unarchive": return "Arşivden çıkar"
             case "Move to trash": return "Çöpe taşı"
             case "Restore note": return "Geri yükle"
             case "Delete forever": return "Kalıcı sil"
             case "Open project": return "Projeyi aç"
+            case "Edit": return "Düzenle"
+            case "Edit project note": return "Proje notunu düzenle"
+            case "Cancel": return "İptal"
+            case "Save": return "Kaydet"
             case "Save as personal note": return "Kişisel nota kaydet"
             case "Copy project note": return "Proje notunu kopyala"
             case "Checklist": return "Checklist"
@@ -2335,8 +2500,10 @@ struct StudioKeepNotesView: View {
             case "Grid view": return "Grid görünümü"
             case "List view": return "Liste görünümü"
             case "Close": return "Kapat"
+            case "Add note": return "Notu ekle"
             case "Undo": return "Geri al"
             case "is editing": return "düzenliyor"
+            case "This note is being edited by another collaborator.": return "Bu not şu anda başka bir ortak çalışan tarafından düzenleniyor."
             case "Someone": return "Birisi"
             default: return t(key, lang: seciliDil)
             }
@@ -2408,6 +2575,119 @@ struct StudioKeepNotesView: View {
         .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.18 : 0.06), radius: 8, x: 0, y: 3)
     }
 
+    private var isCompactKeepPhoneLayout: Bool {
+        #if os(iOS)
+        return horizontalSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    private var keepPhoneHorizontalPadding: CGFloat {
+        isCompactKeepPhoneLayout ? 16 : 28
+    }
+
+    private var keepPhoneCardCornerRadius: CGFloat {
+        isCompactKeepPhoneLayout ? 12 : 18
+    }
+
+    private var keepCardInnerPadding: CGFloat {
+        if isCompactKeepPhoneLayout {
+            return gridMode ? 12 : 14
+        }
+        return 16
+    }
+
+    private var keepPhoneCardMinHeight: CGFloat {
+        if isCompactKeepPhoneLayout {
+            return gridMode ? 64 : 58
+        }
+        return 150
+    }
+
+    private var keepPhoneGridCardMinHeight: CGFloat {
+        isCompactKeepPhoneLayout ? (gridMode ? 84 : 72) : 150
+    }
+
+    private var shouldHideKeepNotesScrollIndicator: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    private var keepDesktopGridSpacing: CGFloat {
+        isCompactKeepPhoneLayout ? 10 : 18
+    }
+
+    private var keepDesktopListSpacing: CGFloat {
+        isCompactKeepPhoneLayout ? 10 : 14
+    }
+
+    private var keepDesktopCardOuterPadding: CGFloat {
+        isCompactKeepPhoneLayout ? 0 : 4
+    }
+
+    private var keepGridColumns: [GridItem] {
+        if isCompactKeepPhoneLayout {
+            if gridMode {
+                return [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ]
+            }
+
+            return [
+                GridItem(.flexible(), spacing: 10)
+            ]
+        }
+
+        if gridMode {
+                    return [
+                        GridItem(.flexible(), spacing: isCompactKeepPhoneLayout ? 10 : 18),
+                        GridItem(.flexible(), spacing: isCompactKeepPhoneLayout ? 10 : 18)
+                    ]
+                }
+
+                return [
+                    GridItem(.flexible(), spacing: isCompactKeepPhoneLayout ? 10 : 18)
+                ]
+    }
+
+
+
+    private var keepLocalUIStoragePrefix: String {
+        let userId = keepCurrentUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyId = cleanCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "studioKeepUI.\(companyId.isEmpty ? "localCompany" : companyId).\(userId.isEmpty ? "localUser" : userId)"
+    }
+
+    private var keepSelectedSectionStorageKey: String {
+        "\(keepLocalUIStoragePrefix).selectedSection"
+    }
+
+    private var keepGridModeStorageKey: String {
+        "\(keepLocalUIStoragePrefix).gridMode"
+    }
+
+    private func loadKeepLocalUIState() {
+        let storedSection = UserDefaults.standard.string(forKey: keepSelectedSectionStorageKey) ?? "notes"
+        selectedSection = storedSection.isEmpty ? "notes" : storedSection
+
+        if UserDefaults.standard.object(forKey: keepGridModeStorageKey) != nil {
+            gridMode = UserDefaults.standard.bool(forKey: keepGridModeStorageKey)
+        }
+    }
+
+    private func saveKeepSelectedSectionState() {
+        UserDefaults.standard.set(selectedSection, forKey: keepSelectedSectionStorageKey)
+    }
+
+    private func saveKeepGridModeState() {
+        UserDefaults.standard.set(gridMode, forKey: keepGridModeStorageKey)
+    }
+
     private var keepCurrentUserId: String {
         Auth.auth().currentUser?.uid ?? ""
     }
@@ -2418,6 +2698,22 @@ struct StudioKeepNotesView: View {
 
     private func canEditKeepNote(_ note: StudioKeepNote) -> Bool {
         canSeeKeepNote(note)
+    }
+
+    private func collaboratorInviteKey(noteId: String, email: String) -> String {
+        "\(noteId.trimmingCharacters(in: .whitespacesAndNewlines))::\(normalizedCollaboratorEmail(email))"
+    }
+
+    private func isCollaboratorInvitePending(for note: StudioKeepNote, email: String) -> Bool {
+        pendingCollaboratorInviteKeys.contains(collaboratorInviteKey(noteId: note.id, email: email))
+    }
+
+    private func markCollaboratorInvitePending(for note: StudioKeepNote, email: String) {
+        pendingCollaboratorInviteKeys.insert(collaboratorInviteKey(noteId: note.id, email: email))
+    }
+
+    private func clearCollaboratorInvitePending(for note: StudioKeepNote, email: String) {
+        pendingCollaboratorInviteKeys.remove(collaboratorInviteKey(noteId: note.id, email: email))
     }
 
     private func normalizedCollaboratorEmail(_ email: String) -> String {
@@ -2448,6 +2744,8 @@ struct StudioKeepNotesView: View {
             "text": note.text,
             "colorName": note.colorName,
             "ownerUserId": note.ownerUserId.isEmpty ? keepCurrentUserId : note.ownerUserId,
+            "ownerEmail": note.ownerEmail.isEmpty ? keepCurrentUserEmail : note.ownerEmail,
+            "ownerName": note.ownerName,
             "companyId": cleanCompanyId,
             "sharedWith": emails,
             "collaboratorEmails": note.collaboratorEmails,
@@ -2508,7 +2806,7 @@ struct StudioKeepNotesView: View {
         guard !member.userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         Functions.functions(region: "europe-west2")
-            .httpsCallable("sharePersonalNoteWithWorkspaceMember")
+            .httpsCallable("createPersonalNoteCollaborationInvite")
             .call([
                 "companyId": cleanCompanyId,
                 "noteId": note.id,
@@ -2590,38 +2888,35 @@ struct StudioKeepNotesView: View {
         let email = normalizedCollaboratorEmail(collaboratorEmailText)
         guard !email.isEmpty else { return }
 
-        var updated = note
-        if updated.ownerUserId.isEmpty {
-            updated.ownerUserId = keepCurrentUserId
-        }
-
-        if !updated.collaboratorEmails.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) {
-            updated.collaboratorEmails.append(email)
-        }
-
-        if !updated.sharedWith.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) {
-            updated.sharedWith.append(email)
-        }
-
         collaboratorEmailText = ""
-        saveNote(updated)
 
         if let member = workspaceMember(for: email) {
-            mirrorSharedNote(updated, to: member)
+            markCollaboratorInvitePending(for: note, email: member.normalizedEmail)
+            mirrorSharedNote(note, to: member)
+        } else {
+            errorMessage = t("Please select a joined workspace member from the list.", lang: seciliDil)
         }
 
-        collaboratorNote = updated
+        collaboratorNote = note
     }
 
     private func removeCollaborator(_ email: String, from note: StudioKeepNote) {
         let clean = normalizedCollaboratorEmail(email)
+        clearCollaboratorInvitePending(for: note, email: clean)
+
         var updated = note
+        let wasAcceptedOrShared = updated.collaboratorEmails.contains { $0.caseInsensitiveCompare(clean) == .orderedSame } ||
+            updated.sharedWith.contains { $0.caseInsensitiveCompare(clean) == .orderedSame }
+
         updated.collaboratorEmails.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
         updated.sharedWith.removeAll { $0.caseInsensitiveCompare(clean) == .orderedSame }
-        saveNote(updated)
 
-        if let member = workspaceMember(for: clean) {
-            removeMirroredSharedNote(note, from: member)
+        if wasAcceptedOrShared {
+            saveNote(updated)
+
+            if let member = workspaceMember(for: clean) {
+                removeMirroredSharedNote(note, from: member)
+            }
         }
 
         collaboratorNote = updated
@@ -2640,8 +2935,51 @@ struct StudioKeepNotesView: View {
         return email
     }
 
+    private func isSharedKeepNote(_ note: StudioKeepNote) -> Bool {
+        !note.sharedWith.isEmpty || !note.collaboratorEmails.isEmpty || (!note.ownerUserId.isEmpty && note.ownerUserId != keepCurrentUserId)
+    }
+
+    private func syncSharedNoteContentIfNeeded(_ note: StudioKeepNote) {
+        guard isSharedKeepNote(note) else { return }
+        guard !note.id.isEmpty, !cleanCompanyId.isEmpty else { return }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("syncSharedPersonalNoteContent")
+            .call([
+                "companyId": cleanCompanyId,
+                "noteId": note.id,
+                "note": cloudNotePayload(note)
+            ]) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+    }
+
+    private func setSharedNoteEditingPresence(_ note: StudioKeepNote, isEditing: Bool) {
+        guard isSharedKeepNote(note) else { return }
+        guard !note.id.isEmpty, !cleanCompanyId.isEmpty else { return }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("setSharedPersonalNoteEditingPresence")
+            .call([
+                "companyId": cleanCompanyId,
+                "noteId": note.id,
+                "isEditing": isEditing
+            ]) { _, error in
+                if let error {
+                    DispatchQueue.main.async {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+    }
+
     private func markNoteEditing(_ note: StudioKeepNote) {
         guard !note.id.isEmpty else { return }
+        setSharedNoteEditingPresence(note, isEditing: true)
         guard let collection = notesCollection else { return }
 
         collection.document(note.id).setData([
@@ -2653,6 +2991,10 @@ struct StudioKeepNotesView: View {
 
     private func clearNoteEditing(_ noteId: String) {
         guard !noteId.isEmpty else { return }
+        if let note = notes.first(where: { $0.id == noteId }) {
+            setSharedNoteEditingPresence(note, isEditing: false)
+        }
+
         guard let collection = notesCollection else { return }
 
         collection.document(noteId).setData([
@@ -2682,189 +3024,644 @@ struct StudioKeepNotesView: View {
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
+    private var filteredWorkspaceMembersForCollaborator: [KeepWorkspaceMember] {
+        let query = collaboratorMemberSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return selectableWorkspaceMembers }
+
+        return selectableWorkspaceMembers.filter { member in
+            [
+                member.displayName,
+                member.email,
+                member.role
+            ]
+            .joined(separator: " ")
+            .lowercased()
+            .contains(query)
+        }
+    }
+
+
+    private func workspaceMemberFromDocument(_ document: QueryDocumentSnapshot) -> KeepWorkspaceMember? {
+        let data = document.data()
+
+        let email = (
+            data["email"] as? String ??
+            data["userEmail"] as? String ??
+            data["memberEmail"] as? String ??
+            data["accountEmail"] as? String ??
+            data["invitedEmail"] as? String ??
+            ""
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let name = (
+            data["name"] as? String ??
+            data["displayName"] as? String ??
+            data["fullName"] as? String ??
+            data["userName"] as? String ??
+            data["memberName"] as? String ??
+            ""
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let role = (
+            data["role"] as? String ??
+            data["workspaceRole"] as? String ??
+            data["accessRole"] as? String ??
+            ""
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let photoURL = (
+            data["photoURL"] as? String ??
+            data["avatarURL"] as? String ??
+            data["profilePhotoURL"] as? String ??
+            data["userPhotoURL"] as? String ??
+            ""
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let userId = (
+            data["userId"] as? String ??
+            data["uid"] as? String ??
+            data["memberUid"] as? String ??
+            data["ownerUid"] as? String ??
+            document.documentID
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !email.isEmpty else { return nil }
+
+        return KeepWorkspaceMember(
+            id: document.documentID,
+            userId: userId,
+            email: email,
+            name: name,
+            role: role,
+            photoURL: photoURL
+        )
+    }
+
+    private func mergeWorkspaceMembers(_ incoming: [KeepWorkspaceMember]) {
+        var mergedByEmail: [String: KeepWorkspaceMember] = Dictionary(
+            uniqueKeysWithValues: keepWorkspaceMembers.map { ($0.normalizedEmail, $0) }
+        )
+
+        for member in incoming {
+            let key = member.normalizedEmail
+            guard !key.isEmpty else { continue }
+
+            if let existing = mergedByEmail[key] {
+                let bestUserId = existing.userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? member.userId : existing.userId
+                let bestName = existing.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? member.name : existing.name
+                let bestRole = existing.role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? member.role : existing.role
+                mergedByEmail[key] = KeepWorkspaceMember(
+                    id: existing.id,
+                    userId: bestUserId,
+                    email: existing.email,
+                    name: bestName,
+                    role: bestRole,
+                    photoURL: existing.photoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? member.photoURL : existing.photoURL
+                )
+            } else {
+                mergedByEmail[key] = member
+            }
+        }
+
+        keepWorkspaceMembers = Array(mergedByEmail.values)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
     private func loadWorkspaceMembersForNotes() {
-        membersListener?.remove()
+        membersListeners.forEach { $0.remove() }
+        membersListeners.removeAll()
+        keepWorkspaceMembers = []
 
         let db = Firestore.firestore()
         let companyId = cleanCompanyId
         guard !companyId.isEmpty else { return }
 
-        membersListener = db.collection("companies")
-            .document(companyId)
-            .collection("members")
-            .addSnapshotListener { snapshot, _ in
+        let candidateCollections: [CollectionReference] = [
+            db.collection("companies").document(companyId).collection("members"),
+            db.collection("companies").document(companyId).collection("teamMembers"),
+            db.collection("companies").document(companyId).collection("workspaceMembers"),
+            db.collection("companies").document(companyId).collection("users"),
+            db.collection("workspaces").document(companyId).collection("members"),
+            db.collection("workspaces").document(companyId).collection("teamMembers")
+        ]
+
+        for collection in candidateCollections {
+            let listener = collection.addSnapshotListener { snapshot, _ in
                 DispatchQueue.main.async {
-                    keepWorkspaceMembers = snapshot?.documents.compactMap { document in
-                        let data = document.data()
-                        let email = (data["email"] as? String ?? data["userEmail"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                        let name = (data["name"] as? String ?? data["displayName"] as? String ?? data["fullName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                        let role = data["role"] as? String ?? ""
-                        guard !email.isEmpty else { return nil }
-
-                        let userId = (data["userId"] as? String ?? data["uid"] as? String ?? document.documentID).trimmingCharacters(in: .whitespacesAndNewlines)
-
-                        return KeepWorkspaceMember(
-                            id: document.documentID,
-                            userId: userId,
-                            email: email,
-                            name: name,
-                            role: role
-                        )
+                    let loaded = snapshot?.documents.compactMap { document in
+                        workspaceMemberFromDocument(document)
                     } ?? []
+
+                    mergeWorkspaceMembers(loaded)
                 }
             }
+            membersListeners.append(listener)
+        }
+
+        // Bazı eski yapılarda üyeler company dokümanı içindeki map/array alanlarında tutulabilir.
+        let companyListener = db.collection("companies").document(companyId).addSnapshotListener { snapshot, _ in
+            DispatchQueue.main.async {
+                guard let data = snapshot?.data() else { return }
+                var loaded: [KeepWorkspaceMember] = []
+
+                func appendMember(id: String, value: Any) {
+                    if let dict = value as? [String: Any] {
+                        let email = (
+                            dict["email"] as? String ??
+                            dict["userEmail"] as? String ??
+                            dict["memberEmail"] as? String ??
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        guard !email.isEmpty else { return }
+
+                        let name = (
+                            dict["name"] as? String ??
+                            dict["displayName"] as? String ??
+                            dict["fullName"] as? String ??
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        let role = (
+                            dict["role"] as? String ??
+                            dict["workspaceRole"] as? String ??
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        let photoURL = (
+                            dict["photoURL"] as? String ??
+                            dict["avatarURL"] as? String ??
+                            dict["profilePhotoURL"] as? String ??
+                            dict["userPhotoURL"] as? String ??
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        let userId = (
+                            dict["userId"] as? String ??
+                            dict["uid"] as? String ??
+                            id
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        loaded.append(
+                            KeepWorkspaceMember(
+                                id: id,
+                                userId: userId,
+                                email: email,
+                                name: name,
+                                role: role,
+                                photoURL: photoURL
+                            )
+                        )
+                    } else if let email = value as? String {
+                        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !cleanEmail.isEmpty else { return }
+                        loaded.append(
+                            KeepWorkspaceMember(
+                                id: id,
+                                userId: id,
+                                email: cleanEmail,
+                                name: "",
+                                role: "",
+                                photoURL: ""
+                            )
+                        )
+                    }
+                }
+
+                for fieldName in ["members", "teamMembers", "workspaceMembers", "users", "memberEmails"] {
+                    if let map = data[fieldName] as? [String: Any] {
+                        for (id, value) in map {
+                            appendMember(id: id, value: value)
+                        }
+                    } else if let array = data[fieldName] as? [[String: Any]] {
+                        for (index, value) in array.enumerated() {
+                            appendMember(id: "\(fieldName)-\(index)", value: value)
+                        }
+                    } else if let emails = data[fieldName] as? [String] {
+                        for email in emails {
+                            appendMember(id: email, value: email)
+                        }
+                    }
+                }
+
+                mergeWorkspaceMembers(loaded)
+            }
+        }
+
+        membersListeners.append(companyListener)
     }
+
 
     private func addWorkspaceMember(_ member: KeepWorkspaceMember, to note: StudioKeepNote) {
-        collaboratorEmailText = member.normalizedEmail
-        addCollaborator(to: note)
-
-        var updated = note
-        updated.ownerUserId = updated.ownerUserId.isEmpty ? keepCurrentUserId : updated.ownerUserId
-
-        if !updated.collaboratorEmails.contains(where: { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }) {
-            updated.collaboratorEmails.append(member.normalizedEmail)
-        }
-
-        if !updated.sharedWith.contains(where: { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }) {
-            updated.sharedWith.append(member.normalizedEmail)
-        }
-
-        mirrorSharedNote(updated, to: member)
-        collaboratorNote = updated
+        // Accept edilmeden sharedWith/collaboratorEmails yazmıyoruz.
+        // Aksi halde saveNote -> shared sync tetiklenir ve not karşı tarafta
+        // davet kabul edilmeden görünmeye başlar.
+        markCollaboratorInvitePending(for: note, email: member.normalizedEmail)
+        mirrorSharedNote(note, to: member)
     }
 
-    private var notesSectionHeader: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t(sectionDisplayTitle(selectedSection), lang: seciliDil))
-                        .font(.system(size: 24, weight: .bold))
-                    Text(activeSectionCountText)
-                        .font(.system(size: 12.5, weight: .semibold))
+
+    private func projectNoteMasonryColumnCount(for width: CGFloat) -> Int {
+        if width >= 980 { return 3 }
+        if width >= 620 { return 2 }
+        return 1
+    }
+
+    private func projectNoteMasonryColumns(_ groups: [StudioProjectNoteGroup], columnCount: Int) -> [[StudioProjectNoteGroup]] {
+        let safeCount = max(1, columnCount)
+        var columns = Array(repeating: [StudioProjectNoteGroup](), count: safeCount)
+
+        // Project Notes kartları aç/kapanırken sağa sola atlamasın diye
+        // kolon dağılımı görünür liste sırasına göre sabit tutulur.
+        // Aç/kapan sadece kartın kendi kolonunda yükseklik değiştirir.
+        for (index, group) in groups.enumerated() {
+            columns[index % safeCount].append(group)
+        }
+
+        return columns
+    }
+
+
+    private var projectNotesMasonryGrid: some View {
+        GeometryReader { proxy in
+            let columnCount = projectNoteMasonryColumnCount(for: proxy.size.width)
+            let columns = projectNoteMasonryColumns(projectNoteGroups, columnCount: columnCount)
+
+            HStack(alignment: .top, spacing: isCompactKeepPhoneLayout ? 10 : 18) {
+                ForEach(Array(columns.enumerated()), id: \.offset) { _, columnGroups in
+                    VStack(spacing: 18) {
+                        ForEach(columnGroups) { group in
+                            projectNoteGroupCard(group)
+                                .id(group.id)
+                                .frame(maxWidth: 420, alignment: .topLeading)
+                                .frame(maxWidth: .infinity, alignment: .top)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(.horizontal, 4)
+        }
+        .frame(minHeight: projectNotesMasonryEstimatedHeight())
+    }
+
+    private func projectNotesMasonryEstimatedHeight() -> CGFloat {
+        let rows = max(1, Int(ceil(Double(projectNoteGroups.count) / 3.0)))
+        return CGFloat(rows) * 210.0
+    }
+
+    private func beginEditingProjectNote(_ item: StudioProjectNoteItem) {
+        editingProjectNoteItem = item
+        editingProjectNoteText = item.text
+    }
+
+    private func saveEditedProjectNote(_ item: StudioProjectNoteItem) {
+        let cleanText = editingProjectNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let orderIndex = firebaseManager.siparisler.firstIndex(where: { orderSelectionKeyForNotes($0) == item.orderKey }) else {
+            editingProjectNoteItem = nil
+            editingProjectNoteText = ""
+            return
+        }
+
+        let previousOrder = firebaseManager.siparisler[orderIndex]
+        var updatedOrder = previousOrder
+
+        switch item.noteType {
+        case "Project Note":
+            updatedOrder.notes = cleanText
+        case "Inventory Note":
+            updatedOrder.invNotes = cleanText
+        default:
+            var fields = updatedOrder.customFields ?? [:]
+            let matchingKey = fields.keys.first { key in
+                guard key.hasPrefix("specialNote::") else { return false }
+                let rawTitle = String(key.dropFirst("specialNote::".count))
+                let cleanTitle = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                let title = cleanTitle.isEmpty ? "Special Note" : rawTitle
+                return title == item.noteType
+            }
+
+            if let matchingKey {
+                if cleanText.isEmpty {
+                    fields.removeValue(forKey: matchingKey)
+                } else {
+                    fields[matchingKey] = cleanText
+                }
+                updatedOrder.customFields = fields.isEmpty ? nil : fields
+            }
+        }
+
+        firebaseManager.updateSiparis(updatedOrder, previousSiparis: previousOrder)
+        editingProjectNoteItem = nil
+        editingProjectNoteText = ""
+    }
+
+    private func projectNoteEditorSheet(for item: StudioProjectNoteItem) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 38, height: 38)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Edit project note", lang: seciliDil))
+                        .font(.system(size: 20, weight: .bold))
+                    Text(item.displayProjectTitle)
+                        .font(.system(size: 12.5))
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer()
 
-                if selectedSection == "trash" && !visibleNotes.isEmpty {
+                Button {
+                    editingProjectNoteItem = nil
+                    editingProjectNoteText = ""
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Divider().opacity(0.35)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text(item.noteType)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                TextEditor(text: $editingProjectNoteText)
+                    .font(.system(size: 14.5))
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .frame(minHeight: 220)
+                    .background(Color.primary.opacity(0.045))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                HStack {
                     Button(role: .destructive) {
-                        emptyTrash()
+                        editingProjectNoteText = ""
                     } label: {
-                        Label(t("Empty trash", lang: seciliDil), systemImage: "trash.slash")
-                            .font(.system(size: 12.5, weight: .bold))
+                        Label(t("Clear", lang: seciliDil), systemImage: "trash")
                     }
                     .buttonStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.red.opacity(0.10))
-                    .clipShape(Capsule())
-                }
 
-                if selectedSection != "notes" {
+                    Spacer()
+
                     Button {
-                        selectedSection = "notes"
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
-                            composerExpanded = true
+                        editingProjectNoteItem = nil
+                        editingProjectNoteText = ""
+                    } label: {
+                        Text(t("Cancel", lang: seciliDil))
+                            .font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        saveEditedProjectNote(item)
+                    } label: {
+                        Text(t("Save", lang: seciliDil))
+                            .font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(Color.blue.opacity(0.16))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(18)
+        }
+        .frame(minWidth: 520, minHeight: 430)
+        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
+        .onAppear {
+            editingProjectNoteText = item.text
+        }
+    }
+
+    private func loadKeepCollaborationInvites() {
+        guard !cleanCompanyId.isEmpty else { return }
+        isLoadingKeepInvites = true
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("listPersonalNoteCollaborationInvites")
+            .call(["companyId": cleanCompanyId]) { result, error in
+                DispatchQueue.main.async {
+                    isLoadingKeepInvites = false
+
+                    if let error {
+                        errorMessage = error.localizedDescription
+                        return
+                    }
+
+                    guard let data = result?.data as? [String: Any],
+                          let rawInvites = data["invites"] as? [[String: Any]] else {
+                        keepCollaborationInvites = []
+                        return
+                    }
+
+                    keepCollaborationInvites = rawInvites.compactMap { raw in
+                        let notePreview = raw["notePreview"] as? [String: Any] ?? [:]
+                        let inviteId = raw["inviteId"] as? String ?? raw["id"] as? String ?? ""
+                        guard !inviteId.isEmpty else { return nil }
+
+                        return KeepCollaborationInvite(
+                            id: inviteId,
+                            inviteId: inviteId,
+                            companyId: raw["companyId"] as? String ?? cleanCompanyId,
+                            noteId: raw["noteId"] as? String ?? "",
+                            sourceUserId: raw["sourceUserId"] as? String ?? "",
+                            sourceEmail: raw["sourceEmail"] as? String ?? "",
+                            title: notePreview["title"] as? String ?? "",
+                            text: notePreview["text"] as? String ?? "",
+                            createdAtMillis: raw["createdAtMillis"] as? Double
+                        )
+                    }
+                }
+            }
+    }
+
+    private func startKeepInviteLiveRefresh() {
+        keepInviteRefreshTimer?.invalidate()
+        keepInviteRefreshTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                if selectedSection == "notes" {
+                    loadKeepCollaborationInvites()
+                }
+            }
+        }
+    }
+
+    private func stopKeepInviteLiveRefresh() {
+        keepInviteRefreshTimer?.invalidate()
+        keepInviteRefreshTimer = nil
+    }
+
+    private func acceptKeepCollaborationInvite(_ invite: KeepCollaborationInvite) {
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("acceptPersonalNoteCollaborationInvite")
+            .call([
+                "companyId": invite.companyId,
+                "inviteId": invite.inviteId
+            ]) { _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        errorMessage = error.localizedDescription
+                        return
+                    }
+
+                    keepCollaborationInvites.removeAll { $0.id == invite.id }
+                    startNotesListener()
+                }
+            }
+    }
+
+    private func declineKeepCollaborationInvite(_ invite: KeepCollaborationInvite) {
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("declinePersonalNoteCollaborationInvite")
+            .call([
+                "companyId": invite.companyId,
+                "inviteId": invite.inviteId
+            ]) { _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        errorMessage = error.localizedDescription
+                        return
+                    }
+
+                    keepCollaborationInvites.removeAll { $0.id == invite.id }
+                }
+            }
+    }
+
+    private var collaborationInvitesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !keepCollaborationInvites.isEmpty {
+                Text(t("Collaboration invitations", lang: seciliDil).uppercased())
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .tracking(1.1)
+                    .padding(.horizontal, 4)
+
+                ForEach(keepCollaborationInvites) { invite in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "person.2.badge.plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.blue)
+                            .frame(width: 36, height: 36)
+                            .background(Color.blue.opacity(0.12))
+                            .clipShape(Circle())
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(invite.displayTitle)
+                                .font(.system(size: 14.5, weight: .bold))
+                                .lineLimit(1)
+
+                            Text("\(invite.sourceEmail) \(t("invited you to collaborate on this note.", lang: seciliDil))")
+                                .font(.system(size: 12.2))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            if !invite.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(invite.text)
+                                    .font(.system(size: 12.4))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
-                    } label: {
-                        Label(t("New note", lang: seciliDil), systemImage: "plus")
-                            .font(.system(size: 12.5, weight: .bold))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.yellow.opacity(keepColorScheme == .dark ? 0.18 : 0.22))
-                    .clipShape(Capsule())
 
-                    Button {
-                        selectedSection = "notes"
-                    } label: {
-                        Label(t("Back to notes", lang: seciliDil), systemImage: "arrow.left")
-                            .font(.system(size: 12.5, weight: .bold))
+                        Spacer()
+
+                        Button {
+                            declineKeepCollaborationInvite(invite)
+                        } label: {
+                            Text(t("Decline", lang: seciliDil))
+                                .font(.system(size: 12, weight: .bold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.primary.opacity(0.055))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            acceptKeepCollaborationInvite(invite)
+                        } label: {
+                            Text(t("Accept", lang: seciliDil))
+                                .font(.system(size: 12, weight: .bold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.blue.opacity(0.16))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.primary.opacity(0.055))
-                    .clipShape(Capsule())
+                    .padding(14)
+                    .background(surfaceColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.055), radius: 7, x: 0, y: 2)
                 }
-            }
-
-            if isSelectionModeActive {
-                bulkSelectionBar
-            }
-
-            if isKeepUndoVisible {
-                keepUndoBar
             }
         }
         .frame(maxWidth: 920)
     }
 
-    private var bulkSelectionBar: some View {
-        HStack(spacing: 10) {
-            Text("\(selectedKeepNoteIds.count) \(t("selected", lang: seciliDil))")
-                .font(.system(size: 12.5, weight: .bold))
-                .foregroundColor(.secondary)
-
-            Spacer()
-
-            Button {
-                bulkPinSelectedNotes()
-            } label: {
-                Label(t("Pin", lang: seciliDil), systemImage: "pin")
-            }
-
-            Button {
-                bulkArchiveSelectedNotes()
-            } label: {
-                Label(t("Archive", lang: seciliDil), systemImage: "archivebox")
-            }
-
-            Button(role: .destructive) {
-                bulkTrashSelectedNotes()
-            } label: {
-                Label(t("Trash", lang: seciliDil), systemImage: "trash")
-            }
-
-            Button {
-                clearKeepNoteSelection()
-            } label: {
-                Label(t("Clear", lang: seciliDil), systemImage: "xmark")
-            }
-        }
-        .buttonStyle(.plain)
-        .font(.system(size: 12.5, weight: .bold))
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(surfaceColor)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.18 : 0.06), radius: 8, x: 0, y: 3)
-    }
-
-
     private var projectNotesContent: some View {
         VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "info.circle")
+                    .foregroundColor(.secondary)
+                Text(t("Project notes are grouped by project. Open a group to review all notes from the same project.", lang: seciliDil))
+                    .font(.system(size: 12.5))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            .padding(12)
+            .background(Color.primary.opacity(0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
             if projectNoteGroups.isEmpty {
                 emptyState
                     .frame(maxWidth: .infinity)
                     .padding(.top, 70)
             } else {
-                LazyVStack(spacing: 12) {
-                    ForEach(projectNoteGroups) { group in
-                        projectNoteGroupCard(group)
-                    }
-                }
-                .frame(maxWidth: 920)
+                projectNotesMasonryGrid
+                    .frame(maxWidth: 1180, alignment: .top)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .padding(.top, 8)
     }
+
 
     private func projectNoteGroupCard(_ group: StudioProjectNoteGroup) -> some View {
         let isExpanded = expandedProjectNoteKeys.contains(group.id)
@@ -2898,48 +3695,56 @@ struct StudioKeepNotesView: View {
 
                 Spacer()
 
-                if isExpanded {
-                    Button {
-                        withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
-                            _ = expandedProjectNoteKeys.remove(group.id)
-                        }
-                    } label: {
-                        Text(t("Show less", lang: seciliDil))
-                            .font(.system(size: 12, weight: .bold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(Color.primary.opacity(0.055))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
                 if let first = group.items.first {
                     Button {
                         openProjectFromNote(first)
                     } label: {
-                        Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
-                            .font(.system(size: 12, weight: .bold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 30, height: 30)
                             .background(Color.primary.opacity(0.055))
-                            .clipShape(Capsule())
+                            .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .help(keepShortcutText("Open project"))
+                    .accessibilityLabel(keepShortcutText("Open project"))
                 }
+
+                Button {
+                    withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                        if isExpanded {
+                            _ = expandedProjectNoteKeys.remove(group.id)
+                        } else {
+                            _ = expandedProjectNoteKeys.insert(group.id)
+                        }
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(t(isExpanded ? "Show less" : "Show more", lang: seciliDil))
+                .accessibilityLabel(t(isExpanded ? "Show less" : "Show more", lang: seciliDil))
             }
 
             if isExpanded {
                 VStack(spacing: 10) {
                     ForEach(group.items) { item in
                         projectNoteCard(item)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
                 }
             } else {
                 Text(previewText)
                     .font(.system(size: 14.5))
                     .foregroundColor(.primary.opacity(0.88))
-                    .lineLimit(4)
+                    .lineLimit(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 if count > 1 {
                     VStack(spacing: 4) {
@@ -2957,40 +3762,31 @@ struct StudioKeepNotesView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(keepCardInnerPadding)
+        .fixedSize(horizontal: false, vertical: true)
         .background(surfaceColor)
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(borderColor, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.045), radius: 8, x: 0, y: 3)
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onTapGesture {
-            guard count > 1 else { return }
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
-                if expandedProjectNoteKeys.contains(group.id) {
-                    _ = expandedProjectNoteKeys.remove(group.id)
-                } else {
-                    expandedProjectNoteKeys.insert(group.id)
-                }
-            }
-        }
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.070), radius: 7, x: 0, y: 2)
     }
+
 
     private func projectNoteCard(_ item: StudioProjectNoteItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "doc.text")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 13.5, weight: .bold))
                     .foregroundColor(.blue)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 28, height: 28)
                     .background(Color.blue.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayProjectTitle)
-                        .font(.system(size: 15.5, weight: .bold))
+                        .font(.system(size: 14.5, weight: .bold))
                         .lineLimit(1)
 
                     HStack(spacing: 6) {
@@ -2999,7 +3795,7 @@ struct StudioKeepNotesView: View {
                         }
                         Text(item.noteType)
                     }
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 10.8, weight: .semibold))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 }
@@ -3007,12 +3803,26 @@ struct StudioKeepNotesView: View {
                 Spacer()
 
                 Button {
+                    beginEditingProjectNote(item)
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(t("Edit", lang: seciliDil))
+                .accessibilityLabel(t("Edit", lang: seciliDil))
+
+                Button {
                     copyProjectNoteToClipboard(item)
                 } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 12.5, weight: .bold))
                         .foregroundColor(.secondary)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 28, height: 28)
                         .background(Color.primary.opacity(0.055))
                         .clipShape(Circle())
                 }
@@ -3026,7 +3836,7 @@ struct StudioKeepNotesView: View {
                     Image(systemName: "plus.rectangle.on.folder")
                         .font(.system(size: 12.5, weight: .bold))
                         .foregroundColor(.secondary)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 28, height: 28)
                         .background(Color.primary.opacity(0.055))
                         .clipShape(Circle())
                 }
@@ -3037,21 +3847,24 @@ struct StudioKeepNotesView: View {
                 Button {
                     openProjectFromNote(item)
                 } label: {
-                    Label(t("Open project", lang: seciliDil), systemImage: "arrow.up.right.square")
-                        .font(.system(size: 12, weight: .bold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
                         .background(Color.primary.opacity(0.055))
-                        .clipShape(Capsule())
+                        .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .help(keepShortcutText("Open project"))
+                .accessibilityLabel(keepShortcutText("Open project"))
             }
 
             Text(item.text)
                 .font(.system(size: 14.5))
                 .foregroundColor(.primary.opacity(0.88))
+                .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(20)
+                .lineLimit(10)
         }
         .padding(14)
         .background(Color.primary.opacity(0.035))
@@ -3069,7 +3882,7 @@ struct StudioKeepNotesView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
+                        .frame(width: 28, height: 28)
                         .background(Color.primary.opacity(0.06))
                         .clipShape(Circle())
                 }
@@ -3092,7 +3905,7 @@ struct StudioKeepNotesView: View {
                 } label: {
                     Image(systemName: "checkmark")
                         .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
+                        .frame(width: 28, height: 28)
                         .background(Color.green.opacity(0.12))
                         .clipShape(Circle())
                 }
@@ -3173,7 +3986,7 @@ struct StudioKeepNotesView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
+                        .frame(width: 28, height: 28)
                         .background(Color.primary.opacity(0.06))
                         .clipShape(Circle())
                 }
@@ -3296,6 +4109,8 @@ struct StudioKeepNotesView: View {
 
                 Button {
                     collaboratorNote = nil
+                    collaboratorEmailText = ""
+                    collaboratorMemberSearchText = ""
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
@@ -3311,98 +4126,168 @@ struct StudioKeepNotesView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
-                    Image(systemName: "envelope")
-                        .foregroundColor(.secondary)
-
-                    TextField(t("Add collaborator email", lang: seciliDil), text: $collaboratorEmailText)
-                        .textFieldStyle(.plain)
-                        .onSubmit {
-                            addCollaborator(to: note)
-                        }
-
                     Button {
-                        addCollaborator(to: note)
+                        withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                            isWorkspaceMemberListExpanded.toggle()
+                        }
                     } label: {
-                        Text(t("Add", lang: seciliDil))
+                        Image(systemName: isWorkspaceMemberListExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 12.5, weight: .bold))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.blue.opacity(0.12))
-                            .clipShape(Capsule())
+                            .foregroundColor(.secondary)
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(normalizedCollaboratorEmail(collaboratorEmailText).isEmpty)
-                }
-                .padding(12)
-                .background(Color.primary.opacity(0.045))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                if !selectableWorkspaceMembers.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(t("Workspace members", lang: seciliDil))
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 13.5, weight: .bold))
+                        Text(t("Select a joined member to invite as collaborator.", lang: seciliDil))
+                            .font(.system(size: 11.5))
                             .foregroundColor(.secondary)
+                    }
 
-                        ForEach(selectableWorkspaceMembers) { member in
-                            let alreadyAdded = note.collaboratorEmails.contains { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }
+                    Spacer()
 
-                            Button {
-                                addWorkspaceMember(member, to: note)
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: alreadyAdded ? "checkmark.circle.fill" : "person.crop.circle")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(alreadyAdded ? .green : .secondary)
-
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(member.displayName)
-                                            .font(.system(size: 13.5, weight: .semibold))
-                                            .foregroundColor(.primary)
-                                        Text(member.email)
-                                            .font(.system(size: 11.5))
-                                            .foregroundColor(.secondary)
-                                    }
-
-                                    Spacer()
-
-                                    if alreadyAdded {
-                                        Text(t("Added", lang: seciliDil))
-                                            .font(.system(size: 11.5, weight: .bold))
-                                            .foregroundColor(.green)
-                                    } else {
-                                        Text(t("Add", lang: seciliDil))
-                                            .font(.system(size: 11.5, weight: .bold))
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                                .padding(10)
-                                .background(Color.primary.opacity(0.035))
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(alreadyAdded)
-                        }
+                    if isLoadingKeepInvites {
+                        ProgressView()
+                            .controlSize(.small)
                     }
                 }
 
-                if note.collaboratorEmails.isEmpty {
+                if isWorkspaceMemberListExpanded {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+
+                        TextField(t("Search members", lang: seciliDil), text: $collaboratorMemberSearchText)
+                            .textFieldStyle(.plain)
+
+                        if !collaboratorMemberSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Button {
+                                collaboratorMemberSearchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(12)
+                    .background(Color.primary.opacity(0.045))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    if selectableWorkspaceMembers.isEmpty {
+                        VStack(spacing: 10) {
+                            Image(systemName: "person.2.slash")
+                                .font(.system(size: 30))
+                                .foregroundColor(.secondary.opacity(0.55))
+                            Text(t("No joined workspace members found.", lang: seciliDil))
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+
+                            Text("companyId: \(cleanCompanyId)")
+                                .font(.system(size: 10.5))
+                                .foregroundColor(.secondary.opacity(0.75))
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 32)
+                    } else if filteredWorkspaceMembersForCollaborator.isEmpty {
+                        VStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 30))
+                                .foregroundColor(.secondary.opacity(0.55))
+                            Text(t("No members match your search.", lang: seciliDil))
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 32)
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 8) {
+                                ForEach(filteredWorkspaceMembersForCollaborator) { member in
+                                    let alreadyAdded = note.collaboratorEmails.contains { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }
+                                    let pendingAdded = isCollaboratorInvitePending(for: note, email: member.normalizedEmail)
+
+                                    Button {
+                                        addWorkspaceMember(member, to: note)
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            ZStack(alignment: .bottomTrailing) {
+                                                collaboratorAvatar(for: member.normalizedEmail, size: 30)
+
+                                                if alreadyAdded || pendingAdded {
+                                                    Image(systemName: "checkmark.circle.fill")
+                                                        .font(.system(size: 11, weight: .bold))
+                                                        .foregroundColor(.green)
+                                                        .background(Circle().fill(surfaceColor))
+                                                }
+                                            }
+
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(member.displayName)
+                                                    .font(.system(size: 13.5, weight: .semibold))
+                                                    .foregroundColor(.primary)
+                                                    .lineLimit(1)
+
+                                                Text(member.email)
+                                                    .font(.system(size: 11.5))
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(1)
+                                            }
+
+                                            Spacer()
+
+                                            if alreadyAdded || pendingAdded {
+                                                Text(t("Invited", lang: seciliDil))
+                                                    .font(.system(size: 11.5, weight: .bold))
+                                                    .foregroundColor(.green)
+                                            } else {
+                                                Text(t("Invite", lang: seciliDil))
+                                                    .font(.system(size: 11.5, weight: .bold))
+                                                    .foregroundColor(.blue)
+                                            }
+                                        }
+                                        .padding(10)
+                                        .background(Color.primary.opacity(0.035))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(alreadyAdded || pendingAdded)
+                                }
+                            }
+                        }
+        .scrollIndicators(shouldHideKeepNotesScrollIndicator ? .hidden : .automatic)
+                        .frame(maxHeight: 260)
+                    }
+                }
+
+                Divider().opacity(0.25)
+
+                if note.collaboratorEmails.isEmpty && note.sharedWith.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "person.2")
-                            .font(.system(size: 34))
+                            .font(.system(size: 30))
                             .foregroundColor(.secondary.opacity(0.55))
                         Text(t("No collaborators yet", lang: seciliDil))
                             .font(.system(size: 13.5, weight: .bold))
                             .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, 22)
                 } else {
-                    VStack(spacing: 8) {
-                        ForEach(note.collaboratorEmails, id: \.self) { email in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(t("Invited collaborators", lang: seciliDil))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        ForEach(Array(Set(note.collaboratorEmails + note.sharedWith + selectableWorkspaceMembers.filter { isCollaboratorInvitePending(for: note, email: $0.normalizedEmail) }.map { $0.normalizedEmail })).sorted(), id: \.self) { email in
                             HStack(spacing: 10) {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundColor(.secondary)
+                                collaboratorAvatar(for: email, noteId: note.id, size: 28)
 
                                 Text(email)
                                     .font(.system(size: 13.5, weight: .semibold))
@@ -3425,7 +4310,7 @@ struct StudioKeepNotesView: View {
                     }
                 }
 
-                Text(t("Shared notes are visible to selected workspace members connected to the same owner/workspace.", lang: seciliDil))
+                Text(t("Each note requires its own invitation. The selected member will see only this note after accepting.", lang: seciliDil))
                     .font(.system(size: 11.5))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3433,60 +4318,269 @@ struct StudioKeepNotesView: View {
             }
             .padding(18)
         }
-        .frame(minWidth: 460, minHeight: 430)
+        .frame(minWidth: 500, minHeight: 540)
         .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
+        .onAppear {
+            for email in note.sharedWith + note.collaboratorEmails {
+                clearCollaboratorInvitePending(for: note, email: email)
+            }
+            loadWorkspaceMembersForNotes()
+            loadKeepCollaborationInvites()
+        }
     }
 
-    private var quickComposer: some View {
+
+    private var notesSectionHeader: some View {
+        VStack(spacing: 10) {
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t(sectionDisplayTitle(selectedSection), lang: seciliDil))
+                        .font(.system(size: 24, weight: .bold))
+                    Text(activeSectionCountText)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                if selectedSection == "trash" && !visibleNotes.isEmpty {
+                    Button(role: .destructive) {
+                        emptyTrash()
+                    } label: {
+                        Label(t("Empty trash", lang: seciliDil), systemImage: "trash.slash")
+                            .font(.system(size: 12.5, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.10))
+                    .clipShape(Capsule())
+                }
+
+                if selectedSection != "notes" {
+                    if selectedSection != "projectNotes" {
+                        Button {
+                            selectedSection = "notes"
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                                composerExpanded = true
+                            }
+                        } label: {
+                            Label(t("New note", lang: seciliDil), systemImage: "plus")
+                                .font(.system(size: 12.5, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.yellow.opacity(keepColorScheme == .dark ? 0.18 : 0.22))
+                        .clipShape(Capsule())
+                    }
+
+                    Button {
+                        selectedSection = "notes"
+                    } label: {
+                        Label(t("Back to notes", lang: seciliDil), systemImage: "arrow.left")
+                            .font(.system(size: 12.5, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.primary.opacity(0.055))
+                    .clipShape(Capsule())
+                }
+            }
+
+            if isSelectionModeActive {
+                bulkSelectionBar
+            }
+
+            if isKeepUndoVisible {
+                keepUndoBar
+            }
+        }
+        .frame(maxWidth: 920)
+    }
+
+    private var bulkSelectionBar: some View {
+        HStack(spacing: 10) {
+            Text("\(selectedKeepNoteIds.count) \(t("selected", lang: seciliDil))")
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundColor(.secondary)
+
+            Spacer()
+
+            Button {
+                bulkPinSelectedNotes()
+            } label: {
+                Label(t("Pin", lang: seciliDil), systemImage: "pin")
+            }
+
+            Button {
+                bulkArchiveOrUnarchiveSelectedNotes()
+            } label: {
+                Label(t(selectedSection == "archive" ? "Unarchive" : "Archive", lang: seciliDil), systemImage: selectedSection == "archive" ? "archivebox.fill" : "archivebox")
+            }
+
+            Button(role: .destructive) {
+                bulkTrashSelectedNotes()
+            } label: {
+                Label(t("Trash", lang: seciliDil), systemImage: "trash")
+            }
+
+            Button {
+                clearKeepNoteSelection()
+            } label: {
+                Label(t("Clear", lang: seciliDil), systemImage: "xmark")
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 12.5, weight: .bold))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(surfaceColor)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.18 : 0.06), radius: 8, x: 0, y: 3)
+    }
+
+
+
+    private func expandQuickComposer() {
+        guard !composerExpanded else { return }
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+            composerExpanded = true
+        }
+    }
+
+    private func collapseQuickComposerIfNeeded() {
+        guard composerExpanded else { return }
+        closeOrAddComposerNote()
+    }
+
+
+    private var composerHasContent: Bool {
+        !composerTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func closeOrAddComposerNote() {
+        if composerHasContent {
+            saveComposerIfNeeded()
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                composerExpanded = false
+            }
+            isComposerTextFocused = false
+        } else {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                composerExpanded = false
+            }
+            isComposerTextFocused = false
+        }
+    }
+
+    private func toggleComposerPin() {
+        composerPinned.toggle()
+    }
+
+    private var composerMaxWidth: CGFloat {
+        isCompactKeepPhoneLayout ? .infinity : 720
+    }
+
+    private var composerHorizontalPadding: CGFloat {
+        isCompactKeepPhoneLayout ? 18 : 22
+    }
+
+    private var composerVerticalPadding: CGFloat {
+        if isCompactKeepPhoneLayout {
+            return composerExpanded ? 14 : 13
+        }
+        return composerExpanded ? 18 : 16
+    }
+
+    private var composerExpandedMinHeight: CGFloat {
+        isCompactKeepPhoneLayout ? 150 : 320
+    }
+
+    private var composerCornerRadius: CGFloat {
+        isCompactKeepPhoneLayout ? 18 : 18
+    }
+
+    private var desktopQuickComposer: some View {
         VStack(spacing: 0) {
             if composerExpanded {
                 HStack(alignment: .center, spacing: 12) {
                     TextField(t("Title", lang: seciliDil), text: $composerTitle)
-                        .font(.system(size: 21, weight: .bold))
+                        .font(.system(size: isCompactKeepPhoneLayout ? 19 : 21, weight: .bold))
                         .textFieldStyle(.plain)
+                    .focused($isComposerTextFocused)
                         .onSubmit {
                             saveComposerIfNeeded()
                         }
 
                     Button {
-                        composerPinned.toggle()
+                        withAnimation(.easeInOut(duration: 0.12)) {
+                            toggleComposerPin()
+                        }
                     } label: {
                         Image(systemName: composerPinned ? "pin.fill" : "pin")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(composerPinned ? .blue : .secondary)
                             .frame(width: 34, height: 34)
-                            .background(Color.primary.opacity(0.055))
+                            .background(Color.primary.opacity(composerPinned ? 0.10 : 0.055))
                             .clipShape(Circle())
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .help(t(composerPinned ? "Unpin note" : "Pin note", lang: seciliDil))
+                    .help(keepShortcutText(composerPinned ? "Unpin note" : "Pin note"))
+                    .accessibilityLabel(keepShortcutText(composerPinned ? "Unpin note" : "Pin note"))
+                    .zIndex(20)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 6)
+                .padding(.horizontal, composerHorizontalPadding)
+                .padding(.top, isCompactKeepPhoneLayout ? 10 : 18)
+                .padding(.bottom, isCompactKeepPhoneLayout ? 6 : 6)
             }
 
             HStack(alignment: .top, spacing: 10) {
-                TextField(t("Take a note...", lang: seciliDil), text: $composerText, axis: .vertical)
-                    .font(.system(size: composerExpanded ? 16.5 : 15.5, weight: composerExpanded ? .regular : .semibold))
-                    .textFieldStyle(.plain)
-                    .lineLimit(composerExpanded ? 8...20 : 1...1)
-                    .padding(.top, composerExpanded ? 0 : 1)
-                    .onSubmit {
-                        saveComposerIfNeeded()
-                    }
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
-                            composerExpanded = true
+                ZStack(alignment: .leading) {
+                    TextField(t("Take a note...", lang: seciliDil), text: $composerText, axis: .vertical)
+                        .font(.system(size: isCompactKeepPhoneLayout ? 15.5 : (composerExpanded ? 16.5 : 15.5), weight: composerExpanded ? .regular : .semibold))
+                        .textFieldStyle(.plain)
+                        .focused($isComposerTextFocused)
+                        .lineLimit(composerExpanded ? (isCompactKeepPhoneLayout ? 3...6 : 8...20) : 1...1)
+                        .padding(.top, composerExpanded ? 0 : 1)
+                        .onSubmit {
+                            saveComposerIfNeeded()
                         }
+                        .onChange(of: isComposerTextFocused) { focused in
+                            if focused {
+                                expandQuickComposer()
+                            }
+                        }
+
+                    if !composerExpanded {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                expandQuickComposer()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    isComposerTextFocused = true
+                                }
+                            }
+                            .accessibilityHidden(true)
                     }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    expandQuickComposer()
+                }
+
 
                 if !composerExpanded {
                     HStack(spacing: 16) {
                         Button {
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
-                                composerExpanded = true
-                            }
+                            expandQuickComposer()
                             if !composerText.hasSuffix("\n") && !composerText.isEmpty {
                                 composerText += "\n"
                             }
@@ -3499,9 +4593,7 @@ struct StudioKeepNotesView: View {
                         .accessibilityLabel(keepShortcutText("Checklist"))
 
                         Button {
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
-                                composerExpanded = true
-                            }
+                            expandQuickComposer()
                         } label: {
                             Image(systemName: "photo")
                         }
@@ -3513,24 +4605,22 @@ struct StudioKeepNotesView: View {
                     .foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, composerExpanded ? 16 : 14)
+            .padding(.horizontal, composerHorizontalPadding)
+            .padding(.vertical, composerVerticalPadding)
             .contentShape(Rectangle())
             .onTapGesture {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
-                    composerExpanded = true
-                }
+                expandQuickComposer()
             }
 
             if composerExpanded {
-                VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: isCompactKeepPhoneLayout ? 8 : 12) {
                     if composerReminderEnabled ||
                         !composerLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                         !composerLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         HStack(spacing: 8) {
                             if composerReminderEnabled {
                                 Label(composerReminderDate.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
-                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .font(.system(size: 10.8, weight: .semibold))
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 5)
@@ -3540,7 +4630,7 @@ struct StudioKeepNotesView: View {
 
                             if !composerLabelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Label(composerLabelText, systemImage: "tag")
-                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .font(.system(size: 10.8, weight: .semibold))
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 5)
@@ -3550,7 +4640,7 @@ struct StudioKeepNotesView: View {
 
                             if !composerLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Label(t("Link attached", lang: seciliDil), systemImage: "link")
-                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .font(.system(size: 10.8, weight: .semibold))
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 5)
@@ -3560,7 +4650,7 @@ struct StudioKeepNotesView: View {
 
                             Spacer()
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, composerHorizontalPadding)
                     }
 
                     HStack(spacing: 18) {
@@ -3646,9 +4736,9 @@ struct StudioKeepNotesView: View {
                         Spacer()
 
                         Button {
-                            saveComposerIfNeeded()
+                            closeOrAddComposerNote()
                         } label: {
-                            Text(t("Close", lang: seciliDil))
+                            Text(t(composerHasContent ? "Add note" : "Close", lang: seciliDil))
                                 .font(.system(size: 14, weight: .bold))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 9)
@@ -3659,11 +4749,13 @@ struct StudioKeepNotesView: View {
                     }
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, composerHorizontalPadding)
                     .padding(.bottom, 14)
                 }
             }
         }
+        .frame(maxWidth: composerMaxWidth, alignment: .leading)
+        .clipped()
         .background(noteCardColor(composerColor))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -3671,17 +4763,133 @@ struct StudioKeepNotesView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.24 : 0.16), radius: composerExpanded ? 16 : 8, x: 0, y: composerExpanded ? 6 : 3)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            expandQuickComposer()
+        }
+        .onChange(of: isComposerTextFocused) { focused in
+            if focused {
+                expandQuickComposer()
+            }
+        }
+        .onHover { isHovering in
+            isHoveringQuickComposer = isHovering
+        }
         .frame(maxWidth: composerExpanded ? 880 : 620)
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {
             if !composerExpanded {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
-                    composerExpanded = true
-                }
+                expandQuickComposer()
             }
         }
         .animation(.spring(response: 0.25, dampingFraction: 0.88), value: composerExpanded)
     }
+
+    private var mobileQuickComposer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField(t("Title", lang: seciliDil), text: $composerTitle)
+                        .font(.system(size: 21, weight: .bold))
+                        .textFieldStyle(.plain)
+                        .focused($isComposerTextFocused)
+                        .onSubmit {
+                            saveComposerIfNeeded()
+                        }
+
+                    TextField(t("Take a note...", lang: seciliDil), text: $composerText, axis: .vertical)
+                        .font(.system(size: 16))
+                        .textFieldStyle(.plain)
+                        .focused($isComposerTextFocused)
+                        .lineLimit(3...6)
+                        .onSubmit {
+                            saveComposerIfNeeded()
+                        }
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        toggleComposerPin()
+                    }
+                } label: {
+                    Image(systemName: composerPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(composerPinned ? .blue : .secondary)
+                        .frame(width: 34, height: 34)
+                        .background(Color.primary.opacity(composerPinned ? 0.10 : 0.055))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 18) {
+                Button {
+                    // Kept as a simple mobile formatting placeholder for future expansion.
+                } label: {
+                    Image(systemName: "textformat")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    composerReminderEnabled.toggle()
+                } label: {
+                    Image(systemName: composerReminderEnabled ? "bell.fill" : "bell")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(composerReminderEnabled ? .orange : .secondary)
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { composerExpanded = false }
+                } label: {
+                    Text(t("Close", lang: seciliDil))
+                        .font(.system(size: 15.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    saveComposerIfNeeded()
+                } label: {
+                    Text(t("Add note", lang: seciliDil))
+                        .font(.system(size: 15.5, weight: .bold))
+                        .foregroundColor((!composerTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? .blue : .secondary.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .disabled(!(!composerTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(surfaceColor)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.10), radius: 14, x: 0, y: 8)
+        .contentShape(Rectangle())
+    }
+
+    private var quickComposer: some View {
+        Group {
+            if isCompactKeepPhoneLayout && composerExpanded {
+                mobileQuickComposer
+            } else {
+                desktopQuickComposer
+            }
+        }
+    }
+
 
 
     private func keepMasonryColumnCount(for width: CGFloat) -> Int {
@@ -3702,148 +4910,326 @@ struct StudioKeepNotesView: View {
         return columns
     }
 
-    private var notesGrid: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            if !pinnedNotes.isEmpty {
-                Text(t("Pinned", lang: seciliDil).uppercased())
-                    .font(.system(size: 11.5, weight: .bold))
-                    .foregroundColor(.secondary)
-                    .tracking(1.1)
-                    .padding(.horizontal, 4)
 
-                masonryGrid(for: pinnedNotes)
-            }
-
-            if !otherNotes.isEmpty {
-                if !pinnedNotes.isEmpty {
-                    Text(t("Others", lang: seciliDil).uppercased())
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .tracking(1.1)
-                        .padding(.horizontal, 4)
-                        .padding(.top, 4)
-                }
-
-                masonryGrid(for: otherNotes)
-            }
-        }
-        .frame(maxWidth: 1180, alignment: .topLeading)
-        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visibleNotes.map(\.id))
-    }
-
-    private func masonryGrid(for noteItems: [StudioKeepNote]) -> some View {
-        GeometryReader { proxy in
-            let columnCount = keepMasonryColumnCount(for: proxy.size.width)
-            let columns = keepMasonryColumns(noteItems, columnCount: columnCount)
-
-            HStack(alignment: .top, spacing: 18) {
-                ForEach(Array(columns.enumerated()), id: \.offset) { _, columnNotes in
-                    VStack(spacing: 18) {
-                        ForEach(columnNotes) { note in
-                            noteCard(note)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: noteItems.map(\.id))
-            .padding(.horizontal, 4)
-        }
-        .frame(minHeight: masonryEstimatedHeight(for: noteItems))
-    }
-
+    
     private func masonryEstimatedHeight(for noteItems: [StudioKeepNote]) -> CGFloat {
         let rows = max(1, Int(ceil(Double(noteItems.count) / 3.0)))
         return CGFloat(rows) * 190.0
     }
 
+    private func masonryGrid(for noteItems: [StudioKeepNote]) -> some View {
+            GeometryReader { proxy in
+                let columnCount = keepMasonryColumnCount(for: proxy.size.width)
+                let columns = keepMasonryColumns(noteItems, columnCount: columnCount)
+
+                HStack(alignment: .top, spacing: 18) {
+                    ForEach(Array(columns.enumerated()), id: \.offset) { _, columnNotes in
+                        VStack(spacing: 18) {
+                            ForEach(columnNotes) { note in
+                                noteCard(note)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .animation(.spring(response: 0.34, dampingFraction: 0.86), value: noteItems.map(\.id))
+                .padding(.horizontal, 0)
+            }
+            .frame(minHeight: masonryEstimatedHeight(for: noteItems))
+        }
+
+    private var notesGrid: some View {
+        Group {
+            if isCompactKeepPhoneLayout {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 10),
+                        GridItem(.flexible(), spacing: 10)
+                    ],
+                    spacing: 10
+                ) {
+                    ForEach(visibleNotes) { note in
+                        noteCard(note)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 18) {
+                            if !pinnedNotes.isEmpty {
+                                Text(t("Pinned", lang: seciliDil).uppercased())
+                                    .font(.system(size: 11.5, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                    .tracking(1.1)
+                                    .padding(.horizontal, 4)
+
+                                masonryGrid(for: pinnedNotes)
+                            }
+
+                            if !otherNotes.isEmpty {
+                                if !pinnedNotes.isEmpty {
+                                    Text(t("Others", lang: seciliDil).uppercased())
+                                        .font(.system(size: 11.5, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                        .tracking(1.1)
+                                        .padding(.horizontal, 4)
+                                        .padding(.top, 4)
+                                }
+
+                                masonryGrid(for: otherNotes)
+                            }
+                        }
+                        .frame(maxWidth: 1180, alignment: .topLeading)
+                        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visibleNotes.map(\.id))
+            }
+        }
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: gridMode)
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: visibleNotes.map(\.id))
+    }
+
+
 
     private var notesList: some View {
-        LazyVStack(spacing: 12) {
-            ForEach(visibleNotes) { note in
-                noteCard(note)
-                    .frame(maxWidth: 760)
+        Group {
+            if isCompactKeepPhoneLayout {
+                LazyVStack(spacing: 10) {
+                    ForEach(visibleNotes) { note in
+                        noteCard(note)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                }
+            } else {
+                LazyVStack(spacing: 12) {
+                            ForEach(visibleNotes) { note in
+                                noteCard(note)
+                                    .frame(maxWidth: 760)
+                            }
+                        }
             }
         }
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: gridMode)
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: visibleNotes.map(\.id))
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(t(title, lang: seciliDil).uppercased())
-            .font(.system(size: 11.5, weight: .bold))
-            .foregroundColor(.secondary)
-            .tracking(1.2)
-            .padding(.horizontal, 4)
+
+
+    private var shouldShowCardActionRow: Bool {
+        !isCompactKeepPhoneLayout
     }
 
-    private func keepText(_ key: String) -> String {
-        if seciliDil == "Türkçe" {
-            switch key {
-            case "Edit note": return "Notu düzenle"
-            case "Pin note": return "Notu sabitle"
-            case "Unpin note": return "Sabitlemeyi kaldır"
-            case "Duplicate note": return "Notu çoğalt"
-            case "Copy note": return "Notu kopyala"
-            case "Change colour": return "Rengi değiştir"
-            case "Reminder": return "Hatırlatma"
-            case "Labels": return "Etiketler"
-            case "Archive note": return "Arşivle"
-            case "Unarchive note": return "Arşivden çıkar"
-            case "Move to trash": return "Çöpe taşı"
-            case "Restore note": return "Geri yükle"
-            case "Delete forever": return "Kalıcı sil"
-            default: return t(key, lang: seciliDil)
+    private func removeReminderFromNote(_ note: StudioKeepNote) {
+        var updated = note
+        updated.reminderDate = nil
+        updated.updatedAt = Date()
+        saveNote(updated)
+    }
+
+    private func collaboratorMember(for email: String) -> KeepWorkspaceMember? {
+        let clean = normalizedCollaboratorEmail(email)
+        return keepWorkspaceMembers.first { $0.normalizedEmail.caseInsensitiveCompare(clean) == .orderedSame }
+    }
+
+    private func collaboratorDisplayName(for email: String) -> String {
+        if let member = collaboratorMember(for: email) {
+            return member.displayName
+        }
+
+        let cleanEmail = normalizedCollaboratorEmail(email)
+        if let firstPart = cleanEmail.split(separator: "@").first {
+            return String(firstPart)
+        }
+
+        return cleanEmail
+    }
+
+    private func collaboratorTooltip(for email: String) -> String {
+        let cleanEmail = normalizedCollaboratorEmail(email)
+        let name = collaboratorDisplayName(for: email)
+        if cleanEmail.isEmpty { return name }
+        return "\(name)\n\(cleanEmail)"
+    }
+
+    private func collaboratorInitials(for email: String) -> String {
+        let name = collaboratorDisplayName(for: email)
+        let parts = name
+            .split(separator: " ")
+            .map { String($0.prefix(1)).uppercased() }
+
+        if parts.count >= 2 {
+            return String(parts.prefix(2).joined())
+        }
+
+        if let first = parts.first, !first.isEmpty {
+            return first
+        }
+
+        return String(normalizedCollaboratorEmail(email).prefix(1)).uppercased()
+    }
+
+    private func collaboratorAvatarHoverKey(noteId: String, email: String) -> String {
+        "\(noteId.trimmingCharacters(in: .whitespacesAndNewlines))::\(normalizedCollaboratorEmail(email))"
+    }
+
+    private func collaborationEmailsForAvatarStack(note: StudioKeepNote) -> [String] {
+        var emails = Set<String>()
+
+        for email in note.collaboratorEmails + note.sharedWith {
+            let clean = normalizedCollaboratorEmail(email)
+            if !clean.isEmpty {
+                emails.insert(clean)
             }
         }
-        return t(key, lang: seciliDil)
+
+        let ownerEmail = normalizedCollaboratorEmail(note.ownerEmail)
+        if !ownerEmail.isEmpty && ownerEmail != keepCurrentUserEmail {
+            emails.insert(ownerEmail)
+        }
+
+        if note.ownerEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !note.ownerUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           note.ownerUserId != keepCurrentUserId,
+           let ownerMember = keepWorkspaceMembers.first(where: { $0.userId == note.ownerUserId }) {
+            let clean = ownerMember.normalizedEmail
+            if !clean.isEmpty {
+                emails.insert(clean)
+            }
+        }
+
+        emails.remove(keepCurrentUserEmail)
+        return Array(emails).sorted()
     }
 
-    private func keepIconButton(
-        _ systemImage: String,
-        helpKey: String,
-        role: ButtonRole? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        KeepTooltipIconButton(
-            systemImage: systemImage,
-            tooltip: keepShortcutText(helpKey),
-            role: role,
-            action: action
-        )
+    private func collaboratorTooltipBubble(for email: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(collaboratorDisplayName(for: email))
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(normalizedCollaboratorEmail(email))
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundColor(.white.opacity(0.82))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: 170, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color(red: 0, green: 0, blue: 0).opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.22), radius: 8, x: 0, y: 3)
+        .allowsHitTesting(false)
     }
 
-    private func keepIconMenu<Content: View>(
-        _ systemImage: String,
-        helpKey: String,
-        @ViewBuilder content: @escaping () -> Content
-    ) -> some View {
-        KeepTooltipIconMenu(
-            systemImage: systemImage,
-            tooltip: keepShortcutText(helpKey),
-            content: content
-        )
+    private func collaboratorAvatar(for email: String, noteId: String = "", size: CGFloat = 26) -> some View {
+        let member = collaboratorMember(for: email)
+        let photoURL = member?.photoURL.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cleanEmail = normalizedCollaboratorEmail(email)
+        let hoverKey = collaboratorAvatarHoverKey(noteId: noteId, email: cleanEmail)
+
+        return ZStack(alignment: .leading) {
+            ZStack {
+                Circle()
+                    .fill(Color.primary.opacity(0.08))
+
+                if let url = URL(string: photoURL), !photoURL.isEmpty {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        default:
+                            Text(collaboratorInitials(for: email))
+                                .font(.system(size: max(9, size * 0.38), weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } else {
+                    Text(collaboratorInitials(for: email))
+                        .font(.system(size: max(9, size * 0.38), weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(surfaceColor, lineWidth: 2)
+            )
+            .contentShape(Circle())
+            .onHover { isHovering in
+                hoveredCollaboratorAvatarKey = isHovering ? hoverKey : nil
+            }
+
+            if hoveredCollaboratorAvatarKey == hoverKey {
+                collaboratorTooltipBubble(for: email)
+                    .offset(x: size + 10, y: 0)
+                    .zIndex(999)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .frame(width: hoveredCollaboratorAvatarKey == hoverKey ? size + 190 : size, height: size, alignment: .leading)
+        .zIndex(hoveredCollaboratorAvatarKey == hoverKey ? 999 : 1)
+        .animation(.easeOut(duration: 0.12), value: hoveredCollaboratorAvatarKey)
+        .accessibilityLabel(collaboratorTooltip(for: email))
     }
 
+    private func collaboratorAvatarStack(for note: StudioKeepNote) -> some View {
+        let emails = collaborationEmailsForAvatarStack(note: note)
+
+        return HStack(spacing: -7) {
+            ForEach(Array(emails.prefix(4)), id: \.self) { email in
+                collaboratorAvatar(for: email, noteId: note.id, size: 28)
+            }
+
+            if emails.count > 4 {
+                Text("+\(emails.count - 4)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(surfaceColor, lineWidth: 2)
+                    )
+                    .help(emails.dropFirst(4).map { collaboratorTooltip(for: $0) }.joined(separator: "\n\n"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
+        .zIndex(hoveredCollaboratorAvatarKey == nil ? 1 : 999)
+    }
+
+    private func noteHasCollaboratorsForAvatar(_ note: StudioKeepNote) -> Bool {
+        !collaborationEmailsForAvatarStack(note: note).isEmpty
+    }
 
     private func keepCardIconButton(
         _ systemImage: String,
         helpKey: String,
         role: ButtonRole? = nil,
+        tooltipPlacement: KeepTooltipPlacement = .above,
         action: @escaping () -> Void
     ) -> some View {
         KeepTooltipIconButton(
             systemImage: systemImage,
             tooltip: keepShortcutText(helpKey),
+            tooltipPlacement: tooltipPlacement,
             role: role,
             action: action
         )
     }
 
-    private func keepCardIconMenu<Content: View>(
+    private func keepCardIconMenu<MenuContent: View>(
         _ systemImage: String,
         helpKey: String,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping () -> MenuContent
     ) -> some View {
         KeepTooltipIconMenu(
             systemImage: systemImage,
@@ -3852,57 +5238,212 @@ struct StudioKeepNotesView: View {
         )
     }
 
+    private func notePinIconName(_ note: StudioKeepNote) -> String {
+        note.isPinned ? "pin.fill" : "pin"
+    }
+
+    private func notePinHelpKey(_ note: StudioKeepNote) -> String {
+        note.isPinned ? "Unpin note" : "Pin note"
+    }
+
+    private func noteTopPinButton(_ note: StudioKeepNote) -> some View {
+        keepCardIconButton(
+            notePinIconName(note),
+            helpKey: notePinHelpKey(note),
+            tooltipPlacement: .below
+        ) {
+            togglePin(note)
+        }
+    }
+
+    private func noteCardActionRow(_ note: StudioKeepNote, showActions: Bool) -> some View {
+        HStack(spacing: 7) {
+            if !note.updatedAt.formatted(date: .abbreviated, time: .shortened).isEmpty {
+                Text(note.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.85))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            noteTopPinButton(note)
+
+            keepCardIconButton("plus.square.on.square", helpKey: "Duplicate note") {
+                duplicateNote(note)
+            }
+
+            keepCardIconButton("doc.on.doc", helpKey: "Copy note") {
+                copyNoteToClipboard(note)
+            }
+
+            keepCardIconMenu("paintpalette", helpKey: "Change colour") {
+                ForEach(noteColors, id: \.self) { color in
+                    Button(t(color.capitalized, lang: seciliDil)) {
+                        var updated = note
+                        updated.colorName = color
+                        saveNote(updated)
+                    }
+                }
+            }
+
+            keepCardIconMenu(note.reminderDate == nil ? "bell" : "bell.fill", helpKey: "Reminder") {
+                Button(t("Tomorrow", lang: seciliDil)) {
+                    setReminder(note, date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+                }
+                Button(t("Next week", lang: seciliDil)) {
+                    setReminder(note, date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date())
+                }
+                Button(t("Pick date", lang: seciliDil)) {
+                    reminderPickerNote = note
+                }
+                if note.reminderDate != nil {
+                    Button(t("Remove reminder", lang: seciliDil), role: .destructive) {
+                        removeReminderFromNote(note)
+                    }
+                }
+            }
+
+            keepCardIconMenu("tag", helpKey: "Labels") {
+                ForEach(allLabels, id: \.self) { label in
+                    Button(label) {
+                        toggleLabel(label, for: note)
+                    }
+                }
+                Button(t("Add label", lang: seciliDil)) {
+                    addDefaultLabel(to: note)
+                }
+            }
+
+            keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") {
+                openCollaboratorSheet(note)
+            }
+
+            keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") {
+                toggleArchive(note)
+            }
+
+            if selectedSection == "trash" {
+                keepCardIconButton("arrow.uturn.backward", helpKey: "Restore note") {
+                    restoreNote(note)
+                }
+
+                keepCardIconButton("trash.fill", helpKey: "Delete forever", role: .destructive) {
+                    permanentlyDelete(note)
+                }
+            } else {
+                keepCardIconButton("trash", helpKey: "Move to trash", role: .destructive) {
+                    moveToTrash(note)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
+        .opacity(showActions ? 1 : 0)
+        .allowsHitTesting(showActions)
+    }
+
+    private func notePrimaryFontSize(_ note: StudioKeepNote) -> CGFloat {
+        let combined = (note.title + " " + note.text).trimmingCharacters(in: .whitespacesAndNewlines)
+        if isCompactKeepPhoneLayout && gridMode {
+            if combined.count > 120 { return 16 }
+            if combined.count > 70 { return 18 }
+            return 21
+        }
+
+        if isCompactKeepPhoneLayout && !gridMode {
+            return combined.count > 120 ? 17 : 19
+        }
+
+        return 14.5
+    }
+
+    private func noteBodyFontSize(_ note: StudioKeepNote) -> CGFloat {
+        let combined = (note.title + " " + note.text).trimmingCharacters(in: .whitespacesAndNewlines)
+        if isCompactKeepPhoneLayout && gridMode {
+            if combined.count > 120 { return 15 }
+            if combined.count > 70 { return 16.5 }
+            return 20
+        }
+
+        if isCompactKeepPhoneLayout && !gridMode {
+            return combined.count > 120 ? 16 : 18
+        }
+
+        return 14.2
+    }
+
+    private func noteGridLineLimit(_ note: StudioKeepNote) -> Int {
+        let combined = (note.title + " " + note.text).trimmingCharacters(in: .whitespacesAndNewlines)
+        if isCompactKeepPhoneLayout && gridMode {
+            return combined.count > 120 ? 8 : 6
+        }
+        return isCompactKeepPhoneLayout ? 4 : 9
+    }
+
+    private func noteSelectionButton(_ note: StudioKeepNote, isSelected: Bool) -> some View {
+        Button {
+            toggleKeepNoteSelection(note)
+        } label: {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(isSelected ? .blue : .secondary)
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .help(keepShortcutText(isSelected ? "Deselect" : "Select"))
+        .accessibilityLabel(keepShortcutText(isSelected ? "Deselect" : "Select"))
+    }
+
+    private func noteTextContent(_ note: StudioKeepNote) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(note.title)
+                    .font(.system(size: notePrimaryFontSize(note), weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(isCompactKeepPhoneLayout && gridMode ? 2 : 3)
+            }
+
+            if !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(note.text)
+                    .font(.system(size: noteBodyFontSize(note)))
+                    .foregroundColor(.primary.opacity(0.86))
+                    .lineLimit(noteGridLineLimit(note))
+            }
+        }
+    }
+
+    private func noteTopPinContainer(_ note: StudioKeepNote, showActions: Bool) -> some View {
+        ZStack {
+            noteTopPinButton(note)
+                .opacity((showActions || note.isPinned) ? 1 : 0)
+                .allowsHitTesting(showActions || note.isPinned)
+        }
+    }
+
+    private func noteHeaderRow(_ note: StudioKeepNote, showActions: Bool, isSelected: Bool) -> some View {
+        HStack(alignment: .top) {
+            if showActions || isSelected {
+                noteSelectionButton(note, isSelected: isSelected)
+            }
+
+            noteTextContent(note)
+
+            Spacer(minLength: 8)
+
+            noteTopPinContainer(note, showActions: showActions)
+        }
+    }
+
     private func noteCard(_ note: StudioKeepNote) -> some View {
-        let showActions = hoveredKeepNoteId == note.id || selectedKeepNoteIds.contains(note.id)
+        let showActions = (!isCompactKeepPhoneLayout && hoveredKeepNoteId == note.id) || selectedKeepNoteIds.contains(note.id)
         let isSelected = selectedKeepNoteIds.contains(note.id)
 
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                if showActions || isSelected {
-                    Button {
-                        toggleKeepNoteSelection(note)
-                    } label: {
-                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(isSelected ? .blue : .secondary)
-                            .frame(width: 24, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                    .help(keepShortcutText(isSelected ? "Deselect" : "Select"))
-                    .accessibilityLabel(keepShortcutText(isSelected ? "Deselect" : "Select"))
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    if !note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(note.title)
-                            .font(.system(size: 15.5, weight: .bold))
-                            .foregroundColor(.primary)
-                            .lineLimit(3)
-                    }
-
-                    if !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(note.text)
-                            .font(.system(size: 14.2))
-                            .foregroundColor(.primary.opacity(0.86))
-                            .lineLimit(9)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                ZStack {
-                    keepIconButton(note.isPinned ? "pin.fill" : "pin", helpKey: note.isPinned ? "Unpin note" : "Pin note") {
-                        togglePin(note)
-                    }
-                    .opacity((showActions || note.isPinned) ? 1 : 0)
-                    .allowsHitTesting(showActions || note.isPinned)
-                }
-                .frame(width: 28, height: 28)
-            }
+            noteHeaderRow(note, showActions: showActions, isSelected: isSelected)
 
             if let reminderDate = note.reminderDate {
                 Label(reminderDate.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 10.8, weight: .semibold))
                     .foregroundColor(reminderDate < Date() ? .orange : .secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
@@ -3931,7 +5472,7 @@ struct StudioKeepNotesView: View {
                             openNoteLink(link)
                         } label: {
                             Label(cleanLinkTitle(link), systemImage: "link")
-                                .font(.system(size: 11.5, weight: .semibold))
+                                .font(.system(size: 10.8, weight: .semibold))
                                 .lineLimit(1)
                                 .foregroundColor(.blue)
                                 .padding(.horizontal, 8)
@@ -3945,17 +5486,6 @@ struct StudioKeepNotesView: View {
             }
 
 
-            if !note.collaboratorEmails.isEmpty {
-                Label("\(note.collaboratorEmails.count) \(t(note.collaboratorEmails.count == 1 ? "collaborator" : "collaborators", lang: seciliDil))", systemImage: "person.2")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color.blue.opacity(0.10))
-                    .clipShape(Capsule())
-            }
-
-
             if isNoteActivelyEditedByOther(note) {
                 Label("\(activeEditorDisplayName(for: note)) \(t("is editing", lang: seciliDil))", systemImage: "pencil.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
@@ -3966,95 +5496,18 @@ struct StudioKeepNotesView: View {
                     .clipShape(Capsule())
             }
 
+            if noteHasCollaboratorsForAvatar(note) {
+                collaboratorAvatarStack(for: note)
+            }
+
             Spacer(minLength: 6)
 
-            HStack(spacing: 7) {
-                if !note.updatedAt.formatted(date: .abbreviated, time: .shortened).isEmpty {
-                    Text(note.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary.opacity(0.85))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                keepCardIconButton(note.isPinned ? "pin.slash" : "pin", helpKey: note.isPinned ? "Unpin note" : "Pin note") {
-                    togglePin(note)
-                }
-
-                keepCardIconButton("plus.square.on.square", helpKey: "Duplicate note") {
-                    duplicateNote(note)
-                }
-
-                keepCardIconButton("doc.on.doc", helpKey: "Copy note") {
-                    copyNoteToClipboard(note)
-                }
-
-                keepCardIconMenu("paintpalette", helpKey: "Change colour") {
-                    ForEach(noteColors, id: \.self) { color in
-                        Button(t(color.capitalized, lang: seciliDil)) {
-                            var updated = note
-                            updated.colorName = color
-                            saveNote(updated)
-                        }
-                    }
-                }
-
-                keepCardIconMenu(note.reminderDate == nil ? "bell" : "bell.fill", helpKey: "Reminder") {
-                    Button(t("Tomorrow", lang: seciliDil)) {
-                        setReminder(note, date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
-                    }
-                    Button(t("Next week", lang: seciliDil)) {
-                        setReminder(note, date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date())
-                    }
-                    Button(t("Pick date", lang: seciliDil)) {
-                        reminderPickerDate = note.reminderDate ?? (Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date())
-                        reminderPickerNote = note
-                    }
-                    Button(t("Remove reminder", lang: seciliDil)) {
-                        setReminder(note, date: nil)
-                    }
-                }
-
-                keepCardIconMenu("tag", helpKey: "Labels") {
-                    ForEach(allLabels, id: \.self) { label in
-                        Button(label) {
-                            toggleLabel(label, for: note)
-                        }
-                    }
-                    Button(t("Add label", lang: seciliDil)) {
-                        addDefaultLabel(to: note)
-                    }
-                }
-
-                keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") {
-                    openCollaboratorSheet(note)
-                }
-
-                keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") {
-                    toggleArchive(note)
-                }
-
-                if selectedSection == "trash" {
-                    keepCardIconButton("arrow.uturn.backward", helpKey: "Restore note") {
-                        restoreNote(note)
-                    }
-
-                    keepCardIconButton("trash.fill", helpKey: "Delete forever", role: .destructive) {
-                        permanentlyDelete(note)
-                    }
-                } else {
-                    keepCardIconButton("trash", helpKey: "Move to trash", role: .destructive) {
-                        moveToTrash(note)
-                    }
-                }
+            if shouldShowCardActionRow {
+                noteCardActionRow(note, showActions: showActions)
             }
-            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
-            .opacity(showActions ? 1 : 0)
-            .allowsHitTesting(showActions)
         }
-        .padding(16)
-        .frame(minHeight: 104, alignment: .topLeading)
+        .padding(isCompactKeepPhoneLayout ? keepCardInnerPadding : 18)
+        .frame(minHeight: isCompactKeepPhoneLayout ? keepPhoneCardMinHeight : 150, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .background(noteCardColor(note.colorName))
         .overlay(
@@ -4067,7 +5520,7 @@ struct StudioKeepNotesView: View {
         .onTapGesture {
             if isSelectionModeActive {
                 toggleKeepNoteSelection(note)
-            } else {
+            } else if !isNoteActivelyEditedByOther(note) {
                 selectedNote = note
             }
         }
@@ -4199,6 +5652,7 @@ struct StudioKeepNotesView: View {
             text: text,
             colorName: composerColor,
             ownerUserId: keepCurrentUserId,
+            isPinned: composerPinned,
             labels: labels,
             links: links,
             reminderDate: composerReminderEnabled ? composerReminderDate : nil,
@@ -4296,6 +5750,7 @@ private func saveNote(_ note: StudioKeepNote) {
         }
 
         collection.document(updated.id).setData(payload, merge: true)
+        syncSharedNoteContentIfNeeded(updated)
     }
 
     private func togglePin(_ note: StudioKeepNote) {
@@ -4500,6 +5955,7 @@ struct KeepNoteDropDelegate: DropDelegate {
 
 
 struct StudioKeepNoteEditor: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var editorColorScheme
 
@@ -4511,155 +5967,468 @@ struct StudioKeepNoteEditor: View {
     let onArchive: (StudioKeepNote) -> Void
     let onPin: (StudioKeepNote) -> Void
 
+        private var isPhoneEditorLayout: Bool {
+        #if os(iOS)
+        return horizontalSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    private var editorMaxWidth: CGFloat {
+        isPhoneEditorLayout ? .infinity : 760
+    }
+
+    private var editorHorizontalPadding: CGFloat {
+        isPhoneEditorLayout ? 16 : 24
+    }
+
+    private var editorContentPadding: CGFloat {
+        isPhoneEditorLayout ? 18 : 24
+    }
+
+    private var editorOuterPadding: CGFloat {
+        isPhoneEditorLayout ? 0 : 24
+    }
+
+    private var editorCornerRadius: CGFloat {
+        isPhoneEditorLayout ? 0 : 26
+    }
+
+    private var editorTopPadding: CGFloat {
+        isPhoneEditorLayout ? 12 : 24
+    }
+
+    private var editorBottomToolbarHeight: CGFloat {
+        isPhoneEditorLayout ? 58 : 64
+    }
+
+    private var editorMinBodyHeight: CGFloat {
+        isPhoneEditorLayout ? 240 : 420
+    }
+
+    private var mobileEditorBackground: Color {
+        editorColorScheme == .dark ? Color(red: 0.08, green: 0.08, blue: 0.08) : Color.white
+    }
+
+    private var mobileMutedBackground: Color {
+        editorColorScheme == .dark ? Color.white.opacity(0.08) : Color.primary.opacity(0.055)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .bold))
-                        .frame(width: 34, height: 34)
-                        .background(Color.primary.opacity(0.07))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Button {
-                    onPin(note)
-                    note.isPinned.toggle()
-                } label: {
-                    Image(systemName: note.isPinned ? "pin.fill" : "pin")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    let copy = StudioKeepNote(
-                        title: note.title.isEmpty ? "Copy" : "\(note.title) Copy",
-                        text: note.text,
-                        colorName: note.colorName,
-                        isPinned: false,
-                        isArchived: false,
-                        isDeleted: false,
-                        labels: note.labels,
-                        reminderDate: nil,
-                        createdAt: Date(),
-                        updatedAt: Date()
-                    )
-                    onSave(copy)
-                } label: {
-                    Image(systemName: "plus.square.on.square")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    onArchive(note)
-                    note.isArchived.toggle()
-                } label: {
-                    Image(systemName: "archivebox")
-                }
-                .buttonStyle(.plain)
-
-                Button(role: .destructive) {
-                    onDelete(note)
-                    dismiss()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(14)
-
-            TextField("Title", text: $note.title)
-                .font(.system(size: 20, weight: .bold))
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-
-            TextEditor(text: $note.text)
-                .font(.system(size: 15.5))
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label(note.reminderDate == nil ? "No reminder" : note.reminderDate!.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
-                        .foregroundColor(.secondary)
-
-                    Spacer()
-
-                    Button("Tomorrow") {
-                        note.reminderDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-                    }
-
-                    Button("Clear") {
-                        note.reminderDate = nil
-                    }
-                }
-
-                TextField("Labels, comma separated", text: Binding(
-                    get: { note.labels.joined(separator: ", ") },
-                    set: { value in
-                        note.labels = value
-                            .split(separator: ",")
-                            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-                            .filter { !$0.isEmpty }
-                    }
-                ))
-                .textFieldStyle(.plain)
-                .padding(10)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                TextField("Links, comma separated", text: Binding(
-                    get: { note.links.joined(separator: ", ") },
-                    set: { value in
-                        note.links = value
-                            .split(separator: ",")
-                            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-                            .filter { !$0.isEmpty }
-                    }
-                ))
-                .textFieldStyle(.plain)
-                .padding(10)
-                .background(Color.primary.opacity(0.055))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .padding(.horizontal, 16)
-
-            HStack {
-                Menu {
-                    ForEach(noteColors, id: \.self) { color in
-                        Button(color.capitalized) {
-                            note.colorName = color
-                        }
-                    }
-                } label: {
-                    Label("Colour", systemImage: "paintpalette")
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Button("Done") {
-                    onSave(note)
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(16)
-        }
-        .frame(minWidth: 460, minHeight: 420)
-        .background(colorForNote(note.colorName))
-        .onDisappear {
-            if !note.isEmpty {
-                onSave(note)
+        Group {
+            if isPhoneEditorLayout {
+                mobileEditorBody
+            } else {
+                desktopEditorBody
             }
         }
     }
+
+    private var mobileEditorBody: some View {
+        VStack(spacing: 0) {
+            mobileEditorTopBar
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    TextField("Title", text: $note.title)
+                        .font(.system(size: 28, weight: .bold))
+                        .textFieldStyle(.plain)
+                        .foregroundColor(.primary.opacity(note.title.isEmpty ? 0.28 : 1))
+                        .padding(.top, 6)
+
+                    TextEditor(text: $note.text)
+                        .font(.system(size: 19))
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 300, alignment: .topLeading)
+                        .padding(.horizontal, -5)
+
+                    mobileCollaboratorArea
+
+                    mobileReminderAndMetaArea
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 22)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+
+            mobileEditorBottomBar
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(mobileEditorBackground)
+    }
+
+
+
+    private var mobileEditorTopBar: some View {
+        HStack(spacing: 14) {
+            Button {
+                onSave(note)
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 28, weight: .regular))
+                    .foregroundColor(.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                onPin(note)
+                note.isPinned.toggle()
+            } label: {
+                Image(systemName: note.isPinned ? "pin.fill" : "pin")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(note.isPinned ? .blue : .secondary)
+                    .frame(width: 38, height: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                note.reminderDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+            } label: {
+                Image(systemName: note.reminderDate == nil ? "bell" : "bell.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(note.reminderDate == nil ? .secondary : .orange)
+                    .frame(width: 38, height: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                onArchive(note)
+                note.isArchived.toggle()
+                dismiss()
+            } label: {
+                Image(systemName: note.isArchived ? "archivebox.fill" : "archivebox")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 38, height: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
+        .background(mobileEditorBackground)
+    }
+
+
+
+    private var mobileCollaboratorArea: some View {
+        HStack(spacing: 8) {
+            if !note.ownerEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(String(note.ownerEmail.prefix(1)).uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 30, height: 30)
+                    .background(mobileMutedBackground)
+                    .clipShape(Circle())
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 2)
+    }
+
+
+
+    private var mobileReminderAndMetaArea: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label(note.reminderDate == nil ? "No reminder" : note.reminderDate!.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button("Tomorrow") {
+                    note.reminderDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                }
+                .font(.system(size: 15.5, weight: .semibold))
+
+                Button("Clear") {
+                    note.reminderDate = nil
+                }
+                .font(.system(size: 15.5, weight: .semibold))
+            }
+            .padding(.top, 2)
+
+            TextField("Labels", text: Binding(
+                get: { note.labels.joined(separator: ", ") },
+                set: { value in
+                    note.labels = value
+                        .split(separator: ",")
+                        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+            ))
+            .font(.system(size: 16))
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(mobileMutedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            TextField("Links", text: Binding(
+                get: { note.links.joined(separator: ", ") },
+                set: { value in
+                    note.links = value
+                        .split(separator: ",")
+                        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+            ))
+            .font(.system(size: 16))
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(mobileMutedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+
+
+    private var mobileEditorBottomBar: some View {
+        HStack(spacing: 20) {
+            Button {
+                let copy = StudioKeepNote(
+                    title: note.title.isEmpty ? "Copy" : "\(note.title) Copy",
+                    text: note.text,
+                    colorName: note.colorName,
+                    isPinned: false,
+                    isArchived: false,
+                    isDeleted: false,
+                    labels: note.labels,
+                    reminderDate: nil,
+                    createdAt: Date(),
+                    updatedAt: Date()
+                )
+                onSave(copy)
+            } label: {
+                Image(systemName: "plus.square")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(.secondary)
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                ForEach(noteColors, id: \.self) { color in
+                    Button(color.capitalized) {
+                        note.colorName = color
+                    }
+                }
+            } label: {
+                Image(systemName: "paintpalette")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(.secondary)
+                    .frame(width: 34, height: 34)
+            }
+
+            Spacer()
+
+            Text("Edited \(note.updatedAt.formatted(date: .omitted, time: .shortened))")
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            Spacer()
+
+            Menu {
+                Button("Delete", role: .destructive) {
+                    onDelete(note)
+                    dismiss()
+                }
+            } label: {
+                Image(systemName: "ellipsis.vertical")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 34, height: 34)
+            }
+
+            Button {
+                onSave(note)
+                dismiss()
+            } label: {
+                Text("Done")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .frame(minWidth: 54, alignment: .trailing)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(
+            mobileEditorBackground
+                .shadow(.drop(color: Color(red: 0, green: 0, blue: 0).opacity(0.10), radius: 5, y: -2))
+        )
+    }
+
+
+
+
+    private var desktopEditorBody: some View {
+        VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 15, weight: .bold))
+                                .frame(width: 34, height: 34)
+                                .background(Color.primary.opacity(0.07))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+        
+                        Spacer()
+        
+                        Button {
+                            onPin(note)
+                            note.isPinned.toggle()
+                        } label: {
+                            Image(systemName: note.isPinned ? "pin.fill" : "pin")
+                        }
+                        .buttonStyle(.plain)
+        
+                        Button {
+                            let copy = StudioKeepNote(
+                                title: note.title.isEmpty ? "Copy" : "\(note.title) Copy",
+                                text: note.text,
+                                colorName: note.colorName,
+                                isPinned: false,
+                                isArchived: false,
+                                isDeleted: false,
+                                labels: note.labels,
+                                reminderDate: nil,
+                                createdAt: Date(),
+                                updatedAt: Date()
+                            )
+                            onSave(copy)
+                        } label: {
+                            Image(systemName: "plus.square.on.square")
+                        }
+                        .buttonStyle(.plain)
+        
+                        Button {
+                            onArchive(note)
+                            note.isArchived.toggle()
+                        } label: {
+                            Image(systemName: "archivebox")
+                        }
+                        .buttonStyle(.plain)
+        
+                        Button(role: .destructive) {
+                            onDelete(note)
+                            dismiss()
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(14)
+        
+                    TextField("Title", text: $note.title)
+                        .font(.system(size: 20, weight: .bold))
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+        
+                    TextEditor(text: $note.text)
+                        .font(.system(size: 15.5))
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+        
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Label(note.reminderDate == nil ? "No reminder" : note.reminderDate!.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
+                                .foregroundColor(.secondary)
+        
+                            Spacer()
+        
+                            Button("Tomorrow") {
+                                note.reminderDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                            }
+        
+                            Button("Clear") {
+                                note.reminderDate = nil
+                            }
+                        }
+        
+                        TextField("Labels, comma separated", text: Binding(
+                            get: { note.labels.joined(separator: ", ") },
+                            set: { value in
+                                note.labels = value
+                                    .split(separator: ",")
+                                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                                    .filter { !$0.isEmpty }
+                            }
+                        ))
+                        .textFieldStyle(.plain)
+                        .padding(10)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        
+                        TextField("Links, comma separated", text: Binding(
+                            get: { note.links.joined(separator: ", ") },
+                            set: { value in
+                                note.links = value
+                                    .split(separator: ",")
+                                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                                    .filter { !$0.isEmpty }
+                            }
+                        ))
+                        .textFieldStyle(.plain)
+                        .padding(10)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .padding(.horizontal, 16)
+        
+                    HStack {
+                        Menu {
+                            ForEach(noteColors, id: \.self) { color in
+                                Button(color.capitalized) {
+                                    note.colorName = color
+                                }
+                            }
+                        } label: {
+                            Label("Colour", systemImage: "paintpalette")
+                        }
+                        .buttonStyle(.plain)
+        
+                        Spacer()
+        
+                        Button("Done") {
+                            onSave(note)
+                            dismiss()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(16)
+                }
+                .frame(minWidth: 460, minHeight: editorMinBodyHeight)
+                .frame(maxWidth: isPhoneEditorLayout ? .infinity : 760, maxHeight: isPhoneEditorLayout ? .infinity : nil, alignment: .topLeading)
+                .background(colorForNote(note.colorName))
+                .onDisappear {
+                    if !note.isEmpty {
+                        onSave(note)
+                    }
+                }
+    }
+
+
 }
 
 
@@ -5804,7 +7573,7 @@ struct ContentView: View {
     private var activityNotificationDrawerOverlay: some View {
         if isActivityDrawerOpen {
             ZStack(alignment: .trailing) {
-                Color.black.opacity(isPhoneLayout ? 0.92 : 0.0)
+                Color(red: 0, green: 0, blue: 0).opacity(isPhoneLayout ? 0.92 : 0.0)
                     .ignoresSafeArea()
                     .background(.ultraThinMaterial.opacity(isPhoneLayout ? 0.0 : 0.0))
                     .onTapGesture {
@@ -7044,7 +8813,7 @@ struct ContentView: View {
                     .frame(maxWidth: 680)
                     .background(bgHeader)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.20 : 0.08), radius: 24, x: 0, y: 12)
+                    .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(colorScheme == .dark ? 0.20 : 0.08), radius: 24, x: 0, y: 12)
 
                     Text(t("You can change this later from Settings > Workflow > Business Type.", lang: seciliDil))
                         .font(.system(size: 12))
@@ -7748,6 +9517,23 @@ struct ContentView: View {
         }
 
         let route = notification.route.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let type = notification.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let title = notification.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let message = notification.message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if route == "notes" ||
+            route.contains("note") ||
+            type.contains("note") ||
+            type.contains("collaboration") ||
+            title.contains("note") ||
+            message.contains("note collaboration") ||
+            message.contains("shared a note") {
+            UserDefaults.standard.set(true, forKey: "studioPendingOpenNotesFromNotification")
+            UserDefaults.standard.set("Notes", forKey: "studioRequestedStartTab")
+            NotificationCenter.default.post(name: .studioOpenNotesFromActivityNotification, object: nil)
+            aktifSekme = "Notes"
+            return
+        }
         if route == "messagethread" || !notification.threadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             UserDefaults.standard.set(notification.threadId, forKey: "pendingMessageThreadId")
             UserDefaults.standard.set(notification.messageId, forKey: "pendingMessageId")
@@ -9140,7 +10926,7 @@ struct SiparisKarti: View {
         .background(kartArkaPlanRengi)
         .cornerRadius(16)
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(kartCizgiRengi, lineWidth: 1.5))
-        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.04), radius: 5, y: 2)
+        .shadow(color: colorScheme == .dark ? .clear : Color(red: 0, green: 0, blue: 0).opacity(0.04), radius: 5, y: 2)
         .opacity(siparis.status == "Cancelled" ? 0.6 : 1.0)
         .contentShape(Rectangle())
         .transaction { transaction in
@@ -9165,8 +10951,8 @@ struct SiparisKarti: View {
     @ViewBuilder
     private func statusBadge(slot: Int, stepName: String) -> some View {
         let cleanedStepName = stepName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let labelFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
-        let border = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+        let labelFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color(red: 0, green: 0, blue: 0).opacity(0.05)
+        let border = colorScheme == .dark ? Color.white.opacity(0.08) : Color(red: 0, green: 0, blue: 0).opacity(0.06)
 
         if cleanedStepName.isEmpty {
             Menu {
@@ -10059,7 +11845,7 @@ struct AccountProfileView: View {
     }
 
     private var fieldBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.045)
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color(red: 0, green: 0, blue: 0).opacity(0.045)
     }
 
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
@@ -10234,7 +12020,7 @@ struct AccountProfileView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
-        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0 : 0.06), radius: 16, y: 8)
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(colorScheme == .dark ? 0 : 0.06), radius: 16, y: 8)
     }
 
     private var profileCard: some View {
@@ -12194,7 +13980,7 @@ private struct StudioRoleAccessEditor: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var fieldBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.045)
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color(red: 0, green: 0, blue: 0).opacity(0.045)
     }
 
     var body: some View {
@@ -12364,7 +14150,7 @@ private struct StudioCustomRoleProfileEditor: View {
     }
 
     private var fieldBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.045)
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color(red: 0, green: 0, blue: 0).opacity(0.045)
     }
 
     private var cleanDraftName: String {

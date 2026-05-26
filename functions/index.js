@@ -1223,6 +1223,568 @@ exports.removeSharedPersonalNoteFromWorkspaceMember = onCall({ region: "europe-w
 });
 
 
+
+function personalNoteInviteRef(companyId = "", inviteId = "") {
+  return admin.firestore()
+    .collection("companies")
+    .doc(String(companyId || "").trim())
+    .collection("personal_note_collaboration_invites")
+    .doc(String(inviteId || "").trim());
+}
+
+function inviteIdForPersonalNote(companyId = "", noteId = "", targetUserId = "") {
+  const source = `${String(companyId || "").trim()}_${String(noteId || "").trim()}_${String(targetUserId || "").trim()}`;
+  return crypto.createHash("sha1").update(source).digest("hex");
+}
+
+function cleanInviteNotePreview(note = {}) {
+  return {
+    title: cleanPersonalNoteText(note.title || "Untitled note", 500) || "Untitled note",
+    text: cleanPersonalNoteText(note.text || "", 1200),
+    colorName: cleanPersonalNoteText(note.colorName || "default", 80) || "default"
+  };
+}
+
+exports.createPersonalNoteCollaborationInvite = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const noteId = String(request.data?.noteId || "").trim();
+  const targetUserId = String(request.data?.targetUserId || request.data?.targetUid || "").trim();
+  const targetEmail = normalizedPersonalNoteEmail(request.data?.targetEmail || "");
+  const note = request.data?.note || {};
+
+  if (!companyId || !noteId || !targetUserId) {
+    throw new HttpsError("invalid-argument", "companyId, noteId and targetUserId are required.");
+  }
+
+  const { companyData } = await requireNotificationWorkspaceAccess(request, companyId);
+  if (!isWorkspaceMemberTarget(companyData, targetUserId, targetEmail)) {
+    throw new HttpsError("permission-denied", "The selected user is not a member of this workspace.");
+  }
+
+  const sourceRef = personalNoteDocRef(companyId, uid, noteId);
+  const sourceSnap = await sourceRef.get();
+  const sourceData = sourceSnap.exists ? sourceSnap.data() || {} : {};
+  const ownerUserId = String(sourceData.ownerUserId || note.ownerUserId || uid).trim();
+
+  if (ownerUserId && ownerUserId !== uid && !uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the note owner can invite collaborators.");
+  }
+
+  const inviteId = inviteIdForPersonalNote(companyId, noteId, targetUserId);
+  const inviteRef = personalNoteInviteRef(companyId, inviteId);
+  const senderEmail = supportUserEmail(request);
+  const preview = cleanInviteNotePreview({ ...note, ...sourceData });
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  const invitePayload = {
+    companyId,
+    inviteId,
+    noteId,
+    sourceUserId: uid,
+    sourceEmail: senderEmail,
+    ownerUserId: ownerUserId || uid,
+    targetUserId,
+    targetEmail,
+    status: "pending",
+    notePreview: preview,
+    createdAt: now,
+    updatedAt: now,
+    acceptedAt: null,
+    declinedAt: null
+  };
+
+  const notificationRef = notificationCollectionRef(companyId).doc();
+  const message = `${senderEmail || "A teammate"} invited you to collaborate on a note: ${preview.title}`;
+
+  const batch = admin.firestore().batch();
+  batch.set(inviteRef, invitePayload, { merge: true });
+  batch.set(sourceRef, {
+    ownerUserId: ownerUserId || uid,
+    companyId,
+    pendingCollaboratorEmails: admin.firestore.FieldValue.arrayUnion(targetEmail),
+    updatedAt: now
+  }, { merge: true });
+  const userNotificationRef = admin.firestore()
+    .collection("companies")
+    .doc(companyId)
+    .collection("users")
+    .doc(targetUserId)
+    .collection("notifications")
+    .doc(notificationRef.id);
+
+  batch.set(notificationRef, {
+    companyId,
+    type: "personal_note_collaboration_invite",
+    title: "Note collaboration invitation",
+    message,
+    noteId,
+    inviteId,
+    route: "notes",
+    senderUid: uid,
+    senderEmail,
+    recipientUids: [targetUserId],
+    recipientEmails: targetEmail ? [targetEmail] : [],
+    createdAt: now,
+    read: false,
+    actioned: false,
+    source: "createPersonalNoteCollaborationInvite"
+  }, { merge: true });
+
+  batch.set(userNotificationRef, {
+    companyId,
+    type: "personal_note_collaboration_invite",
+    title: "Note collaboration invitation",
+    message,
+    noteId,
+    inviteId,
+    route: "notes",
+    senderUid: uid,
+    senderEmail,
+    recipientUids: [targetUserId],
+    recipientEmails: targetEmail ? [targetEmail] : [],
+    createdAt: now,
+    read: false,
+    actioned: false,
+    source: "createPersonalNoteCollaborationInvite"
+  }, { merge: true });
+
+  await batch.commit();
+
+  let pushResult = { sent: 0, failed: 0, reason: "not_attempted" };
+  try {
+    pushResult = await sendPushNotificationToRecipients(companyId, {
+      type: "personal_note_collaboration_invite",
+      title: "Note collaboration invitation",
+      message,
+      noteId,
+      inviteId,
+      route: "notes",
+      notificationId: notificationRef.id,
+      senderUid: uid,
+      senderEmail
+    }, {
+      userIds: [targetUserId],
+      emails: targetEmail ? [targetEmail] : []
+    });
+
+    await notificationRef.set({
+      pushSent: Number(pushResult.sent || 0) > 0,
+      pushResult,
+      pushSentAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.error("personal note collaboration invite push failed:", error?.message || error);
+  }
+
+  return {
+    ok: true,
+    inviteId,
+    noteId,
+    companyId,
+    targetUserId,
+    targetEmail,
+    notificationId: notificationRef.id,
+    pushResult
+  };
+});
+
+exports.listPersonalNoteCollaborationInvites = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  if (!companyId) {
+    throw new HttpsError("invalid-argument", "companyId is required.");
+  }
+
+  await requireNotificationWorkspaceAccess(request, companyId);
+  const userEmail = supportUserEmail(request);
+
+  const byUidSnap = await admin.firestore()
+    .collection("companies")
+    .doc(companyId)
+    .collection("personal_note_collaboration_invites")
+    .where("targetUserId", "==", uid)
+    .where("status", "==", "pending")
+    .limit(50)
+    .get();
+
+  let docs = byUidSnap.docs;
+
+  if (userEmail) {
+    const byEmailSnap = await admin.firestore()
+      .collection("companies")
+      .doc(companyId)
+      .collection("personal_note_collaboration_invites")
+      .where("targetEmail", "==", userEmail)
+      .where("status", "==", "pending")
+      .limit(50)
+      .get();
+
+    const seen = new Set(docs.map((doc) => doc.id));
+    for (const doc of byEmailSnap.docs) {
+      if (!seen.has(doc.id)) docs.push(doc);
+    }
+  }
+
+  return {
+    ok: true,
+    invites: docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        inviteId: data.inviteId || doc.id,
+        companyId: data.companyId || companyId,
+        noteId: data.noteId || "",
+        sourceUserId: data.sourceUserId || "",
+        sourceEmail: data.sourceEmail || "",
+        ownerUserId: data.ownerUserId || "",
+        targetUserId: data.targetUserId || "",
+        targetEmail: data.targetEmail || "",
+        status: data.status || "pending",
+        notePreview: data.notePreview || {},
+        createdAtMillis: data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : null
+      };
+    })
+  };
+});
+
+exports.acceptPersonalNoteCollaborationInvite = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const inviteId = String(request.data?.inviteId || "").trim();
+  if (!companyId || !inviteId) {
+    throw new HttpsError("invalid-argument", "companyId and inviteId are required.");
+  }
+
+  await requireNotificationWorkspaceAccess(request, companyId);
+
+  const inviteRef = personalNoteInviteRef(companyId, inviteId);
+  const inviteSnap = await inviteRef.get();
+  if (!inviteSnap.exists) {
+    throw new HttpsError("not-found", "Invitation not found.");
+  }
+
+  const invite = inviteSnap.data() || {};
+  const userEmail = supportUserEmail(request);
+  const targetUserId = String(invite.targetUserId || "").trim();
+  const targetEmail = normalizedPersonalNoteEmail(invite.targetEmail || "");
+
+  if (targetUserId !== uid && (!userEmail || targetEmail !== userEmail)) {
+    throw new HttpsError("permission-denied", "This invitation is not for the signed-in user.");
+  }
+
+  if (String(invite.status || "") !== "pending") {
+    return { ok: true, alreadyHandled: true, status: invite.status || "unknown" };
+  }
+
+  const noteId = String(invite.noteId || "").trim();
+  const sourceUserId = String(invite.sourceUserId || invite.ownerUserId || "").trim();
+  if (!noteId || !sourceUserId) {
+    throw new HttpsError("failed-precondition", "Invitation is missing note source information.");
+  }
+
+  const sourceRef = personalNoteDocRef(companyId, sourceUserId, noteId);
+  const sourceSnap = await sourceRef.get();
+  if (!sourceSnap.exists) {
+    throw new HttpsError("not-found", "The original note is no longer available.");
+  }
+
+  const sourceData = sourceSnap.data() || {};
+  const existingShared = cleanPersonalNoteStringArray(sourceData.sharedWith || []).map(normalizedPersonalNoteEmail);
+  const existingCollaborators = cleanPersonalNoteStringArray(sourceData.collaboratorEmails || []).map(normalizedPersonalNoteEmail);
+  const targetEmailForShare = targetEmail || userEmail;
+
+  const sharedWith = Array.from(new Set([...existingShared, targetEmailForShare].filter(Boolean)));
+  const collaboratorEmails = Array.from(new Set([...existingCollaborators, targetEmailForShare].filter(Boolean)));
+
+  const targetRef = personalNoteDocRef(companyId, uid, noteId);
+  const targetPayload = cleanSharedPersonalNotePayload({
+    ...sourceData,
+    sharedWith,
+    collaboratorEmails
+  }, {
+    companyId,
+    ownerUserId: sourceData.ownerUserId || sourceUserId,
+    targetUserId: uid
+  });
+
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const batch = admin.firestore().batch();
+  batch.set(targetRef, targetPayload, { merge: true });
+  batch.set(sourceRef, {
+    sharedWith,
+    collaboratorEmails,
+    pendingCollaboratorEmails: admin.firestore.FieldValue.arrayRemove(targetEmailForShare),
+    updatedAt: now
+  }, { merge: true });
+  batch.set(inviteRef, {
+    status: "accepted",
+    acceptedAt: now,
+    updatedAt: now
+  }, { merge: true });
+
+  await batch.commit();
+
+  return { ok: true, status: "accepted", noteId, inviteId };
+});
+
+exports.declinePersonalNoteCollaborationInvite = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const inviteId = String(request.data?.inviteId || "").trim();
+  if (!companyId || !inviteId) {
+    throw new HttpsError("invalid-argument", "companyId and inviteId are required.");
+  }
+
+  await requireNotificationWorkspaceAccess(request, companyId);
+
+  const inviteRef = personalNoteInviteRef(companyId, inviteId);
+  const inviteSnap = await inviteRef.get();
+  if (!inviteSnap.exists) {
+    throw new HttpsError("not-found", "Invitation not found.");
+  }
+
+  const invite = inviteSnap.data() || {};
+  const userEmail = supportUserEmail(request);
+  const targetUserId = String(invite.targetUserId || "").trim();
+  const targetEmail = normalizedPersonalNoteEmail(invite.targetEmail || "");
+
+  if (targetUserId !== uid && (!userEmail || targetEmail !== userEmail)) {
+    throw new HttpsError("permission-denied", "This invitation is not for the signed-in user.");
+  }
+
+  const noteId = String(invite.noteId || "").trim();
+  const sourceUserId = String(invite.sourceUserId || invite.ownerUserId || "").trim();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  const batch = admin.firestore().batch();
+  batch.set(inviteRef, {
+    status: "declined",
+    declinedAt: now,
+    updatedAt: now
+  }, { merge: true });
+
+  if (noteId && sourceUserId && targetEmail) {
+    batch.set(personalNoteDocRef(companyId, sourceUserId, noteId), {
+      pendingCollaboratorEmails: admin.firestore.FieldValue.arrayRemove(targetEmail),
+      updatedAt: now
+    }, { merge: true });
+  }
+
+  await batch.commit();
+  return { ok: true, status: "declined", noteId, inviteId };
+});
+
+
+
+function resolvePersonalNoteCollaboratorUserIds(companyData = {}, emails = [], excludedUid = "") {
+  const excluded = String(excludedUid || "").trim();
+  const wantedEmails = new Set(
+    (Array.isArray(emails) ? emails : [])
+      .map(normalizedPersonalNoteEmail)
+      .filter(Boolean)
+  );
+
+  const resolved = new Set();
+
+  function maybeAdd(uid = "", email = "") {
+    const cleanUid = String(uid || "").trim();
+    const cleanEmail = normalizedPersonalNoteEmail(email || "");
+    if (!cleanUid || cleanUid === excluded) return;
+    if (wantedEmails.size === 0 || wantedEmails.has(cleanEmail)) {
+      resolved.add(cleanUid);
+    }
+  }
+
+  maybeAdd(companyData.ownerUid || "", companyData.ownerEmail || companyData.email || "");
+
+  const members = companyMembersMap(companyData);
+  for (const [uid, member] of Object.entries(members)) {
+    if (!member || typeof member !== "object" || Array.isArray(member)) continue;
+    maybeAdd(uid, member.email || member.userEmail || member.memberEmail || "");
+  }
+
+  return Array.from(resolved);
+}
+
+function personalNoteMirrorPayloadForSync(note = {}, context = {}) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const payload = {
+    title: cleanPersonalNoteText(note.title || "", 500),
+    text: cleanPersonalNoteText(note.text || "", 20000),
+    colorName: cleanPersonalNoteText(note.colorName || "default", 80) || "default",
+    ownerUserId: String(note.ownerUserId || context.ownerUserId || "").trim(),
+    companyId: String(context.companyId || note.companyId || "").trim(),
+    sharedWith: cleanPersonalNoteStringArray(note.sharedWith || []),
+    collaboratorEmails: cleanPersonalNoteStringArray(note.collaboratorEmails || []),
+    isPinned: Boolean(note.isPinned),
+    isArchived: Boolean(note.isArchived),
+    isDeleted: Boolean(note.isDeleted),
+    labels: cleanPersonalNoteStringArray(note.labels || [], 80, 160),
+    links: cleanPersonalNoteStringArray(note.links || [], 80, 1000),
+    manualOrder: Number.isFinite(Number(note.manualOrder)) ? Number(note.manualOrder) : Date.now(),
+    updatedAt: now
+  };
+
+  if (note.createdAt && typeof note.createdAt.toDate === "function") {
+    payload.createdAt = note.createdAt;
+  } else if (Number.isFinite(Number(note.createdAtMillis))) {
+    payload.createdAt = admin.firestore.Timestamp.fromMillis(Number(note.createdAtMillis));
+  }
+
+  if (Number.isFinite(Number(note.reminderDateMillis))) {
+    payload.reminderDate = admin.firestore.Timestamp.fromMillis(Number(note.reminderDateMillis));
+  } else if (note.reminderDate && typeof note.reminderDate.toDate === "function") {
+    payload.reminderDate = note.reminderDate;
+  }
+
+  return payload;
+}
+
+exports.syncSharedPersonalNoteContent = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const noteId = String(request.data?.noteId || "").trim();
+  const note = request.data?.note || {};
+
+  if (!companyId || !noteId) {
+    throw new HttpsError("invalid-argument", "companyId and noteId are required.");
+  }
+
+  const { companyData } = await requireNotificationWorkspaceAccess(request, companyId);
+  const currentRef = personalNoteDocRef(companyId, uid, noteId);
+  const currentSnap = await currentRef.get();
+
+  if (!currentSnap.exists) {
+    throw new HttpsError("not-found", "The note is not available for the signed-in user.");
+  }
+
+  const currentData = currentSnap.data() || {};
+  const sharedEmails = cleanPersonalNoteStringArray([
+    ...(Array.isArray(currentData.sharedWith) ? currentData.sharedWith : []),
+    ...(Array.isArray(currentData.collaboratorEmails) ? currentData.collaboratorEmails : []),
+    ...(Array.isArray(note.sharedWith) ? note.sharedWith : []),
+    ...(Array.isArray(note.collaboratorEmails) ? note.collaboratorEmails : [])
+  ]).map(normalizedPersonalNoteEmail).filter(Boolean);
+
+  const ownerUserId = String(currentData.ownerUserId || note.ownerUserId || uid).trim();
+  const mergedNote = {
+    ...currentData,
+    ...note,
+    ownerUserId: ownerUserId || uid,
+    sharedWith: sharedEmails,
+    collaboratorEmails: sharedEmails
+  };
+
+  const payload = personalNoteMirrorPayloadForSync(mergedNote, {
+    companyId,
+    ownerUserId: ownerUserId || uid
+  });
+
+  const targetUserIds = new Set([
+    uid,
+    ownerUserId,
+    ...resolvePersonalNoteCollaboratorUserIds(companyData, sharedEmails, "")
+  ].filter(Boolean));
+
+  const batch = admin.firestore().batch();
+  for (const targetUid of targetUserIds) {
+    batch.set(personalNoteDocRef(companyId, targetUid, noteId), {
+      ...payload,
+      userId: targetUid
+    }, { merge: true });
+  }
+
+  await batch.commit();
+
+  return {
+    ok: true,
+    noteId,
+    syncedUserCount: targetUserIds.size
+  };
+});
+
+exports.setSharedPersonalNoteEditingPresence = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const companyId = String(request.data?.companyId || "").trim();
+  const noteId = String(request.data?.noteId || "").trim();
+  const isEditing = Boolean(request.data?.isEditing);
+
+  if (!companyId || !noteId) {
+    throw new HttpsError("invalid-argument", "companyId and noteId are required.");
+  }
+
+  const { companyData } = await requireNotificationWorkspaceAccess(request, companyId);
+  const currentRef = personalNoteDocRef(companyId, uid, noteId);
+  const currentSnap = await currentRef.get();
+
+  if (!currentSnap.exists) {
+    throw new HttpsError("not-found", "The note is not available for the signed-in user.");
+  }
+
+  const currentData = currentSnap.data() || {};
+  const sharedEmails = cleanPersonalNoteStringArray([
+    ...(Array.isArray(currentData.sharedWith) ? currentData.sharedWith : []),
+    ...(Array.isArray(currentData.collaboratorEmails) ? currentData.collaboratorEmails : [])
+  ]).map(normalizedPersonalNoteEmail).filter(Boolean);
+
+  const ownerUserId = String(currentData.ownerUserId || uid).trim();
+  const targetUserIds = new Set([
+    uid,
+    ownerUserId,
+    ...resolvePersonalNoteCollaboratorUserIds(companyData, sharedEmails, "")
+  ].filter(Boolean));
+
+  const update = isEditing ? {
+    activeEditorUserId: uid,
+    activeEditorEmail: supportUserEmail(request),
+    activeEditorUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+  } : {
+    activeEditorUserId: "",
+    activeEditorEmail: "",
+    activeEditorUpdatedAt: admin.firestore.FieldValue.delete()
+  };
+
+  const batch = admin.firestore().batch();
+  for (const targetUid of targetUserIds) {
+    batch.set(personalNoteDocRef(companyId, targetUid, noteId), update, { merge: true });
+  }
+
+  await batch.commit();
+
+  return {
+    ok: true,
+    noteId,
+    isEditing,
+    syncedUserCount: targetUserIds.size
+  };
+});
+
+
 const PLAN_ENTITLEMENTS = {
   demo: {
     plan: "demo",
@@ -12077,4 +12639,1312 @@ exports.editThreadMessage = onCall({ region: "europe-west2" }, async (request) =
 
   await batch.commit();
   return { ok: true, threadId, messageId, message: "Message edited." };
+});
+
+/* === NivaDesk ChatGPT Workspace Action API - MVP v1 ===
+   Private backend foundation for future ChatGPT / Apps SDK / MCP integration.
+   Uses Firebase ID token in Authorization: Bearer <token>.
+   Does not expose direct Firestore access.
+*/
+
+function nvChatCors(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return true;
+  }
+  return false;
+}
+
+function nvCleanString(value = "", maxLength = 500) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function nvCleanNumber(value = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function nvTimestampFromInput(value, fallbackDate = new Date()) {
+  if (!value) return admin.firestore.Timestamp.fromDate(fallbackDate);
+  if (value && typeof value.toDate === "function") return value;
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return admin.firestore.Timestamp.fromDate(fallbackDate);
+  return admin.firestore.Timestamp.fromDate(parsed);
+}
+
+function nvDeliveryDaysFromDueDate(dueDateValue, fallbackDays = 45) {
+  if (!dueDateValue) return fallbackDays;
+  const due = new Date(String(dueDateValue));
+  if (Number.isNaN(due.getTime())) return fallbackDays;
+  const now = new Date();
+  const days = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (!Number.isFinite(days)) return fallbackDays;
+  return Math.max(0, days);
+}
+
+function nvHistoryItem(title = "", oldValue = "", newValue = "") {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    title: nvCleanString(title, 160),
+    oldValue: nvCleanString(oldValue, 500),
+    newValue: nvCleanString(newValue, 1200)
+  };
+}
+
+function nvRoleCanWriteOrders(companyData = {}, uid = "") {
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
+  if (uidIsCompanyOwner(companyData, uid) || role === "owner" || role === "admin" || role === "member") {
+    return true;
+  }
+  return false;
+}
+
+function nvSafeOrderForChatGPT(doc) {
+  const data = doc.data ? (doc.data() || {}) : (doc || {});
+  return {
+    id: doc.id || data.id || "",
+    companyId: data.companyId || "",
+    customerName: data.customerName || "",
+    emailAddress: data.emailAddress || "",
+    instagramUsername: data.instagramUsername || "",
+    whatsappNumber: data.whatsappNumber || "",
+    watchRef: data.watchRef || "",
+    designName: data.designName || "",
+    designLink: data.designLink || "",
+    notes: data.notes || "",
+    designStatus: data.designStatus || "",
+    status: data.status || "",
+    priority: data.priority || "",
+    risk: data.risk || "",
+    trackingNumber: data.trackingNumber || "",
+    courier: data.courier || "",
+    isDispatched: Boolean(data.isDispatched),
+    isDelivered: Boolean(data.isDelivered),
+    paidAmount: Number(data.paidAmount || 0),
+    remainingAmount: Number(data.remainingAmount || 0),
+    watchPurchasePrice: Number(data.watchPurchasePrice || 0),
+    deliveryTime: Number(data.deliveryTime || 0),
+    paymentDate: data.paymentDate || null,
+    labels: data.labels || [],
+    todoCount: Array.isArray(data.todoItems) ? data.todoItems.length : 0,
+    clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
+    historyLog: Array.isArray(data.historyLog) ? data.historyLog.slice(0, 20) : []
+  };
+}
+
+async function nvRequireChatGPTWorkspaceAccess(req, companyId = "") {
+  const authHeader = String(req.get("Authorization") || "");
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+  if (!token) {
+    throw new HttpsError("unauthenticated", "Missing Authorization: Bearer <Firebase ID token>.");
+  }
+
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(token);
+  } catch (error) {
+    throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
+  }
+
+  const uid = String(decoded.uid || "").trim();
+  const cleanCompanyId = String(companyId || "").trim();
+  if (!uid || !cleanCompanyId) {
+    throw new HttpsError("invalid-argument", "companyId is required.");
+  }
+
+  const companyRef = admin.firestore().collection("companies").doc(cleanCompanyId);
+  const companySnap = await companyRef.get();
+  if (!companySnap.exists) {
+    throw new HttpsError("not-found", "Workspace not found.");
+  }
+
+  const companyData = { ...(companySnap.data() || {}), __workspaceId: cleanCompanyId };
+  if (!uidHasCompanyAccess(companyData, uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to this workspace.");
+  }
+
+  return {
+    uid,
+    email: String(decoded.email || "").trim().toLowerCase(),
+    companyId: cleanCompanyId,
+    companyRef,
+    companyData
+  };
+}
+
+function nvRequireWriteAccess(context) {
+  if (!nvRoleCanWriteOrders(context.companyData, context.uid)) {
+    throw new HttpsError("permission-denied", "Your role cannot create or update orders.");
+  }
+}
+
+function nvOrderDefaults(args = {}, context = {}) {
+  const customerName = nvCleanString(args.customerName || args.customer || "New Project", 240) || "New Project";
+  const designBrief = nvCleanString(args.designBrief || args.notes || "", 5000);
+  const watchModel = nvCleanString(args.watchModel || args.watchRef || "", 240);
+  const deliveryDays = Number.isFinite(Number(args.deliveryDays))
+    ? Math.max(0, Number(args.deliveryDays))
+    : nvDeliveryDaysFromDueDate(args.dueDate, 45);
+
+  const paidAmount = nvCleanNumber(args.paidAmount ?? args.depositPaid ?? 0);
+  const totalPrice = nvCleanNumber(args.totalPrice ?? args.price ?? 0);
+  const remainingAmount = nvCleanNumber(args.remainingAmount ?? Math.max(0, totalPrice - paidAmount));
+
+  const history = [
+    nvHistoryItem("Created by ChatGPT", "", `${context.email || context.uid || "User"} created this order from ChatGPT.`)
+  ];
+
+  if (designBrief) {
+    history.push(nvHistoryItem("Design brief added", "", designBrief.slice(0, 900)));
+  }
+
+  return {
+    companyId: context.companyId,
+    paymentMethod: nvCleanString(args.paymentMethod || "Card", 120),
+    customerName,
+    paymentDate: nvTimestampFromInput(args.paymentDate, new Date()),
+    paidAmount,
+    remainingAmount,
+    watchPurchasePrice: nvCleanNumber(args.watchPurchasePrice || 0),
+    watchRef: watchModel,
+    deliveryTime: deliveryDays,
+    designName: nvCleanString(args.designName || args.projectName || "", 240),
+    designLink: nvCleanString(args.designLink || "", 1000),
+    communication: Array.isArray(args.communication) ? args.communication.map((item) => nvCleanString(item, 80)).filter(Boolean).slice(0, 20) : [],
+    emailAddress: nvCleanString(args.emailAddress || args.email || "", 240).toLowerCase(),
+    instagramUsername: nvCleanString(args.instagramUsername || args.instagram || "", 160),
+    whatsappNumber: nvCleanString(args.whatsappNumber || args.phone || args.whatsapp || "", 120),
+    notes: designBrief,
+    designStatus: nvCleanString(args.designStatus || "Not Yet", 120),
+    status: nvCleanString(args.status || "Not Yet", 120),
+    isDispatched: Boolean(args.isDispatched),
+    trackingNumber: nvCleanString(args.trackingNumber || "", 160),
+    courier: nvCleanString(args.courier || "Auto Detect", 120) || "Auto Detect",
+    isDelivered: Boolean(args.isDelivered),
+    paymentFee: nvCleanNumber(args.paymentFee || 0),
+    deliveryCost: nvCleanNumber(args.deliveryCost || 0),
+    taxType: nvCleanString(args.taxType || "", 80),
+    extraStatuses: args.extraStatuses && typeof args.extraStatuses === "object" && !Array.isArray(args.extraStatuses) ? args.extraStatuses : {},
+    taxRate: nvCleanNumber(args.taxRate || 0),
+    invBool1: Boolean(args.invBool1),
+    invBool2: Boolean(args.invBool2),
+    invBool3: Boolean(args.invBool3),
+    invBool4: Boolean(args.invBool4),
+    invNotes: nvCleanString(args.invNotes || "", 1000),
+    taxAmount: nvCleanNumber(args.taxAmount || 0),
+    priority: nvCleanString(args.priority || "Normal", 80) || "Normal",
+    risk: nvCleanString(args.risk || "None", 80) || "None",
+    riskReason: nvCleanString(args.riskReason || "-", 500) || "-",
+    customFields: args.customFields && typeof args.customFields === "object" && !Array.isArray(args.customFields) ? args.customFields : {},
+    customToggles: args.customToggles && typeof args.customToggles === "object" && !Array.isArray(args.customToggles) ? args.customToggles : {},
+    historyLog: history,
+    clientFiles: [],
+    todoItems: [],
+    workSessions: [],
+    assignedToUid: nvCleanString(args.assignedToUid || "", 160),
+    assignedToEmail: nvCleanString(args.assignedToEmail || "", 240).toLowerCase(),
+    createdByUid: context.uid,
+    createdByEmail: context.email || "",
+    createdFrom: "chatgpt",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+}
+
+async function nvChatGPTCreateOrder(context, args = {}) {
+  nvRequireWriteAccess(context);
+  const ref = admin.firestore().collection("siparisler").doc();
+  const payload = nvOrderDefaults(args, context);
+  await ref.set(payload, { merge: true });
+  return {
+    ok: true,
+    action: "create_order",
+    order: nvSafeOrderForChatGPT({ id: ref.id, data: () => payload })
+  };
+}
+
+async function nvChatGPTSearchOrders(context, args = {}) {
+  const rawQuery = nvCleanString(args.query || args.keyword || "", 240).toLowerCase();
+  const status = nvCleanString(args.status || "", 120).toLowerCase();
+  const limit = Math.min(Math.max(Number(args.limit || 30), 1), 100);
+
+  const snap = await admin.firestore()
+    .collection("siparisler")
+    .where("companyId", "==", context.companyId)
+    .limit(250)
+    .get();
+
+  let orders = snap.docs.map(nvSafeOrderForChatGPT);
+
+  if (rawQuery) {
+    orders = orders.filter((order) => {
+      const haystack = [
+        order.id,
+        order.customerName,
+        order.emailAddress,
+        order.instagramUsername,
+        order.whatsappNumber,
+        order.watchRef,
+        order.designName,
+        order.notes,
+        order.status,
+        order.designStatus
+      ].join(" ").toLowerCase();
+      return haystack.includes(rawQuery);
+    });
+  }
+
+  if (status) {
+    orders = orders.filter((order) => String(order.status || "").toLowerCase().includes(status));
+  }
+
+  orders = orders.slice(0, limit);
+  return { ok: true, action: "search_orders", count: orders.length, orders };
+}
+
+async function nvChatGPTGetOrderDetail(context, args = {}) {
+  const orderId = nvCleanString(args.orderId || args.id || "", 160);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+  const ref = admin.firestore().collection("siparisler").doc(orderId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Order not found.");
+  const data = snap.data() || {};
+  if (String(data.companyId || "") !== context.companyId) {
+    throw new HttpsError("permission-denied", "This order belongs to another workspace.");
+  }
+  return { ok: true, action: "get_order_detail", order: nvSafeOrderForChatGPT(snap) };
+}
+
+async function nvChatGPTAddOrderNote(context, args = {}) {
+  nvRequireWriteAccess(context);
+  const orderId = nvCleanString(args.orderId || args.id || "", 160);
+  const noteText = nvCleanString(args.note || args.text || "", 5000);
+  if (!orderId || !noteText) {
+    throw new HttpsError("invalid-argument", "orderId and note are required.");
+  }
+
+  const ref = admin.firestore().collection("siparisler").doc(orderId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Order not found.");
+  const data = snap.data() || {};
+  if (String(data.companyId || "") !== context.companyId) {
+    throw new HttpsError("permission-denied", "This order belongs to another workspace.");
+  }
+
+  const previousNotes = String(data.notes || "");
+  const mergedNotes = previousNotes ? `${previousNotes}\n\n${noteText}` : noteText;
+  await ref.set({
+    notes: mergedNotes,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    historyLog: admin.firestore.FieldValue.arrayUnion(
+      nvHistoryItem("Note added by ChatGPT", "", noteText.slice(0, 900))
+    )
+  }, { merge: true });
+
+  return { ok: true, action: "add_order_note", orderId };
+}
+
+async function nvChatGPTUpdateOrderStatus(context, args = {}) {
+  nvRequireWriteAccess(context);
+  const orderId = nvCleanString(args.orderId || args.id || "", 160);
+  const status = nvCleanString(args.status || "", 160);
+  const designStatus = nvCleanString(args.designStatus || "", 160);
+  if (!orderId || (!status && !designStatus)) {
+    throw new HttpsError("invalid-argument", "orderId and status or designStatus are required.");
+  }
+
+  const ref = admin.firestore().collection("siparisler").doc(orderId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Order not found.");
+  const data = snap.data() || {};
+  if (String(data.companyId || "") !== context.companyId) {
+    throw new HttpsError("permission-denied", "This order belongs to another workspace.");
+  }
+
+  const update = {
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+  const historyItems = [];
+  if (status) {
+    update.status = status;
+    historyItems.push(nvHistoryItem("Status changed by ChatGPT", data.status || "", status));
+  }
+  if (designStatus) {
+    update.designStatus = designStatus;
+    historyItems.push(nvHistoryItem("Design status changed by ChatGPT", data.designStatus || "", designStatus));
+  }
+  if (historyItems.length > 0) {
+    update.historyLog = admin.firestore.FieldValue.arrayUnion(...historyItems);
+  }
+
+  await ref.set(update, { merge: true });
+  return { ok: true, action: "update_order_status", orderId, status: status || data.status || "", designStatus: designStatus || data.designStatus || "" };
+}
+
+async function nvChatGPTDispatchAction(context, action = "", args = {}) {
+  switch (String(action || "").trim()) {
+    case "create_order":
+      return nvChatGPTCreateOrder(context, args);
+    case "search_orders":
+      return nvChatGPTSearchOrders(context, args);
+    case "get_order_detail":
+      return nvChatGPTGetOrderDetail(context, args);
+    case "add_order_note":
+      return nvChatGPTAddOrderNote(context, args);
+    case "update_order_status":
+      return nvChatGPTUpdateOrderStatus(context, args);
+    default:
+      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status.");
+  }
+}
+
+
+
+// MARK: - ChatGPT OAuth skeleton
+
+const NV_CHATGPT_OAUTH_CODE_TTL_MS = 10 * 60 * 1000;
+const NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
+const NV_CHATGPT_OAUTH_ISSUER_NAME = "NivaDesk StudioFlow";
+
+function nvBase64Url(buffer) {
+  return Buffer.from(buffer)
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+
+function nvRandomToken(byteLength = 32) {
+  return nvBase64Url(crypto.randomBytes(byteLength));
+}
+
+function nvSha256(value = "") {
+  return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+}
+
+function nvChatGPTOAuthCodesRef() {
+  return admin.firestore().collection("chatgptOAuthCodes");
+}
+
+function nvChatGPTOAuthTokensRef() {
+  return admin.firestore().collection("chatgptOAuthTokens");
+}
+
+function nvSafeOAuthUri(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (!["https:", "http:"].includes(url.protocol)) return "";
+    return url.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function nvOAuthBaseUrl(req) {
+  const host = String(req.get("host") || "").trim();
+  const protocol = String(req.get("x-forwarded-proto") || "https").split(",")[0].trim() || "https";
+  return `${protocol}://${host}`;
+}
+
+function nvOAuthEndpointUrl(req, functionName = "") {
+  const base = nvOAuthBaseUrl(req);
+  const path = String(req.path || "");
+  const lastSlash = path.lastIndexOf("/");
+  const prefixPath = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : "/";
+  return `${base}${prefixPath}${functionName}`;
+}
+
+function nvOAuthProtectedResourceMetadata(req) {
+  const resource = nvOAuthEndpointUrl(req, "chatgptMcp");
+  return {
+    resource,
+    authorization_servers: [
+      nvOAuthEndpointUrl(req, "chatgptOAuthAuthorizationServer")
+    ],
+    bearer_methods_supported: ["header"],
+    scopes_supported: [
+      "orders.read",
+      "orders.write",
+      "notes.write",
+      "tasks.write"
+    ],
+    resource_documentation: "https://eggcraft.co.uk/"
+  };
+}
+
+function nvOAuthAuthorizationServerMetadata(req) {
+  const issuer = nvOAuthEndpointUrl(req, "chatgptOAuthAuthorizationServer");
+  return {
+    issuer,
+    authorization_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthAuthorize"),
+    token_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthToken"),
+    registration_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthRegister"),
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+    scopes_supported: [
+      "orders.read",
+      "orders.write",
+      "notes.write",
+      "tasks.write"
+    ],
+    service_documentation: "https://eggcraft.co.uk/",
+    ui_locales_supported: ["en", "tr"]
+  };
+}
+
+function nvOAuthJson(res, status, payload = {}) {
+  res.status(status).json({
+    ...payload,
+    server: NV_CHATGPT_OAUTH_ISSUER_NAME
+  });
+}
+
+function nvOAuthHtmlEscape(value = "") {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function nvOAuthExtractClientId(req) {
+  return nvCleanString(req.query?.client_id || req.body?.client_id || "", 500);
+}
+
+function nvOAuthExtractRedirectUri(req) {
+  return nvSafeOAuthUri(req.query?.redirect_uri || req.body?.redirect_uri || "");
+}
+
+function nvOAuthExtractScope(req) {
+  return nvCleanString(req.query?.scope || req.body?.scope || "orders.read orders.write", 500);
+}
+
+function nvOAuthExtractState(req) {
+  return nvCleanString(req.query?.state || req.body?.state || "", 2000);
+}
+
+function nvOAuthExtractCodeChallenge(req) {
+  return nvCleanString(req.query?.code_challenge || req.body?.code_challenge || "", 500);
+}
+
+function nvOAuthExtractCodeChallengeMethod(req) {
+  return nvCleanString(req.query?.code_challenge_method || req.body?.code_challenge_method || "", 50);
+}
+
+function nvOAuthValidateAuthorizeParams(req) {
+  const responseType = nvCleanString(req.query?.response_type || req.body?.response_type || "", 80);
+  const clientId = nvOAuthExtractClientId(req);
+  const redirectUri = nvOAuthExtractRedirectUri(req);
+  const scope = nvOAuthExtractScope(req);
+  const state = nvOAuthExtractState(req);
+  const codeChallenge = nvOAuthExtractCodeChallenge(req);
+  const codeChallengeMethod = nvOAuthExtractCodeChallengeMethod(req);
+
+  if (responseType !== "code") {
+    return { ok: false, error: "unsupported_response_type", message: "response_type must be code." };
+  }
+  if (!clientId) {
+    return { ok: false, error: "invalid_request", message: "client_id is required." };
+  }
+  if (!redirectUri) {
+    return { ok: false, error: "invalid_request", message: "redirect_uri must be a valid URL." };
+  }
+  if (!codeChallenge || codeChallengeMethod !== "S256") {
+    return { ok: false, error: "invalid_request", message: "PKCE S256 code_challenge is required." };
+  }
+
+  return {
+    ok: true,
+    clientId,
+    redirectUri,
+    scope,
+    state,
+    codeChallenge,
+    codeChallengeMethod
+  };
+}
+
+function nvOAuthVerifyPkce(codeVerifier = "", expectedChallenge = "") {
+  const verifier = String(codeVerifier || "").trim();
+  const expected = String(expectedChallenge || "").trim();
+  if (!verifier || !expected) return false;
+  const challenge = nvBase64Url(crypto.createHash("sha256").update(verifier, "utf8").digest());
+  return challenge === expected;
+}
+
+async function nvOAuthCreateCodeRecord(data = {}) {
+  const rawCode = nvRandomToken(32);
+  const codeHash = nvSha256(rawCode);
+  const nowMs = Date.now();
+  await nvChatGPTOAuthCodesRef().doc(codeHash).set({
+    clientId: String(data.clientId || ""),
+    redirectUri: String(data.redirectUri || ""),
+    scope: String(data.scope || ""),
+    codeChallenge: String(data.codeChallenge || ""),
+    codeChallengeMethod: String(data.codeChallengeMethod || "S256"),
+    uid: String(data.uid || ""),
+    email: String(data.email || ""),
+    companyId: String(data.companyId || ""),
+    createdAtMs: nowMs,
+    expiresAtMs: nowMs + NV_CHATGPT_OAUTH_CODE_TTL_MS,
+    consumedAtMs: 0,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "chatgptOAuthAuthorize"
+  }, { merge: true });
+  return rawCode;
+}
+
+async function nvOAuthCreateAccessToken(data = {}) {
+  const rawToken = nvRandomToken(48);
+  const tokenHash = nvSha256(rawToken);
+  const nowMs = Date.now();
+  await nvChatGPTOAuthTokensRef().doc(tokenHash).set({
+    clientId: String(data.clientId || ""),
+    scope: String(data.scope || ""),
+    uid: String(data.uid || ""),
+    email: String(data.email || ""),
+    companyId: String(data.companyId || ""),
+    createdAtMs: nowMs,
+    expiresAtMs: nowMs + NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS,
+    revokedAtMs: 0,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: "chatgptOAuthToken"
+  }, { merge: true });
+
+  return {
+    accessToken: rawToken,
+    expiresIn: Math.floor(NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS / 1000)
+  };
+}
+
+async function nvResolveChatGPTOAuthBearer(req) {
+  const authHeader = String(req.get("authorization") || req.get("Authorization") || "").trim();
+  if (!authHeader.toLowerCase().startsWith("bearer ")) return null;
+  const rawToken = authHeader.slice(7).trim();
+  if (!rawToken) return null;
+
+  const tokenHash = nvSha256(rawToken);
+  const tokenSnap = await nvChatGPTOAuthTokensRef().doc(tokenHash).get();
+  if (!tokenSnap.exists) return null;
+
+  const tokenData = tokenSnap.data() || {};
+  const nowMs = Date.now();
+  if (Number(tokenData.revokedAtMs || 0) > 0) return null;
+  if (Number(tokenData.expiresAtMs || 0) <= nowMs) return null;
+
+  return {
+    uid: String(tokenData.uid || ""),
+    email: String(tokenData.email || ""),
+    companyId: String(tokenData.companyId || ""),
+    scope: String(tokenData.scope || ""),
+    clientId: String(tokenData.clientId || ""),
+    tokenHash
+  };
+}
+
+async function nvRequireChatGPTWorkspaceAccessWithOAuth(req, companyId = "") {
+  const oauth = await nvResolveChatGPTOAuthBearer(req);
+  if (oauth?.uid) {
+    const cleanCompanyId = String(companyId || oauth.companyId || "").trim();
+    if (!cleanCompanyId) {
+      throw new HttpsError("invalid-argument", "companyId is required.");
+    }
+
+    const companyRef = admin.firestore().collection("companies").doc(cleanCompanyId);
+    const companySnap = await companyRef.get();
+    if (!companySnap.exists) {
+      throw new HttpsError("not-found", "Workspace not found.");
+    }
+
+    const companyData = companySnap.data() || {};
+    companyData.__workspaceId = cleanCompanyId;
+    if (!uidHasCompanyAccess(companyData, oauth.uid)) {
+      throw new HttpsError("permission-denied", "You do not have access to this workspace.");
+    }
+
+    return {
+      uid: oauth.uid,
+      email: oauth.email,
+      companyId: cleanCompanyId,
+      companyRef,
+      companyData,
+      authType: "chatgpt_oauth",
+      scope: oauth.scope
+    };
+  }
+
+  return nvRequireChatGPTWorkspaceAccess(req, companyId);
+}
+
+exports.chatgptOAuthProtectedResource = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+  nvOAuthJson(res, 200, nvOAuthProtectedResourceMetadata(req));
+});
+
+exports.chatgptOAuthAuthorizationServer = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+  nvOAuthJson(res, 200, nvOAuthAuthorizationServerMetadata(req));
+});
+
+exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+  if (req.method !== "POST") {
+    nvOAuthJson(res, 405, { error: "method_not_allowed", message: "Use POST." });
+    return;
+  }
+
+  const clientId = `chatgpt_${nvRandomToken(18)}`;
+  nvOAuthJson(res, 201, {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code"],
+    response_types: ["code"],
+    scope: "orders.read orders.write notes.write tasks.write"
+  });
+});
+
+exports.chatgptOAuthAuthorize = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+
+  const params = nvOAuthValidateAuthorizeParams(req);
+  if (!params.ok) {
+    nvOAuthJson(res, 400, params);
+    return;
+  }
+
+  // Safety-first skeleton:
+  // This endpoint intentionally does not auto-approve OAuth yet.
+  // Next step: redirect to StudioFlow web login, verify Firebase user session,
+  // choose workspace, then call nvOAuthCreateCodeRecord and redirect back.
+  const loginUrl = process.env.STUDIOFLOW_CHATGPT_LOGIN_URL || "";
+  if (loginUrl) {
+    const login = new URL(loginUrl);
+    login.searchParams.set("client_id", params.clientId);
+    login.searchParams.set("redirect_uri", params.redirectUri);
+    login.searchParams.set("scope", params.scope);
+    login.searchParams.set("state", params.state);
+    login.searchParams.set("code_challenge", params.codeChallenge);
+    login.searchParams.set("code_challenge_method", params.codeChallengeMethod);
+    res.redirect(302, login.toString());
+    return;
+  }
+
+  res.status(501).send(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NivaDesk ChatGPT Connection</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; color: #1d1d1f; margin: 0; padding: 40px; }
+    .card { max-width: 680px; margin: 0 auto; background: white; border-radius: 22px; box-shadow: 0 12px 36px rgba(0,0,0,.08); padding: 28px; }
+    h1 { margin-top: 0; font-size: 28px; }
+    code { background: #f0f0f2; padding: 2px 6px; border-radius: 6px; }
+    .muted { color: #6e6e73; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>NivaDesk ChatGPT connection is prepared</h1>
+    <p class="muted">OAuth metadata is active, but the StudioFlow web login callback is not connected yet.</p>
+    <p class="muted">Next step: set <code>STUDIOFLOW_CHATGPT_LOGIN_URL</code> to your StudioFlow web <code>/chatgpt/connect</code> page.</p>
+    <p class="muted">Client: ${nvOAuthHtmlEscape(params.clientId)}</p>
+  </div>
+</body>
+</html>`);
+});
+
+
+exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+  if (req.method !== "POST") {
+    nvOAuthJson(res, 405, { error: "method_not_allowed", message: "Use POST." });
+    return;
+  }
+
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const clientId = nvCleanString(body.client_id || body.clientId || "", 500);
+    const redirectUri = nvSafeOAuthUri(body.redirect_uri || body.redirectUri || "");
+    const scope = nvCleanString(body.scope || "orders.read orders.write", 500);
+    const state = nvCleanString(body.state || "", 2000);
+    const codeChallenge = nvCleanString(body.code_challenge || body.codeChallenge || "", 500);
+    const codeChallengeMethod = nvCleanString(body.code_challenge_method || body.codeChallengeMethod || "", 50);
+    const companyId = nvCleanString(body.companyId || "", 160);
+
+    if (!clientId || !redirectUri || !codeChallenge || codeChallengeMethod !== "S256") {
+      nvOAuthJson(res, 400, {
+        error: "invalid_request",
+        message: "client_id, redirect_uri, code_challenge and code_challenge_method=S256 are required."
+      });
+      return;
+    }
+
+    if (!companyId) {
+      nvOAuthJson(res, 400, {
+        error: "invalid_request",
+        message: "companyId is required."
+      });
+      return;
+    }
+
+    const context = await nvRequireChatGPTWorkspaceAccess(req, companyId);
+    const code = await nvOAuthCreateCodeRecord({
+      clientId,
+      redirectUri,
+      scope,
+      codeChallenge,
+      codeChallengeMethod,
+      uid: context.uid,
+      email: context.email,
+      companyId: context.companyId
+    });
+
+    const redirect = new URL(redirectUri);
+    redirect.searchParams.set("code", code);
+    if (state) redirect.searchParams.set("state", state);
+
+    nvOAuthJson(res, 200, {
+      ok: true,
+      redirect_uri: redirect.toString(),
+      expires_in: Math.floor(NV_CHATGPT_OAUTH_CODE_TTL_MS / 1000),
+      companyId: context.companyId
+    });
+  } catch (error) {
+    const status = nvMcpHttpStatusFromHttps(error);
+    const message = error?.message || String(error);
+    console.error("chatgptOAuthApprove failed:", error?.code || status, message);
+    nvOAuthJson(res, status, {
+      error: error?.code || "internal",
+      message
+    });
+  }
+});
+
+
+exports.chatgptOAuthToken = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+  if (req.method !== "POST") {
+    nvOAuthJson(res, 405, { error: "method_not_allowed", message: "Use POST." });
+    return;
+  }
+
+  const grantType = nvCleanString(req.body?.grant_type || "", 80);
+  const code = nvCleanString(req.body?.code || "", 500);
+  const redirectUri = nvSafeOAuthUri(req.body?.redirect_uri || "");
+  const clientId = nvCleanString(req.body?.client_id || "", 500);
+  const codeVerifier = nvCleanString(req.body?.code_verifier || "", 500);
+
+  if (grantType !== "authorization_code") {
+    nvOAuthJson(res, 400, { error: "unsupported_grant_type", message: "Only authorization_code is supported." });
+    return;
+  }
+  if (!code || !redirectUri || !clientId || !codeVerifier) {
+    nvOAuthJson(res, 400, { error: "invalid_request", message: "code, redirect_uri, client_id and code_verifier are required." });
+    return;
+  }
+
+  const codeHash = nvSha256(code);
+  const codeRef = nvChatGPTOAuthCodesRef().doc(codeHash);
+  const codeSnap = await codeRef.get();
+
+  if (!codeSnap.exists) {
+    nvOAuthJson(res, 400, { error: "invalid_grant", message: "Invalid or expired authorization code." });
+    return;
+  }
+
+  const codeData = codeSnap.data() || {};
+  const nowMs = Date.now();
+
+  if (Number(codeData.consumedAtMs || 0) > 0 || Number(codeData.expiresAtMs || 0) <= nowMs) {
+    nvOAuthJson(res, 400, { error: "invalid_grant", message: "Authorization code has expired or was already used." });
+    return;
+  }
+  if (String(codeData.clientId || "") !== clientId || String(codeData.redirectUri || "") !== redirectUri) {
+    nvOAuthJson(res, 400, { error: "invalid_grant", message: "Authorization code does not match this client or redirect URI." });
+    return;
+  }
+  if (!nvOAuthVerifyPkce(codeVerifier, codeData.codeChallenge || "")) {
+    nvOAuthJson(res, 400, { error: "invalid_grant", message: "PKCE verification failed." });
+    return;
+  }
+
+  await codeRef.set({
+    consumedAtMs: nowMs,
+    consumedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  const token = await nvOAuthCreateAccessToken({
+    clientId,
+    scope: codeData.scope || "",
+    uid: codeData.uid || "",
+    email: codeData.email || "",
+    companyId: codeData.companyId || ""
+  });
+
+  nvOAuthJson(res, 200, {
+    access_token: token.accessToken,
+    token_type: "Bearer",
+    expires_in: token.expiresIn,
+    scope: codeData.scope || ""
+  });
+});
+
+
+// MARK: - ChatGPT MCP endpoint MVP
+
+const NV_MCP_PROTOCOL_VERSION = "2024-11-05";
+
+function nvMcpServerInfo() {
+  return {
+    name: "NivaDesk StudioFlow",
+    version: "0.1.0"
+  };
+}
+
+function nvMcpText(value = "") {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (_) {
+    return String(value || "");
+  }
+}
+
+function nvMcpJsonRpcResult(id, result = {}) {
+  return {
+    jsonrpc: "2.0",
+    id: id === undefined ? null : id,
+    result
+  };
+}
+
+function nvMcpJsonRpcError(id, code = -32603, message = "Internal error", data = undefined) {
+  const payload = {
+    jsonrpc: "2.0",
+    id: id === undefined ? null : id,
+    error: {
+      code,
+      message: String(message || "Internal error")
+    }
+  };
+  if (data !== undefined) payload.error.data = data;
+  return payload;
+}
+
+function nvMcpErrorCodeFromHttps(error = {}) {
+  const code = error?.code || "";
+  switch (code) {
+    case "unauthenticated": return -32001;
+    case "permission-denied": return -32003;
+    case "not-found": return -32004;
+    case "invalid-argument": return -32602;
+    default: return -32603;
+  }
+}
+
+function nvMcpHttpStatusFromHttps(error = {}) {
+  const code = error?.code || "";
+  switch (code) {
+    case "unauthenticated": return 401;
+    case "permission-denied": return 403;
+    case "not-found": return 404;
+    case "invalid-argument": return 400;
+    default: return 500;
+  }
+}
+
+function nvMcpToolContentFromResult(result = {}) {
+  const action = String(result.action || "");
+  if (action === "create_order") {
+    return `Order created: ${result.orderId || result.id || "new order"}`;
+  }
+  if (action === "search_orders") {
+    return `Found ${result.count || 0} order(s).`;
+  }
+  if (action === "get_order_detail") {
+    const order = result.order || {};
+    return `Order detail: ${order.customerName || order.id || "order"}`;
+  }
+  if (action === "add_order_note") {
+    return `Note added to order ${result.orderId || ""}.`;
+  }
+  if (action === "update_order_status") {
+    return `Order status updated: ${result.orderId || ""}.`;
+  }
+  return nvMcpText(result);
+}
+
+function nvMcpToolResult(result = {}) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: nvMcpToolContentFromResult(result)
+      }
+    ],
+    structuredContent: result,
+    isError: false
+  };
+}
+
+function nvMcpToolErrorResult(error = {}) {
+  const code = error?.code || "internal";
+  const message = error?.message || String(error);
+  return {
+    content: [
+      {
+        type: "text",
+        text: message
+      }
+    ],
+    structuredContent: {
+      ok: false,
+      error: code,
+      message
+    },
+    isError: true
+  };
+}
+
+function nvMcpOrderToolSchemas() {
+  return [
+    {
+      name: "create_order",
+      title: "Create order",
+      description: "Create a new NivaDesk / StudioFlow order in a workspace. Use this only after the user provides enough order details or confirms creating a draft order.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId"],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Workspace/company ID where the order should be created."
+          },
+          customerName: {
+            type: "string",
+            description: "Customer name or project name."
+          },
+          email: {
+            type: "string",
+            description: "Customer email address."
+          },
+          phone: {
+            type: "string",
+            description: "Customer phone or WhatsApp number."
+          },
+          instagram: {
+            type: "string",
+            description: "Customer Instagram username."
+          },
+          watchModel: {
+            type: "string",
+            description: "Watch model or reference, for example Rolex Datejust 41."
+          },
+          designBrief: {
+            type: "string",
+            description: "Short design brief or customer request."
+          },
+          designName: {
+            type: "string",
+            description: "Internal design/project name."
+          },
+          price: {
+            type: "number",
+            description: "Total quoted price."
+          },
+          paidAmount: {
+            type: "number",
+            description: "Already paid amount, for example deposit amount."
+          },
+          dueDate: {
+            type: "string",
+            description: "Delivery due date in YYYY-MM-DD format where possible."
+          },
+          deliveryDays: {
+            type: "number",
+            description: "Alternative to dueDate: number of days until due."
+          },
+          status: {
+            type: "string",
+            description: "Initial order status."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "search_orders",
+      title: "Search orders",
+      description: "Search orders in the user's workspace by customer name, email, watch model, status, order ID, or keyword.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId"],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Workspace/company ID to search."
+          },
+          query: {
+            type: "string",
+            description: "Search keyword, customer name, email, watch model, or order ID."
+          },
+          status: {
+            type: "string",
+            description: "Optional status filter."
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of orders to return. Default is 10."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "get_order_detail",
+      title: "Get order detail",
+      description: "Get full safe order details for one order in the user's workspace.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "orderId"],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Workspace/company ID."
+          },
+          orderId: {
+            type: "string",
+            description: "Order document ID."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "add_order_note",
+      title: "Add order note",
+      description: "Append an internal note to an existing order.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "orderId", "note"],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Workspace/company ID."
+          },
+          orderId: {
+            type: "string",
+            description: "Order document ID."
+          },
+          note: {
+            type: "string",
+            description: "Note text to append."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "update_order_status",
+      title: "Update order status",
+      description: "Update an order status or design status. Use only when the user clearly asks to update the order.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "orderId"],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Workspace/company ID."
+          },
+          orderId: {
+            type: "string",
+            description: "Order document ID."
+          },
+          status: {
+            type: "string",
+            description: "New main order status."
+          },
+          designStatus: {
+            type: "string",
+            description: "New design/workflow status."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    }
+  ];
+}
+
+function nvMcpInitializeResult() {
+  return {
+    protocolVersion: NV_MCP_PROTOCOL_VERSION,
+    serverInfo: nvMcpServerInfo(),
+    capabilities: {
+      tools: {}
+    },
+    instructions: [
+      "This MCP server connects ChatGPT to NivaDesk / StudioFlow workspace order actions.",
+      "Always ask for confirmation before creating or changing important order data when user intent is ambiguous.",
+      "Never reveal data from another workspace. All tool calls require companyId and a valid Firebase ID token.",
+      "Respect workspace roles: view-only and workflow-only users cannot create or update orders."
+    ].join("\n")
+  };
+}
+
+function nvMcpProtectedResourceMetadata(req) {
+  return nvOAuthProtectedResourceMetadata(req);
+}
+
+async function nvHandleMcpToolCall(req, params = {}) {
+  const toolName = nvCleanString(params.name || "", 120);
+  const args = params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
+    ? params.arguments
+    : {};
+  const companyId = nvCleanString(args.companyId || "", 160);
+
+  if (!toolName) {
+    throw new HttpsError("invalid-argument", "Tool name is required.");
+  }
+
+  const context = await nvRequireChatGPTWorkspaceAccessWithOAuth(req, companyId);
+  return nvChatGPTDispatchAction(context, toolName, args);
+}
+
+async function nvHandleMcpRequest(req, body = {}) {
+  const id = body.id === undefined ? null : body.id;
+  const method = String(body.method || "").trim();
+  const params = body.params && typeof body.params === "object" && !Array.isArray(body.params) ? body.params : {};
+
+  switch (method) {
+    case "initialize":
+      return nvMcpJsonRpcResult(id, nvMcpInitializeResult());
+
+    case "ping":
+      return nvMcpJsonRpcResult(id, {});
+
+    case "tools/list":
+      return nvMcpJsonRpcResult(id, { tools: nvMcpOrderToolSchemas() });
+
+    case "tools/call": {
+      try {
+        const result = await nvHandleMcpToolCall(req, params);
+        return nvMcpJsonRpcResult(id, nvMcpToolResult(result));
+      } catch (error) {
+        return nvMcpJsonRpcResult(id, nvMcpToolErrorResult(error));
+      }
+    }
+
+    default:
+      return nvMcpJsonRpcError(id, -32601, `Method not found: ${method || "(empty)"}`);
+  }
+}
+
+exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+
+  if (req.method === "GET") {
+    res.status(200).json({
+      ok: true,
+      name: "NivaDesk StudioFlow MCP",
+      serverInfo: nvMcpServerInfo(),
+      protectedResource: nvMcpProtectedResourceMetadata(req),
+      tools: nvMcpOrderToolSchemas().map((tool) => ({
+        name: tool.name,
+        title: tool.title,
+        description: tool.description
+      }))
+    });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "method-not-allowed", message: "Use POST." });
+    return;
+  }
+
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const response = await nvHandleMcpRequest(req, body);
+    res.status(200).json(response);
+  } catch (error) {
+    const code = nvMcpErrorCodeFromHttps(error);
+    const status = nvMcpHttpStatusFromHttps(error);
+    const message = error?.message || String(error);
+    console.error("chatgptMcp failed:", error?.code || code, message);
+    if (status === 401) {
+      const metadataUrl = nvOAuthEndpointUrl(req, "chatgptOAuthProtectedResource");
+      res.set("WWW-Authenticate", `Bearer realm="NivaDesk StudioFlow MCP", resource_metadata="${metadataUrl}"`);
+    }
+    res.status(status).json(nvMcpJsonRpcError(null, code, message));
+  }
+});
+
+
+exports.chatgptWorkspaceAction = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "method-not-allowed", message: "Use POST." });
+    return;
+  }
+
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const companyId = nvCleanString(body.companyId || "", 160);
+    const action = nvCleanString(body.action || "", 120);
+    const args = body.arguments && typeof body.arguments === "object" && !Array.isArray(body.arguments) ? body.arguments : {};
+    const context = await nvRequireChatGPTWorkspaceAccess(req, companyId);
+    const result = await nvChatGPTDispatchAction(context, action, args);
+    res.status(200).json(result);
+  } catch (error) {
+    const code = error?.code || "internal";
+    const message = error?.message || String(error);
+    const httpStatus =
+      code === "unauthenticated" ? 401 :
+      code === "permission-denied" ? 403 :
+      code === "not-found" ? 404 :
+      code === "invalid-argument" ? 400 : 500;
+
+    console.error("chatgptWorkspaceAction failed:", code, message);
+    res.status(httpStatus).json({ ok: false, error: code, message });
+  }
 });

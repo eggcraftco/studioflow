@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
@@ -24,11 +25,18 @@ import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
+import uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
+
+sealed class PendingActivityNavigation {
+    object Messages : PendingActivityNavigation()
+    object Orders : PendingActivityNavigation()
+    data class Support(val ticketId: String, val ticketType: String) : PendingActivityNavigation()
+}
 
 data class StudioFlowUiState(
     val loading: Boolean = true,
@@ -55,6 +63,9 @@ data class StudioFlowUiState(
     val archivedThreadMarkers: Map<String, Long> = emptyMap(),
     val savedMessageIdsByThreadId: Map<String, Set<String>> = emptyMap(),
     val forwardingMessage: StudioMessageItem? = null,
+    val messageWorkspaceSettings: StudioMessageWorkspaceSettings = StudioMessageWorkspaceSettings(),
+    val isSavingMessageWorkspaceSettings: Boolean = false,
+    val messageWorkspaceSettingsStatus: String = "",
     val messageError: String = "",
     val activityNotifications: List<StudioActivityNotification> = emptyList(),
     val activityNotificationUnreadCount: Int = 0,
@@ -62,6 +73,10 @@ data class StudioFlowUiState(
     val activityNotificationReadFilter: String = "all",
     val activityNotificationTypeFilter: String = "all",
     val dismissedActivityNotificationIds: Set<String> = emptySet(),
+    val pendingActivityNavigation: PendingActivityNavigation? = null,
+    val keepNotes: List<StudioKeepNote> = emptyList(),
+    val keepNotesSearch: String = "",
+    val keepNotesSection: String = "notes",
     val errorMessage: String = "",
     val settingsMessage: String = ""
 )
@@ -73,6 +88,8 @@ class StudioFlowViewModel @JvmOverloads constructor(
     private val mutableState = MutableStateFlow(StudioFlowUiState())
     private val draftPrefs: SharedPreferences =
         application.getSharedPreferences("studio_message_drafts", Context.MODE_PRIVATE)
+    private val messagePrefs: SharedPreferences =
+        application.getSharedPreferences("studio_message_local", Context.MODE_PRIVATE)
 
     fun loadDraft(workspaceId: String, threadId: String): String {
         if (workspaceId.isBlank() || threadId.isBlank()) return ""
@@ -91,6 +108,87 @@ class StudioFlowViewModel @JvmOverloads constructor(
     private fun draftKey(workspaceId: String, uid: String, threadId: String): String =
         "draft_${workspaceId}_${uid}_$threadId"
 
+    private fun savedKey(workspaceId: String, uid: String): String =
+        "saved_${workspaceId}_$uid"
+
+    private fun archiveKey(workspaceId: String, uid: String): String =
+        "archive_${workspaceId}_$uid"
+
+    private fun dismissedNotifKey(workspaceId: String, uid: String): String =
+        "dismissed_notifs_${workspaceId}_$uid"
+
+    private fun loadDismissedNotifs(workspaceId: String, uid: String): Set<String> {
+        if (workspaceId.isBlank() || uid.isBlank()) return emptySet()
+        val raw = messagePrefs.getString(dismissedNotifKey(workspaceId, uid), "").orEmpty()
+        if (raw.isBlank()) return emptySet()
+        return runCatching {
+            val arr = org.json.JSONArray(raw)
+            val out = mutableSetOf<String>()
+            for (i in 0 until arr.length()) {
+                val s = arr.optString(i).trim()
+                if (s.isNotEmpty()) out.add(s)
+            }
+            out.toSet()
+        }.getOrDefault(emptySet())
+    }
+
+    private fun persistDismissedNotifs(workspaceId: String, uid: String, ids: Set<String>) {
+        if (workspaceId.isBlank() || uid.isBlank()) return
+        val arr = org.json.JSONArray(ids.take(500).toList())
+        messagePrefs.edit().putString(dismissedNotifKey(workspaceId, uid), arr.toString()).apply()
+    }
+
+    private fun loadSavedMessages(workspaceId: String, uid: String): Map<String, Set<String>> {
+        if (workspaceId.isBlank() || uid.isBlank()) return emptyMap()
+        val raw = messagePrefs.getString(savedKey(workspaceId, uid), "").orEmpty()
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            val out = mutableMapOf<String, Set<String>>()
+            obj.keys().forEach { threadId ->
+                val arr = obj.optJSONArray(threadId) ?: return@forEach
+                val set = mutableSetOf<String>()
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i).trim()
+                    if (s.isNotEmpty()) set.add(s)
+                }
+                if (set.isNotEmpty()) out[threadId] = set
+            }
+            out.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun persistSavedMessages(workspaceId: String, uid: String, map: Map<String, Set<String>>) {
+        if (workspaceId.isBlank() || uid.isBlank()) return
+        val obj = org.json.JSONObject()
+        map.forEach { (threadId, ids) ->
+            obj.put(threadId, org.json.JSONArray(ids))
+        }
+        messagePrefs.edit().putString(savedKey(workspaceId, uid), obj.toString()).apply()
+    }
+
+    private fun loadArchivedMarkers(workspaceId: String, uid: String): Map<String, Long> {
+        if (workspaceId.isBlank() || uid.isBlank()) return emptyMap()
+        val raw = messagePrefs.getString(archiveKey(workspaceId, uid), "").orEmpty()
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            val out = mutableMapOf<String, Long>()
+            obj.keys().forEach { threadId ->
+                val ts = obj.optLong(threadId, 0L)
+                if (ts > 0L) out[threadId] = ts
+            }
+            out.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun persistArchivedMarkers(workspaceId: String, uid: String, map: Map<String, Long>) {
+        if (workspaceId.isBlank() || uid.isBlank()) return
+        val obj = org.json.JSONObject()
+        map.forEach { (threadId, ts) -> obj.put(threadId, ts) }
+        messagePrefs.edit().putString(archiveKey(workspaceId, uid), obj.toString()).apply()
+    }
+
     val state: StateFlow<StudioFlowUiState> = mutableState.asStateFlow()
     private var workspaceJob: Job? = null
     private var ordersJob: Job? = null
@@ -105,6 +203,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
     private var messageTypingSenderJob: Job? = null
     private var lastTypingSentAt: Long = 0L
     private var activityNotificationsJob: Job? = null
+    private var keepNotesJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -121,6 +220,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 messagePresenceJob?.cancel()
                 messageTypingSenderJob?.cancel()
                 activityNotificationsJob?.cancel()
+                keepNotesJob?.cancel()
                 if (user == null) {
                     StudioMessageRouteHolder.clearCurrentCompanyId()
                     mutableState.value = StudioFlowUiState(loading = false)
@@ -784,10 +884,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
     fun toggleThreadArchive(threadId: String) {
         val clean = threadId.trim()
         if (clean.isBlank()) return
+        val workspace = mutableState.value.workspace ?: return
+        val uid = mutableState.value.user?.uid.orEmpty()
         mutableState.update { current ->
             val markers = current.archivedThreadMarkers.toMutableMap()
             if (markers.containsKey(clean)) markers.remove(clean)
             else markers[clean] = System.currentTimeMillis()
+            persistArchivedMarkers(workspace.id, uid, markers)
             current.copy(archivedThreadMarkers = markers)
         }
     }
@@ -796,11 +899,14 @@ class StudioFlowViewModel @JvmOverloads constructor(
         val ct = threadId.trim()
         val cm = messageId.trim()
         if (ct.isBlank() || cm.isBlank()) return
+        val workspace = mutableState.value.workspace ?: return
+        val uid = mutableState.value.user?.uid.orEmpty()
         mutableState.update { current ->
             val map = current.savedMessageIdsByThreadId.toMutableMap()
             val set = (map[ct] ?: emptySet()).toMutableSet()
             if (set.contains(cm)) set.remove(cm) else set.add(cm)
-            map[ct] = set
+            if (set.isEmpty()) map.remove(ct) else map[ct] = set
+            persistSavedMessages(workspace.id, uid, map)
             current.copy(savedMessageIdsByThreadId = map)
         }
     }
@@ -926,7 +1032,25 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun markActivityNotificationRead(notificationId: String) {
         val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
         if (notificationId.isBlank()) return
+        // Optimistic local update — UI hemen yansisin
+        mutableState.update { current ->
+            val now = java.util.Date()
+            val updated = current.activityNotifications.map { item ->
+                if (item.id == notificationId) {
+                    val readBy = item.readBy.toMutableMap()
+                    readBy[user.uid] = now
+                    val email = user.email.orEmpty().lowercase()
+                    if (email.isNotEmpty()) readBy[email] = now
+                    item.copy(readBy = readBy)
+                } else item
+            }
+            val unread = updated
+                .filter { !current.dismissedActivityNotificationIds.contains(it.id) && !it.isDismissed(user.uid, user.email.orEmpty()) }
+                .count { it.isUnread(user.uid, user.email.orEmpty()) }
+            current.copy(activityNotifications = updated, activityNotificationUnreadCount = unread)
+        }
         viewModelScope.launch {
             runCatching { repository.markActivityNotificationRead(workspace, notificationId) }
         }
@@ -934,6 +1058,19 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun markAllActivityNotificationsRead() {
         val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        // Optimistic local update
+        mutableState.update { current ->
+            val now = java.util.Date()
+            val email = user.email.orEmpty().lowercase()
+            val updated = current.activityNotifications.map { item ->
+                val readBy = item.readBy.toMutableMap()
+                readBy[user.uid] = now
+                if (email.isNotEmpty()) readBy[email] = now
+                item.copy(readBy = readBy)
+            }
+            current.copy(activityNotifications = updated, activityNotificationUnreadCount = 0)
+        }
         viewModelScope.launch {
             runCatching { repository.markAllActivityNotificationsRead(workspace) }
         }
@@ -941,18 +1078,143 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun dismissActivityNotifications(notificationIds: List<String>) {
         val workspace = mutableState.value.workspace ?: return
+        val uid = mutableState.value.user?.uid.orEmpty()
         val clean = notificationIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (clean.isEmpty()) return
-        mutableState.update { it.copy(dismissedActivityNotificationIds = it.dismissedActivityNotificationIds + clean) }
+        mutableState.update {
+            val next = it.dismissedActivityNotificationIds + clean
+            persistDismissedNotifs(workspace.id, uid, next)
+            it.copy(dismissedActivityNotificationIds = next)
+        }
         viewModelScope.launch {
             runCatching { repository.dismissActivityNotifications(workspace, clean) }
         }
     }
 
+    // — Keep Notes actions —
+    fun setKeepNotesSearch(query: String) {
+        mutableState.update { it.copy(keepNotesSearch = query) }
+    }
+
+    fun setKeepNotesSection(section: String) {
+        mutableState.update { it.copy(keepNotesSection = section) }
+    }
+
+    fun saveKeepNote(note: StudioKeepNote) {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        val finalNote = if (note.ownerUserId.isBlank()) {
+            note.copy(
+                ownerUserId = user.uid,
+                ownerEmail = user.email.orEmpty(),
+                ownerName = user.displayName.orEmpty()
+            )
+        } else note
+        viewModelScope.launch {
+            runCatching { repository.saveKeepNote(workspace.id, user.uid, finalNote) }
+                .onFailure { e -> mutableState.update { it.copy(errorMessage = e.message ?: "Could not save note.") } }
+        }
+    }
+
+    fun deleteKeepNote(noteId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val uid = mutableState.value.user?.uid ?: return
+        viewModelScope.launch {
+            runCatching { repository.deleteKeepNote(workspace.id, uid, noteId) }
+        }
+    }
+
+    fun uploadKeepNoteImage(
+        note: StudioKeepNote,
+        bytes: ByteArray,
+        contentType: String,
+        fileName: String
+    ) {
+        val workspace = mutableState.value.workspace ?: return
+        val uid = mutableState.value.user?.uid ?: return
+        viewModelScope.launch {
+            runCatching {
+                val url = repository.uploadKeepNoteImage(workspace.id, uid, note.id, bytes, contentType, fileName)
+                if (url.isNotBlank()) {
+                    repository.saveKeepNote(
+                        workspace.id, uid,
+                        note.copy(links = note.links + url, updatedAt = java.util.Date())
+                    )
+                }
+            }.onFailure { e ->
+                mutableState.update { it.copy(errorMessage = e.message ?: "Could not upload image.") }
+            }
+        }
+    }
+
     fun openActivityNotification(notification: StudioActivityNotification) {
         markActivityNotificationRead(notification.id)
-        if (notification.threadId.isNotBlank()) {
-            selectMessageThread(notification.threadId)
+        val threadId = notification.threadId.trim()
+        val ticketId = notification.ticketId.trim()
+        val orderId = notification.orderId.trim()
+        val route = notification.route.trim().lowercase()
+        when {
+            route == "messagethread" || threadId.isNotEmpty() -> {
+                if (threadId.isNotEmpty()) selectMessageThread(threadId)
+                mutableState.update { it.copy(pendingActivityNavigation = PendingActivityNavigation.Messages) }
+            }
+            route == "supportticket" || ticketId.isNotEmpty() -> {
+                mutableState.update {
+                    it.copy(
+                        pendingActivityNavigation = PendingActivityNavigation.Support(
+                            ticketId = ticketId,
+                            ticketType = notification.ticketType.ifBlank { "workspace" }
+                        )
+                    )
+                }
+            }
+            route == "order" || orderId.isNotEmpty() -> {
+                mutableState.update { it.copy(pendingActivityNavigation = PendingActivityNavigation.Orders) }
+            }
+        }
+    }
+
+    fun consumePendingActivityNavigation() {
+        mutableState.update { it.copy(pendingActivityNavigation = null) }
+    }
+
+    fun saveMessageWorkspaceSettings(settings: StudioMessageWorkspaceSettings) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(
+                    isSavingMessageWorkspaceSettings = true,
+                    messageWorkspaceSettings = settings,
+                    messageWorkspaceSettingsStatus = ""
+                )
+            }
+            runCatching { repository.setMessageWorkspaceSettings(workspace, settings) }
+                .onSuccess {
+                    mutableState.update {
+                        it.copy(
+                            isSavingMessageWorkspaceSettings = false,
+                            messageWorkspaceSettingsStatus = "Message settings saved."
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(
+                            isSavingMessageWorkspaceSettings = false,
+                            messageWorkspaceSettingsStatus = "Error: ${error.message ?: "Could not save."}"
+                        )
+                    }
+                }
+        }
+    }
+
+    fun reloadMessageWorkspaceSettings() {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.getMessageWorkspaceSettings(workspace) }
+                .onSuccess { settings ->
+                    mutableState.update { it.copy(messageWorkspaceSettings = settings, messageWorkspaceSettingsStatus = "") }
+                }
         }
     }
 
@@ -1122,6 +1384,9 @@ class StudioFlowViewModel @JvmOverloads constructor(
         messageThreadsJob?.cancel()
         messageItemsJob?.cancel()
         messageTeamMembersJob?.cancel()
+        val savedFromPrefs = loadSavedMessages(workspace.id, user.uid)
+        val archivedFromPrefs = loadArchivedMarkers(workspace.id, user.uid)
+        val dismissedFromPrefs = loadDismissedNotifs(workspace.id, user.uid)
         mutableState.update {
             it.copy(
                 messageThreads = emptyList(),
@@ -1129,6 +1394,9 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 selectedMessageThreadId = "",
                 messageItemsByThreadId = emptyMap(),
                 messageUnreadCount = 0,
+                savedMessageIdsByThreadId = savedFromPrefs,
+                archivedThreadMarkers = archivedFromPrefs,
+                dismissedActivityNotificationIds = dismissedFromPrefs,
                 messageError = ""
             )
         }
@@ -1162,20 +1430,46 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(messageTeamMembers = members) }
                 }
         }
+        viewModelScope.launch {
+            runCatching { repository.getMessageWorkspaceSettings(workspace) }
+                .onSuccess { settings ->
+                    mutableState.update { it.copy(messageWorkspaceSettings = settings) }
+                }
+        }
         activityNotificationsJob = viewModelScope.launch {
             repository.activityNotificationsFlow(workspace, user.uid, user.email.orEmpty())
                 .catch { }
                 .collect { items ->
                     val uid = user.uid
-                    val email = user.email.orEmpty()
+                    val email = user.email.orEmpty().lowercase()
                     mutableState.update { current ->
-                        val visible = items.filter { !current.dismissedActivityNotificationIds.contains(it.id) }
+                        // Merge optimistic local readBy entries with server data so a recent
+                        // mark-all-read doesn't get reverted by a stale snapshot that arrives
+                        // before the Cloud Function has finished writing.
+                        val prevById = current.activityNotifications.associateBy { it.id }
+                        val merged = items.map { incoming ->
+                            val prev = prevById[incoming.id] ?: return@map incoming
+                            val mergedRead = incoming.readBy.toMutableMap()
+                            prev.readBy[uid]?.let { d -> if (mergedRead[uid] == null) mergedRead[uid] = d }
+                            if (email.isNotEmpty()) {
+                                prev.readBy[email]?.let { d -> if (mergedRead[email] == null) mergedRead[email] = d }
+                            }
+                            incoming.copy(readBy = mergedRead)
+                        }
+                        val visible = merged.filter { !current.dismissedActivityNotificationIds.contains(it.id) }
                         val unread = visible.count { it.isUnread(uid, email) && !it.isDismissed(uid, email) }
                         current.copy(
-                            activityNotifications = items,
+                            activityNotifications = merged,
                             activityNotificationUnreadCount = unread
                         )
                     }
+                }
+        }
+        keepNotesJob = viewModelScope.launch {
+            repository.keepNotesFlow(workspace.id, user.uid)
+                .catch { }
+                .collect { items ->
+                    mutableState.update { it.copy(keepNotes = items) }
                 }
         }
         settingsJob = viewModelScope.launch {

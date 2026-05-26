@@ -323,6 +323,7 @@ fun OrdersScreen(
                 }
             }
         } else if (selectedOrder != null) {
+            androidx.activity.compose.BackHandler(enabled = true) { selectedOrderId = null }
             OrderDetailScreen(
                 order = selectedOrder,
                 workspace = workspace,

@@ -3,6 +3,7 @@ package uk.co.eggcraft.studioflow.features.messages
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -16,7 +17,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -27,7 +33,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -35,6 +44,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
@@ -65,6 +75,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,6 +99,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -124,6 +136,9 @@ fun MessagesScreen(
     onSaveDraft: (String, String, String) -> Unit
 ) {
     val workspaceId = state.workspace?.id.orEmpty()
+    val workspaceMessageSettings = state.messageWorkspaceSettings
+    val canCreateAnyConversation =
+        workspaceMessageSettings.directMessagesEnabled || workspaceMessageSettings.groupConversationsEnabled
     val currentUid = state.user?.uid.orEmpty()
     val threads = state.messageThreads
     val selectedId = state.selectedMessageThreadId
@@ -149,6 +164,10 @@ fun MessagesScreen(
     }
 
     var editingMessage by remember { mutableStateOf<StudioMessageItem?>(null) }
+    var viewerImage by remember { mutableStateOf<StudioMessageItem?>(null) }
+    var phoneShowingConversation by rememberSaveable(selectedThread?.id) {
+        mutableStateOf(false)
+    }
     var scrollToMessageId by remember { mutableStateOf("") }
     var newConversationOpen by remember { mutableStateOf(false) }
     var threadInfoOpen by remember { mutableStateOf(false) }
@@ -157,7 +176,99 @@ fun MessagesScreen(
     var searchVisible by remember(selectedThread?.id) { mutableStateOf(false) }
     var mutePickerOpen by remember { mutableStateOf(false) }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        val isPhone = maxWidth < 600.dp
+
+        // ---- PHONE LAYOUT (stacked nav: list OR conversation) ----
+        if (isPhone) {
+            if (phoneShowingConversation && selectedThread != null) {
+                BackHandler(enabled = true) { phoneShowingConversation = false }
+                ConversationPanel(
+                    thread = selectedThread,
+                    allItems = allItems,
+                    displayedItems = displayedItems,
+                    savedIds = savedIds,
+                    currentUid = currentUid,
+                    teamMembers = state.messageTeamMembers,
+                    typingUsers = typingUsers,
+                    errorMessage = state.messageError,
+                    replyingTo = state.replyingToMessage,
+                    isSending = state.isSendingMessage,
+                    scrollToMessageId = scrollToMessageId,
+                    searchVisible = searchVisible,
+                    searchQuery = state.messageSearchQuery,
+                    attachmentFilter = state.messageAttachmentFilter,
+                    showSavedOnly = showSavedOnly,
+                    mutePickerOpen = mutePickerOpen,
+                    onScrollHandled = { scrollToMessageId = "" },
+                    onSendMessage = onSendMessage,
+                    onSendMessageWithAttachment = onSendMessageWithAttachment,
+                    onClearReply = { onSetReplyingToMessage(null) },
+                    onReply = { onSetReplyingToMessage(it) },
+                    onEdit = { editingMessage = it },
+                    onDeleteForMe = { onDeleteMessageForMe(it.id) },
+                    onDeleteForEveryone = { onDeleteMessageForEveryone(it.id) },
+                    onToggleReaction = onToggleReaction,
+                    onTogglePin = onTogglePin,
+                    onJumpToMessage = { scrollToMessageId = it },
+                    onToggleSaved = { msg ->
+                        selectedThread.id.let { tid -> onToggleSavedMessage(tid, msg.id) }
+                    },
+                    onForward = { onSetForwardingMessage(it) },
+                    onOpenImage = { viewerImage = it },
+                    onToggleSearchVisible = { searchVisible = !searchVisible; if (!searchVisible) onSetMessageSearchQuery("") },
+                    onSearchQueryChange = onSetMessageSearchQuery,
+                    onAttachmentFilterChange = onSetMessageAttachmentFilter,
+                    onToggleSavedFilter = { showSavedOnly = !showSavedOnly },
+                    onOpenInfo = { threadInfoOpen = true },
+                    onComposerTextChanged = onComposerTextChanged,
+                    onOpenMutePicker = { mutePickerOpen = true },
+                    onDismissMutePicker = { mutePickerOpen = false },
+                    onSetMute = { mode ->
+                        selectedThread.id.let { tid -> onSetThreadMute(tid, mode) }
+                        mutePickerOpen = false
+                    },
+                    workspaceId = workspaceId,
+                    attachmentsEnabled = workspaceMessageSettings.attachmentsEnabled,
+                    onLoadDraft = onLoadDraft,
+                    onSaveDraft = onSaveDraft,
+                    onBack = { phoneShowingConversation = false },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ThreadListPanel(
+                        threads = threads,
+                        archivedMarkers = archivedMarkers,
+                        selectedId = selectedThread?.id.orEmpty(),
+                        currentUid = currentUid,
+                        teamMembers = state.messageTeamMembers,
+                        unreadCount = state.messageUnreadCount,
+                        onSelectThread = { id ->
+                            onSelectThread(id)
+                            phoneShowingConversation = true
+                        },
+                        onToggleArchive = onToggleThreadArchive
+                    )
+                    if (canCreateAnyConversation) {
+                        FloatingActionButton(
+                            onClick = { newConversationOpen = true },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "New conversation")
+                        }
+                    }
+                }
+            }
+            return@BoxWithConstraints
+        }
+
+        // ---- TABLET / DESKTOP LAYOUT (split view) ----
+        Row(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.width(320.dp).fillMaxSize()) {
             ThreadListPanel(
                 threads = threads,
@@ -169,13 +280,15 @@ fun MessagesScreen(
                 onSelectThread = onSelectThread,
                 onToggleArchive = onToggleThreadArchive
             )
-            FloatingActionButton(
-                onClick = { newConversationOpen = true },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "New conversation")
+            if (canCreateAnyConversation) {
+                FloatingActionButton(
+                    onClick = { newConversationOpen = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "New conversation")
+                }
             }
         }
         Box(
@@ -216,6 +329,7 @@ fun MessagesScreen(
                 selectedThread?.id?.let { tid -> onToggleSavedMessage(tid, msg.id) }
             },
             onForward = { onSetForwardingMessage(it) },
+            onOpenImage = { viewerImage = it },
             onToggleSearchVisible = { searchVisible = !searchVisible; if (!searchVisible) onSetMessageSearchQuery("") },
             onSearchQueryChange = onSetMessageSearchQuery,
             onAttachmentFilterChange = onSetMessageAttachmentFilter,
@@ -229,12 +343,15 @@ fun MessagesScreen(
                 mutePickerOpen = false
             },
             workspaceId = workspaceId,
+            attachmentsEnabled = workspaceMessageSettings.attachmentsEnabled,
             onLoadDraft = onLoadDraft,
             onSaveDraft = onSaveDraft,
+            onBack = null,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         )
+        }
     }
 
     editingMessage?.let { msg ->
@@ -245,9 +362,19 @@ fun MessagesScreen(
         )
     }
 
+    viewerImage?.let { img ->
+        ImageViewerDialog(
+            imageUrl = img.fileURL,
+            fileName = img.fileName,
+            onDismiss = { viewerImage = null }
+        )
+    }
+
     if (newConversationOpen) {
         NewConversationDialog(
             teamMembers = state.messageTeamMembers.filter { it.id != currentUid },
+            allowDirect = workspaceMessageSettings.directMessagesEnabled,
+            allowGroup = workspaceMessageSettings.groupConversationsEnabled,
             onDismiss = { newConversationOpen = false },
             onCreateDirect = { uid -> onCreateDirectMessageThread(uid); newConversationOpen = false },
             onCreateGroup = { uids, title -> onCreateGroupMessageThread(uids, title); newConversationOpen = false }
@@ -526,6 +653,7 @@ private fun ConversationPanel(
     onJumpToMessage: (String) -> Unit,
     onToggleSaved: (StudioMessageItem) -> Unit,
     onForward: (StudioMessageItem) -> Unit,
+    onOpenImage: (StudioMessageItem) -> Unit,
     onToggleSearchVisible: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onAttachmentFilterChange: (String) -> Unit,
@@ -536,8 +664,10 @@ private fun ConversationPanel(
     onDismissMutePicker: () -> Unit,
     onSetMute: (String) -> Unit,
     workspaceId: String,
+    attachmentsEnabled: Boolean,
     onLoadDraft: (String, String) -> String,
     onSaveDraft: (String, String, String) -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     if (thread == null) {
@@ -562,7 +692,7 @@ private fun ConversationPanel(
 
     val pinnedItems = allItems.filter { it.pinned && !it.isDeleted }
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier.navigationBarsPadding().imePadding()) {
         ConversationHeader(
             thread = thread,
             currentUid = currentUid,
@@ -574,7 +704,8 @@ private fun ConversationPanel(
             onOpenMutePicker = onOpenMutePicker,
             mutePickerOpen = mutePickerOpen,
             onDismissMutePicker = onDismissMutePicker,
-            onSetMute = onSetMute
+            onSetMute = onSetMute,
+            onBack = onBack
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (searchVisible) {
@@ -623,7 +754,8 @@ private fun ConversationPanel(
                             onToggleReaction = { emoji -> onToggleReaction(item.id, emoji) },
                             onTogglePin = { onTogglePin(item.id, item.pinned) },
                             onToggleSaved = { onToggleSaved(item) },
-                            onForward = { onForward(item) }
+                            onForward = { onForward(item) },
+                            onOpenImage = { onOpenImage(item) }
                         )
                     }
                 }
@@ -638,6 +770,7 @@ private fun ConversationPanel(
             teamMembers = teamMembers,
             workspaceId = workspaceId,
             threadId = thread.id,
+            attachmentsEnabled = attachmentsEnabled,
             onClearReply = onClearReply,
             onSend = onSendMessage,
             onSendAttachment = onSendMessageWithAttachment,
@@ -660,36 +793,42 @@ private fun ConversationHeader(
     onOpenMutePicker: () -> Unit,
     mutePickerOpen: Boolean,
     onDismissMutePicker: () -> Unit,
-    onSetMute: (String) -> Unit
+    onSetMute: (String) -> Unit,
+    onBack: (() -> Unit)? = null
 ) {
+    var moreOpen by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         ThreadAvatar(thread, currentUid, teamMembers)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(thread.displayTitle(currentUid, teamMembers), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+            Text(
+                thread.displayTitle(currentUid, teamMembers),
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 17.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
             val subtitle = when {
-                thread.isTeamThread -> "Workspace broadcast channel"
+                thread.isTeamThread -> "Workspace group conversation"
                 thread.isDirectThread -> "Direct message"
                 thread.isGroupThread -> "${thread.memberUids.size} members"
                 else -> ""
             }
             if (subtitle.isNotBlank()) {
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(
+                    subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    maxLines = 1
+                )
             }
         }
-        IconButton(onClick = onToggleSavedFilter) {
-            Icon(
-                if (showSavedOnly) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                contentDescription = "Saved messages"
-            )
-        }
-        IconButton(onClick = onToggleSearchVisible) { Icon(Icons.Filled.Search, contentDescription = "Search") }
         Box {
             IconButton(onClick = onOpenMutePicker) {
-                Icon(Icons.Filled.NotificationsOff, contentDescription = "Mute")
+                Icon(Icons.Filled.NotificationsOff, contentDescription = "Mute", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             DropdownMenu(expanded = mutePickerOpen, onDismissRequest = onDismissMutePicker) {
                 DropdownMenuItem(text = { Text("Mute for 1 hour") }, onClick = { onSetMute("oneHour") })
@@ -698,7 +837,26 @@ private fun ConversationHeader(
                 DropdownMenuItem(text = { Text("Unmute") }, onClick = { onSetMute("unmute") })
             }
         }
-        IconButton(onClick = onOpenInfo) { Icon(Icons.Filled.Info, contentDescription = "Info") }
+        IconButton(onClick = onToggleSearchVisible) {
+            Icon(Icons.Filled.Search, contentDescription = "Search", tint = StudioBlue)
+        }
+        Box {
+            IconButton(onClick = { moreOpen = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (showSavedOnly) "Show all" else "Saved only") },
+                    leadingIcon = { Icon(if (showSavedOnly) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, contentDescription = null) },
+                    onClick = { moreOpen = false; onToggleSavedFilter() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Conversation info") },
+                    leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                    onClick = { moreOpen = false; onOpenInfo() }
+                )
+            }
+        }
     }
 }
 
@@ -823,70 +981,71 @@ private fun MessageBubble(
     onToggleReaction: (String) -> Unit,
     onTogglePin: () -> Unit,
     onToggleSaved: () -> Unit,
-    onForward: () -> Unit
+    onForward: () -> Unit,
+    onOpenImage: () -> Unit
 ) {
-    val alignment = if (isMine) Alignment.End else Alignment.Start
-    val bubbleColor = if (isMine) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    // iPhone-style colors: navy/teal for mine, dark gray for theirs
+    val mineBubble = if (isDark) Color(0xFF0D3D5C) else StudioBlue.copy(alpha = 0.18f)
+    val theirsBubble = if (isDark) Color(0xFF2A2A2D) else MaterialTheme.colorScheme.surfaceVariant
+    val bubbleColor = if (isMine) mineBubble else theirsBubble
+    val textColor = if (isMine && isDark) Color.White else MaterialTheme.colorScheme.onSurface
     val clipboardManager: ClipboardManager = LocalClipboardManager.current
     var menuOpen by remember { mutableStateOf(false) }
     var showReactionPicker by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
+    // Row layout: avatar (theirs left / mine right) + content column with sender label, bubble, time below
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top
+    ) {
         if (!isMine) {
-            Text(
-                item.senderLabel(),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-            )
+            BubbleAvatar(item)
+            Spacer(Modifier.width(8.dp))
+        } else {
+            Spacer(Modifier.weight(1f, fill = true))
         }
-        Box {
-            Surface(
-                color = bubbleColor,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = { if (!item.isDeleted) menuOpen = true }
-                    )
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    if (item.replyToMessageId.isNotBlank()) {
-                        ReplyQuote(item)
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    if (item.isDeleted) {
-                        Text("Message deleted", fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                    } else {
-                        if (item.fileURL.isNotBlank()) {
-                            AttachmentCard(item)
-                            if (item.text.isNotBlank()) Spacer(Modifier.height(6.dp))
+        Column(
+            modifier = Modifier.widthIn(max = 280.dp),
+            horizontalAlignment = if (isMine) Alignment.End else Alignment.Start
+        ) {
+            if (!isMine) {
+                Text(
+                    item.senderLabel(),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+            Box {
+                Surface(
+                    color = bubbleColor,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { if (!item.isDeleted) menuOpen = true }
+                        )
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                        if (item.replyToMessageId.isNotBlank()) {
+                            ReplyQuote(item)
+                            Spacer(Modifier.height(4.dp))
                         }
-                        if (item.text.isNotBlank()) {
-                            Text(item.text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (saved) {
-                            Icon(Icons.Filled.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        if (item.pinned) {
-                            Icon(Icons.Filled.PushPin, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        item.createdAt?.let {
-                            Text(formatTime(it), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (item.edited && !item.isDeleted) {
-                            Spacer(Modifier.width(6.dp))
-                            Text("edited", fontSize = 10.sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (item.isDeleted) {
+                            Text("Message deleted", fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        } else {
+                            if (item.fileURL.isNotBlank()) {
+                                AttachmentCard(item, onImageClick = onOpenImage)
+                                if (item.text.isNotBlank()) Spacer(Modifier.height(6.dp))
+                            }
+                            if (item.text.isNotBlank()) {
+                                Text(item.text, fontSize = 15.sp, color = textColor, lineHeight = 20.sp)
+                            }
                         }
                     }
                 }
-            }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(text = { Text("React") }, onClick = { menuOpen = false; showReactionPicker = true })
                 DropdownMenuItem(text = { Text("Reply") }, onClick = { menuOpen = false; onReply() })
@@ -933,8 +1092,64 @@ private fun MessageBubble(
                 }
             }
         }
-        if (item.reactions.isNotEmpty()) {
-            ReactionRow(item = item, currentUid = currentUid, onToggleReaction = onToggleReaction)
+            if (item.reactions.isNotEmpty()) {
+                ReactionRow(item = item, currentUid = currentUid, onToggleReaction = onToggleReaction)
+            }
+            // Time + edited + pin/save indicators below bubble (iPhone style)
+            Row(
+                modifier = Modifier.padding(top = 3.dp, start = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (saved) {
+                    Icon(Icons.Filled.Bookmark, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(4.dp))
+                }
+                if (item.pinned) {
+                    Icon(Icons.Filled.PushPin, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(4.dp))
+                }
+                item.createdAt?.let {
+                    Text(formatTime(it), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (item.edited && !item.isDeleted) {
+                    Spacer(Modifier.width(6.dp))
+                    Text("edited", fontSize = 11.sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (isMine) {
+            Spacer(Modifier.width(8.dp))
+            BubbleAvatar(item)
+        } else {
+            Spacer(Modifier.weight(1f, fill = true))
+        }
+    }
+}
+
+@Composable
+private fun BubbleAvatar(item: StudioMessageItem) {
+    val photo = item.senderPhotoURL.trim()
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (photo.isNotEmpty()) {
+            coil.compose.AsyncImage(
+                model = photo,
+                contentDescription = item.senderLabel(),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(34.dp).clip(CircleShape)
+            )
+        } else {
+            Text(
+                item.senderLabel().take(1).uppercase(),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
         }
     }
 }
@@ -974,7 +1189,45 @@ private fun ReactionRow(
 }
 
 @Composable
-private fun AttachmentCard(item: StudioMessageItem) {
+private fun AttachmentCard(item: StudioMessageItem, onImageClick: () -> Unit = {}) {
+    if (item.isImageAttachment) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.clickable(onClick = onImageClick)
+        ) {
+            Column {
+                AsyncImage(
+                    model = item.fileURL,
+                    contentDescription = item.fileName.ifBlank { "Image attachment" },
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .widthIn(max = 240.dp)
+                        .heightIn(max = 240.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                )
+                if (item.fileName.isNotBlank()) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            item.fileName,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        val size = formatFileSize(item.fileSize)
+                        if (size.isNotBlank()) {
+                            Text(size, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(8.dp),
@@ -1016,6 +1269,7 @@ private fun Composer(
     teamMembers: List<StudioMessageTeamMember>,
     workspaceId: String,
     threadId: String,
+    attachmentsEnabled: Boolean,
     onClearReply: () -> Unit,
     onSend: (String, List<String>) -> Unit,
     onSendAttachment: (ByteArray, String, String, String, List<String>) -> Unit,
@@ -1028,28 +1282,34 @@ private fun Composer(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val pickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            scope.launch {
-                runCatching {
-                    val resolver = context.contentResolver
-                    try { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Throwable) {}
-                    val name = queryDisplayName(uri, resolver) ?: "Attachment"
-                    val type = resolver.getType(uri) ?: "application/octet-stream"
-                    val bytes = withContext(Dispatchers.IO) {
-                        resolver.openInputStream(uri)?.use { it.readBytes() }
-                    } ?: return@runCatching
-                    if (bytes.isEmpty()) return@runCatching
-                    onSendAttachment(bytes, name, type, draft.text.trim(), pendingMentionUids.value)
-                    draft = TextFieldValue("")
-                    pendingMentionUids.value = emptyList()
-                    onSaveDraft(workspaceId, threadId, "")
-                }
+    var attachMenuOpen by remember { mutableStateOf(false) }
+
+    val sendUriAsAttachment: (Uri) -> Unit = { uri ->
+        scope.launch {
+            runCatching {
+                val resolver = context.contentResolver
+                try { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Throwable) {}
+                val name = queryDisplayName(uri, resolver) ?: "Attachment"
+                val type = resolver.getType(uri) ?: "application/octet-stream"
+                val bytes = withContext(Dispatchers.IO) {
+                    resolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: return@runCatching
+                if (bytes.isEmpty()) return@runCatching
+                onSendAttachment(bytes, name, type, draft.text.trim(), pendingMentionUids.value)
+                draft = TextFieldValue("")
+                pendingMentionUids.value = emptyList()
+                onSaveDraft(workspaceId, threadId, "")
             }
         }
     }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> if (uri != null) sendUriAsAttachment(uri) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? -> if (uri != null) sendUriAsAttachment(uri) }
 
     val mentionQuery = remember(draft.text, draft.selection) {
         val cursor = draft.selection.end.coerceAtMost(draft.text.length)
@@ -1138,50 +1398,139 @@ private fun Composer(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { pickerLauncher.launch(arrayOf("*/*")) }, enabled = !isSending) {
-                Icon(Icons.Filled.AttachFile, contentDescription = "Attach file")
-            }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = {
-                    draft = it
-                    onSaveDraft(workspaceId, threadId, it.text)
-                    if (it.text.isNotBlank()) onTextChanged()
-                },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Write a message…") },
-                singleLine = false,
-                maxLines = 5,
-                keyboardOptions = KeyboardOptions.Default
-            )
-            Spacer(Modifier.width(8.dp))
-            IconButton(
-                onClick = {
-                    val text = draft.text.trim()
-                    if (text.isNotEmpty() && !isSending) {
-                        onSend(text, pendingMentionUids.value)
-                        draft = TextFieldValue("")
-                        pendingMentionUids.value = emptyList()
-                        onSaveDraft(workspaceId, threadId, "")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+        ) {
+            if (attachmentsEnabled) {
+                Box {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(enabled = !isSending) { attachMenuOpen = true }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = "Attach",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
-                },
-                enabled = draft.text.trim().isNotEmpty() && !isSending
+                    DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Photo Library") },
+                            leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null) },
+                            onClick = {
+                                attachMenuOpen = false
+                                photoPickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Files") },
+                            leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null) },
+                            onClick = {
+                                attachMenuOpen = false
+                                filePickerLauncher.launch(arrayOf("*/*"))
+                            }
+                        )
+                    }
+                }
+            }
+            // Pill-shaped text field (iPhone style)
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                PillTextField(
+                    placeholder = "Message",
+                    value = draft,
+                    onValueChange = {
+                        draft = it
+                        onSaveDraft(workspaceId, threadId, it.text)
+                        if (it.text.isNotBlank()) onTextChanged()
+                    }
+                )
+            }
+            val canSend = draft.text.trim().isNotEmpty() && !isSending
+            Surface(
+                shape = CircleShape,
+                color = if (canSend) StudioBlue else MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable(enabled = canSend) {
+                        val text = draft.text.trim()
+                        if (text.isNotEmpty() && !isSending) {
+                            onSend(text, pendingMentionUids.value)
+                            draft = TextFieldValue("")
+                            pendingMentionUids.value = emptyList()
+                            onSaveDraft(workspaceId, threadId, "")
+                        }
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        tint = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
+private fun PillTextField(
+    placeholder: String,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+) {
+    androidx.compose.foundation.text.BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        textStyle = androidx.compose.ui.text.TextStyle(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp
+        ),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(StudioBlue),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        maxLines = 5,
+        decorationBox = { inner ->
+            Box(contentAlignment = Alignment.CenterStart) {
+                if (value.text.isEmpty()) {
+                    Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
+                }
+                inner()
+            }
+        }
+    )
+}
+
+@Composable
 private fun NewConversationDialog(
     teamMembers: List<StudioMessageTeamMember>,
+    allowDirect: Boolean,
+    allowGroup: Boolean,
     onDismiss: () -> Unit,
     onCreateDirect: (String) -> Unit,
     onCreateGroup: (List<String>, String) -> Unit
 ) {
-    var groupMode by remember { mutableStateOf(false) }
+    var groupMode by remember(allowDirect, allowGroup) { mutableStateOf(!allowDirect && allowGroup) }
     var selectedUids by remember { mutableStateOf<Set<String>>(emptySet()) }
     var groupTitle by remember { mutableStateOf("") }
 
@@ -1190,9 +1539,11 @@ private fun NewConversationDialog(
         title = { Text(if (groupMode) "New group" else "New direct message") },
         text = {
             Column(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
-                Row(modifier = Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !groupMode, onClick = { groupMode = false; selectedUids = emptySet() }, label = { Text("Direct") })
-                    FilterChip(selected = groupMode, onClick = { groupMode = true }, label = { Text("Group") })
+                if (allowDirect && allowGroup) {
+                    Row(modifier = Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = !groupMode, onClick = { groupMode = false; selectedUids = emptySet() }, label = { Text("Direct") })
+                        FilterChip(selected = groupMode, onClick = { groupMode = true }, label = { Text("Group") })
+                    }
                 }
                 if (groupMode) {
                     OutlinedTextField(
