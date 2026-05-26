@@ -83,49 +83,32 @@ function workspaceRole(data: Record<string, unknown>, uid: string) {
   return cleanText(memberRoles[uid]) || "member";
 }
 
-async function loadWorkspaces(uid: string): Promise<WorkspaceOption[]> {
-  const results = new Map<string, WorkspaceOption>();
+async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user"]>): Promise<WorkspaceOption[]> {
+  const token = await user.getIdToken();
+  const baseUrl = functionBaseUrl();
+  if (!baseUrl) throw new Error("Firebase Functions base URL is not configured.");
 
-  const userSnapshot = await getDoc(doc(db, "users", uid));
-  const userData = userSnapshot.exists() ? userSnapshot.data() : {};
-  const activeCompanyId = cleanText(userData.activeCompanyId) || uid;
-
-  const activeSnapshot = await getDoc(doc(db, "companies", activeCompanyId));
-  if (activeSnapshot.exists()) {
-    const data = activeSnapshot.data();
-    results.set(activeSnapshot.id, {
-      id: activeSnapshot.id,
-      name: workspaceName(data, "My Studio"),
-      role: workspaceRole(data, uid)
-    });
-  }
-
-  const ownSnapshot = await getDoc(doc(db, "companies", uid));
-  if (ownSnapshot.exists()) {
-    const data = ownSnapshot.data();
-    results.set(ownSnapshot.id, {
-      id: ownSnapshot.id,
-      name: workspaceName(data, "My Studio"),
-      role: workspaceRole(data, uid)
-    });
-  }
-
-  const memberQuery = query(
-    collection(db, "companies"),
-    where("memberUids", "array-contains", uid),
-    limit(25)
-  );
-  const memberSnapshot = await getDocs(memberQuery);
-  memberSnapshot.forEach(item => {
-    const data = item.data();
-    results.set(item.id, {
-      id: item.id,
-      name: workspaceName(data, item.id),
-      role: workspaceRole(data, uid)
-    });
+  const response = await fetch(`${baseUrl}/chatgptOAuthWorkspaces`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
   });
 
-  return Array.from(results.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || "Could not load workspaces.");
+  }
+
+  const items = Array.isArray(data.workspaces) ? data.workspaces : [];
+  return items
+    .map((item: Record<string, unknown>) => ({
+      id: cleanText(item.id),
+      name: cleanText(item.name) || "My Studio",
+      role: cleanText(item.role) || "member"
+    }))
+    .filter((item: WorkspaceOption) => Boolean(item.id))
+    .sort((a: WorkspaceOption, b: WorkspaceOption) => a.name.localeCompare(b.name));
 }
 
 export default function ChatGPTConnectPage() {
@@ -153,7 +136,7 @@ export default function ChatGPTConnectPage() {
       setLoadingWorkspaces(true);
       setError("");
       try {
-        const items = await loadWorkspaces(user.uid);
+        const items = await loadWorkspaces(user);
         if (cancelled) return;
         setWorkspaces(items);
         setSelectedCompanyId(current => current || items[0]?.id || "");
