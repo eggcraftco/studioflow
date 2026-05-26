@@ -156,12 +156,10 @@ export function supportTicketIsUnread(ticket: StudioSupportTicket, currentUserUi
 }
 
 export function supportUnreadTotal(summary: SupportTicketUnreadSummary | null | undefined) {
-  const count = Number(
-    summary?.totalUnread ??
-    summary?.unreadCount ??
-    ((Number(summary?.appSupportUnread ?? summary?.supportUnread ?? 0) || 0) + (Number(summary?.workspaceUnread ?? 0) || 0)) ??
-    0
-  );
+  const fallbackCount =
+    (Number(summary?.appSupportUnread ?? summary?.supportUnread ?? 0) || 0) +
+    (Number(summary?.workspaceUnread ?? 0) || 0);
+  const count = Number(summary?.totalUnread ?? summary?.unreadCount ?? fallbackCount);
   return Number.isFinite(count) && count > 0 ? Math.round(count) : 0;
 }
 

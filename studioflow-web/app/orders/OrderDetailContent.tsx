@@ -2075,7 +2075,7 @@ export function OrderDetailContent({
     if (guideRestrictsToCustomerOnly) {
       sourceColumns = [["customer"]];
     } else if (guideForcesFinancialVisible) {
-      const withoutFinancial = sourceColumns.map(column => column.filter(cardId => cardId !== "financial"));
+      const withoutFinancial = sourceColumns.map(column => column.filter(cardId => cardId !== "financial")) as OrderDetailCardId[][];
       while (withoutFinancial.length < 2) withoutFinancial.push([]);
       withoutFinancial[1] = ["financial", ...withoutFinancial[1]];
       sourceColumns = withoutFinancial;
