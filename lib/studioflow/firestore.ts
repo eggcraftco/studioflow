@@ -148,6 +148,7 @@ export type WorkspaceSettingsOverview = {
   uploadSafetyMaxFileSizeMB: number;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
   orderCardShowStatusBadges: boolean;
+  businessOnboardingCompleted: boolean;
 };
 
 export type DashboardWidgetVisibility = {
@@ -799,7 +800,9 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
       numberValue(data.uploadSafetyMaxFileSizeMB, 10)
     ),
     dashboardWidgetVisibility: dashboardVisibility,
-    orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true)
+    orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
+    businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||
+      booleanValue(data.businessOnboardingCompleted, false)
   };
 }
 

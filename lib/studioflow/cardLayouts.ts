@@ -1,5 +1,5 @@
 import { httpsCallable } from "firebase/functions";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db, functions } from "@/lib/firebase/client";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 
@@ -57,8 +57,18 @@ export const DEFAULT_ORDER_DETAIL_CARD_LAYOUT: OrderDetailCardLayout = {
 };
 
 const LEGACY_CARD_ID_MAP: Record<string, OrderDetailCardId> = {
+  communication: "customer",
+  customerCommunication: "customer",
+  customerAndCommunication: "customer",
   timeline: "delivery",
-  finance: "financial"
+  timelineDelivery: "delivery",
+  deliveryTimeline: "delivery",
+  finance: "financial",
+  financialInfo: "financial",
+  priorityRisk: "priority",
+  materialsInventory: "materials",
+  history: "historyLog",
+  historylog: "historyLog"
 };
 
 type CardLayoutCallableResult = {
@@ -160,9 +170,10 @@ function normalizeCardNumberMap(value: unknown) {
   const output: Partial<Record<OrderDetailCardId, number>> = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return output;
 
-  ORDER_DETAIL_CARD_IDS.forEach(cardId => {
-    const number = Number((value as Record<string, unknown>)[cardId]);
-    if (Number.isFinite(number) && number > 0) {
+  Object.entries(value as Record<string, unknown>).forEach(([rawCardId, rawNumber]) => {
+    const cardId = normalizeCardId(rawCardId);
+    const number = Number(rawNumber);
+    if (cardId && Number.isFinite(number) && number > 0) {
       output[cardId] = Math.min(Math.max(number, 160), 1200);
     }
   });
@@ -198,10 +209,10 @@ function normalizeCardColorMap(value: unknown) {
   const output: Partial<Record<OrderDetailCardId, string>> = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return output;
 
-  ORDER_DETAIL_CARD_IDS.forEach(cardId => {
-    const color = (value as Record<string, unknown>)[cardId];
-    if (typeof color === "string" && color.trim()) {
-      output[cardId] = color.trim();
+  Object.entries(value as Record<string, unknown>).forEach(([rawCardId, rawColor]) => {
+    const cardId = normalizeCardId(rawCardId);
+    if (cardId && typeof rawColor === "string" && rawColor.trim()) {
+      output[cardId] = rawColor.trim();
     }
   });
 
@@ -402,14 +413,45 @@ export function subscribeOrderDetailCardLayout(
 ) {
   if (!uid || !workspaceId) return () => {};
 
-  return onSnapshot(
-    doc(db, "companySettings", workspaceId),
+  const settingsRef = doc(db, "companySettings", workspaceId);
+  let disposed = false;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const applySnapshotData = (data: Record<string, unknown>) => {
+    if (disposed) return;
+    onLayout(layoutFromWorkspaceSettings(data, uid, ownerUid, orderId));
+  };
+
+  const scheduleSettledRefresh = () => {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      void getDoc(settingsRef)
+        .then(latestSnapshot => {
+          if (disposed || !latestSnapshot.exists()) return;
+          applySnapshotData(latestSnapshot.data() as Record<string, unknown>);
+        })
+        .catch(() => {
+          // The live listener remains the source of truth; this is only a small
+          // catch-up read for rapid Mac/iPad resize writes.
+        });
+    }, 180);
+  };
+
+  const unsubscribe = onSnapshot(
+    settingsRef,
     snapshot => {
-      const data = snapshot.exists() ? snapshot.data() : {};
-      onLayout(layoutFromWorkspaceSettings(data, uid, ownerUid, orderId));
+      const data = snapshot.exists() ? snapshot.data() as Record<string, unknown> : {};
+      applySnapshotData(data);
+      scheduleSettledRefresh();
     },
     error => {
       onError(friendlyCardLayoutError(error, "Could not listen for card layout changes."));
     }
   );
+
+  return () => {
+    disposed = true;
+    if (refreshTimer) clearTimeout(refreshTimer);
+    unsubscribe();
+  };
 }

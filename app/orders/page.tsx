@@ -44,6 +44,12 @@ import {
 import { studioT } from "@/lib/studioflow/language";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderDetailContent } from "./OrderDetailContent";
+import {
+  getFirstProjectGuideState,
+  setFirstProjectGuideState,
+  subscribeFirstProjectGuideState,
+  type FirstProjectGuideState
+} from "@/lib/studioflow/firstProjectGuide";
 
 function applyOrderListPatch(order: OrderListItem, patch: Partial<OrderDetail>): OrderListItem {
   return {
@@ -118,6 +124,7 @@ export default function OrdersPage() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [requestedOrderId, setRequestedOrderId] = useState("");
+  const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderQuickFilterId>("all");
   const [orderSortMode, setOrderSortMode] = useState<OrderSortMode>("smart");
@@ -137,6 +144,11 @@ export default function OrdersPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setRequestedOrderId(params.get("selectedOrderId") ?? params.get("orderId") ?? "");
+  }, []);
+
+  useEffect(() => {
+    setFirstProjectGuide(getFirstProjectGuideState());
+    return subscribeFirstProjectGuideState(setFirstProjectGuide);
   }, []);
 
   useEffect(() => {
@@ -245,9 +257,11 @@ export default function OrdersPage() {
     async function handleCreatedOrder(event: Event) {
       const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
       if (!orderId || !workspace) return;
+      setFirstProjectGuideState({ step: 2, orderId, completed: false });
       const loadedOrders = await loadRecentOrders(workspace.id);
       setOrders(loadedOrders);
       setSelectedOrderId(orderId);
+      setRequestedOrderId(orderId);
     }
 
     window.addEventListener("studioflow-order-created", handleCreatedOrder);
@@ -528,6 +542,8 @@ export default function OrdersPage() {
                   showStatusBadges={showOrderStatusBadges}
                   assigneeName={assigneeNameForOrder(order)}
                   assigneePhotoURL={assigneePhotoForOrder(order)}
+                  showFirstProjectGuideProjectBubble={firstProjectGuide?.step === 2 && firstProjectGuide.orderId === order.id}
+                  onFirstProjectGuideProjectNext={() => setFirstProjectGuideState({ step: 3, orderId: order.id, completed: false })}
                   onSelect={() => setSelectedOrderId(order.id)}
                 />
               </div>

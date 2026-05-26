@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { CardIconGlyph } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import type { BlockHeadingSettings, HeadingItem } from "@/lib/studioflow/blockHeadings";
@@ -247,7 +248,9 @@ export function OrderListCard({
   moneySettings,
   showStatusBadges = true,
   assigneeName = "",
-  assigneePhotoURL = ""
+  assigneePhotoURL = "",
+  showFirstProjectGuideProjectBubble = false,
+  onFirstProjectGuideProjectNext
 }: {
   order: OrderListCardItem;
   selected: boolean;
@@ -260,6 +263,8 @@ export function OrderListCard({
   showStatusBadges?: boolean;
   assigneeName?: string;
   assigneePhotoURL?: string;
+  showFirstProjectGuideProjectBubble?: boolean;
+  onFirstProjectGuideProjectNext?: () => void;
 }) {
   const { hideNumbers } = usePricePrivacy();
   const firstBadgeStep = resolveBadgeStep(blockHeadingSettings, 1);
@@ -272,6 +277,67 @@ export function OrderListCard({
   const scheduleItem = nextScheduleItem(order);
   const assignmentLabel = assigneeName.trim() || displayNameFromEmail(order.assignedToEmail ?? "");
   const displayLanguage = (moneySettings as { selectedLanguage?: string } | null | undefined)?.selectedLanguage;
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [guideBubblePosition, setGuideBubblePosition] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    if (!showFirstProjectGuideProjectBubble) {
+      setGuideBubblePosition(null);
+      return;
+    }
+
+    function updatePosition() {
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (!rect) {
+        setGuideBubblePosition(null);
+        return;
+      }
+      const bubbleWidth = 300;
+      const left = Math.max(16, Math.min(rect.left, window.innerWidth - bubbleWidth - 16));
+      const top = Math.min(window.innerHeight - 170, rect.bottom + 12);
+      setGuideBubblePosition({ left, top: Math.max(16, top) });
+    }
+
+    updatePosition();
+    const timer = window.setInterval(updatePosition, 250);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [showFirstProjectGuideProjectBubble]);
+
+  const guideBubble = showFirstProjectGuideProjectBubble && guideBubblePosition ? (
+    <div
+      className="first-project-guide-bubble"
+      style={{
+        position: "fixed",
+        left: guideBubblePosition.left,
+        top: guideBubblePosition.top,
+        width: 300,
+        zIndex: 10000,
+        border: "3px solid #2563eb",
+        borderRadius: 18,
+        padding: 16,
+        background: "rgba(239, 246, 255, 0.98)",
+        boxShadow: "0 22px 55px rgba(37, 99, 235, 0.32)",
+        color: "var(--text)"
+      }}
+      onClick={event => event.stopPropagation()}
+    >
+      <div style={{ fontSize: 12, fontWeight: 800, color: "#2563eb", marginBottom: 6 }}>Step 2 of 6</div>
+      <strong style={{ display: "block", marginBottom: 6 }}>This is your project card.</strong>
+      <p style={{ margin: "0 0 12px", color: "var(--muted)", lineHeight: 1.4 }}>
+        Each project appears in this list. Select a card to open its workspace on the right.
+      </p>
+      <button className="button" type="button" onClick={onFirstProjectGuideProjectNext}>
+        Next
+      </button>
+    </div>
+  ) : null;
+
   const content = (
     <div className="order-list-card-content">
       <div className="order-list-thumbnail" aria-hidden="true">
@@ -355,9 +421,17 @@ export function OrderListCard({
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
-      className={selected ? "order-list-card selected" : "order-list-card"}
+      className={[
+        selected ? "order-list-card selected" : "order-list-card",
+        showFirstProjectGuideProjectBubble ? "first-project-guide-target" : ""
+      ].filter(Boolean).join(" ")}
+      style={showFirstProjectGuideProjectBubble ? {
+        outline: "3px solid #2563eb",
+        boxShadow: "0 0 0 6px rgba(37, 99, 235, 0.18), 0 18px 45px rgba(37, 99, 235, 0.22)"
+      } : undefined}
       onClick={onSelect}
       onKeyDown={event => {
         if (event.key === "Enter" || event.key === " ") {
@@ -367,6 +441,7 @@ export function OrderListCard({
       }}
     >
       {content}
+      {guideBubble}
     </div>
   );
 }
