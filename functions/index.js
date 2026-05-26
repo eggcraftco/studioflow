@@ -12688,7 +12688,7 @@ function nvDeliveryDaysFromDueDate(dueDateValue, fallbackDays = 45) {
 function nvHistoryItem(title = "", oldValue = "", newValue = "") {
   return {
     id: crypto.randomUUID(),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: admin.firestore.Timestamp.now(),
     title: nvCleanString(title, 160),
     oldValue: nvCleanString(oldValue, 500),
     newValue: nvCleanString(newValue, 1200)
@@ -12734,6 +12734,21 @@ function nvSafeOrderForChatGPT(doc) {
     clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
     historyLog: Array.isArray(data.historyLog) ? data.historyLog.slice(0, 20) : []
   };
+}
+
+async function nvRequireFirebaseIdToken(req) {
+  const authHeader = String(req.get("Authorization") || req.get("authorization") || "");
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+
+  if (!token) {
+    throw new HttpsError("unauthenticated", "Missing Authorization: Bearer <Firebase ID token>.");
+  }
+
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (error) {
+    throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
+  }
 }
 
 async function nvRequireChatGPTWorkspaceAccess(req, companyId = "") {
@@ -12795,11 +12810,11 @@ function nvOrderDefaults(args = {}, context = {}) {
   const remainingAmount = nvCleanNumber(args.remainingAmount ?? Math.max(0, totalPrice - paidAmount));
 
   const history = [
-    nvHistoryItem("Created by ChatGPT", "", `${context.email || context.uid || "User"} created this order from ChatGPT.`)
+    nvHistoryItem("Order Created", "-", `${context.email || context.uid || "User"} created this order from ChatGPT.`)
   ];
 
   if (designBrief) {
-    history.push(nvHistoryItem("Design brief added", "", designBrief.slice(0, 900)));
+    history.push(nvHistoryItem("Design Brief", "-", designBrief.slice(0, 900)));
   }
 
   return {
@@ -12941,7 +12956,7 @@ async function nvChatGPTAddOrderNote(context, args = {}) {
     notes: mergedNotes,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     historyLog: admin.firestore.FieldValue.arrayUnion(
-      nvHistoryItem("Note added by ChatGPT", "", noteText.slice(0, 900))
+      nvHistoryItem("Special Notes", "-", noteText.slice(0, 900))
     )
   }, { merge: true });
 
@@ -12971,11 +12986,11 @@ async function nvChatGPTUpdateOrderStatus(context, args = {}) {
   const historyItems = [];
   if (status) {
     update.status = status;
-    historyItems.push(nvHistoryItem("Status changed by ChatGPT", data.status || "", status));
+    historyItems.push(nvHistoryItem("Order Status", data.status || "-", status));
   }
   if (designStatus) {
     update.designStatus = designStatus;
-    historyItems.push(nvHistoryItem("Design status changed by ChatGPT", data.designStatus || "", designStatus));
+    historyItems.push(nvHistoryItem("Design Status", data.designStatus || "-", designStatus));
   }
   if (historyItems.length > 0) {
     update.historyLog = admin.firestore.FieldValue.arrayUnion(...historyItems);
@@ -12985,7 +13000,191 @@ async function nvChatGPTUpdateOrderStatus(context, args = {}) {
   return { ok: true, action: "update_order_status", orderId, status: status || data.status || "", designStatus: designStatus || data.designStatus || "" };
 }
 
-async function nvChatGPTDispatchAction(context, action = "", args = {}) {
+async function nvPersonalNoteRefForChatGPT(context, noteId = "") {
+  const cleanNoteId = nvCleanString(noteId || "", 180);
+  if (!cleanNoteId) throw new HttpsError("invalid-argument", "noteId is required.");
+  return personalNoteDocRef(context.companyId, context.uid, cleanNoteId);
+}
+
+function nvSafePersonalNoteForChatGPT(docOrData = {}) {
+  const id = docOrData.id || docOrData.noteId || "";
+  const data = typeof docOrData.data === "function" ? (docOrData.data() || {}) : (docOrData || {});
+  return {
+    id,
+    noteId: id,
+    companyId: String(data.companyId || ""),
+    userId: String(data.userId || ""),
+    ownerUserId: String(data.ownerUserId || ""),
+    ownerEmail: String(data.ownerEmail || ""),
+    ownerName: String(data.ownerName || ""),
+    title: String(data.title || ""),
+    text: String(data.text || ""),
+    colorName: String(data.colorName || "default"),
+    isPinned: Boolean(data.isPinned),
+    isArchived: Boolean(data.isArchived),
+    isDeleted: Boolean(data.isDeleted),
+    labels: Array.isArray(data.labels) ? data.labels.map((item) => String(item || "")).filter(Boolean).slice(0, 80) : [],
+    links: Array.isArray(data.links) ? data.links.map((item) => String(item || "")).filter(Boolean).slice(0, 80) : [],
+    collaboratorEmails: Array.isArray(data.collaboratorEmails) ? data.collaboratorEmails.map((item) => String(item || "")).filter(Boolean).slice(0, 80) : [],
+    sharedWith: Array.isArray(data.sharedWith) ? data.sharedWith.map((item) => String(item || "")).filter(Boolean).slice(0, 80) : [],
+    reminderDateMillis: data.reminderDate && typeof data.reminderDate.toMillis === "function" ? data.reminderDate.toMillis() : (Number.isFinite(Number(data.reminderDateMillis)) ? Number(data.reminderDateMillis) : null),
+    createdAtMillis: data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : (Number.isFinite(Number(data.createdAtMillis)) ? Number(data.createdAtMillis) : null),
+    updatedAtMillis: data.updatedAt && typeof data.updatedAt.toMillis === "function" ? data.updatedAt.toMillis() : (Number.isFinite(Number(data.updatedAtMillis)) ? Number(data.updatedAtMillis) : null)
+  };
+}
+
+function nvPersonalNotePayloadFromChatGPT(context, args = {}, existing = null) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const payload = {
+    title: nvCleanString(args.title || args.name || existing?.title || "", 500),
+    text: nvCleanString(args.text || args.content || args.body || existing?.text || "", 20000),
+    colorName: nvCleanString(args.colorName || args.color || existing?.colorName || "default", 80) || "default",
+    ownerUserId: context.uid,
+    ownerEmail: context.email || "",
+    ownerName: nvCleanString(args.ownerName || existing?.ownerName || "", 240),
+    companyId: context.companyId,
+    userId: context.uid,
+    sharedWith: Array.isArray(existing?.sharedWith) ? existing.sharedWith : [],
+    collaboratorEmails: Array.isArray(existing?.collaboratorEmails) ? existing.collaboratorEmails : [],
+    activeEditorUserId: "",
+    activeEditorEmail: "",
+    isPinned: args.isPinned === undefined ? Boolean(existing?.isPinned) : Boolean(args.isPinned),
+    isArchived: args.isArchived === undefined ? Boolean(existing?.isArchived) : Boolean(args.isArchived),
+    isDeleted: args.isDeleted === undefined ? Boolean(existing?.isDeleted) : Boolean(args.isDeleted),
+    labels: cleanPersonalNoteStringArray(args.labels || existing?.labels || [], 80, 160),
+    links: cleanPersonalNoteStringArray(args.links || existing?.links || [], 80, 1000),
+    manualOrder: Number.isFinite(Number(existing?.manualOrder)) ? Number(existing.manualOrder) : Date.now(),
+    updatedAt: now,
+    source: "chatgpt"
+  };
+  if (!existing) payload.createdAt = now;
+
+  if (Number.isFinite(Number(args.reminderDateMillis))) {
+    payload.reminderDate = admin.firestore.Timestamp.fromMillis(Number(args.reminderDateMillis));
+  } else if (args.reminderDate) {
+    const parsed = Date.parse(String(args.reminderDate));
+    if (Number.isFinite(parsed)) payload.reminderDate = admin.firestore.Timestamp.fromMillis(parsed);
+  }
+  return payload;
+}
+
+async function nvChatGPTCreateNote(context, args = {}) {
+  const title = nvCleanString(args.title || args.name || "", 500);
+  const text = nvCleanString(args.text || args.content || args.body || "", 20000);
+  if (!title && !text) throw new HttpsError("invalid-argument", "title or text is required.");
+
+  const ref = personalNoteDocRef(context.companyId, context.uid, admin.firestore().collection("_").doc().id);
+  const payload = nvPersonalNotePayloadFromChatGPT(context, args, null);
+  await ref.set(payload, { merge: true });
+
+  return { ok: true, action: "create_note", noteId: ref.id, note: nvSafePersonalNoteForChatGPT({ id: ref.id, data: () => payload }) };
+}
+
+async function nvChatGPTSearchNotes(context, args = {}) {
+  const q = nvCleanString(args.query || args.keyword || "", 240).toLowerCase();
+  const includeArchived = Boolean(args.includeArchived);
+  const includeDeleted = Boolean(args.includeDeleted);
+  const limit = Math.min(Math.max(Number(args.limit || 20), 1), 100);
+
+  const snap = await admin.firestore()
+    .collection("companies")
+    .doc(context.companyId)
+    .collection("personal_notes")
+    .doc(context.uid)
+    .collection("notes")
+    .limit(250)
+    .get();
+
+  let notes = snap.docs.map(nvSafePersonalNoteForChatGPT)
+    .filter((note) => includeArchived || !note.isArchived)
+    .filter((note) => includeDeleted || !note.isDeleted);
+
+  if (q) {
+    notes = notes.filter((note) => {
+      const haystack = [note.id, note.title, note.text, ...(Array.isArray(note.labels) ? note.labels : [])].join(" ").toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+
+  notes = notes
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return Number(b.updatedAtMillis || 0) - Number(a.updatedAtMillis || 0);
+    })
+    .slice(0, limit);
+
+  return { ok: true, action: "search_notes", count: notes.length, notes };
+}
+
+async function nvChatGPTGetNoteDetail(context, args = {}) {
+  const noteId = nvCleanString(args.noteId || args.id || "", 180);
+  const ref = nvPersonalNoteRefForChatGPT(context, noteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Note not found.");
+  return { ok: true, action: "get_note_detail", noteId, note: nvSafePersonalNoteForChatGPT(snap) };
+}
+
+async function nvChatGPTAppendNote(context, args = {}) {
+  const noteId = nvCleanString(args.noteId || args.id || "", 180);
+  const appendText = nvCleanString(args.text || args.content || args.appendText || "", 10000);
+  if (!noteId || !appendText) throw new HttpsError("invalid-argument", "noteId and text are required.");
+
+  const ref = nvPersonalNoteRefForChatGPT(context, noteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Note not found.");
+  const data = snap.data() || {};
+  const previousText = String(data.text || "");
+  const nextText = previousText ? `${previousText}\n\n${appendText}` : appendText;
+  await ref.set({ text: nextText, updatedAt: admin.firestore.FieldValue.serverTimestamp(), source: "chatgpt" }, { merge: true });
+
+  return { ok: true, action: "append_note", noteId, note: { ...nvSafePersonalNoteForChatGPT(snap), text: nextText } };
+}
+
+async function nvChatGPTUpdateNote(context, args = {}) {
+  const noteId = nvCleanString(args.noteId || args.id || "", 180);
+  if (!noteId) throw new HttpsError("invalid-argument", "noteId is required.");
+
+  const ref = nvPersonalNoteRefForChatGPT(context, noteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Note not found.");
+  const existing = snap.data() || {};
+
+  const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp(), source: "chatgpt" };
+  if (args.title !== undefined || args.name !== undefined) update.title = nvCleanString(args.title || args.name || "", 500);
+  if (args.text !== undefined || args.content !== undefined || args.body !== undefined) update.text = nvCleanString(args.text || args.content || args.body || "", 20000);
+  if (args.colorName !== undefined || args.color !== undefined) update.colorName = nvCleanString(args.colorName || args.color || "default", 80) || "default";
+  if (args.labels !== undefined) update.labels = cleanPersonalNoteStringArray(args.labels, 80, 160);
+  if (args.links !== undefined) update.links = cleanPersonalNoteStringArray(args.links, 80, 1000);
+
+  if (Object.keys(update).length <= 2) throw new HttpsError("invalid-argument", "Provide at least one field to update: title, text, labels, links, or colorName.");
+  await ref.set(update, { merge: true });
+  return { ok: true, action: "update_note", noteId, note: nvSafePersonalNoteForChatGPT({ id: noteId, data: () => ({ ...existing, ...update }) }) };
+}
+
+async function nvChatGPTPinNote(context, args = {}) {
+  const noteId = nvCleanString(args.noteId || args.id || "", 180);
+  if (!noteId) throw new HttpsError("invalid-argument", "noteId is required.");
+  const isPinned = Boolean(args.isPinned ?? args.pinned ?? true);
+  const ref = nvPersonalNoteRefForChatGPT(context, noteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Note not found.");
+  await ref.set({ isPinned, updatedAt: admin.firestore.FieldValue.serverTimestamp(), source: "chatgpt" }, { merge: true });
+  return { ok: true, action: "pin_note", noteId, isPinned };
+}
+
+async function nvChatGPTArchiveNote(context, args = {}) {
+  const noteId = nvCleanString(args.noteId || args.id || "", 180);
+  if (!noteId) throw new HttpsError("invalid-argument", "noteId is required.");
+  const isArchived = Boolean(args.isArchived ?? args.archived ?? true);
+  const ref = nvPersonalNoteRefForChatGPT(context, noteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Note not found.");
+  await ref.set({ isArchived, updatedAt: admin.firestore.FieldValue.serverTimestamp(), source: "chatgpt" }, { merge: true });
+  return { ok: true, action: "archive_note", noteId, isArchived };
+}
+
+
+function nvChatGPTDispatchAction(context, action = "", args = {}) {
   switch (String(action || "").trim()) {
     case "create_order":
       return nvChatGPTCreateOrder(context, args);
@@ -12997,8 +13196,22 @@ async function nvChatGPTDispatchAction(context, action = "", args = {}) {
       return nvChatGPTAddOrderNote(context, args);
     case "update_order_status":
       return nvChatGPTUpdateOrderStatus(context, args);
+    case "create_note":
+      return nvChatGPTCreateNote(context, args);
+    case "search_notes":
+      return nvChatGPTSearchNotes(context, args);
+    case "get_note_detail":
+      return nvChatGPTGetNoteDetail(context, args);
+    case "append_note":
+      return nvChatGPTAppendNote(context, args);
+    case "update_note":
+      return nvChatGPTUpdateNote(context, args);
+    case "pin_note":
+      return nvChatGPTPinNote(context, args);
+    case "archive_note":
+      return nvChatGPTArchiveNote(context, args);
     default:
-      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status.");
+      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note.");
   }
 }
 
@@ -13047,17 +13260,18 @@ function nvSafeOAuthUri(value = "") {
 }
 
 function nvOAuthBaseUrl(req) {
-  const host = String(req.get("host") || "").trim();
+  const publicBaseUrl = String(process.env.STUDIOFLOW_CHATGPT_PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+  if (publicBaseUrl) return publicBaseUrl;
+
+  const host = String(req.get("x-forwarded-host") || req.get("host") || "").trim();
   const protocol = String(req.get("x-forwarded-proto") || "https").split(",")[0].trim() || "https";
   return `${protocol}://${host}`;
 }
 
 function nvOAuthEndpointUrl(req, functionName = "") {
   const base = nvOAuthBaseUrl(req);
-  const path = String(req.path || "");
-  const lastSlash = path.lastIndexOf("/");
-  const prefixPath = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : "/";
-  return `${base}${prefixPath}${functionName}`;
+  const cleanFunctionName = String(functionName || "").replace(/^\/+/, "");
+  return `${base}/${cleanFunctionName}`;
 }
 
 function nvOAuthProtectedResourceMetadata(req) {
@@ -13071,6 +13285,7 @@ function nvOAuthProtectedResourceMetadata(req) {
     scopes_supported: [
       "orders.read",
       "orders.write",
+      "notes.read",
       "notes.write",
       "tasks.write"
     ],
@@ -13092,6 +13307,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
     scopes_supported: [
       "orders.read",
       "orders.write",
+      "notes.read",
       "notes.write",
       "tasks.write"
     ],
@@ -13308,7 +13524,7 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
     token_endpoint_auth_method: "none",
     grant_types: ["authorization_code"],
     response_types: ["code"],
-    scope: "orders.read orders.write notes.write tasks.write"
+    scope: "orders.read orders.write notes.read notes.write tasks.write"
   });
 });
 
@@ -13360,6 +13576,90 @@ exports.chatgptOAuthAuthorize = onRequest({ region: "europe-west2", cors: true }
   </div>
 </body>
 </html>`);
+});
+
+
+
+exports.chatgptOAuthWorkspaces = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+  if (nvChatCors(req, res)) return;
+  if (req.method !== "GET" && req.method !== "POST") {
+    nvOAuthJson(res, 405, { error: "method_not_allowed", message: "Use GET or POST." });
+    return;
+  }
+
+  try {
+    const decoded = await nvRequireFirebaseIdToken(req);
+    const uid = decoded.uid;
+    const email = decoded.email || "";
+    const results = new Map();
+
+    async function addWorkspace(companyId) {
+      const cleanCompanyId = nvCleanString(companyId || "", 160);
+      if (!cleanCompanyId || results.has(cleanCompanyId)) return;
+
+      const snap = await admin.firestore().collection("companies").doc(cleanCompanyId).get();
+      if (!snap.exists) return;
+
+      const data = snap.data() || {};
+      data.__workspaceId = cleanCompanyId;
+      if (!uidHasCompanyAccess(data, uid)) return;
+
+      const memberRoles = data.memberRoles && typeof data.memberRoles === "object" ? data.memberRoles : {};
+      const role = String(data.ownerUid || "") === uid
+        ? "owner"
+        : String(memberRoles[uid] || data.memberAccess?.[uid] || "member");
+
+      results.set(cleanCompanyId, {
+        id: cleanCompanyId,
+        name: String(data.companyName || data.name || data.appName || "My Studio"),
+        role
+      });
+    }
+
+    const userSnap = await admin.firestore().collection("users").doc(uid).get();
+    const userData = userSnap.exists ? userSnap.data() || {} : {};
+
+    await addWorkspace(userData.activeCompanyId);
+    await addWorkspace(userData.companyId);
+    await addWorkspace(uid);
+
+    const ownedQuery = await admin.firestore()
+      .collection("companies")
+      .where("ownerUid", "==", uid)
+      .limit(25)
+      .get();
+
+    for (const doc of ownedQuery.docs) {
+      await addWorkspace(doc.id);
+    }
+
+    const memberQuery = await admin.firestore()
+      .collection("companies")
+      .where("memberUids", "array-contains", uid)
+      .limit(25)
+      .get();
+
+    for (const doc of memberQuery.docs) {
+      await addWorkspace(doc.id);
+    }
+
+    const workspaces = Array.from(results.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    nvOAuthJson(res, 200, {
+      ok: true,
+      uid,
+      email,
+      workspaces
+    });
+  } catch (error) {
+    const status = nvMcpHttpStatusFromHttps(error);
+    const message = error?.message || String(error);
+    console.error("chatgptOAuthWorkspaces failed:", error?.code || status, message);
+    nvOAuthJson(res, status, {
+      error: error?.code || "internal",
+      message
+    });
+  }
 });
 
 
@@ -13579,6 +13879,24 @@ function nvMcpToolContentFromResult(result = {}) {
   }
   if (action === "update_order_status") {
     return `Order status updated: ${result.orderId || ""}.`;
+  }
+  if (action === "create_note") {
+    return `Personal note created: ${result.note?.title || result.noteId || "new note"}.`;
+  }
+  if (action === "search_notes") {
+    return `Found ${result.count || 0} note(s).`;
+  }
+  if (action === "get_note_detail") {
+    return `Note detail: ${result.note?.title || result.noteId || "note"}.`;
+  }
+  if (action === "append_note" || action === "update_note") {
+    return `Personal note updated: ${result.noteId || ""}.`;
+  }
+  if (action === "pin_note") {
+    return `Personal note pin state updated: ${result.noteId || ""}.`;
+  }
+  if (action === "archive_note") {
+    return `Personal note archive state updated: ${result.noteId || ""}.`;
   }
   return nvMcpText(result);
 }
@@ -13810,6 +14128,127 @@ function nvMcpOrderToolSchemas() {
         idempotentHint: false,
         openWorldHint: false
       }
+    },
+    {
+      name: "create_note",
+      title: "Create personal note",
+      description: "Create a new personal Notes item for the connected user in the currently connected workspace. Do not ask for companyId. This is not an order note. Collaboration is not changed automatically.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          title: { type: "string", description: "Note title." },
+          text: { type: "string", description: "Note body/content." },
+          labels: { type: "array", items: { type: "string" }, description: "Optional labels." },
+          links: { type: "array", items: { type: "string" }, description: "Optional links or image URLs." },
+          colorName: { type: "string", description: "Optional color name." },
+          isPinned: { type: "boolean", description: "Whether to pin the note." }
+        }
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+    },
+    {
+      name: "search_notes",
+      title: "Search personal notes",
+      description: "Search the connected user's personal Notes in the currently connected workspace. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          query: { type: "string", description: "Keyword to search in title, text, labels or note ID." },
+          includeArchived: { type: "boolean", description: "Include archived notes." },
+          includeDeleted: { type: "boolean", description: "Include deleted notes." },
+          limit: { type: "number", description: "Maximum number of notes to return. Default is 20." }
+        }
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    {
+      name: "get_note_detail",
+      title: "Get personal note detail",
+      description: "Get one personal note by note ID from the currently connected workspace. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "noteId"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          noteId: { type: "string", description: "Personal note document ID." }
+        }
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    {
+      name: "append_note",
+      title: "Append to personal note",
+      description: "Append text to an existing personal note for the connected user in the currently connected workspace. Do not ask for companyId. This is not an order note.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "noteId", "text"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          noteId: { type: "string", description: "Personal note document ID." },
+          text: { type: "string", description: "Text to append to the note." }
+        }
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+    },
+    {
+      name: "update_note",
+      title: "Update personal note",
+      description: "Update the title, text, labels, links or color of a personal note in the currently connected workspace. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "noteId"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          noteId: { type: "string", description: "Personal note document ID." },
+          title: { type: "string", description: "New note title." },
+          text: { type: "string", description: "New note text/body." },
+          labels: { type: "array", items: { type: "string" }, description: "Replacement labels." },
+          links: { type: "array", items: { type: "string" }, description: "Replacement links." },
+          colorName: { type: "string", description: "Replacement color name." }
+        }
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+    },
+    {
+      name: "pin_note",
+      title: "Pin or unpin personal note",
+      description: "Pin or unpin a personal note in the currently connected workspace. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "noteId"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          noteId: { type: "string", description: "Personal note document ID." },
+          isPinned: { type: "boolean", description: "True to pin, false to unpin." }
+        }
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+    },
+    {
+      name: "archive_note",
+      title: "Archive or unarchive personal note",
+      description: "Archive or unarchive a personal note in the currently connected workspace. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["companyId", "noteId"],
+        properties: {
+          companyId: { type: "string", description: "Workspace/company ID." },
+          noteId: { type: "string", description: "Personal note document ID." },
+          isArchived: { type: "boolean", description: "True to archive, false to unarchive." }
+        }
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
     }
   ];
 }
@@ -13822,10 +14261,10 @@ function nvMcpInitializeResult() {
       tools: {}
     },
     instructions: [
-      "This MCP server connects ChatGPT to NivaDesk / StudioFlow workspace order actions.",
+      "This MCP server connects ChatGPT to NivaDesk / StudioFlow workspace order and personal note actions.",
       "Always ask for confirmation before creating or changing important order data when user intent is ambiguous.",
       "Never reveal data from another workspace. All tool calls require companyId and a valid Firebase ID token.",
-      "Respect workspace roles: view-only and workflow-only users cannot create or update orders."
+      "Respect workspace roles: view-only and workflow-only users cannot create or update orders. Personal note tools only affect the connected user own Notes area; collaboration is not changed automatically."
     ].join("\n")
   };
 }
