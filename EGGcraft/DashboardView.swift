@@ -1,6 +1,9 @@
 import SwiftUI
 import Charts
 import FirebaseFirestore
+#if os(macOS)
+import AppKit
+#endif
 
 // 🌟 YENİ: TÜM UYGULAMA İÇİN ORTAK PARA BİRİMİ FORMATLAYICILARI 🌟
 extension Double {
@@ -29,6 +32,61 @@ private struct DashboardFinancialItemDTO: Codable, Identifiable {
     var title: String
 }
 
+private enum DashboardSpendingScope: String, CaseIterable, Identifiable {
+    case customRange
+    case thisMonth
+    case thisYear
+    case allTime
+
+    var id: String { rawValue }
+}
+
+private struct DashboardExtraSpendingEntry: Identifiable {
+    let id = UUID()
+    let heading: String
+    let amount: Double
+    let orderId: String
+    let customerName: String
+    let designName: String
+    let watchRef: String
+    let paymentDate: Date
+
+    var orderTitle: String {
+        let customer = customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return customer.isEmpty ? "Untitled order" : customer
+    }
+
+    var descriptionText: String {
+        let design = designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let watch = watchRef.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !design.isEmpty && !watch.isEmpty {
+            return "\(design) · \(watch)"
+        } else if !design.isEmpty {
+            return design
+        } else if !watch.isEmpty {
+            return watch
+        } else {
+            return "No description"
+        }
+    }
+}
+
+private struct DashboardExtraSpendingHeadingSummary: Identifiable {
+    let id = UUID()
+    let heading: String
+    let total: Double
+    let entries: [DashboardExtraSpendingEntry]
+}
+
+private struct DashboardExtraSpendingOrderGroup: Identifiable {
+    let id: String
+    let orderTitle: String
+    let orderSubtitle: String
+    let total: Double
+    let entries: [DashboardExtraSpendingEntry]
+}
+
 struct DashboardView: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
     @Environment(\.colorScheme) var colorScheme
@@ -39,6 +97,10 @@ struct DashboardView: View {
     @AppStorage("financialExpenseItemsJSON") private var financialExpenseItemsJSON: String = ""
     @AppStorage("financialRemainingItemsJSON") private var financialRemainingItemsJSON: String = ""
     @AppStorage("financialShowBaseCost") private var financialShowBaseCost: Bool = true
+    @AppStorage("extraSpendingIncludeBaseCost") private var extraSpendingIncludeBaseCost: Bool = true
+    @AppStorage("extraSpendingIncludeShipping") private var extraSpendingIncludeShipping: Bool = false
+    @AppStorage("extraSpendingIncludePlatformFee") private var extraSpendingIncludePlatformFee: Bool = false
+    @AppStorage("extraSpendingIncludeTax") private var extraSpendingIncludeTax: Bool = false
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
     
     @State private var seciliFiltre: ZamanFiltresi = .buYil
@@ -51,6 +113,11 @@ struct DashboardView: View {
     
     // 🌟 YENİ: WIDGET KART GÖRÜNÜRLÜK ŞALTERLERİ 🌟
     @State private var showWidgetMenu = false
+    @State private var extraSpendingScope: DashboardSpendingScope = .thisMonth
+    @State private var extraSpendingStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var extraSpendingEndDate: Date = Date()
+    @State private var extraSpendingPageIndex: Int = 0
+    @State private var showExtraSpendingPage: Bool = false
     @AppStorage("dashShowRevenue") private var dashShowRevenue = true
     @AppStorage("dashShowPending") private var dashShowPending = true
     @AppStorage("dashShowCost") private var dashShowCost = true
@@ -105,16 +172,253 @@ struct DashboardView: View {
 
     private func customFinancialAmount(for siparis: Siparis, prefix: String, items: [DashboardFinancialItemDTO]) -> Double {
         items.reduce(0) { total, item in
-            let key = prefix + item.title
-            let raw = siparis.customFields?[key] ?? ""
-            let cleaned = raw
-                .replacingOccurrences(of: ",", with: "")
-                .replacingOccurrences(of: seciliParaBirimi, with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            return total + (Double(cleaned) ?? 0)
+            total + customFinancialAmountValue(for: siparis, prefix: prefix, title: item.title)
         }
     }
+
+    private func customFinancialAmountValue(for siparis: Siparis, prefix: String, title: String) -> Double {
+        let key = prefix + title
+        let raw = siparis.customFields?[key] ?? ""
+        let cleaned = raw
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: seciliParaBirimi, with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return Double(cleaned) ?? 0
+    }
+
+    private var currentFilterDateRange: (start: Date, end: Date)? {
+        let cal = Calendar.current
+        let simdi = Date()
+
+        switch seciliFiltre {
+        case .buHafta:
+            guard let interval = cal.dateInterval(of: .weekOfYear, for: simdi) else { return nil }
+            return (interval.start, interval.end)
+        case .buAy:
+            guard let interval = cal.dateInterval(of: .month, for: simdi) else { return nil }
+            return (interval.start, interval.end)
+        case .buYil:
+            guard let interval = cal.dateInterval(of: .year, for: simdi) else { return nil }
+            return (interval.start, interval.end)
+        case .tumZamanlar:
+            return nil
+        case .ozelTarih:
+            let start = cal.startOfDay(for: baslangicTarihi)
+            let end = cal.date(bySettingHour: 23, minute: 59, second: 59, of: bitisTarihi) ?? bitisTarihi
+            return (start, end)
+        }
+    }
+
+    private func spendingDateRange(for scope: DashboardSpendingScope) -> (start: Date, end: Date)? {
+        let cal = Calendar.current
+        let now = Date()
+
+        switch scope {
+        case .customRange:
+            let start = cal.startOfDay(for: extraSpendingStartDate)
+            let end = cal.date(bySettingHour: 23, minute: 59, second: 59, of: extraSpendingEndDate) ?? extraSpendingEndDate
+            return (start, end)
+        case .thisMonth:
+            guard let interval = cal.dateInterval(of: .month, for: now) else { return nil }
+            return (interval.start, interval.end)
+        case .thisYear:
+            guard let interval = cal.dateInterval(of: .year, for: now) else { return nil }
+            return (interval.start, interval.end)
+        case .allTime:
+            return nil
+        }
+    }
+
+    private func spendingScopeTitle(_ scope: DashboardSpendingScope) -> String {
+        switch scope {
+        case .customRange: return t("Custom Range", lang: seciliDil)
+        case .thisMonth: return t("This Month", lang: seciliDil)
+        case .thisYear: return t("This Year", lang: seciliDil)
+        case .allTime: return t("All Time", lang: seciliDil)
+        }
+    }
+
+    private func ordersForSpendingScope(_ scope: DashboardSpendingScope) -> [Siparis] {
+        guard let range = spendingDateRange(for: scope) else {
+            return firebaseManager.siparisler
+        }
+
+        return firebaseManager.siparisler.filter { siparis in
+            siparis.paymentDate >= range.start && siparis.paymentDate <= range.end
+        }
+    }
+
+    private func standardExtraSpendingEntries(for siparis: Siparis) -> [DashboardExtraSpendingEntry] {
+        var entries: [DashboardExtraSpendingEntry] = []
+
+        func appendStandard(_ heading: String, amount: Double) {
+            guard amount > 0 else { return }
+            entries.append(DashboardExtraSpendingEntry(
+                heading: heading,
+                amount: amount,
+                orderId: siparis.id ?? "",
+                customerName: siparis.customerName,
+                designName: siparis.designName,
+                watchRef: siparis.watchRef,
+                paymentDate: siparis.paymentDate
+            ))
+        }
+
+        if extraSpendingIncludeBaseCost && financialShowBaseCost {
+            appendStandard(t("Base Cost", lang: seciliDil), amount: siparis.watchPurchasePrice)
+        }
+        if extraSpendingIncludeShipping {
+            appendStandard(t("Shipping", lang: seciliDil), amount: siparis.deliveryCost)
+        }
+        if extraSpendingIncludePlatformFee {
+            appendStandard(t("Platform Fee", lang: seciliDil), amount: siparis.paymentFee)
+        }
+        if extraSpendingIncludeTax {
+            appendStandard(t("VAT / Tax", lang: seciliDil), amount: siparis.taxAmount)
+        }
+
+        return entries
+    }
+
+    private var extraSpendingEntries: [DashboardExtraSpendingEntry] {
+        let headings = financialExpenseItems
+
+        return ordersForSpendingScope(extraSpendingScope).flatMap { siparis in
+            let customEntries = headings.compactMap { item -> DashboardExtraSpendingEntry? in
+                let amount = customFinancialAmountValue(for: siparis, prefix: "financialExpense::", title: item.title)
+                guard amount > 0 else { return nil }
+
+                return DashboardExtraSpendingEntry(
+                    heading: item.title,
+                    amount: amount,
+                    orderId: siparis.id ?? "",
+                    customerName: siparis.customerName,
+                    designName: siparis.designName,
+                    watchRef: siparis.watchRef,
+                    paymentDate: siparis.paymentDate
+                )
+            }
+
+            return standardExtraSpendingEntries(for: siparis) + customEntries
+        }
+        .sorted { $0.amount > $1.amount }
+    }
+
+    private var extraSpendingTotal: Double {
+        extraSpendingEntries.reduce(0) { $0 + $1.amount }
+    }
+
+    private var extraSpendingHeadingSummaries: [DashboardExtraSpendingHeadingSummary] {
+        let grouped = Dictionary(grouping: extraSpendingEntries) { $0.heading }
+        return grouped.map { heading, entries in
+            let sortedEntries = entries.sorted { $0.amount > $1.amount }
+            return DashboardExtraSpendingHeadingSummary(
+                heading: heading,
+                total: sortedEntries.reduce(0) { $0 + $1.amount },
+                entries: sortedEntries
+            )
+        }
+        .filter { $0.total > 0 }
+        .sorted { $0.total > $1.total }
+    }
+
+    private var topExtraSpendingOrders: [DashboardExtraSpendingEntry] {
+        Array(extraSpendingEntries.prefix(8))
+    }
+
+    private var extraSpendingOrderGroups: [DashboardExtraSpendingOrderGroup] {
+        let grouped = Dictionary(grouping: extraSpendingEntries) { $0.orderId }
+        return grouped.map { orderId, entries in
+            let sortedEntries = entries.sorted {
+                if $0.paymentDate == $1.paymentDate {
+                    return $0.heading.localizedCaseInsensitiveCompare($1.heading) == .orderedAscending
+                }
+                return $0.paymentDate > $1.paymentDate
+            }
+            let first = sortedEntries.first
+            let subtitleParts = [
+                first?.descriptionText ?? "",
+                first?.watchRef ?? ""
+            ].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            return DashboardExtraSpendingOrderGroup(
+                id: orderId,
+                orderTitle: first?.orderTitle ?? t("Unknown Order", lang: seciliDil),
+                orderSubtitle: subtitleParts.joined(separator: " · "),
+                total: sortedEntries.reduce(0) { $0 + $1.amount },
+                entries: sortedEntries
+            )
+        }
+        .sorted {
+            if $0.total == $1.total {
+                return $0.orderTitle.localizedCaseInsensitiveCompare($1.orderTitle) == .orderedAscending
+            }
+            return $0.total > $1.total
+        }
+    }
+
+    private var extraSpendingItemsPerPage: Int {
+        isPhoneLayout ? 12 : 20
+    }
+
+    private var extraSpendingTotalPages: Int {
+        guard !extraSpendingEntries.isEmpty else { return 1 }
+        return max(1, Int(ceil(Double(extraSpendingEntries.count) / Double(extraSpendingItemsPerPage))))
+    }
+
+    private var extraSpendingSafePageIndex: Int {
+        min(max(extraSpendingPageIndex, 0), max(extraSpendingTotalPages - 1, 0))
+    }
+
+    private var paginatedExtraSpendingEntries: [DashboardExtraSpendingEntry] {
+        guard !extraSpendingEntries.isEmpty else { return [] }
+        let start = extraSpendingSafePageIndex * extraSpendingItemsPerPage
+        let end = min(start + extraSpendingItemsPerPage, extraSpendingEntries.count)
+        guard start < end else { return [] }
+        return Array(extraSpendingEntries[start..<end])
+    }
+
+    private var paginatedExtraSpendingOrderGroups: [DashboardExtraSpendingOrderGroup] {
+        let grouped = Dictionary(grouping: paginatedExtraSpendingEntries) { $0.orderId }
+        return grouped.map { orderId, entries in
+            let sortedEntries = entries.sorted {
+                if $0.paymentDate == $1.paymentDate {
+                    return $0.heading.localizedCaseInsensitiveCompare($1.heading) == .orderedAscending
+                }
+                return $0.paymentDate > $1.paymentDate
+            }
+            let first = sortedEntries.first
+            let subtitleParts = [
+                first?.descriptionText ?? "",
+                first?.watchRef ?? ""
+            ].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            return DashboardExtraSpendingOrderGroup(
+                id: orderId,
+                orderTitle: first?.orderTitle ?? t("Unknown Order", lang: seciliDil),
+                orderSubtitle: subtitleParts.joined(separator: " · "),
+                total: sortedEntries.reduce(0) { $0 + $1.amount },
+                entries: sortedEntries
+            )
+        }
+        .sorted {
+            if $0.total == $1.total {
+                return $0.orderTitle.localizedCaseInsensitiveCompare($1.orderTitle) == .orderedAscending
+            }
+            return $0.total > $1.total
+        }
+    }
+
+    private var extraSpendingPageRangeText: String {
+        guard !extraSpendingEntries.isEmpty else { return "0 / 0" }
+        let start = extraSpendingSafePageIndex * extraSpendingItemsPerPage + 1
+        let end = min(start + extraSpendingItemsPerPage - 1, extraSpendingEntries.count)
+        return "\(start)-\(end) / \(extraSpendingEntries.count)"
+    }
+
+    private func resetExtraSpendingPage() {
+        extraSpendingPageIndex = 0
+    }
+
 
     private func customExpenseTotal(for siparis: Siparis) -> Double {
         customFinancialAmount(for: siparis, prefix: "financialExpense::", items: financialExpenseItems)
@@ -197,15 +501,55 @@ struct DashboardView: View {
     var buyumeYuzdesi: Double { if gecenYilKari == 0 { return buYilKari > 0 ? 100.0 : 0.0 }; return ((buYilKari - gecenYilKari) / gecenYilKari) * 100.0 }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: isPhoneLayout ? 14 : 20) {
-                headerFiltreAlani
-                ozetKartlariAlani
-                grafikAlani
-                yillikPerformansAlani
+        ZStack {
+            ScrollView {
+                VStack(spacing: isPhoneLayout ? 14 : 20) {
+                    headerFiltreAlani
+                    ozetKartlariAlani
+                    extraSpendingSummaryAlani
+                    grafikAlani
+                    yillikPerformansAlani
+                }
+                .padding(.vertical, isPhoneLayout ? 10 : 16)
             }
-            .padding(.vertical, isPhoneLayout ? 10 : 16)
+
+            #if os(macOS)
+            if showExtraSpendingPage {
+                Color.black.opacity(0.18)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        showExtraSpendingPage = false
+                    }
+                    .transition(.opacity)
+
+                extraSpendingDetailPage
+                    .padding(28)
+                    .transition(.scale(scale: 0.98).combined(with: .opacity))
+                    .zIndex(1)
+            }
+            #endif
         }
+        .animation(.easeInOut(duration: 0.16), value: showExtraSpendingPage)
+        #if !os(macOS)
+        .sheet(isPresented: $showExtraSpendingPage) {
+            NavigationStack {
+                ScrollView {
+                    extraSpendingDetailPage
+                        .padding(.top, 10)
+                }
+                .background(colorScheme == .dark ? Color.black : Color(.systemGroupedBackground))
+                .navigationTitle(t("Extra Spending", lang: seciliDil))
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(t("Done", lang: seciliDil)) {
+                            showExtraSpendingPage = false
+                        }
+                    }
+                }
+            }
+        }
+        #endif
         .onChange(of: dashShowRevenue) { _, _ in syncDashboardWidgetVisibility() }
         .onChange(of: dashShowPending) { _, _ in syncDashboardWidgetVisibility() }
         .onChange(of: dashShowCost) { _, _ in syncDashboardWidgetVisibility() }
@@ -213,6 +557,14 @@ struct DashboardView: View {
         .onChange(of: dashShowShipping) { _, _ in syncDashboardWidgetVisibility() }
         .onChange(of: dashShowTax) { _, _ in syncDashboardWidgetVisibility() }
         .onChange(of: dashShowProfit) { _, _ in syncDashboardWidgetVisibility() }
+        .onChange(of: extraSpendingScope) { _, _ in resetExtraSpendingPage() }
+        .onChange(of: extraSpendingStartDate) { _, _ in resetExtraSpendingPage() }
+        .onChange(of: extraSpendingEndDate) { _, _ in resetExtraSpendingPage() }
+        .onChange(of: extraSpendingIncludeBaseCost) { _, _ in resetExtraSpendingPage() }
+        .onChange(of: extraSpendingIncludeShipping) { _, _ in resetExtraSpendingPage() }
+        .onChange(of: extraSpendingIncludePlatformFee) { _, _ in resetExtraSpendingPage() }
+        .onChange(of: extraSpendingIncludeTax) { _, _ in resetExtraSpendingPage() }
+
     }
 
     private func dashboardMoney(_ value: Double, short: Bool = false) -> String {
@@ -268,7 +620,7 @@ struct DashboardView: View {
     }
 
     private var dashboardCustomizeContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: isPhoneLayout ? 12 : 14) {
             HStack(spacing: 10) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 15, weight: .bold))
@@ -650,6 +1002,568 @@ struct DashboardView: View {
         if dashShowShipping { OzetKart(title: t("Shipping", lang: seciliDil), value: toplamKargo, iconName: "shippingbox", color: .red, sembol: seciliParaBirimi) }
         if dashShowTax { OzetKart(title: t("Tax Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
         if dashShowProfit { OzetKart(title: t("Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+    }
+    private var extraSpendingSummaryAlani: some View {
+        Button {
+            showExtraSpendingPage = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "list.bullet.rectangle.portrait")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.red)
+                    .frame(width: 38, height: 38)
+                    .background(Color.red.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Extra Spending Summary", lang: seciliDil))
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.primary)
+
+                    Text(t("Open a detailed page for monthly, yearly and order-based extra spending with descriptions.", lang: seciliDil))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(dashboardMoney(extraSpendingTotal))
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+
+                    Text("\(extraSpendingEntries.count) \(t("entries", lang: seciliDil))")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(isPhoneLayout ? 12 : 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+            .cornerRadius(12)
+            .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+            .padding(.horizontal, isPhoneLayout ? 10 : 16)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var extraSpendingDetailPage: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if isPhoneLayout {
+                VStack(alignment: .leading, spacing: 12) {
+                    extraSpendingDetailTitle
+                    extraSpendingFilterControls
+                }
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    extraSpendingDetailTitle
+
+                    Spacer(minLength: 12)
+
+                    extraSpendingFilterControls
+                }
+            }
+
+            extraSpendingMetricsSection
+
+            extraSpendingIncludedCostsOptions
+
+            if extraSpendingEntries.isEmpty {
+                extraSpendingEmptyState(
+                    title: t("No spending found for this period.", lang: seciliDil),
+                    message: t("Try another period, choose a custom date range, enable additional cost types, or add values inside the Financial Info card of an order.", lang: seciliDil)
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Text(t("All Spending Entries", lang: seciliDil))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Text(extraSpendingPageRangeText)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.secondary)
+                    }
+
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(paginatedExtraSpendingOrderGroups) { group in
+                                extraSpendingOrderGroupSection(group)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .frame(minHeight: isPhoneLayout ? 260 : 320, maxHeight: isPhoneLayout ? nil : 340)
+
+                    extraSpendingPaginationControls
+                }
+            }
+        }
+        .padding(isPhoneLayout ? 12 : 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(12)
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+        .padding(.horizontal, isPhoneLayout ? 0 : 16)
+        .frame(width: isPhoneLayout ? nil : CGFloat(980), height: isPhoneLayout ? nil : CGFloat(620), alignment: .top)
+    }
+
+
+    private var extraSpendingPaginationControls: some View {
+        HStack(spacing: 10) {
+            Button {
+                extraSpendingPageIndex = max(extraSpendingSafePageIndex - 1, 0)
+            } label: {
+                Label(t("Previous", lang: seciliDil), systemImage: "chevron.left")
+            }
+            .buttonStyle(.bordered)
+            .disabled(extraSpendingSafePageIndex <= 0)
+
+            Spacer()
+
+            Text("\(t("Page", lang: seciliDil)) \(extraSpendingSafePageIndex + 1) / \(extraSpendingTotalPages)")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Spacer()
+
+            Button {
+                extraSpendingPageIndex = min(extraSpendingSafePageIndex + 1, extraSpendingTotalPages - 1)
+            } label: {
+                Label(t("Next", lang: seciliDil), systemImage: "chevron.right")
+            }
+            .buttonStyle(.bordered)
+            .disabled(extraSpendingSafePageIndex >= extraSpendingTotalPages - 1)
+        }
+        .padding(.top, 2)
+    }
+
+    private var extraSpendingDetailTitle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "list.bullet.rectangle.portrait")
+                    .font(.system(size: isPhoneLayout ? 13 : 14, weight: .bold))
+                    .foregroundColor(.red)
+                    .frame(width: isPhoneLayout ? 26 : 28, height: isPhoneLayout ? 26 : 28)
+                    .background(Color.red.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text(t("Extra Spending Summary", lang: seciliDil))
+                    .font(.system(size: isPhoneLayout ? 15 : 16, weight: .bold))
+                    .foregroundColor(.primary)
+            }
+
+            Text(t("Shows every extra spending entry in one clear list, grouped by order with descriptions.", lang: seciliDil))
+                .font(.system(size: isPhoneLayout ? 11 : 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var extraSpendingFilterControls: some View {
+        VStack(alignment: isPhoneLayout ? .leading : .trailing, spacing: 8) {
+            HStack(spacing: 8) {
+                Picker("", selection: $extraSpendingScope) {
+                    ForEach(DashboardSpendingScope.allCases) { scope in
+                        Text(spendingScopeTitle(scope)).tag(scope)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: isPhoneLayout ? .infinity : 430)
+
+                #if os(macOS)
+                Button(action: exportExtraSpendingCSV) {
+                    Label(t("Export CSV", lang: seciliDil), systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .disabled(extraSpendingEntries.isEmpty)
+                #endif
+            }
+
+            #if !os(macOS)
+            if !extraSpendingEntries.isEmpty {
+                ShareLink(item: extraSpendingShareURL) {
+                    Label(t("Export CSV", lang: seciliDil), systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+            #endif
+
+            if extraSpendingScope == .customRange {
+                HStack(spacing: isPhoneLayout ? 10 : 8) {
+                    extraSpendingDatePickerRow(title: t("From", lang: seciliDil), selection: $extraSpendingStartDate)
+                    extraSpendingDatePickerRow(title: t("To", lang: seciliDil), selection: $extraSpendingEndDate)
+                }
+                .frame(maxWidth: isPhoneLayout ? .infinity : nil, alignment: .leading)
+            }
+        }
+    }
+
+    private func extraSpendingDatePickerRow(title: String, selection: Binding<Date>) -> some View {
+        HStack(spacing: isPhoneLayout ? 5 : 8) {
+            Text(title)
+                .font(.system(size: isPhoneLayout ? 10 : 11, weight: .regular))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+
+            DatePicker("", selection: selection, displayedComponents: .date)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .frame(maxWidth: isPhoneLayout ? .infinity : 120, alignment: .leading)
+        }
+        .frame(maxWidth: isPhoneLayout ? .infinity : nil, alignment: .leading)
+    }
+
+    private var extraSpendingIncludedCostsOptions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(t("Included Costs", lang: seciliDil))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+
+            if isPhoneLayout {
+                VStack(alignment: .leading, spacing: 7) {
+                    extraSpendingCostToggle(title: t("Base Cost", lang: seciliDil), isOn: $extraSpendingIncludeBaseCost)
+                    extraSpendingCostToggle(title: t("Shipping", lang: seciliDil), isOn: $extraSpendingIncludeShipping)
+                    extraSpendingCostToggle(title: t("Platform Fee", lang: seciliDil), isOn: $extraSpendingIncludePlatformFee)
+                    extraSpendingCostToggle(title: t("VAT / Tax", lang: seciliDil), isOn: $extraSpendingIncludeTax)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    extraSpendingCostToggle(title: t("Base Cost", lang: seciliDil), isOn: $extraSpendingIncludeBaseCost)
+                    extraSpendingCostToggle(title: t("Shipping", lang: seciliDil), isOn: $extraSpendingIncludeShipping)
+                    extraSpendingCostToggle(title: t("Platform Fee", lang: seciliDil), isOn: $extraSpendingIncludePlatformFee)
+                    extraSpendingCostToggle(title: t("VAT / Tax", lang: seciliDil), isOn: $extraSpendingIncludeTax)
+
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func extraSpendingCostToggle(title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(title, isOn: isOn)
+            #if os(macOS)
+            .toggleStyle(.checkbox)
+            #else
+            .toggleStyle(.switch)
+            #endif
+            .font(.system(size: isPhoneLayout ? 12 : 11, weight: .regular))
+            .foregroundColor(.secondary)
+    }
+
+    private var extraSpendingMetricsSection: some View {
+        Group {
+            if isPhoneLayout {
+                VStack(spacing: 8) {
+                    extraSpendingMetricBox(
+                        title: t("Total Extra Spending", lang: seciliDil),
+                        value: extraSpendingTotal,
+                        icon: "minus.circle",
+                        tint: .red
+                    )
+
+                    HStack(spacing: 8) {
+                        extraSpendingSmallMetricBox(
+                            title: t("Headings", lang: seciliDil),
+                            value: "\(extraSpendingHeadingSummaries.count)",
+                            icon: "text.badge.checkmark",
+                            tint: .blue
+                        )
+
+                        extraSpendingSmallMetricBox(
+                            title: t("Entries", lang: seciliDil),
+                            value: "\(extraSpendingEntries.count)",
+                            icon: "doc.text.magnifyingglass",
+                            tint: .purple
+                        )
+                    }
+                }
+            } else {
+                HStack(spacing: 12) {
+                    extraSpendingMetricBox(
+                        title: t("Total Extra Spending", lang: seciliDil),
+                        value: extraSpendingTotal,
+                        icon: "minus.circle",
+                        tint: .red
+                    )
+
+                    extraSpendingSmallMetricBox(
+                        title: t("Headings", lang: seciliDil),
+                        value: "\(extraSpendingHeadingSummaries.count)",
+                        icon: "text.badge.checkmark",
+                        tint: .blue
+                    )
+
+                    extraSpendingSmallMetricBox(
+                        title: t("Order Entries", lang: seciliDil),
+                        value: "\(extraSpendingEntries.count)",
+                        icon: "doc.text.magnifyingglass",
+                        tint: .purple
+                    )
+                }
+            }
+        }
+    }
+
+    private func extraSpendingMetricBox(title: String, value: Double, icon: String, tint: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Text(dashboardMoney(value))
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func extraSpendingSmallMetricBox(title: String, value: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Text(value)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: isPhoneLayout ? .infinity : 170)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func extraSpendingHeadingRow(_ summary: DashboardExtraSpendingHeadingSummary) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Text(t(summary.heading, lang: seciliDil))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text(dashboardMoney(summary.total))
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(.red)
+                    .lineLimit(1)
+            }
+
+            if let first = summary.entries.first {
+                Text("\(first.orderTitle) · \(first.descriptionText)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            if summary.entries.count > 1 {
+                Text("+\(summary.entries.count - 1) \(t("more order entries", lang: seciliDil))")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func extraSpendingOrderGroupSection(_ group: DashboardExtraSpendingOrderGroup) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.orderTitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                    if !group.orderSubtitle.isEmpty {
+                        Text(group.orderSubtitle)
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundColor(.secondary.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 10)
+
+                Text(dashboardMoney(group.total))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 2)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(group.entries) { entry in
+                    extraSpendingOrderRow(entry)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func extraSpendingOrderRow(_ entry: DashboardExtraSpendingEntry) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(t(entry.heading, lang: seciliDil))
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    if !entry.descriptionText.isEmpty {
+                        Text("·")
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.secondary)
+
+                        Text(entry.descriptionText)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Text(entry.paymentDate, format: .dateTime.day().month().year())
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer(minLength: 10)
+
+            Text(dashboardMoney(entry.amount))
+                .font(.system(size: 12, weight: .regular, design: .rounded))
+                .foregroundColor(.red)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .background(colorScheme == .dark ? Color.white.opacity(0.035) : Color.black.opacity(0.025))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private func extraSpendingEmptyState(title: String, message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "tray")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(.secondary)
+                .frame(width: 24, height: 24)
+                .background(Color.primary.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.primary)
+
+                Text(message)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func csvSafe(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return "\"\(escaped)\""
+    }
+
+    private func extraSpendingCSVString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        var rows: [String] = [
+            "Date,Customer,Design / Description,Watch,Spending Heading,Amount,Currency,Order ID"
+        ]
+
+        for entry in extraSpendingEntries.sorted(by: { $0.paymentDate > $1.paymentDate }) {
+            rows.append([
+                csvSafe(formatter.string(from: entry.paymentDate)),
+                csvSafe(entry.orderTitle),
+                csvSafe(entry.descriptionText),
+                csvSafe(entry.watchRef),
+                csvSafe(entry.heading),
+                csvSafe(String(format: "%.2f", entry.amount)),
+                csvSafe(seciliParaBirimi),
+                csvSafe(entry.orderId)
+            ].joined(separator: ","))
+        }
+
+        return rows.joined(separator: "\n")
+    }
+
+    private var extraSpendingShareURL: URL {
+        let fileName = "extra-spending-\(extraSpendingScope.rawValue).csv"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try? extraSpendingCSVString().write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    private func exportExtraSpendingCSV() {
+        guard !extraSpendingEntries.isEmpty else { return }
+
+        #if os(macOS)
+        let csv = extraSpendingCSVString()
+        let panel = NSSavePanel()
+        panel.title = t("Export Extra Spending", lang: seciliDil)
+        panel.nameFieldStringValue = "extra-spending-\(extraSpendingScope.rawValue).csv"
+        panel.allowedFileTypes = ["csv"]
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try csv.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                print("Extra spending CSV export failed:", error.localizedDescription)
+            }
+        }
+        #endif
     }
 
     private var grafikAlani: some View {

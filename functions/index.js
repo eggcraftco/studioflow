@@ -12797,6 +12797,516 @@ function nvRequireWriteAccess(context) {
   }
 }
 
+function nvRoleCanAccessFinancialInfo(companyData = {}, uid = "") {
+  const cleanUid = String(uid || "").trim();
+  if (!cleanUid) return false;
+  if (uidIsCompanyOwner(companyData, cleanUid)) return true;
+
+  const roleValue = workspaceMemberRoleValue(companyData, cleanUid, "member");
+  const customRole = customRoleData(companyData, roleValue);
+  const access = workspaceMemberAccess(companyData, cleanUid);
+  const hasFinanceAccess = access.financialInfo !== false && access.cardFinancial !== false;
+
+  if (customRole) return hasFinanceAccess;
+
+  const role = normalizeWorkspaceRole(roleValue, "member");
+  if (role === "workflowOnly" || role === "viewOnly") return false;
+  if (role === "owner" || role === "admin" || role === "member") return hasFinanceAccess;
+  return false;
+}
+
+function nvRequireFinancialAccess(context) {
+  if (!nvRoleCanAccessFinancialInfo(context.companyData, context.uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to financial information in this workspace.");
+  }
+}
+
+function nvRequireDashboardAccess(context) {
+  if (!uidCanAccessWorkspaceArea(context.companyData, context.uid, "dashboard")) {
+    throw new HttpsError("permission-denied", "You do not have access to the dashboard in this workspace.");
+  }
+}
+
+function nvMoneyNumber(value) {
+  const raw = typeof value === "number" ? value : String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[£$€]/g, "")
+    .trim();
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function nvChatGPTDateMillis(value) {
+  if (!value) return null;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") {
+    const d = value.toDate();
+    const t = d instanceof Date ? d.getTime() : NaN;
+    return Number.isFinite(t) ? t : null;
+  }
+  if (value instanceof Date) {
+    const t = value.getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function nvChatGPTDueDateMillis(order = {}) {
+  const explicit = nvChatGPTDateMillis(order.dueDate || order.deliveryDueDate || order.deliveryDate);
+  if (explicit) return explicit;
+  const startMs = nvChatGPTDateMillis(order.paymentDate || order.createdAt);
+  const deliveryDays = Number(order.deliveryTime || order.deliveryDays || 0);
+  if (startMs && Number.isFinite(deliveryDays) && deliveryDays > 0) {
+    return startMs + deliveryDays * 24 * 60 * 60 * 1000;
+  }
+  return null;
+}
+
+function nvIsCompletedStatus(value = "") {
+  const s = String(value || "").trim().toLowerCase();
+  return ["completed", "complete", "done", "delivered", "finished", "tamamlandı", "tamamlandi"].includes(s);
+}
+
+function nvIsCancelledStatus(value = "") {
+  const s = String(value || "").trim().toLowerCase();
+  return ["cancelled", "canceled", "cancel", "iptal", "cancelled order"].includes(s);
+}
+
+function nvChatGPTCustomFinancialItems(order = {}, prefix = "") {
+  const fields = order.customFields && typeof order.customFields === "object" && !Array.isArray(order.customFields) ? order.customFields : {};
+  return Object.entries(fields)
+    .filter(([key]) => String(key || "").startsWith(prefix))
+    .map(([key, rawValue]) => {
+      const title = String(key).slice(prefix.length);
+      const amount = nvMoneyNumber(rawValue);
+      return { title, amount };
+    })
+    .filter((item) => item.title && item.amount !== 0);
+}
+
+function nvChatGPTOrderFinancialsFromData(data = {}, orderId = "") {
+  const paidAmount = nvMoneyNumber(data.paidAmount);
+  const remainingAmount = nvMoneyNumber(data.remainingAmount);
+  const totalPrice = nvMoneyNumber(data.totalPrice || data.price || (paidAmount + remainingAmount));
+  const watchPurchasePrice = nvMoneyNumber(data.watchPurchasePrice);
+  const paymentFee = nvMoneyNumber(data.paymentFee);
+  const deliveryCost = nvMoneyNumber(data.deliveryCost);
+  const taxAmount = nvMoneyNumber(data.taxAmount);
+  const taxRate = nvMoneyNumber(data.taxRate);
+  const customExpenses = nvChatGPTCustomFinancialItems(data, "financialExpense::");
+  const customPending = nvChatGPTCustomFinancialItems(data, "financialRemaining::");
+  const customExpenseTotal = customExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const customPendingTotal = customPending.reduce((sum, item) => sum + item.amount, 0);
+  const totalCost = watchPurchasePrice + paymentFee + deliveryCost + taxAmount + customExpenseTotal;
+  const expectedRevenue = totalPrice || (paidAmount + remainingAmount);
+  const estimatedProfit = expectedRevenue - totalCost;
+  const outstandingTotal = remainingAmount + customPendingTotal;
+  const dueMs = nvChatGPTDueDateMillis(data);
+
+  return {
+    orderId,
+    customerName: String(data.customerName || ""),
+    watchRef: String(data.watchRef || ""),
+    designName: String(data.designName || ""),
+    status: String(data.status || ""),
+    designStatus: String(data.designStatus || ""),
+    currency: String(data.currency || data.paraBirimi || "£"),
+    totalPrice: nvMoneyNumber(totalPrice),
+    paidAmount,
+    remainingAmount,
+    customPending,
+    customPendingTotal,
+    outstandingTotal,
+    watchPurchasePrice,
+    paymentFee,
+    deliveryCost,
+    taxType: String(data.taxType || ""),
+    taxRate,
+    taxAmount,
+    customExpenses,
+    customExpenseTotal,
+    totalCost,
+    estimatedProfit,
+    dueDate: dueMs ? new Date(dueMs).toISOString().slice(0, 10) : "",
+    isCompleted: nvIsCompletedStatus(data.status),
+    isCancelled: nvIsCancelledStatus(data.status)
+  };
+}
+
+async function nvChatGPTGetOrderFinancials(context, args = {}) {
+  nvRequireFinancialAccess(context);
+  const orderId = nvCleanString(args.orderId || args.id || "", 160);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const ref = admin.firestore().collection("siparisler").doc(orderId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Order not found.");
+  const data = snap.data() || {};
+  if (String(data.companyId || "") !== context.companyId) {
+    throw new HttpsError("permission-denied", "This order belongs to another workspace.");
+  }
+
+  return {
+    ok: true,
+    action: "get_order_financials",
+    orderId,
+    financials: nvChatGPTOrderFinancialsFromData(data, orderId)
+  };
+}
+
+function nvChatGPTDashboardBuckets(orders = []) {
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  let active = 0;
+  let completed = 0;
+  let cancelled = 0;
+  let overdue = 0;
+  let dueSoon = 0;
+
+  for (const item of orders) {
+    const status = item.status || "";
+    if (nvIsCancelledStatus(status)) {
+      cancelled += 1;
+    } else if (nvIsCompletedStatus(status) || item.isDelivered === true) {
+      completed += 1;
+    } else {
+      active += 1;
+      const dueMs = nvChatGPTDueDateMillis(item);
+      if (dueMs && dueMs < now) overdue += 1;
+      if (dueMs && dueMs >= now && dueMs <= now + sevenDays) dueSoon += 1;
+    }
+  }
+
+  return { total: orders.length, active, completed, cancelled, overdue, dueSoon };
+}
+
+function nvChatGPTDashboardFinancialSummary(orders = []) {
+  const summary = {
+    totalRevenue: 0,
+    paidAmount: 0,
+    remainingAmount: 0,
+    customPendingTotal: 0,
+    outstandingTotal: 0,
+    watchPurchaseCost: 0,
+    paymentFees: 0,
+    deliveryCosts: 0,
+    taxAmount: 0,
+    customExpenseTotal: 0,
+    totalCost: 0,
+    estimatedProfit: 0
+  };
+
+  for (const order of orders) {
+    if (nvIsCancelledStatus(order.status)) continue;
+    const f = nvChatGPTOrderFinancialsFromData(order, order.id || "");
+    summary.totalRevenue += f.totalPrice || (f.paidAmount + f.remainingAmount);
+    summary.paidAmount += f.paidAmount;
+    summary.remainingAmount += f.remainingAmount;
+    summary.customPendingTotal += f.customPendingTotal;
+    summary.outstandingTotal += f.outstandingTotal;
+    summary.watchPurchaseCost += f.watchPurchasePrice;
+    summary.paymentFees += f.paymentFee;
+    summary.deliveryCosts += f.deliveryCost;
+    summary.taxAmount += f.taxAmount;
+    summary.customExpenseTotal += f.customExpenseTotal;
+    summary.totalCost += f.totalCost;
+    summary.estimatedProfit += f.estimatedProfit;
+  }
+
+  for (const key of Object.keys(summary)) {
+    summary[key] = Math.round((summary[key] + Number.EPSILON) * 100) / 100;
+  }
+  return summary;
+}
+
+
+function nvRoundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function nvChatGPTScopeDateRange(scope = "", fromDate = "", toDate = "") {
+  const normalized = String(scope || "thisMonth").trim().toLowerCase();
+  const now = new Date();
+
+  function startOfDay(d) {
+    const out = new Date(d);
+    out.setHours(0, 0, 0, 0);
+    return out;
+  }
+
+  function endOfDay(d) {
+    const out = new Date(d);
+    out.setHours(23, 59, 59, 999);
+    return out;
+  }
+
+  if (["all", "alltime", "all_time", "all time"].includes(normalized)) {
+    return null;
+  }
+
+  if (["custom", "customrange", "custom_range", "custom range"].includes(normalized)) {
+    const startMs = Date.parse(String(fromDate || ""));
+    const endMs = Date.parse(String(toDate || ""));
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      throw new HttpsError("invalid-argument", "fromDate and toDate are required for custom range, in YYYY-MM-DD format.");
+    }
+    return { startMs: startOfDay(new Date(startMs)).getTime(), endMs: endOfDay(new Date(endMs)).getTime(), scope: "customRange" };
+  }
+
+  if (["thisyear", "this_year", "this year", "year"].includes(normalized)) {
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end = new Date(now.getFullYear() + 1, 0, 1);
+    return { startMs: start.getTime(), endMs: end.getTime(), scope: "thisYear" };
+  }
+
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return { startMs: start.getTime(), endMs: end.getTime(), scope: "thisMonth" };
+}
+
+function nvChatGPTPaymentDateMillis(order = {}) {
+  return nvChatGPTDateMillis(order.paymentDate || order.createdAt || order.updatedAt);
+}
+
+function nvChatGPTExtraSpendingEntry(order = {}, heading = "", amount = 0, source = "custom") {
+  const orderId = String(order.id || order.orderId || "");
+  const dateMs = nvChatGPTPaymentDateMillis(order);
+  return {
+    orderId,
+    customerName: String(order.customerName || ""),
+    designName: String(order.designName || ""),
+    watchRef: String(order.watchRef || ""),
+    status: String(order.status || ""),
+    paymentDate: dateMs ? new Date(dateMs).toISOString().slice(0, 10) : "",
+    heading: String(heading || ""),
+    amount: nvRoundMoney(amount),
+    source
+  };
+}
+
+function nvChatGPTExtraSpendingEntriesForOrder(order = {}, options = {}) {
+  const entries = [];
+
+  function pushEntry(heading, amount, source) {
+    const value = nvMoneyNumber(amount);
+    if (value <= 0) return;
+    entries.push(nvChatGPTExtraSpendingEntry(order, heading, value, source));
+  }
+
+  if (options.includeBaseCost !== false) {
+    pushEntry("Base Cost", order.watchPurchasePrice, "baseCost");
+  }
+  if (options.includeShipping === true) {
+    pushEntry("Shipping", order.deliveryCost, "shipping");
+  }
+  if (options.includePlatformFee === true) {
+    pushEntry("Platform Fee", order.paymentFee, "platformFee");
+  }
+  if (options.includeTax === true) {
+    pushEntry("VAT / Tax", order.taxAmount, "tax");
+  }
+
+  const customExpenses = nvChatGPTCustomFinancialItems(order, "financialExpense::");
+  for (const item of customExpenses) {
+    pushEntry(item.title, item.amount, "customSpending");
+  }
+
+  return entries;
+}
+
+function nvChatGPTSummarizeExtraSpending(entries = []) {
+  const byHeading = new Map();
+  const byOrder = new Map();
+
+  for (const entry of entries) {
+    const headingKey = String(entry.heading || "Other");
+    const orderKey = String(entry.orderId || "unknown");
+    const amount = nvMoneyNumber(entry.amount);
+
+    if (!byHeading.has(headingKey)) {
+      byHeading.set(headingKey, { heading: headingKey, total: 0, count: 0 });
+    }
+    const h = byHeading.get(headingKey);
+    h.total += amount;
+    h.count += 1;
+
+    if (!byOrder.has(orderKey)) {
+      byOrder.set(orderKey, {
+        orderId: orderKey,
+        customerName: entry.customerName,
+        designName: entry.designName,
+        watchRef: entry.watchRef,
+        total: 0,
+        count: 0
+      });
+    }
+    const o = byOrder.get(orderKey);
+    o.total += amount;
+    o.count += 1;
+  }
+
+  const clean = (item) => ({ ...item, total: nvRoundMoney(item.total) });
+
+  return {
+    byHeading: Array.from(byHeading.values()).map(clean).sort((a, b) => b.total - a.total).slice(0, 50),
+    byOrder: Array.from(byOrder.values()).map(clean).sort((a, b) => b.total - a.total).slice(0, 50)
+  };
+}
+
+async function nvChatGPTGetExtraSpendingOverview(context, args = {}) {
+  nvRequireFinancialAccess(context);
+
+  const range = nvChatGPTScopeDateRange(args.scope || args.period || "thisMonth", args.fromDate || args.startDate || "", args.toDate || args.endDate || "");
+  const pageSize = Math.min(Math.max(Number(args.pageSize || args.limit || 20), 1), 100);
+  const page = Math.max(Number(args.page || 1), 1);
+  const orders = await nvChatGPTLoadWorkspaceOrders(context, args.scanLimit || 1000);
+
+  const includeOptions = {
+    includeBaseCost: args.includeBaseCost !== false,
+    includeShipping: args.includeShipping === true,
+    includePlatformFee: args.includePlatformFee === true,
+    includeTax: args.includeTax === true
+  };
+
+  let entries = [];
+  for (const order of orders) {
+    if (nvIsCancelledStatus(order.status)) continue;
+    const dateMs = nvChatGPTPaymentDateMillis(order);
+    if (range && (!dateMs || dateMs < range.startMs || dateMs > range.endMs)) continue;
+    entries.push(...nvChatGPTExtraSpendingEntriesForOrder(order, includeOptions));
+  }
+
+  entries = entries
+    .filter((entry) => nvMoneyNumber(entry.amount) > 0)
+    .sort((a, b) => {
+      const amountDiff = nvMoneyNumber(b.amount) - nvMoneyNumber(a.amount);
+      if (amountDiff !== 0) return amountDiff;
+      return String(a.customerName || "").localeCompare(String(b.customerName || ""));
+    });
+
+  const totalAmount = nvRoundMoney(entries.reduce((sum, entry) => sum + nvMoneyNumber(entry.amount), 0));
+  const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const pageEntries = entries.slice(startIndex, startIndex + pageSize);
+  const summary = nvChatGPTSummarizeExtraSpending(entries);
+
+  return {
+    ok: true,
+    action: "get_extra_spending_overview",
+    companyId: context.companyId,
+    scope: range ? range.scope : "allTime",
+    fromDate: range ? new Date(range.startMs).toISOString().slice(0, 10) : "",
+    toDate: range ? new Date(range.endMs).toISOString().slice(0, 10) : "",
+    includeOptions,
+    totalAmount,
+    totalEntries: entries.length,
+    page: safePage,
+    pageSize,
+    totalPages,
+    pageRange: entries.length === 0 ? "0 / 0" : `${startIndex + 1}-${Math.min(startIndex + pageSize, entries.length)} / ${entries.length}`,
+    byHeading: summary.byHeading,
+    byOrder: summary.byOrder,
+    entries: pageEntries
+  };
+}
+
+function nvChatGPTOrderSummaryForDashboard(data = {}, id = "") {
+  const dueMs = nvChatGPTDueDateMillis(data);
+  return {
+    id,
+    customerName: String(data.customerName || ""),
+    watchRef: String(data.watchRef || ""),
+    designName: String(data.designName || ""),
+    status: String(data.status || ""),
+    designStatus: String(data.designStatus || ""),
+    remainingAmount: nvMoneyNumber(data.remainingAmount),
+    paidAmount: nvMoneyNumber(data.paidAmount),
+    dueDate: dueMs ? new Date(dueMs).toISOString().slice(0, 10) : ""
+  };
+}
+
+async function nvChatGPTLoadWorkspaceOrders(context, limit = 500) {
+  const snap = await admin.firestore()
+    .collection("siparisler")
+    .where("companyId", "==", context.companyId)
+    .limit(Math.min(Math.max(Number(limit || 500), 1), 1000))
+    .get();
+
+  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+}
+
+async function nvChatGPTGetDashboardSummary(context, args = {}) {
+  nvRequireDashboardAccess(context);
+  const orders = await nvChatGPTLoadWorkspaceOrders(context, args.limit || 500);
+  const buckets = nvChatGPTDashboardBuckets(orders);
+  const hasFinancialAccess = nvRoleCanAccessFinancialInfo(context.companyData, context.uid);
+
+  const now = Date.now();
+  const upcoming = orders
+    .filter((order) => !nvIsCancelledStatus(order.status) && !nvIsCompletedStatus(order.status) && order.isDelivered !== true)
+    .map((order) => ({ order, dueMs: nvChatGPTDueDateMillis(order) }))
+    .filter((item) => item.dueMs)
+    .sort((a, b) => a.dueMs - b.dueMs)
+    .slice(0, 10)
+    .map((item) => ({
+      ...nvChatGPTOrderSummaryForDashboard(item.order, item.order.id || ""),
+      daysRemaining: Math.ceil((item.dueMs - now) / (24 * 60 * 60 * 1000))
+    }));
+
+  const result = {
+    ok: true,
+    action: "get_dashboard_summary",
+    companyId: context.companyId,
+    counts: buckets,
+    upcomingOrders: upcoming,
+    financialAccess: hasFinancialAccess
+  };
+
+  if (hasFinancialAccess) {
+    result.financialSummary = nvChatGPTDashboardFinancialSummary(orders);
+    result.highestRemainingOrders = orders
+      .filter((order) => !nvIsCancelledStatus(order.status) && nvMoneyNumber(order.remainingAmount) > 0)
+      .sort((a, b) => nvMoneyNumber(b.remainingAmount) - nvMoneyNumber(a.remainingAmount))
+      .slice(0, 10)
+      .map((order) => nvChatGPTOrderSummaryForDashboard(order, order.id || ""));
+  } else {
+    result.financialSummaryHiddenReason = "Your workspace role does not allow financial information.";
+  }
+
+  return result;
+}
+
+async function nvChatGPTGetFinancialOverview(context, args = {}) {
+  nvRequireFinancialAccess(context);
+  const orders = await nvChatGPTLoadWorkspaceOrders(context, args.limit || 1000);
+  return {
+    ok: true,
+    action: "get_financial_overview",
+    companyId: context.companyId,
+    counts: nvChatGPTDashboardBuckets(orders),
+    financialSummary: nvChatGPTDashboardFinancialSummary(orders),
+    highestRemainingOrders: orders
+      .filter((order) => !nvIsCancelledStatus(order.status) && nvMoneyNumber(order.remainingAmount) > 0)
+      .sort((a, b) => nvMoneyNumber(b.remainingAmount) - nvMoneyNumber(a.remainingAmount))
+      .slice(0, 15)
+      .map((order) => nvChatGPTOrderSummaryForDashboard(order, order.id || "")),
+    mostProfitableOrders: orders
+      .filter((order) => !nvIsCancelledStatus(order.status))
+      .map((order) => ({ order, financials: nvChatGPTOrderFinancialsFromData(order, order.id || "") }))
+      .sort((a, b) => b.financials.estimatedProfit - a.financials.estimatedProfit)
+      .slice(0, 10)
+      .map((item) => ({
+        ...nvChatGPTOrderSummaryForDashboard(item.order, item.order.id || ""),
+        estimatedProfit: item.financials.estimatedProfit,
+        totalRevenue: item.financials.totalPrice || (item.financials.paidAmount + item.financials.remainingAmount),
+        totalCost: item.financials.totalCost
+      }))
+  };
+}
+
 function nvOrderDefaults(args = {}, context = {}) {
   const customerName = nvCleanString(args.customerName || args.customer || "New Project", 240) || "New Project";
   const designBrief = nvCleanString(args.designBrief || args.notes || "", 5000);
@@ -13210,8 +13720,16 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       return nvChatGPTPinNote(context, args);
     case "archive_note":
       return nvChatGPTArchiveNote(context, args);
+    case "get_order_financials":
+      return nvChatGPTGetOrderFinancials(context, args);
+    case "get_dashboard_summary":
+      return nvChatGPTGetDashboardSummary(context, args);
+    case "get_financial_overview":
+      return nvChatGPTGetFinancialOverview(context, args);
+    case "get_extra_spending_overview":
+      return nvChatGPTGetExtraSpendingOverview(context, args);
     default:
-      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note.");
+      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note, get_order_financials, get_dashboard_summary, get_financial_overview, get_extra_spending_overview, get_extra_spending_overview.");
   }
 }
 
@@ -13220,7 +13738,9 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
 // MARK: - ChatGPT OAuth skeleton
 
 const NV_CHATGPT_OAUTH_CODE_TTL_MS = 10 * 60 * 1000;
-const NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
+// Keep ChatGPT connector access stable for a private workspace integration.
+// Users can still revoke access by reconnecting/removing the connector.
+const NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const NV_CHATGPT_OAUTH_ISSUER_NAME = "NivaDesk StudioFlow";
 
 function nvBase64Url(buffer) {
@@ -13287,6 +13807,7 @@ function nvOAuthProtectedResourceMetadata(req) {
       "orders.write",
       "notes.read",
       "notes.write",
+      "finance.read",
       "tasks.write"
     ],
     resource_documentation: "https://eggcraft.co.uk/"
@@ -13309,6 +13830,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
       "orders.write",
       "notes.read",
       "notes.write",
+      "finance.read",
       "tasks.write"
     ],
     service_documentation: "https://eggcraft.co.uk/",
@@ -13469,7 +13991,7 @@ async function nvResolveChatGPTOAuthBearer(req) {
 async function nvRequireChatGPTWorkspaceAccessWithOAuth(req, companyId = "") {
   const oauth = await nvResolveChatGPTOAuthBearer(req);
   if (oauth?.uid) {
-    const cleanCompanyId = String(companyId || oauth.companyId || "").trim();
+    const cleanCompanyId = String(oauth.companyId || companyId || "").trim();
     if (!cleanCompanyId) {
       throw new HttpsError("invalid-argument", "companyId is required.");
     }
@@ -13898,6 +14420,15 @@ function nvMcpToolContentFromResult(result = {}) {
   if (action === "archive_note") {
     return `Personal note archive state updated: ${result.noteId || ""}.`;
   }
+  if (action === "get_order_financials") {
+    return `Order financials: ${result.financials?.customerName || result.orderId || "order"}.`;
+  }
+  if (action === "get_dashboard_summary") {
+    return `Dashboard summary: ${result.counts?.total || 0} order(s).`;
+  }
+  if (action === "get_financial_overview") {
+    return `Financial overview: ${result.counts?.total || 0} order(s).`;
+  }
   return nvMcpText(result);
 }
 
@@ -13938,11 +14469,11 @@ function nvMcpOrderToolSchemas() {
     {
       name: "create_order",
       title: "Create order",
-      description: "Create a new NivaDesk / StudioFlow order in a workspace. Use this only after the user provides enough order details or confirms creating a draft order.",
+      description: "Create a new NivaDesk / StudioFlow order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. Use this only after the user provides enough order details or confirms creating a draft order.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId"],
+        required: [],
         properties: {
           companyId: {
             type: "string",
@@ -14008,11 +14539,11 @@ function nvMcpOrderToolSchemas() {
     {
       name: "search_orders",
       title: "Search orders",
-      description: "Search orders in the user's workspace by customer name, email, watch model, status, order ID, or keyword.",
+      description: "Search orders in the currently connected workspace by customer name, email, watch model, status, order ID, or keyword. Use the connected workspace automatically. Do not ask for companyId.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId"],
+        required: [],
         properties: {
           companyId: {
             type: "string",
@@ -14042,11 +14573,11 @@ function nvMcpOrderToolSchemas() {
     {
       name: "get_order_detail",
       title: "Get order detail",
-      description: "Get full safe order details for one order in the user's workspace.",
+      description: "Get full safe order details for one order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "orderId"],
+        required: ["orderId"],
         properties: {
           companyId: {
             type: "string",
@@ -14068,11 +14599,11 @@ function nvMcpOrderToolSchemas() {
     {
       name: "add_order_note",
       title: "Add order note",
-      description: "Append an internal note to an existing order.",
+      description: "Append an internal note to an existing order in the currently connected workspace. This is an order note, not a personal Notes item. Do not ask for companyId.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "orderId", "note"],
+        required: ["orderId", "note"],
         properties: {
           companyId: {
             type: "string",
@@ -14098,11 +14629,11 @@ function nvMcpOrderToolSchemas() {
     {
       name: "update_order_status",
       title: "Update order status",
-      description: "Update an order status or design status. Use only when the user clearly asks to update the order.",
+      description: "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "orderId"],
+        required: ["orderId"],
         properties: {
           companyId: {
             type: "string",
@@ -14136,9 +14667,9 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId"],
+        required: [],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           title: { type: "string", description: "Note title." },
           text: { type: "string", description: "Note body/content." },
           labels: { type: "array", items: { type: "string" }, description: "Optional labels." },
@@ -14156,9 +14687,9 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId"],
+        required: [],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           query: { type: "string", description: "Keyword to search in title, text, labels or note ID." },
           includeArchived: { type: "boolean", description: "Include archived notes." },
           includeDeleted: { type: "boolean", description: "Include deleted notes." },
@@ -14174,9 +14705,9 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "noteId"],
+        required: ["noteId"],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           noteId: { type: "string", description: "Personal note document ID." }
         }
       },
@@ -14189,9 +14720,9 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "noteId", "text"],
+        required: ["noteId", "text"],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           noteId: { type: "string", description: "Personal note document ID." },
           text: { type: "string", description: "Text to append to the note." }
         }
@@ -14205,9 +14736,9 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "noteId"],
+        required: ["noteId"],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           noteId: { type: "string", description: "Personal note document ID." },
           title: { type: "string", description: "New note title." },
           text: { type: "string", description: "New note text/body." },
@@ -14225,9 +14756,9 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "noteId"],
+        required: ["noteId"],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           noteId: { type: "string", description: "Personal note document ID." },
           isPinned: { type: "boolean", description: "True to pin, false to unpin." }
         }
@@ -14241,14 +14772,150 @@ function nvMcpOrderToolSchemas() {
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["companyId", "noteId"],
+        required: ["noteId"],
         properties: {
-          companyId: { type: "string", description: "Workspace/company ID." },
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
           noteId: { type: "string", description: "Personal note document ID." },
           isArchived: { type: "boolean", description: "True to archive, false to unarchive." }
         }
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+    },
+    {
+      name: "get_order_financials",
+      title: "Get order financials",
+      description: "Read the Financial Info card values for one order. Requires financial access in the connected workspace. Do not use if the user role cannot see financial info.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["orderId"],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          orderId: {
+            type: "string",
+            description: "Order document ID."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "get_dashboard_summary",
+      title: "Get dashboard summary",
+      description: "Read the connected workspace dashboard summary. Basic dashboard counts are returned when the user has dashboard access. Financial totals are included only when the user's role has financial access.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of orders to scan. Default is 500."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "get_extra_spending_overview",
+      title: "Get extra spending overview",
+      description: "Read the Extra Spending Summary for the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. Requires financial access. Supports thisMonth, thisYear, allTime and customRange, pagination, Base Cost, Shipping, Platform Fee and VAT / Tax options.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          scope: {
+            type: "string",
+            description: "Optional period: thisMonth, thisYear, allTime, or customRange. Default is thisMonth."
+          },
+          fromDate: {
+            type: "string",
+            description: "Start date in YYYY-MM-DD format. Required only when scope is customRange."
+          },
+          toDate: {
+            type: "string",
+            description: "End date in YYYY-MM-DD format. Required only when scope is customRange."
+          },
+          includeBaseCost: {
+            type: "boolean",
+            description: "Include Base Cost / watch purchase price. Default true."
+          },
+          includeShipping: {
+            type: "boolean",
+            description: "Include shipping/delivery cost. Default false."
+          },
+          includePlatformFee: {
+            type: "boolean",
+            description: "Include platform/payment fee. Default false."
+          },
+          includeTax: {
+            type: "boolean",
+            description: "Include VAT / tax amount. Default false."
+          },
+          page: {
+            type: "number",
+            description: "Page number for entry results. Default 1."
+          },
+          pageSize: {
+            type: "number",
+            description: "Entries per page. Default 20, maximum 100."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    {
+      name: "get_financial_overview",
+      title: "Get financial overview",
+      description: "Read workspace-level financial totals, remaining payments, costs and estimated profit. Requires financial access in the connected workspace.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {
+          companyId: {
+            type: "string",
+            description: "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of orders to scan. Default is 1000."
+          }
+        }
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
     }
   ];
 }
