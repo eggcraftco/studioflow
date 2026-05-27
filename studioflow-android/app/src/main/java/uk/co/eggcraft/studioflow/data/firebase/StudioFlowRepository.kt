@@ -29,6 +29,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
 import com.google.firebase.firestore.Query
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.data.model.StudioKeepCollaborationInvite
 import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
@@ -1647,6 +1648,96 @@ class StudioFlowRepository(
         val metadata = StorageMetadata.Builder().setContentType(contentType.ifBlank { "image/jpeg" }).build()
         ref.putBytes(bytes, metadata).await()
         return ref.downloadUrl.await().toString()
+    }
+
+    // — Keep Note collaboration (Cloud Functions, mirror Mac) —
+    suspend fun inviteKeepNoteCollaborator(
+        workspaceId: String,
+        note: StudioKeepNote,
+        targetUserId: String,
+        targetEmail: String
+    ) {
+        if (workspaceId.isBlank() || note.id.isBlank() || (targetUserId.isBlank() && targetEmail.isBlank())) return
+        val notePayload = mapOf(
+            "title" to note.title,
+            "text" to note.text,
+            "colorName" to note.colorName,
+            "ownerUserId" to note.ownerUserId,
+            "companyId" to workspaceId,
+            "sharedWith" to note.sharedWith,
+            "collaboratorEmails" to note.collaboratorEmails,
+            "isPinned" to note.isPinned,
+            "isArchived" to note.isArchived,
+            "isDeleted" to note.isDeleted,
+            "labels" to note.labels,
+            "links" to note.links,
+            "manualOrder" to note.manualOrder,
+            "reminderDateMillis" to note.reminderDate?.time
+        )
+        functions.getHttpsCallable("createPersonalNoteCollaborationInvite")
+            .call(mapOf(
+                "companyId" to workspaceId,
+                "noteId" to note.id,
+                "targetUserId" to targetUserId,
+                "targetEmail" to targetEmail,
+                "note" to notePayload
+            )).await()
+    }
+
+    suspend fun removeKeepNoteCollaborator(
+        workspaceId: String,
+        noteId: String,
+        targetUserId: String,
+        targetEmail: String
+    ) {
+        if (workspaceId.isBlank() || noteId.isBlank()) return
+        functions.getHttpsCallable("removeSharedPersonalNoteFromWorkspaceMember")
+            .call(mapOf(
+                "companyId" to workspaceId,
+                "noteId" to noteId,
+                "targetUserId" to targetUserId,
+                "targetEmail" to targetEmail
+            )).await()
+    }
+
+    suspend fun listKeepCollaborationInvites(workspaceId: String): List<StudioKeepCollaborationInvite> {
+        if (workspaceId.isBlank()) return emptyList()
+        val result = functions.getHttpsCallable("listPersonalNoteCollaborationInvites")
+            .call(mapOf("companyId" to workspaceId))
+            .await()
+        val data = result.data as? Map<*, *> ?: return emptyList()
+        val raw = data["invites"] as? List<*> ?: return emptyList()
+        return raw.mapNotNull { item ->
+            val m = item as? Map<*, *> ?: return@mapNotNull null
+            val inviteId = (m["inviteId"] as? String ?: m["id"] as? String).orEmpty()
+            if (inviteId.isBlank()) return@mapNotNull null
+            val preview = m["notePreview"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            StudioKeepCollaborationInvite(
+                id = inviteId,
+                inviteId = inviteId,
+                companyId = (m["companyId"] as? String).orEmpty().ifBlank { workspaceId },
+                noteId = (m["noteId"] as? String).orEmpty(),
+                sourceUserId = (m["sourceUserId"] as? String).orEmpty(),
+                sourceEmail = (m["sourceEmail"] as? String).orEmpty(),
+                title = (preview["title"] as? String).orEmpty(),
+                text = (preview["text"] as? String).orEmpty(),
+                createdAtMillis = (m["createdAtMillis"] as? Number)?.toLong()
+            )
+        }
+    }
+
+    suspend fun acceptKeepCollaborationInvite(workspaceId: String, inviteId: String) {
+        if (workspaceId.isBlank() || inviteId.isBlank()) return
+        functions.getHttpsCallable("acceptPersonalNoteCollaborationInvite")
+            .call(mapOf("companyId" to workspaceId, "inviteId" to inviteId))
+            .await()
+    }
+
+    suspend fun declineKeepCollaborationInvite(workspaceId: String, inviteId: String) {
+        if (workspaceId.isBlank() || inviteId.isBlank()) return
+        functions.getHttpsCallable("declinePersonalNoteCollaborationInvite")
+            .call(mapOf("companyId" to workspaceId, "inviteId" to inviteId))
+            .await()
     }
 
     suspend fun deleteKeepNote(workspaceId: String, userId: String, noteId: String) {

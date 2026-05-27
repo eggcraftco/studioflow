@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.data.model.StudioKeepCollaborationInvite
 import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
@@ -77,6 +78,7 @@ data class StudioFlowUiState(
     val keepNotes: List<StudioKeepNote> = emptyList(),
     val keepNotesSearch: String = "",
     val keepNotesSection: String = "notes",
+    val keepCollaborationInvites: List<StudioKeepCollaborationInvite> = emptyList(),
     val errorMessage: String = "",
     val settingsMessage: String = ""
 )
@@ -1124,6 +1126,48 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    fun inviteKeepNoteCollaborator(note: StudioKeepNote, targetUserId: String, targetEmail: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.inviteKeepNoteCollaborator(workspace.id, note, targetUserId, targetEmail) }
+                .onFailure { e -> mutableState.update { it.copy(errorMessage = e.message ?: "Could not invite collaborator.") } }
+        }
+    }
+
+    fun removeKeepNoteCollaborator(noteId: String, targetUserId: String, targetEmail: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.removeKeepNoteCollaborator(workspace.id, noteId, targetUserId, targetEmail) }
+        }
+    }
+
+    fun refreshKeepCollaborationInvites() {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.listKeepCollaborationInvites(workspace.id) }
+                .onSuccess { items -> mutableState.update { it.copy(keepCollaborationInvites = items) } }
+        }
+    }
+
+    fun acceptKeepCollaborationInvite(inviteId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        // Optimistic local removal
+        mutableState.update { it.copy(keepCollaborationInvites = it.keepCollaborationInvites.filter { i -> i.id != inviteId }) }
+        viewModelScope.launch {
+            runCatching { repository.acceptKeepCollaborationInvite(workspace.id, inviteId) }
+                .onFailure { refreshKeepCollaborationInvites() }
+        }
+    }
+
+    fun declineKeepCollaborationInvite(inviteId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        mutableState.update { it.copy(keepCollaborationInvites = it.keepCollaborationInvites.filter { i -> i.id != inviteId }) }
+        viewModelScope.launch {
+            runCatching { repository.declineKeepCollaborationInvite(workspace.id, inviteId) }
+                .onFailure { refreshKeepCollaborationInvites() }
+        }
+    }
+
     fun uploadKeepNoteImage(
         note: StudioKeepNote,
         bytes: ByteArray,
@@ -1471,6 +1515,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 .collect { items ->
                     mutableState.update { it.copy(keepNotes = items) }
                 }
+        }
+        viewModelScope.launch {
+            while (true) {
+                runCatching { repository.listKeepCollaborationInvites(workspace.id) }
+                    .onSuccess { items -> mutableState.update { it.copy(keepCollaborationInvites = items) } }
+                kotlinx.coroutines.delay(20_000)
+            }
         }
         settingsJob = viewModelScope.launch {
             repository.workspaceSettingsFlow(workspace.id, user.uid, workspace.ownerUid)

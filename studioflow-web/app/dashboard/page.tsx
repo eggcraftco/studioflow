@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { AppShell } from "@/components/AppShell";
@@ -505,6 +505,7 @@ export default function DashboardPage() {
                     previous={compareOneYear || compareThreeYears ? previousYearSeries : []}
                     twoBack={compareThreeYears ? twoYearsBackSeries : []}
                     threeBack={compareThreeYears ? threeYearsBackSeries : []}
+                    settings={settings}
                   />
                 ) : (
                   <div className="dashboard-chart-locked">
@@ -521,6 +522,10 @@ export default function DashboardPage() {
                   <YearSummary title={t("Growth")} value={canSeeAdvancedFinance ? `${Math.abs(yearly.growth).toFixed(1)}%` : t("Locked")} trend={yearly.growth >= 0 ? "up" : "down"} />
                 </div>
               </section>
+
+              {canSeeAdvancedFinance && (
+                <ExtraSpendingSection orders={orders} settings={settings} hideNumbers={hideNumbers} />
+              )}
             </>
           )}
 
@@ -580,15 +585,20 @@ function YearSummary({ title, value, trend }: { title: string; value: string; tr
   );
 }
 
-function pointsForSeries(series: ChartPoint[], min: number, max: number) {
+function pointsForSeries(
+  series: ChartPoint[],
+  min: number,
+  max: number,
+  padX = 20,
+  padY = 18,
+  width = 640,
+  height = 240,
+  padXRight = padX
+) {
   if (series.length === 0) return "";
-  const width = 640;
-  const height = 240;
-  const padX = 20;
-  const padY = 18;
   const range = max - min || 1;
   return series.map((point, index) => {
-    const x = series.length === 1 ? width / 2 : padX + (index / (series.length - 1)) * (width - padX * 2);
+    const x = series.length === 1 ? width / 2 : padX + (index / (series.length - 1)) * (width - padX - padXRight);
     const y = height - padY - ((point.value - min) / range) * (height - padY * 2);
     return `${x},${y}`;
   }).join(" ");
@@ -598,12 +608,14 @@ function ProfitChart({
   current,
   previous,
   twoBack,
-  threeBack
+  threeBack,
+  settings
 }: {
   current: ChartPoint[];
   previous: ChartPoint[];
   twoBack: ChartPoint[];
   threeBack: ChartPoint[];
+  settings: StudioMoneySettings;
 }) {
   const allValues = [...current, ...previous, ...twoBack, ...threeBack].map(point => point.value);
   const min = Math.min(0, ...allValues);
@@ -613,21 +625,129 @@ function ProfitChart({
     return <div className="dashboard-chart-empty">No data available.</div>;
   }
 
+  const symbol = moneySymbol(settings);
+  // Nice y-axis ticks: 4 evenly spaced levels including 0 and max-rounded
+  const niceMax = niceCeil(max);
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * niceMax);
+  // Dynamic width matched to container so text/dots stay proportional
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [W, setW] = useState(640);
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setW(el.clientWidth || 640);
+    const ro = new ResizeObserver(() => setW(el.clientWidth || 640));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const H = 328;
+  const padXLeft = 8;
+  const padXRight = 56; // room for y-axis labels on the right
+  const padX = padXLeft;
+  const padY = 18;
+  // X-axis labels: show every 3rd point (Jan / Apr / Jul / Oct / next Jan-ish)
+  const xLabelIndices = current.length > 1
+    ? Array.from(new Set([0, ...current.map((_, i) => i).filter((i) => i % Math.max(1, Math.floor(current.length / 4)) === 0), current.length - 1]))
+    : [0];
+
+  function yForValue(v: number) {
+    const range = niceMax - 0 || 1;
+    return H - padY - ((v - 0) / range) * (H - padY * 2);
+  }
+  function xForIndex(i: number) {
+    return current.length === 1 ? W / 2 : padXLeft + (i / (current.length - 1)) * (W - padXLeft - padXRight);
+  }
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [hoverPx, setHoverPx] = useState<{ x: number; y: number } | null>(null);
+
+  function handleMove(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    setHoverPx({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    if (current.length <= 1) {
+      setHoverIdx(0);
+      return;
+    }
+    const usable = W - padXLeft - padXRight;
+    const rel = Math.max(0, Math.min(usable, svgX - padXLeft));
+    const idx = Math.round((rel / usable) * (current.length - 1));
+    setHoverIdx(idx);
+  }
+
   return (
-    <div className="dashboard-chart">
-      <svg viewBox="0 0 640 240" role="img" aria-label="Net profit chart">
-        <line x1="20" x2="620" y1="42" y2="42" />
-        <line x1="20" x2="620" y1="120" y2="120" />
-        <line x1="20" x2="620" y1="198" y2="198" />
-        <polyline className="chart-line current" points={pointsForSeries(current, min, max)} />
-        {previous.length ? <polyline className="chart-line previous" points={pointsForSeries(previous, min, max)} /> : null}
-        {twoBack.length ? <polyline className="chart-line two-back" points={pointsForSeries(twoBack, min, max)} /> : null}
-        {threeBack.length ? <polyline className="chart-line three-back" points={pointsForSeries(threeBack, min, max)} /> : null}
+    <div className="dashboard-chart" ref={containerRef}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H + 22}`}
+        role="img"
+        aria-label="Net profit chart"
+        onMouseMove={handleMove}
+        onMouseLeave={() => { setHoverIdx(null); setHoverPx(null); }}
+        style={{ cursor: "crosshair", width: "100%", height: 350 }}
+      >
+        {/* gridlines + Y labels */}
+        {yTicks.map((tick, idx) => {
+          const y = yForValue(tick);
+          return (
+            <g key={idx}>
+              <line x1={padXLeft} x2={W - 8} y1={y} y2={y} />
+              <text x={W - 4} y={y + 4} textAnchor="end" fontSize="11" fill="#6b7280" fontWeight="700">
+                {formatAxisCurrency(tick, symbol)}
+              </text>
+            </g>
+          );
+        })}
+        {/* lines */}
+        <polyline className="chart-line current" points={pointsForSeries(current, 0, niceMax, padXLeft, padY, W, H, padXRight)} />
+        {previous.length ? <polyline className="chart-line previous" points={pointsForSeries(previous, 0, niceMax, padXLeft, padY, W, H, padXRight)} /> : null}
+        {twoBack.length ? <polyline className="chart-line two-back" points={pointsForSeries(twoBack, 0, niceMax, padXLeft, padY, W, H, padXRight)} /> : null}
+        {threeBack.length ? <polyline className="chart-line three-back" points={pointsForSeries(threeBack, 0, niceMax, padXLeft, padY, W, H, padXRight)} /> : null}
+        {/* data point dots on current line */}
+        {current.map((point, i) => (
+          <circle key={i} cx={xForIndex(i)} cy={yForValue(point.value)} r={4} fill="#16a34a" />
+        ))}
+        {/* X-axis labels */}
+        {xLabelIndices.map((i) => (
+          <text key={i} x={xForIndex(i)} y={H + 16} textAnchor="middle" fontSize="11" fill="#6b7280" fontWeight="700">
+            {current[i]?.label}
+          </text>
+        ))}
+        {/* Hover indicator */}
+        {hoverIdx != null && current[hoverIdx] && (
+          <g>
+            <line
+              x1={xForIndex(hoverIdx)}
+              x2={xForIndex(hoverIdx)}
+              y1={padY}
+              y2={H - padY}
+              stroke="#9ca3af"
+              strokeWidth={1}
+              strokeDasharray="4 4"
+            />
+            <circle cx={xForIndex(hoverIdx)} cy={yForValue(current[hoverIdx].value)} r={6} fill="#16a34a" stroke="#fff" strokeWidth={2} />
+          </g>
+        )}
       </svg>
-      <div className="dashboard-chart-labels">
-        <span>{current[0]?.label}</span>
-        <span>{current[current.length - 1]?.label}</span>
-      </div>
+      {hoverIdx != null && current[hoverIdx] && hoverPx && (
+        <div
+          className="dashboard-chart-tooltip"
+          style={{
+            left: `${hoverPx.x + 14}px`,
+            top: `${hoverPx.y + 14}px`,
+            transform: "none",
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280" }}>{current[hoverIdx].label}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#16a34a", display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: "#16a34a" }} />
+            Net: {symbol}{current[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </div>
+        </div>
+      )}
       <div className="dashboard-chart-legend">
         <span><i className="legend-current" /> Current</span>
         {previous.length ? <span><i className="legend-previous" /> -1 Yr</span> : null}
@@ -636,4 +756,20 @@ function ProfitChart({
       </div>
     </div>
   );
+}
+
+function niceCeil(value: number): number {
+  if (value <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(value)));
+  const norm = value / pow;
+  const niceNorm = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  return niceNorm * pow;
+}
+
+function formatAxisCurrency(value: number, symbol: string): string {
+  if (value === 0) return `${symbol}0`;
+  if (Math.abs(value) >= 1000) {
+    return `${symbol}${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k`;
+  }
+  return `${symbol}${Math.round(value)}`;
 }

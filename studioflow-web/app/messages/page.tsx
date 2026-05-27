@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -557,14 +557,14 @@ export default function MessagesPage() {
                 </div>
                 <div className="header-actions">
                   <button type="button" className={`header-icon-btn${showSavedOnly ? " active" : ""}`} title="Saved" onClick={() => setShowSavedOnly((v) => !v)}>
-                    🔖
+                    <HeaderIcon name="bookmark" />
                   </button>
                   <button type="button" className={`header-icon-btn${searchVisible ? " active" : ""}`} title="Search" onClick={() => { setSearchVisible((v) => !v); if (searchVisible) setSearchQuery(""); }}>
-                    🔍
+                    <HeaderIcon name="search" />
                   </button>
                   <div style={{ position: "relative" }}>
                     <button type="button" className="header-icon-btn" title="Mute" onClick={() => setMuteMenuOpen((v) => !v)}>
-                      🔕
+                      <HeaderIcon name="bellSlash" />
                     </button>
                     {muteMenuOpen && (
                       <div className="header-menu" onMouseLeave={() => setMuteMenuOpen(false)}>
@@ -576,14 +576,29 @@ export default function MessagesPage() {
                     )}
                   </div>
                   <button type="button" className="header-icon-btn" title="Info" onClick={() => setInfoOpen(true)}>
-                    ⓘ
+                    <HeaderIcon name="info" />
                   </button>
                 </div>
               </header>
               {errorMessage && <div className="conversation-error">{errorMessage}</div>}
               {searchVisible && (
                 <div className="search-bar">
-                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages…" autoFocus />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages…" autoFocus style={{ flex: 1 }} />
+                    {searchQuery.trim() && (() => {
+                      const matches = items.filter((m) => !m.deletedForEveryone && m.text.toLowerCase().includes(searchQuery.trim().toLowerCase()));
+                      if (matches.length === 0) return <span style={{ fontSize: 12, color: "#9ca3af" }}>No results</span>;
+                      const goNext = () => { handleJumpToMessage(matches[matches.length - 1].id); };
+                      const goPrev = () => { handleJumpToMessage(matches[0].id); };
+                      return (
+                        <>
+                          <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>{matches.length} match{matches.length === 1 ? "" : "es"}</span>
+                          <button type="button" onClick={goPrev} title="Oldest match" style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↑</button>
+                          <button type="button" onClick={goNext} title="Latest match" style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↓</button>
+                        </>
+                      );
+                    })()}
+                  </div>
                   <div className="filter-chips">
                     {(["all", "media", "files"] as const).map((key) => (
                       <button
@@ -605,6 +620,7 @@ export default function MessagesPage() {
                 items={displayedItems}
                 savedIds={savedIds}
                 currentUid={user.uid}
+                thread={selectedThread}
                 onReply={(m) => setReplyingTo(m)}
                 onEdit={(m) => setEditingMessage(m)}
                 onDeleteForMe={(m) => void handleDeleteForMe(m.id)}
@@ -616,10 +632,25 @@ export default function MessagesPage() {
                 onOpenImage={(m) => setViewerImage(m)}
               />
               {typingUsers.length > 0 && (
-                <div className="typing-indicator">
+                <div className="typing-indicator" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ display: "inline-flex", gap: -6 }}>
+                    {typingUsers.slice(0, 3).map((u) => {
+                      const initial = (u.name || u.email || "?").charAt(0).toUpperCase();
+                      const hue = (((u.id || u.email || u.name || "x").split("").reduce((h, c) => h + c.charCodeAt(0), 0)) % 360);
+                      return u.photoURL ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={u.id} src={u.photoURL} alt="" width={18} height={18} style={{ borderRadius: "50%", border: "1.5px solid white", marginLeft: -4 }} />
+                      ) : (
+                        <span key={u.id} style={{ width: 18, height: 18, borderRadius: "50%", background: `hsl(${hue}, 50%, 60%)`, color: "white", fontSize: 9, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1.5px solid white", marginLeft: -4 }}>{initial}</span>
+                      );
+                    })}
+                  </span>
+                  <span>•••</span>
+                  <span>
                   {typingUsers.length === 1
                     ? `${typingUsers[0].name || "Someone"} is typing…`
                     : `${typingUsers.length} people are typing…`}
+                  </span>
                 </div>
               )}
               <Composer
@@ -700,7 +731,12 @@ export default function MessagesPage() {
       )}
 
       {viewerImage && (
-        <ImageViewerModal item={viewerImage} onClose={() => setViewerImage(null)} />
+        <ImageViewerModal
+          item={viewerImage}
+          gallery={items.filter((m) => isImageAttachment(m) && !m.deletedForEveryone)}
+          onChange={(m) => setViewerImage(m)}
+          onClose={() => setViewerImage(null)}
+        />
       )}
 
       {settingsDialogOpen && workspace && (
@@ -739,6 +775,7 @@ function ConversationBody({
   items,
   savedIds,
   currentUid,
+  thread,
   onReply,
   onEdit,
   onDeleteForMe,
@@ -752,6 +789,7 @@ function ConversationBody({
   items: StudioMessageItem[];
   savedIds: Set<string>;
   currentUid: string;
+  thread: StudioMessageThread | null;
   onReply: (m: StudioMessageItem) => void;
   onEdit: (m: StudioMessageItem) => void;
   onDeleteForMe: (m: StudioMessageItem) => void;
@@ -772,13 +810,29 @@ function ConversationBody({
   }
   return (
     <div className="conversation-panel__body">
-      {items.map((item) => (
+      {items.map((item, idx) => {
+        const prev = idx > 0 ? items[idx - 1] : null;
+        const showDateSep = !prev || !sameDay(prev.createdAtMillis, item.createdAtMillis);
+        return (
+        <React.Fragment key={item.id}>
+        {showDateSep && (
+          <div style={{ display: "flex", justifyContent: "center", margin: "10px 0 4px" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", background: "rgba(0,0,0,0.04)", padding: "3px 12px", borderRadius: 999 }}>
+              {formatDateSep(item.createdAtMillis)}
+            </span>
+          </div>
+        )}
         <MessageBubble
-          key={item.id}
           item={item}
           isMine={item.senderUid === currentUid}
           currentUid={currentUid}
           saved={savedIds.has(item.id)}
+          readByCount={(() => {
+            if (!thread || item.senderUid !== currentUid) return 0;
+            const ts = item.createdAtMillis;
+            return Object.entries(thread.readByMillis || {}).filter(([uid, t]) => uid !== currentUid && (t as number) >= ts).length;
+          })()}
+          totalReaderCount={thread ? Math.max(0, (thread.memberUids?.length || 0) - 1) : 0}
           onReply={() => onReply(item)}
           onEdit={() => onEdit(item)}
           onDeleteForMe={() => onDeleteForMe(item)}
@@ -789,7 +843,9 @@ function ConversationBody({
           onForward={() => onForward(item)}
           onOpenImage={() => onOpenImage(item)}
         />
-      ))}
+        </React.Fragment>
+        );
+      })}
       <div ref={endRef} />
     </div>
   );
@@ -959,11 +1015,119 @@ function Composer({
   );
 }
 
+function HeaderIcon({ name }: { name: "bookmark" | "search" | "bellSlash" | "info" }) {
+  const props = {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (name) {
+    case "bookmark":
+      return <svg {...props}><path d="M6 4h12v17l-6-4-6 4z" /></svg>;
+    case "search":
+      return <svg {...props}><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5L21 21" /></svg>;
+    case "bellSlash":
+      return <svg {...props}><path d="M6 8a6 6 0 0 1 9.6-4.8" /><path d="M18 12c0 5 2 6 2 6H6" /><path d="M10 20a2 2 0 0 0 4 0" /><path d="M3 3l18 18" /></svg>;
+    case "info":
+      return <svg {...props}><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 8v.5" strokeLinecap="round" /></svg>;
+  }
+}
+
+function parseForwardedText(text: string): { forwardedFrom: string | null; body: string } {
+  const m = text.match(/^Forwarded from ([^\n]+)\n([\s\S]*)$/);
+  if (m) return { forwardedFrom: m[1].trim(), body: m[2] };
+  return { forwardedFrom: null, body: text };
+}
+
+function sameDay(a: number, b: number): boolean {
+  const da = new Date(a); const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
+function formatDateSep(ms: number): string {
+  const d = new Date(ms);
+  const today = new Date();
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
+  if (sameDay(ms, today.getTime())) return "Today";
+  if (sameDay(ms, yest.getTime())) return "Yesterday";
+  const sameYear = d.getFullYear() === today.getFullYear();
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "long", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
+function firstUrlInText(text: string): string | null {
+  const m = text.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/i);
+  return m ? (m[0].startsWith("http") ? m[0] : `https://${m[0]}`) : null;
+}
+
+function LinkPreviewCard({ url }: { url: string }) {
+  let host = url;
+  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+  const favicon = `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        marginTop: 6,
+        padding: "8px 10px",
+        background: "rgba(45, 123, 244, 0.06)",
+        border: "1px solid rgba(45, 123, 244, 0.18)",
+        borderRadius: 10,
+        textDecoration: "none",
+        color: "inherit",
+        maxWidth: 320,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={favicon} alt="" width={28} height={28} style={{ borderRadius: 6, background: "white", padding: 2, border: "1px solid #e5e7eb" }} />
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#1f2937", lineHeight: 1.2 }}>{host}</span>
+        <span style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{url}</span>
+      </div>
+    </a>
+  );
+}
+
+function renderMessageText(text: string): React.ReactNode {
+  // Split text into segments preserving @mentions and URLs as styled spans
+  const pattern = /(@[\wÀ-￿.\-]+|https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const parts = text.split(pattern);
+  return parts.map((part, i) => {
+    if (!part) return null;
+    if (part.startsWith("@")) {
+      return (
+        <span key={i} style={{ color: "#2D7BF4", fontWeight: 700 }}>{part}</span>
+      );
+    }
+    if (/^https?:\/\//i.test(part) || /^www\./i.test(part)) {
+      const href = part.startsWith("http") ? part : `https://${part}`;
+      return (
+        <a key={i} href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#2D7BF4", textDecoration: "underline" }} onClick={(e) => e.stopPropagation()}>
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 function MessageBubble({
   item,
   isMine,
   currentUid,
   saved,
+  readByCount,
+  totalReaderCount,
   onReply,
   onEdit,
   onDeleteForMe,
@@ -978,6 +1142,8 @@ function MessageBubble({
   isMine: boolean;
   currentUid: string;
   saved: boolean;
+  readByCount: number;
+  totalReaderCount: number;
   onReply: () => void;
   onEdit: () => void;
   onDeleteForMe: () => void;
@@ -995,7 +1161,22 @@ function MessageBubble({
 
   return (
     <div className={`bubble-row bubble-row--${alignment}`}>
-      {!isMine && <span className="bubble-sender">{senderLabel(item)}</span>}
+      {!isMine && (() => {
+        const label = senderLabel(item);
+        const initial = (label || "?").charAt(0).toUpperCase();
+        const hue = (((item.senderUid || item.senderEmail || label).split("").reduce((h, c) => h + c.charCodeAt(0), 0)) % 360);
+        return (
+          <span className="bubble-sender" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {item.senderPhotoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.senderPhotoURL} alt="" width={20} height={20} style={{ borderRadius: "50%", objectFit: "cover", border: "1px solid #e5e7eb" }} />
+            ) : (
+              <span style={{ width: 20, height: 20, borderRadius: "50%", background: `hsl(${hue}, 50%, 60%)`, color: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800 }}>{initial}</span>
+            )}
+            {label}
+          </span>
+        );
+      })()}
       <div
         data-bubble-id={item.id}
         className={`bubble bubble--${alignment}${isMine ? " bubble--mine" : ""}`}
@@ -1036,7 +1217,23 @@ function MessageBubble({
                 )}
               </div>
             )}
-            {item.text && <span className="bubble__text">{item.text}</span>}
+            {item.text && (() => {
+              const parsed = parseForwardedText(item.text);
+              return (
+                <>
+                  {parsed.forwardedFrom && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 4, fontStyle: "italic" }}>
+                      <span>↪</span>
+                      <span>Forwarded from {parsed.forwardedFrom}</span>
+                    </div>
+                  )}
+                  {parsed.body && <span className="bubble__text">{renderMessageText(parsed.body)}</span>}
+                  {parsed.body && firstUrlInText(parsed.body) && (
+                    <LinkPreviewCard url={firstUrlInText(parsed.body)!} />
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
         <span className="bubble__meta">
@@ -1044,6 +1241,11 @@ function MessageBubble({
           {item.pinned && <span className="bubble__pin">📌</span>}
           {formatTime(item.createdAtMillis)}
           {item.edited && !item.deletedForEveryone && <em> · edited</em>}
+          {isMine && totalReaderCount > 0 && (
+            <span title={`Read by ${readByCount} of ${totalReaderCount}`} style={{ marginLeft: 4, color: readByCount > 0 ? "#2D7BF4" : "#9ca3af", fontWeight: 700 }}>
+              {readByCount > 0 ? "✓✓" : "✓"}{readByCount > 0 && totalReaderCount > 1 ? ` ${readByCount}` : ""}
+            </span>
+          )}
         </span>
         {Object.keys(item.reactions).length > 0 && (
           <div className="reactions">
@@ -1101,6 +1303,17 @@ function MessageBubble({
                 Copy text
               </button>
             )}
+            {item.fileURL && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(item.fileURL).catch(() => {});
+                  setMenuOpen(false);
+                }}
+              >
+                Copy attachment link
+              </button>
+            )}
             <button type="button" onClick={() => { setMenuOpen(false); onTogglePin(); }}>
               {item.pinned ? "Unpin" : "Pin"}
             </button>
@@ -1139,20 +1352,35 @@ function MessageBubble({
 
 function ImageViewerModal({
   item,
+  gallery,
+  onChange,
   onClose,
 }: {
   item: StudioMessageItem;
+  gallery: StudioMessageItem[];
+  onChange: (next: StudioMessageItem) => void;
   onClose: () => void;
 }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
+  const idx = gallery.findIndex((m) => m.id === item.id);
+  const hasPrev = idx > 0;
+  const hasNext = idx >= 0 && idx < gallery.length - 1;
+  const goPrev = () => { if (hasPrev) { onChange(gallery[idx - 1]); setScale(1); setOffset({ x: 0, y: 0 }); } };
+  const goNext = () => { if (hasNext) { onChange(gallery[idx + 1]); setScale(1); setOffset({ x: 0, y: 0 }); } };
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") goPrev();
+      else if (e.key === "ArrowRight") goNext();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, idx, gallery.length]);
 
   return (
     <div
@@ -1172,6 +1400,27 @@ function ImageViewerModal({
         }}
         aria-label="Close"
       >×</button>
+      {gallery.length > 1 && (
+        <span style={{ position: "absolute", top: 22, left: 22, color: "white", fontSize: 13, fontWeight: 700, background: "rgba(0,0,0,0.4)", padding: "4px 10px", borderRadius: 999, zIndex: 1 }}>
+          {idx + 1} / {gallery.length}
+        </span>
+      )}
+      {hasPrev && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); goPrev(); }}
+          style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.18)", color: "white", border: "none", borderRadius: "50%", width: 44, height: 44, fontSize: 22, cursor: "pointer", zIndex: 1 }}
+          aria-label="Previous"
+        >‹</button>
+      )}
+      {hasNext && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); goNext(); }}
+          style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.18)", color: "white", border: "none", borderRadius: "50%", width: 44, height: 44, fontSize: 22, cursor: "pointer", zIndex: 1 }}
+          aria-label="Next"
+        >›</button>
+      )}
       {scale !== 1 && (
         <button
           type="button"
@@ -1759,9 +2008,9 @@ function MessagesStyles() {
       .mention-picker__email { font-size: 11px; color: #6b7280; }
       .new-conv-btn { width: 28px; height: 28px; border-radius: 50%; border: none; background: #2563eb; color: white; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
       .header-actions { display: flex; gap: 4px; align-items: center; }
-      .header-icon-btn { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 16px; }
+      .header-icon-btn { background: transparent; border: 1px solid transparent; border-radius: 8px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #374151; }
       .header-icon-btn:hover { background: #f3f4f6; }
-      .header-icon-btn.active { background: rgba(37,99,235,0.12); border-color: rgba(37,99,235,0.3); }
+      .header-icon-btn.active { background: rgba(37,99,235,0.12); border-color: rgba(37,99,235,0.3); color: #2563eb; }
       .header-menu { position: absolute; top: 36px; right: 0; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 200px; z-index: 20; }
       .header-menu button { background: transparent; border: none; text-align: left; padding: 8px 14px; font-size: 13px; cursor: pointer; }
       .header-menu button:hover { background: #f3f4f6; }

@@ -108,8 +108,26 @@ export function NotificationsDrawer({
 
   const handleMarkAllRead = async () => {
     setOptimisticAllRead(true);
+    // Also dismiss the currently visible notifications so the cards clear from view
+    // (Mac/Android also remove them on mark-all-read). Synced via dismissActivityNotifications.
+    const visibleIds = visible.map((n) => n.id);
+    if (visibleIds.length > 0) {
+      onLocalDismiss(visibleIds);
+      if (typeof window !== "undefined" && workspace && uid) {
+        try {
+          const key = `studio_notif_dismissed_${workspace.id}_${uid}`;
+          const existing = window.localStorage.getItem(key);
+          const prev: string[] = existing ? JSON.parse(existing) : [];
+          const merged = Array.from(new Set([...prev, ...visibleIds])).slice(-500);
+          window.localStorage.setItem(key, JSON.stringify(merged));
+        } catch {}
+      }
+    }
     if (!workspace) return;
     try { await markAllActivityNotificationsRead(workspace); } catch {}
+    if (visibleIds.length > 0) {
+      try { await dismissActivityNotifications(workspace, visibleIds); } catch {}
+    }
   };
 
   const handleDismiss = async (ids: string[]) => {
@@ -176,9 +194,6 @@ export function NotificationsDrawer({
               <button type="button" className="notif-pill-button" onClick={() => void handleMarkAllRead()}>
                 Mark all read
               </button>
-            )}
-            {filtered.length > 0 && (
-              <button type="button" className="notif-icon-button" onClick={() => void handleDismiss(filtered.map((n) => n.id))} title="Clear visible">×</button>
             )}
             <button type="button" className="notif-icon-button" onClick={onClose} title="Close">›</button>
           </div>

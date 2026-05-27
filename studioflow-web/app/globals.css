@@ -655,6 +655,21 @@ th {
 .dashboard-chart {
   display: grid;
   gap: 10px;
+  position: relative;
+}
+
+.dashboard-chart-tooltip {
+  position: absolute;
+  top: 8px;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 6px 10px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
 }
 
 .dashboard-chart svg {
@@ -2597,7 +2612,7 @@ th {
 }
 
 .native-toolbar-nav {
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: nowrap;
   overflow-x: auto;
   gap: 14px;

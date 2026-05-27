@@ -726,9 +726,10 @@ struct StudioActivityCenterView: View {
 
             Spacer()
 
-            if unreadCount > 0 {
+            if unreadCount > 0 || !filteredNotifications.isEmpty {
                 Button {
                     firebaseManager.markAllActivityNotificationsRead(companyId: companyId)
+                    dismissVisibleActivityNotifications()
                 } label: {
                     Text("Mark all read")
                         .font(.system(size: 11.5, weight: .bold))
@@ -739,21 +740,6 @@ struct StudioActivityCenterView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-            }
-
-            if !filteredNotifications.isEmpty {
-                Button {
-                    dismissVisibleActivityNotifications()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary.opacity(0.065))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Clear visible notifications")
             }
 
             if presentationStyle == .drawer {
@@ -2068,7 +2054,7 @@ struct StudioKeepNotesView: View {
                                 emptyState
                                     .padding(.top, 70)
                             } else if gridMode {
-                                notesGrid
+                                notesGrid(availableWidth: max(280, geometry.size.width - (isWide ? 230 : 0) - (isWide ? 56 : 32)))
                             } else {
                                 notesList
                             }
@@ -2644,15 +2630,15 @@ struct StudioKeepNotesView: View {
         }
 
         if gridMode {
-                    return [
-                        GridItem(.flexible(), spacing: isCompactKeepPhoneLayout ? 10 : 18),
-                        GridItem(.flexible(), spacing: isCompactKeepPhoneLayout ? 10 : 18)
-                    ]
-                }
+            // Web-style adaptive: fit as many ~240pt min-width columns as page width allows.
+            return [
+                GridItem(.adaptive(minimum: 240, maximum: 360), spacing: 18, alignment: .top)
+            ]
+        }
 
-                return [
-                    GridItem(.flexible(), spacing: isCompactKeepPhoneLayout ? 10 : 18)
-                ]
+        return [
+            GridItem(.flexible(), spacing: 18)
+        ]
     }
 
 
@@ -4893,10 +4879,11 @@ struct StudioKeepNotesView: View {
 
 
     private func keepMasonryColumnCount(for width: CGFloat) -> Int {
-        if width >= 1320 { return 4 }
-        if width >= 980 { return 3 }
-        if width >= 620 { return 2 }
-        return 1
+        // Web-style auto-fit: each card ~220pt wide → as many columns as window allows.
+        let cardMin: CGFloat = 220
+        let gap: CGFloat = 18
+        let raw = Int(floor((width + gap) / (cardMin + gap)))
+        return max(1, raw)
     }
 
     private func keepMasonryColumns(_ notes: [StudioKeepNote], columnCount: Int) -> [[StudioKeepNote]] {
@@ -4917,30 +4904,60 @@ struct StudioKeepNotesView: View {
         return CGFloat(rows) * 190.0
     }
 
-    private func masonryGrid(for noteItems: [StudioKeepNote]) -> some View {
-            GeometryReader { proxy in
-                let columnCount = keepMasonryColumnCount(for: proxy.size.width)
-                let columns = keepMasonryColumns(noteItems, columnCount: columnCount)
+    private struct WidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            let next = nextValue()
+            if next > 0 { value = next }
+        }
+    }
 
-                HStack(alignment: .top, spacing: 18) {
-                    ForEach(Array(columns.enumerated()), id: \.offset) { _, columnNotes in
-                        VStack(spacing: 18) {
-                            ForEach(columnNotes) { note in
-                                noteCard(note)
-                                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                            }
+    private struct MeasuredWidthContainer<Content: View>: View {
+        @State private var width: CGFloat = 0
+        let content: (CGFloat) -> Content
+        init(@ViewBuilder content: @escaping (CGFloat) -> Content) {
+            self.content = content
+        }
+        var body: some View {
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(
+                        GeometryReader { g in
+                            Color.clear.preference(key: WidthKey.self, value: g.size.width)
                         }
-                        .frame(maxWidth: .infinity, alignment: .top)
+                    )
+                if width > 0 {
+                    content(width)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .onPreferenceChange(WidthKey.self) { width = $0 }
+        }
+    }
+
+    private func masonryGrid(for noteItems: [StudioKeepNote], availableWidth: CGFloat) -> some View {
+        let columnCount = keepMasonryColumnCount(for: availableWidth)
+        let gap: CGFloat = 18
+        let colWidth = max(180, (availableWidth - gap * CGFloat(columnCount - 1)) / CGFloat(max(1, columnCount)))
+        let columns = keepMasonryColumns(noteItems, columnCount: columnCount)
+
+        return HStack(alignment: .top, spacing: gap) {
+            ForEach(Array(columns.enumerated()), id: \.offset) { _, columnNotes in
+                VStack(spacing: gap) {
+                    ForEach(columnNotes) { note in
+                        noteCard(note)
+                            .frame(width: colWidth, alignment: .topLeading)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .animation(.spring(response: 0.34, dampingFraction: 0.86), value: noteItems.map(\.id))
-                .padding(.horizontal, 0)
+                .frame(width: colWidth, alignment: .top)
             }
-            .frame(minHeight: masonryEstimatedHeight(for: noteItems))
         }
+        .frame(width: availableWidth, alignment: .topLeading)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: noteItems.map(\.id))
+    }
 
-    private var notesGrid: some View {
+    private func notesGrid(availableWidth: CGFloat) -> some View {
         Group {
             if isCompactKeepPhoneLayout {
                 LazyVGrid(
@@ -4957,31 +4974,31 @@ struct StudioKeepNotesView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 18) {
-                            if !pinnedNotes.isEmpty {
-                                Text(t("Pinned", lang: seciliDil).uppercased())
-                                    .font(.system(size: 11.5, weight: .bold))
-                                    .foregroundColor(.secondary)
-                                    .tracking(1.1)
-                                    .padding(.horizontal, 4)
+                    if !pinnedNotes.isEmpty {
+                        Text(t("Pinned", lang: seciliDil).uppercased())
+                            .font(.system(size: 11.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .tracking(1.1)
+                            .padding(.horizontal, 4)
 
-                                masonryGrid(for: pinnedNotes)
-                            }
+                        masonryGrid(for: pinnedNotes, availableWidth: availableWidth)
+                    }
 
-                            if !otherNotes.isEmpty {
-                                if !pinnedNotes.isEmpty {
-                                    Text(t("Others", lang: seciliDil).uppercased())
-                                        .font(.system(size: 11.5, weight: .bold))
-                                        .foregroundColor(.secondary)
-                                        .tracking(1.1)
-                                        .padding(.horizontal, 4)
-                                        .padding(.top, 4)
-                                }
-
-                                masonryGrid(for: otherNotes)
-                            }
+                    if !otherNotes.isEmpty {
+                        if !pinnedNotes.isEmpty {
+                            Text(t("Others", lang: seciliDil).uppercased())
+                                .font(.system(size: 11.5, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .tracking(1.1)
+                                .padding(.horizontal, 4)
+                                .padding(.top, 4)
                         }
-                        .frame(maxWidth: 1180, alignment: .topLeading)
-                        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visibleNotes.map(\.id))
+
+                        masonryGrid(for: otherNotes, availableWidth: availableWidth)
+                    }
+                }
+                .frame(width: availableWidth, alignment: .topLeading)
+                .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visibleNotes.map(\.id))
             }
         }
         .animation(.spring(response: 0.26, dampingFraction: 0.9), value: gridMode)
@@ -5256,37 +5273,82 @@ struct StudioKeepNotesView: View {
         }
     }
 
+    @ViewBuilder
+    private func noteCardOverflowMenu(_ note: StudioKeepNote) -> some View {
+        Menu {
+            Button(t("Duplicate note", lang: seciliDil)) { duplicateNote(note) }
+            Button(t("Copy note", lang: seciliDil)) { copyNoteToClipboard(note) }
+            Menu(t("Labels", lang: seciliDil)) {
+                ForEach(allLabels, id: \.self) { label in
+                    Button(label) { toggleLabel(label, for: note) }
+                }
+                Button(t("Add label", lang: seciliDil)) { addDefaultLabel(to: note) }
+            }
+            if selectedSection == "trash" {
+                Button(t("Restore note", lang: seciliDil)) { restoreNote(note) }
+                Button(t("Delete forever", lang: seciliDil), role: .destructive) { permanentlyDelete(note) }
+            } else {
+                Button(t("Move to trash", lang: seciliDil), role: .destructive) { moveToTrash(note) }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .bold))
+                .frame(width: 26, height: 26)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func noteCardFullActions(_ note: StudioKeepNote) -> some View {
+        keepCardIconButton("plus.square.on.square", helpKey: "Duplicate note") { duplicateNote(note) }
+        keepCardIconButton("doc.on.doc", helpKey: "Copy note") { copyNoteToClipboard(note) }
+        keepCardIconMenu("paintpalette", helpKey: "Change colour") {
+            ForEach(noteColors, id: \.self) { color in
+                Button(t(color.capitalized, lang: seciliDil)) {
+                    var updated = note; updated.colorName = color; saveNote(updated)
+                }
+            }
+        }
+        keepCardIconMenu(note.reminderDate == nil ? "bell" : "bell.fill", helpKey: "Reminder") {
+            Button(t("Tomorrow", lang: seciliDil)) {
+                setReminder(note, date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+            }
+            Button(t("Next week", lang: seciliDil)) {
+                setReminder(note, date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date())
+            }
+            Button(t("Pick date", lang: seciliDil)) { reminderPickerNote = note }
+            if note.reminderDate != nil {
+                Button(t("Remove reminder", lang: seciliDil), role: .destructive) { removeReminderFromNote(note) }
+            }
+        }
+        keepCardIconMenu("tag", helpKey: "Labels") {
+            ForEach(allLabels, id: \.self) { label in
+                Button(label) { toggleLabel(label, for: note) }
+            }
+            Button(t("Add label", lang: seciliDil)) { addDefaultLabel(to: note) }
+        }
+        keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") { openCollaboratorSheet(note) }
+        keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") { toggleArchive(note) }
+        if selectedSection == "trash" {
+            keepCardIconButton("arrow.uturn.backward", helpKey: "Restore note") { restoreNote(note) }
+            keepCardIconButton("trash.fill", helpKey: "Delete forever", role: .destructive) { permanentlyDelete(note) }
+        } else {
+            keepCardIconButton("trash", helpKey: "Move to trash", role: .destructive) { moveToTrash(note) }
+        }
+    }
+
     private func noteCardActionRow(_ note: StudioKeepNote, showActions: Bool) -> some View {
         HStack(spacing: 7) {
-            if !note.updatedAt.formatted(date: .abbreviated, time: .shortened).isEmpty {
-                Text(note.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary.opacity(0.85))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            noteTopPinButton(note)
-
-            keepCardIconButton("plus.square.on.square", helpKey: "Duplicate note") {
-                duplicateNote(note)
-            }
-
-            keepCardIconButton("doc.on.doc", helpKey: "Copy note") {
-                copyNoteToClipboard(note)
-            }
-
+            // Curated inline icons: palette, bell, person+, archive
             keepCardIconMenu("paintpalette", helpKey: "Change colour") {
                 ForEach(noteColors, id: \.self) { color in
                     Button(t(color.capitalized, lang: seciliDil)) {
-                        var updated = note
-                        updated.colorName = color
-                        saveNote(updated)
+                        var updated = note; updated.colorName = color; saveNote(updated)
                     }
                 }
             }
-
             keepCardIconMenu(note.reminderDate == nil ? "bell" : "bell.fill", helpKey: "Reminder") {
                 Button(t("Tomorrow", lang: seciliDil)) {
                     setReminder(note, date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
@@ -5294,48 +5356,17 @@ struct StudioKeepNotesView: View {
                 Button(t("Next week", lang: seciliDil)) {
                     setReminder(note, date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date())
                 }
-                Button(t("Pick date", lang: seciliDil)) {
-                    reminderPickerNote = note
-                }
+                Button(t("Pick date", lang: seciliDil)) { reminderPickerNote = note }
                 if note.reminderDate != nil {
-                    Button(t("Remove reminder", lang: seciliDil), role: .destructive) {
-                        removeReminderFromNote(note)
-                    }
+                    Button(t("Remove reminder", lang: seciliDil), role: .destructive) { removeReminderFromNote(note) }
                 }
             }
+            keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") { openCollaboratorSheet(note) }
+            keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") { toggleArchive(note) }
 
-            keepCardIconMenu("tag", helpKey: "Labels") {
-                ForEach(allLabels, id: \.self) { label in
-                    Button(label) {
-                        toggleLabel(label, for: note)
-                    }
-                }
-                Button(t("Add label", lang: seciliDil)) {
-                    addDefaultLabel(to: note)
-                }
-            }
+            Spacer(minLength: 4)
 
-            keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") {
-                openCollaboratorSheet(note)
-            }
-
-            keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") {
-                toggleArchive(note)
-            }
-
-            if selectedSection == "trash" {
-                keepCardIconButton("arrow.uturn.backward", helpKey: "Restore note") {
-                    restoreNote(note)
-                }
-
-                keepCardIconButton("trash.fill", helpKey: "Delete forever", role: .destructive) {
-                    permanentlyDelete(note)
-                }
-            } else {
-                keepCardIconButton("trash", helpKey: "Move to trash", role: .destructive) {
-                    moveToTrash(note)
-                }
-            }
+            noteCardOverflowMenu(note)
         }
         .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
         .opacity(showActions ? 1 : 0)
@@ -5422,10 +5453,6 @@ struct StudioKeepNotesView: View {
 
     private func noteHeaderRow(_ note: StudioKeepNote, showActions: Bool, isSelected: Bool) -> some View {
         HStack(alignment: .top) {
-            if showActions || isSelected {
-                noteSelectionButton(note, isSelected: isSelected)
-            }
-
             noteTextContent(note)
 
             Spacer(minLength: 8)
@@ -5515,6 +5542,13 @@ struct StudioKeepNotesView: View {
                 .stroke(isSelected ? Color.blue.opacity(0.55) : borderColor, lineWidth: isSelected ? 1.5 : 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(alignment: .topLeading) {
+            if (showActions || isSelected) && draggingKeepNoteId != note.id {
+                noteSelectionButton(note, isSelected: isSelected)
+                    .offset(x: -8, y: -8)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
         .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(keepColorScheme == .dark ? 0.16 : 0.070), radius: 7, x: 0, y: 2)
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {

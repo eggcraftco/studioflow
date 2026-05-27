@@ -671,6 +671,19 @@ data class StudioKeepNote(
         get() = title.trim().isEmpty() && text.trim().isEmpty()
 }
 
+/** Pending Keep-note collaboration invite (recipient sees Accept/Decline). */
+data class StudioKeepCollaborationInvite(
+    val id: String,
+    val inviteId: String,
+    val companyId: String,
+    val noteId: String,
+    val sourceUserId: String,
+    val sourceEmail: String,
+    val title: String,
+    val text: String,
+    val createdAtMillis: Long? = null
+)
+
 /** A note attached to an order (derived from order fields like notes/customerNotes/invNotes/design). */
 data class StudioProjectNoteItem(
     val id: String,

@@ -327,6 +327,11 @@ private fun StudioFlowAppContent(
             onSaveKeepNote = viewModel::saveKeepNote,
             onDeleteKeepNote = viewModel::deleteKeepNote,
             onUploadKeepNoteImage = viewModel::uploadKeepNoteImage,
+            onInviteKeepCollab = viewModel::inviteKeepNoteCollaborator,
+            onRemoveKeepCollab = viewModel::removeKeepNoteCollaborator,
+            onAcceptKeepInvite = viewModel::acceptKeepCollaborationInvite,
+            onDeclineKeepInvite = viewModel::declineKeepCollaborationInvite,
+            onRefreshKeepInvites = viewModel::refreshKeepCollaborationInvites,
             onSaveMessageWorkspaceSettings = viewModel::saveMessageWorkspaceSettings,
             onReloadMessageWorkspaceSettings = viewModel::reloadMessageWorkspaceSettings,
             onConsumePendingActivityNavigation = viewModel::consumePendingActivityNavigation

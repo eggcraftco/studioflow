@@ -226,6 +226,11 @@ fun StudioFlowMainScreen(
     onSaveKeepNote: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote) -> Unit,
     onDeleteKeepNote: (String) -> Unit,
     onUploadKeepNoteImage: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote, ByteArray, String, String) -> Unit,
+    onInviteKeepCollab: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote, String, String) -> Unit,
+    onRemoveKeepCollab: (String, String, String) -> Unit,
+    onAcceptKeepInvite: (String) -> Unit,
+    onDeclineKeepInvite: (String) -> Unit,
+    onRefreshKeepInvites: () -> Unit,
     onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit,
     onReloadMessageWorkspaceSettings: () -> Unit,
     onConsumePendingActivityNavigation: () -> Unit
@@ -460,6 +465,11 @@ fun StudioFlowMainScreen(
                     onSaveKeepNote = onSaveKeepNote,
                     onDeleteKeepNote = onDeleteKeepNote,
                     onUploadKeepNoteImage = onUploadKeepNoteImage,
+                    onInviteKeepCollab = onInviteKeepCollab,
+                    onRemoveKeepCollab = onRemoveKeepCollab,
+                    onAcceptKeepInvite = onAcceptKeepInvite,
+                    onDeclineKeepInvite = onDeclineKeepInvite,
+                    onRefreshKeepInvites = onRefreshKeepInvites,
                     onSaveMessageWorkspaceSettings = onSaveMessageWorkspaceSettings,
                     onReloadMessageWorkspaceSettings = onReloadMessageWorkspaceSettings,
                     modifier = Modifier.weight(1f)
@@ -570,6 +580,11 @@ fun StudioFlowMainScreen(
                     onSaveKeepNote = onSaveKeepNote,
                     onDeleteKeepNote = onDeleteKeepNote,
                     onUploadKeepNoteImage = onUploadKeepNoteImage,
+                    onInviteKeepCollab = onInviteKeepCollab,
+                    onRemoveKeepCollab = onRemoveKeepCollab,
+                    onAcceptKeepInvite = onAcceptKeepInvite,
+                    onDeclineKeepInvite = onDeclineKeepInvite,
+                    onRefreshKeepInvites = onRefreshKeepInvites,
                     onSaveMessageWorkspaceSettings = onSaveMessageWorkspaceSettings,
                     onReloadMessageWorkspaceSettings = onReloadMessageWorkspaceSettings,
                     modifier = Modifier.weight(1f)
@@ -927,6 +942,11 @@ private fun StudioSectionContent(
     onSaveKeepNote: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote) -> Unit,
     onDeleteKeepNote: (String) -> Unit,
     onUploadKeepNoteImage: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote, ByteArray, String, String) -> Unit,
+    onInviteKeepCollab: (uk.co.eggcraft.studioflow.data.model.StudioKeepNote, String, String) -> Unit,
+    onRemoveKeepCollab: (String, String, String) -> Unit,
+    onAcceptKeepInvite: (String) -> Unit,
+    onDeclineKeepInvite: (String) -> Unit,
+    onRefreshKeepInvites: () -> Unit,
     onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit,
     onReloadMessageWorkspaceSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -1001,7 +1021,12 @@ private fun StudioSectionContent(
                 onSetSection = onSetKeepNotesSection,
                 onSave = onSaveKeepNote,
                 onDelete = onDeleteKeepNote,
-                onUploadImage = onUploadKeepNoteImage
+                onUploadImage = onUploadKeepNoteImage,
+                onInviteCollab = onInviteKeepCollab,
+                onRemoveCollab = onRemoveKeepCollab,
+                onAcceptInvite = onAcceptKeepInvite,
+                onDeclineInvite = onDeclineKeepInvite,
+                onRefreshInvites = onRefreshKeepInvites
             )
             StudioSection.QuickReply -> QuickReplyScreen(
                 state = state,

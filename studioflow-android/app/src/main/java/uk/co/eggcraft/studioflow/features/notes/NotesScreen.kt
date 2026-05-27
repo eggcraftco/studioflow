@@ -1,11 +1,40 @@
 package uk.co.eggcraft.studioflow.features.notes
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.foundation.gestures.awaitFirstDown
+import kotlinx.coroutines.withTimeout
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.staggeredgrid.items as staggeredItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,17 +72,23 @@ fun NotesScreen(
     onSetSection: (String) -> Unit,
     onSave: (StudioKeepNote) -> Unit,
     onDelete: (String) -> Unit,
-    onUploadImage: (StudioKeepNote, ByteArray, String, String) -> Unit = { _, _, _, _ -> }
+    onUploadImage: (StudioKeepNote, ByteArray, String, String) -> Unit = { _, _, _, _ -> },
+    onInviteCollab: (StudioKeepNote, String, String) -> Unit = { _, _, _ -> },
+    onRemoveCollab: (String, String, String) -> Unit = { _, _, _ -> },
+    onAcceptInvite: (String) -> Unit = {},
+    onDeclineInvite: (String) -> Unit = {},
+    onRefreshInvites: () -> Unit = {}
 ) {
     var topTab by rememberSaveable { mutableStateOf("personal") }
     var labelFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var sortMode by rememberSaveable { mutableStateOf("manual") }
     val section = state.keepNotesSection.ifBlank { "notes" }
     val allLabels = remember(state.keepNotes) {
         state.keepNotes.flatMap { it.labels }.distinct().sorted()
     }
     val query = state.keepNotesSearch.trim().lowercase()
     val all = state.keepNotes
-    val visible = remember(all, section, query) {
+    val visible = remember(all, section, query, sortMode, labelFilter) {
         all.filter { note ->
             when (section) {
                 "archive" -> !note.isDeleted && note.isArchived
@@ -66,93 +101,206 @@ fun NotesScreen(
             else note.title.lowercase().contains(query) || note.text.lowercase().contains(query)
         }.filter { note ->
             labelFilter?.let { note.labels.contains(it) } ?: true
-        }.sortedWith(compareByDescending<StudioKeepNote> { it.isPinned }
-            .thenByDescending { it.updatedAt?.time ?: 0L })
+        }.sortedWith(
+            compareByDescending<StudioKeepNote> { it.isPinned }
+                .then(
+                    when {
+                        sortMode == "title" -> compareBy { it.title.lowercase() }
+                        sortMode == "date" -> compareByDescending<StudioKeepNote> { it.updatedAt?.time ?: 0L }
+                        section == "notes" -> compareBy { it.manualOrder.takeIf { v -> v != 0.0 } ?: (it.updatedAt?.time?.toDouble() ?: 0.0) }
+                        else -> compareByDescending<StudioKeepNote> { it.updatedAt?.time ?: 0L }
+                    }
+                )
+        )
     }
     val pinned = visible.filter { it.isPinned }
     val others = visible.filter { !it.isPinned }
 
     var editingNote by remember { mutableStateOf<StudioKeepNote?>(null) }
     var viewerImageUrl by remember { mutableStateOf<String?>(null) }
+    var gridMode by rememberSaveable { mutableStateOf(true) }
+    var dateForNote by remember { mutableStateOf<StudioKeepNote?>(null) }
+    var collabForNote by remember { mutableStateOf<StudioKeepNote?>(null) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+
+    fun duplicateNote(note: StudioKeepNote) {
+        val copy = note.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            createdAt = Date(),
+            updatedAt = Date(),
+            manualOrder = System.currentTimeMillis().toDouble(),
+            isPinned = false
+        )
+        onSave(copy)
+    }
+    fun copyText(note: StudioKeepNote) {
+        val text = listOf(note.title, note.text).filter { it.isNotBlank() }.joinToString("\n")
+        if (text.isNotEmpty()) clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+    }
+    fun toggleLabelOnNote(note: StudioKeepNote, label: String) {
+        val has = note.labels.contains(label)
+        val next = if (has) note.labels - label else note.labels + label
+        onSave(note.copy(labels = next, updatedAt = Date()))
+    }
+
+    // Multi-select state (Mac/Web parity)
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    val selectionActive = selectedIds.isNotEmpty()
+    fun toggleSelect(id: String) {
+        selectedIds = if (selectedIds.contains(id)) selectedIds - id else selectedIds + id
+    }
+    fun clearSelection() { selectedIds = emptySet() }
+    fun bulkApply(transform: (StudioKeepNote) -> StudioKeepNote) {
+        state.keepNotes.filter { selectedIds.contains(it.id) }.forEach { onSave(transform(it)) }
+        clearSelection()
+    }
+    fun bulkDeleteForever() {
+        selectedIds.forEach { onDelete(it) }
+        clearSelection()
+    }
+
+    // Drag-and-drop reorder state (long-press + drag)
+    val cardBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    var draggingNoteId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var dragStartCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+    fun reorderTo(draggedId: String, targetId: String) {
+        if (draggedId == targetId) return
+        if (section != "notes") return
+        val active = state.keepNotes
+            .filter { !it.isDeleted && !it.isArchived && !it.isPinned }
+            .sortedBy { it.manualOrder.takeIf { v -> v != 0.0 } ?: (it.updatedAt?.time?.toDouble() ?: 0.0) }
+            .toMutableList()
+        val from = active.indexOfFirst { it.id == draggedId }
+        val to = active.indexOfFirst { it.id == targetId }
+        if (from < 0 || to < 0) return
+        val moved = active.removeAt(from)
+        active.add(to, moved)
+        val ts = System.currentTimeMillis().toDouble()
+        active.forEachIndexed { idx, n -> onSave(n.copy(manualOrder = ts + idx, updatedAt = Date())) }
+    }
+
+    // Reorder helper — moves note up/down in active list and rewrites manualOrder
+    // for every active note so Mac/Web/Android stay in sync.
+    fun moveCard(note: StudioKeepNote, direction: Int) {
+        if (section != "notes") return
+        val active = state.keepNotes
+            .filter { !it.isDeleted && !it.isArchived && !it.isPinned }
+            .sortedBy { it.manualOrder.takeIf { v -> v != 0.0 } ?: (it.updatedAt?.time?.toDouble() ?: 0.0) }
+            .toMutableList()
+        val from = active.indexOfFirst { it.id == note.id }
+        if (from < 0) return
+        val to = (from + direction).coerceIn(0, active.lastIndex)
+        if (to == from) return
+        val moved = active.removeAt(from)
+        active.add(to, moved)
+        val ts = System.currentTimeMillis().toDouble()
+        active.forEachIndexed { idx, n ->
+            onSave(n.copy(manualOrder = ts + idx, updatedAt = Date()))
+        }
+    }
     val drawerState = androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    androidx.compose.material3.ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            androidx.compose.material3.ModalDrawerSheet {
-                Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(50)).background(Color(0xFFFFF3B0)),
-                            contentAlignment = Alignment.Center
-                        ) { Text("💡", fontSize = 18.sp) }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Notes", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                    }
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Text("VIEW", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    listOf("personal" to "Personal", "project" to "Project Notes").forEach { (k, label) ->
-                        androidx.compose.material3.NavigationDrawerItem(
-                            label = { Text(label, fontWeight = FontWeight.Bold) },
-                            selected = topTab == k,
-                            onClick = {
-                                topTab = k
-                                scope.launch { drawerState.close() }
-                            }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(14.dp))
-                    if (topTab == "personal") {
-                        Text("SECTIONS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        listOf("notes" to "All", "reminders" to "Reminders", "archive" to "Archive", "trash" to "Trash").forEach { (k, label) ->
-                            androidx.compose.material3.NavigationDrawerItem(
-                                label = { Text(label, fontWeight = FontWeight.Bold) },
-                                selected = section == k,
-                                onClick = {
-                                    onSetSection(k)
-                                    scope.launch { drawerState.close() }
-                                }
-                            )
-                        }
-                        if (allLabels.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Text("LABELS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            androidx.compose.material3.NavigationDrawerItem(
-                                label = { Text("All labels", fontWeight = FontWeight.Bold) },
-                                selected = labelFilter == null,
-                                onClick = {
-                                    labelFilter = null
-                                    scope.launch { drawerState.close() }
-                                }
-                            )
-                            allLabels.forEach { l ->
-                                androidx.compose.material3.NavigationDrawerItem(
-                                    label = { Text("#$l") },
-                                    selected = labelFilter == l,
-                                    onClick = {
-                                        labelFilter = l
-                                        scope.launch { drawerState.close() }
-                                    }
-                                )
-                            }
-                        }
-                    }
+    // Counts for sidebar badges (Mac/web parity)
+    val counts = remember(state.keepNotes) {
+        var noteN = 0; var rem = 0; var arc = 0; var trsh = 0
+        val labelMap = mutableMapOf<String, Int>()
+        state.keepNotes.forEach { n ->
+            when {
+                n.isDeleted -> trsh++
+                n.isArchived -> arc++
+                else -> {
+                    noteN++
+                    if (n.reminderDate != null) rem++
+                    n.labels.forEach { l -> labelMap[l] = (labelMap[l] ?: 0) + 1 }
                 }
             }
         }
+        mapOf("notes" to noteN, "reminders" to rem, "archive" to arc, "trash" to trsh) to labelMap
+    }
+    val (sectionCounts, labelCounts) = counts
+
+    @Composable
+    fun SidebarItem(
+        label: String,
+        count: Int = 0,
+        selected: Boolean,
+        onClick: () -> Unit
     ) {
+        androidx.compose.material3.NavigationDrawerItem(
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold, modifier = Modifier.weight(1f))
+                    if (count > 0) {
+                        Text(
+                            count.toString(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            selected = selected,
+            onClick = onClick
+        )
+    }
+
+    @Composable
+    fun SidebarContent(closeDrawer: () -> Unit) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(36.dp).clip(RoundedCornerShape(50)).background(Color(0xFFFFF3B0)),
+                    contentAlignment = Alignment.Center
+                ) { Text("💡", fontSize = 18.sp) }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Notes", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+
+            SidebarItem("Notes", sectionCounts["notes"] ?: 0, topTab == "personal" && section == "notes" && labelFilter == null) {
+                topTab = "personal"; onSetSection("notes"); labelFilter = null; closeDrawer()
+            }
+            SidebarItem("Reminders", sectionCounts["reminders"] ?: 0, topTab == "personal" && section == "reminders") {
+                topTab = "personal"; onSetSection("reminders"); labelFilter = null; closeDrawer()
+            }
+            SidebarItem("Project Notes", 0, topTab == "project") {
+                topTab = "project"; closeDrawer()
+            }
+            if (allLabels.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("LABELS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 14.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                allLabels.forEach { l ->
+                    SidebarItem("#$l", labelCounts[l] ?: 0, labelFilter == l) {
+                        topTab = "personal"; onSetSection("notes"); labelFilter = l; closeDrawer()
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            SidebarItem("Archive", sectionCounts["archive"] ?: 0, topTab == "personal" && section == "archive") {
+                topTab = "personal"; onSetSection("archive"); labelFilter = null; closeDrawer()
+            }
+            SidebarItem("Trash", sectionCounts["trash"] ?: 0, topTab == "personal" && section == "trash") {
+                topTab = "personal"; onSetSection("trash"); labelFilter = null; closeDrawer()
+            }
+        }
+    }
+
+    val mainColumn: @Composable (showHamburger: Boolean) -> Unit = { showHamburger ->
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Compact toolbar: hamburger + title + search
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                Icon(Icons.Filled.Menu, contentDescription = "Menu")
+            if (showHamburger) {
+                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                    Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                }
             }
             Box(
                 modifier = Modifier.size(32.dp).clip(RoundedCornerShape(50)).background(Color(0xFFFFF3B0)),
@@ -160,18 +308,110 @@ fun NotesScreen(
             ) { Text("💡", fontSize = 16.sp) }
             Spacer(modifier = Modifier.width(8.dp))
             Text("Notes", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-            // Inline mini search
-            OutlinedTextField(
-                value = state.keepNotesSearch,
-                onValueChange = onSetSearch,
-                placeholder = { Text("Search", fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                modifier = Modifier.weight(1.6f).heightIn(min = 40.dp)
-            )
+            // Inline compact search (iPhone-style pill)
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.weight(1f).heightIn(min = 34.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = state.keepNotesSearch,
+                        onValueChange = onSetSearch,
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(StudioBlue),
+                        modifier = Modifier.weight(1f).heightIn(min = 28.dp),
+                        decorationBox = { inner ->
+                            if (state.keepNotesSearch.isEmpty()) {
+                                Text("Search", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            inner()
+                        }
+                    )
+                }
+            }
+            // Refresh button (re-fetches collaboration invites)
+            IconButton(onClick = { onRefreshInvites() }) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+            }
+            // Grid / List toggle (Mac parity)
+            IconButton(onClick = { gridMode = !gridMode }) {
+                Icon(
+                    if (gridMode) Icons.AutoMirrored.Filled.ViewList else Icons.Filled.GridView,
+                    contentDescription = if (gridMode) "List view" else "Grid view"
+                )
+            }
+            // Sort menu
+            var sortMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { sortMenuOpen = true }) {
+                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                }
+                androidx.compose.material3.DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                    listOf("manual" to "Manual order", "date" to "Recently updated", "title" to "Title (A–Z)").forEach { (key, label) ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("${if (sortMode == key) "✓ " else ""}$label", fontWeight = if (sortMode == key) FontWeight.Bold else FontWeight.Normal) },
+                            onClick = { sortMode = key; sortMenuOpen = false }
+                        )
+                    }
+                }
+            }
         }
         androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+        // Bulk action bar (Mac/Web parity)
+        if (selectionActive) {
+            Surface(
+                color = Color(0xFFFEF3C7),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { clearSelection() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                    }
+                    Text("${selectedIds.size} selected", fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (section == "trash") {
+                        TextButton(onClick = { bulkApply { it.copy(isDeleted = false, isArchived = false, updatedAt = Date()) } }) {
+                            Text("Restore to Notes", fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = { bulkDeleteForever() }) {
+                            Text("Delete forever", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                        }
+                    } else if (section == "archive") {
+                        TextButton(onClick = { bulkApply { it.copy(isArchived = false, updatedAt = Date()) } }) {
+                            Text("Unarchive", fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = { bulkApply { it.copy(isDeleted = true, updatedAt = Date()) } }) {
+                            Text("Move to trash", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                        }
+                    } else {
+                        TextButton(onClick = { bulkApply { it.copy(isArchived = true, updatedAt = Date()) } }) {
+                            Text("Archive", fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = { bulkApply { it.copy(isDeleted = true, updatedAt = Date()) } }) {
+                            Text("Move to trash", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
 
         // Big section title
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -193,7 +433,42 @@ fun NotesScreen(
 
         if (topTab == "project") {
             ProjectNotesList(state)
-            return@ModalNavigationDrawer
+            return@Column
+        }
+
+        // Collaboration invitations (Mac parity)
+        if (state.keepCollaborationInvites.isNotEmpty() && topTab == "personal") {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("COLLABORATION INVITATIONS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+                state.keepCollaborationInvites.forEach { invite ->
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).background(StudioBlue.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(invite.title.ifBlank { "Untitled note" }, fontWeight = FontWeight.ExtraBold, fontSize = 14.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${invite.sourceEmail} invited you to collaborate on this note.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (invite.text.isNotBlank()) {
+                                    Text(invite.text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            TextButton(onClick = { onDeclineInvite(invite.id) }) { Text("Decline", fontWeight = FontWeight.Bold) }
+                            TextButton(onClick = { onAcceptInvite(invite.id) }) { Text("Accept", fontWeight = FontWeight.Bold, color = StudioBlue) }
+                        }
+                    }
+                }
+            }
         }
 
         // Quick "Take a note..." input
@@ -237,7 +512,137 @@ fun NotesScreen(
             }
         }
 
-        // List
+        // Helper to build a NoteCard with all wired callbacks + drag-reorder
+        @Composable
+        fun renderCard(note: StudioKeepNote) {
+            val isDragging = draggingNoteId == note.id
+            val canDrag = section == "notes" && !note.isPinned && !note.isDeleted && !note.isArchived
+            val openEditor: () -> Unit = { editingNote = note }
+            val onClick = openEditor
+            val dragHandle: Modifier = if (canDrag) {
+                Modifier.pointerInput(note.id) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            val b = cardBounds[note.id]
+                            dragStartCenter = if (b != null)
+                                androidx.compose.ui.geometry.Offset((b.left + b.right) / 2f, (b.top + b.bottom) / 2f)
+                            else androidx.compose.ui.geometry.Offset.Zero
+                            dragOffset = androidx.compose.ui.geometry.Offset.Zero
+                            draggingNoteId = note.id
+                            var dragging = true
+                            while (dragging) {
+                                val ev = awaitPointerEvent()
+                                val change = ev.changes.firstOrNull { it.id == down.id }
+                                if (change == null || !change.pressed) { dragging = false; break }
+                                dragOffset += change.positionChange()
+                                change.consume()
+                            }
+                            val finger = dragStartCenter + dragOffset
+                            val target = cardBounds.entries.firstOrNull { (id, rect) -> id != note.id && rect.contains(finger) }?.key
+                            if (target != null) reorderTo(note.id, target)
+                            draggingNoteId = null
+                            dragOffset = androidx.compose.ui.geometry.Offset.Zero
+                        }
+                    }
+                }
+            } else Modifier
+            Box(
+                modifier = Modifier
+                    .onGloballyPositioned { coords ->
+                        val pos = coords.positionInRoot()
+                        val size = coords.size
+                        cardBounds[note.id] = androidx.compose.ui.geometry.Rect(
+                            pos.x, pos.y, pos.x + size.width, pos.y + size.height
+                        )
+                    }
+                    .graphicsLayer {
+                        if (isDragging) {
+                            translationX = dragOffset.x
+                            translationY = dragOffset.y
+                            scaleX = 1.03f
+                            scaleY = 1.03f
+                            alpha = 0.92f
+                            shadowElevation = 16f
+                        }
+                    }
+                    .zIndex(if (isDragging) 10f else 0f)
+            ) {
+                NoteCard(note, onClick = { editingNote = note }, onTogglePin = {
+                    onSave(note.copy(isPinned = !note.isPinned, updatedAt = Date()))
+                }, onArchive = {
+                    onSave(note.copy(isArchived = !note.isArchived, updatedAt = Date()))
+                }, onDelete = {
+                    if (note.isDeleted) onDelete(note.id)
+                    else onSave(note.copy(isDeleted = true, updatedAt = Date()))
+                }, onRestore = {
+                    onSave(note.copy(isDeleted = false, updatedAt = Date()))
+                }, onOpenImage = { viewerImageUrl = it },
+                onChangeColor = { c -> onSave(note.copy(colorName = c, updatedAt = Date())) },
+                showFullActionRow = !showHamburger,
+                onMoveUp = { moveCard(note, -1) },
+                onMoveDown = { moveCard(note, +1) },
+                canReorder = canDrag,
+                dragHandleModifier = dragHandle,
+                isSelected = selectedIds.contains(note.id),
+                selectionActive = selectionActive,
+                onToggleSelect = { toggleSelect(note.id) },
+                onSetReminder = { d -> onSave(note.copy(reminderDate = d, updatedAt = Date())) },
+                onPickDate = { dateForNote = note },
+                onToggleLabel = { l -> toggleLabelOnNote(note, l) },
+                onDuplicate = { duplicateNote(note) },
+                onCopy = { copyText(note) },
+                onOpenCollaborators = { collabForNote = note },
+                allLabelsList = allLabels,
+                teamMembers = state.messageTeamMembers)
+
+                // Multi-select checkmark overlay (top-left), visible when hovered/selected/in selection mode
+                if ((selectedIds.contains(note.id) || selectionActive) && !isDragging) {
+                    androidx.compose.material3.FilledIconButton(
+                        onClick = { toggleSelect(note.id) },
+                        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (selectedIds.contains(note.id)) StudioBlue else Color(0xFF111827)
+                        ),
+                        modifier = Modifier.align(Alignment.TopStart).offset(x = (-6).dp, y = (-6).dp).size(24.dp)
+                    ) {
+                        Icon(Icons.Filled.Check, contentDescription = "Select", tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+
+        if (gridMode) {
+            // GRID — Reorderable staggered grid (long-press on card body → drag)
+            androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid(
+                columns = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells.Adaptive(minSize = 160.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalItemSpacing = 10.dp,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
+                if (pinned.isNotEmpty()) {
+                    item(key = "__pinned_header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Text("PINNED", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
+                    }
+                    staggeredItems(pinned, key = { it.id }) { renderCard(it) }
+                    item(key = "__others_header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Text("OTHERS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                    }
+                }
+                staggeredItems(others, key = { it.id }) { renderCard(it) }
+                if (visible.isEmpty()) {
+                    item(key = "__empty", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
+                            Text(when (section) { "archive" -> "No archived notes."; "trash" -> "Trash is empty."; "reminders" -> "No reminders."; else -> "Tap + to create your first note." }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            return@Column
+        }
+
+        // LIST — one card per row
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -253,18 +658,7 @@ fun NotesScreen(
                         modifier = Modifier.padding(start = 4.dp, top = 4.dp)
                     )
                 }
-                items(pinned, key = { it.id }) { note ->
-                    NoteCard(note, onClick = { editingNote = note }, onTogglePin = {
-                        onSave(note.copy(isPinned = !note.isPinned, updatedAt = Date()))
-                    }, onArchive = {
-                        onSave(note.copy(isArchived = !note.isArchived, updatedAt = Date()))
-                    }, onDelete = {
-                        if (note.isDeleted) onDelete(note.id)
-                        else onSave(note.copy(isDeleted = true, updatedAt = Date()))
-                    }, onRestore = {
-                        onSave(note.copy(isDeleted = false, updatedAt = Date()))
-                    }, onOpenImage = { viewerImageUrl = it })
-                }
+                items(pinned, key = { it.id }) { note -> renderCard(note) }
                 item {
                     Text(
                         "OTHERS",
@@ -275,18 +669,7 @@ fun NotesScreen(
                     )
                 }
             }
-            items(others, key = { it.id }) { note ->
-                NoteCard(note, onClick = { editingNote = note }, onTogglePin = {
-                    onSave(note.copy(isPinned = !note.isPinned, updatedAt = Date()))
-                }, onArchive = {
-                    onSave(note.copy(isArchived = !note.isArchived, updatedAt = Date()))
-                }, onDelete = {
-                    if (note.isDeleted) onDelete(note.id)
-                    else onSave(note.copy(isDeleted = true, updatedAt = Date()))
-                }, onRestore = {
-                    onSave(note.copy(isDeleted = false, updatedAt = Date()))
-                }, onOpenImage = { viewerImageUrl = it })
-            }
+            items(others, key = { it.id }) { note -> renderCard(note) }
             if (visible.isEmpty()) {
                 item {
                     Box(
@@ -309,6 +692,32 @@ fun NotesScreen(
     }
     }
 
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth >= 600.dp
+        if (isWide) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                androidx.compose.material3.PermanentDrawerSheet(modifier = Modifier.width(240.dp)) {
+                    SidebarContent(closeDrawer = {})
+                }
+                androidx.compose.material3.VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    mainColumn(false)
+                }
+            }
+        } else {
+            androidx.compose.material3.ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    androidx.compose.material3.ModalDrawerSheet {
+                        SidebarContent(closeDrawer = { scope.launch { drawerState.close() } })
+                    }
+                }
+            ) {
+                mainColumn(true)
+            }
+        }
+    }
+
     viewerImageUrl?.let { url ->
         Dialog(onDismissRequest = { viewerImageUrl = null }) {
             Box(
@@ -326,6 +735,84 @@ fun NotesScreen(
                 )
             }
         }
+    }
+
+    dateForNote?.let { note ->
+        val pickerState = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = note.reminderDate?.time ?: System.currentTimeMillis())
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { dateForNote = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { onSave(note.copy(reminderDate = Date(it), updatedAt = Date())) }
+                    dateForNote = null
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { dateForNote = null }) { Text("Cancel") } }
+        ) { androidx.compose.material3.DatePicker(state = pickerState) }
+    }
+
+    collabForNote?.let { note ->
+        var emailInput by remember(note.id) { mutableStateOf("") }
+        var collabs by remember(note.id) { mutableStateOf(note.collaboratorEmails) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { collabForNote = null },
+            title = { Text("Collaborators", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = emailInput,
+                            onValueChange = { emailInput = it },
+                            placeholder = { Text("Email") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = {
+                            val e = emailInput.trim().lowercase()
+                            if (e.isNotEmpty() && "@" in e && !collabs.contains(e)) {
+                                collabs = collabs + e
+                                emailInput = ""
+                            }
+                        }) { Text("Add") }
+                    }
+                    if (collabs.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            collabs.forEach { e ->
+                                InputChip(
+                                    selected = false,
+                                    onClick = { collabs = collabs - e },
+                                    label = { Text(e, fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Filled.Close, null, modifier = Modifier.size(14.dp)) }
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("No collaborators yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val previous = note.collaboratorEmails.toSet()
+                    val nextSet = collabs.toSet()
+                    val added = nextSet - previous
+                    val removed = previous - nextSet
+                    onSave(note.copy(collaboratorEmails = collabs, updatedAt = Date()))
+                    added.forEach { email ->
+                        val member = state.messageTeamMembers.firstOrNull { it.email.equals(email, ignoreCase = true) }
+                        onInviteCollab(note, member?.id.orEmpty(), email)
+                    }
+                    removed.forEach { email ->
+                        val member = state.messageTeamMembers.firstOrNull { it.email.equals(email, ignoreCase = true) }
+                        onRemoveCollab(note.id, member?.id.orEmpty(), email)
+                    }
+                    collabForNote = null
+                }) { Text("Save", fontWeight = FontWeight.ExtraBold) }
+            },
+            dismissButton = { TextButton(onClick = { collabForNote = null }) { Text("Cancel") } }
+        )
     }
 
     editingNote?.let { note ->
@@ -349,13 +836,30 @@ private fun NoteCard(
     onArchive: () -> Unit,
     onDelete: () -> Unit,
     onRestore: () -> Unit = {},
-    onOpenImage: (String) -> Unit = {}
+    onOpenImage: (String) -> Unit = {},
+    onChangeColor: (String) -> Unit = {},
+    onSetReminder: (Date?) -> Unit = {},
+    onPickDate: () -> Unit = {},
+    onToggleLabel: (String) -> Unit = {},
+    onDuplicate: () -> Unit = {},
+    onCopy: () -> Unit = {},
+    onOpenCollaborators: () -> Unit = {},
+    allLabelsList: List<String> = emptyList(),
+    showFullActionRow: Boolean = false,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
+    canReorder: Boolean = false,
+    dragHandleModifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    selectionActive: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    teamMembers: List<uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember> = emptyList()
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = colorForNote(note.colorName),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        onClick = onClick,
+        border = androidx.compose.foundation.BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) StudioBlue else MaterialTheme.colorScheme.outlineVariant),
+        onClick = { if (selectionActive) onToggleSelect() else onClick() },
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -370,13 +874,15 @@ private fun NoteCard(
                         modifier = Modifier.weight(1f)
                     )
                 } else Spacer(modifier = Modifier.weight(1f))
-                if (note.isPinned) {
-                    Icon(
-                        Icons.Filled.PushPin,
-                        contentDescription = "Pinned",
-                        modifier = Modifier.size(18.dp),
-                        tint = StudioBlue
-                    )
+                if (showFullActionRow || note.isPinned) {
+                    IconButton(onClick = onTogglePin, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                            contentDescription = if (note.isPinned) "Unpin" else "Pin",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (note.isPinned) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             val firstImageUrl = note.links.firstOrNull { url ->
@@ -398,13 +904,22 @@ private fun NoteCard(
                 Spacer(modifier = Modifier.height(6.dp))
             }
             if (note.text.isNotBlank()) {
-                Text(
-                    note.text,
-                    fontSize = 14.sp,
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                val annotated = remember(note.text) { buildLinkifiedText(note.text) }
+                androidx.compose.foundation.text.ClickableText(
+                    text = annotated,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
                     maxLines = 6,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = if (note.title.isNotBlank()) 4.dp else 0.dp)
+                    modifier = Modifier.padding(top = if (note.title.isNotBlank()) 4.dp else 0.dp),
+                    onClick = { offset ->
+                        annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
+                            runCatching { uriHandler.openUri(if (it.item.startsWith("http")) it.item else "https://${it.item}") }
+                        } ?: onClick()
+                    }
                 )
             }
             if (note.labels.isNotEmpty()) {
@@ -429,29 +944,231 @@ private fun NoteCard(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+            // Collaborator avatar stack (Mac/Web parity) — uses workspace member photos
             if (note.collaboratorEmails.isNotEmpty()) {
-                Text(
-                    "👥 ${note.collaboratorEmails.size} shared",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+                Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy((-6).dp), verticalAlignment = Alignment.CenterVertically) {
+                    note.collaboratorEmails.take(4).forEachIndexed { idx, email ->
+                        val member = teamMembers.firstOrNull { it.email.equals(email, ignoreCase = true) }
+                        val photoUrl = member?.photoURL?.takeIf { it.isNotBlank() }
+                        val initial = (member?.label?.firstOrNull() ?: email.firstOrNull())?.uppercaseChar()?.toString() ?: "?"
+                        val hue = ((email.hashCode() and 0x7fffffff) % 360).toFloat()
+                        val bg = androidx.compose.ui.graphics.Color.hsv(hue, 0.5f, 0.85f)
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(bg)
+                                .border(1.5.dp, MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)
+                                .zIndex((10 - idx).toFloat()),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (photoUrl != null) {
+                                coil.compose.AsyncImage(
+                                    model = photoUrl,
+                                    contentDescription = email,
+                                    modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                Text(initial, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                            }
+                        }
+                    }
+                    if (note.collaboratorEmails.size > 4) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("+${note.collaboratorEmails.size - 4}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
-            // Only show inline action row when in trash or archive (otherwise edit dialog covers actions)
-            if (note.isDeleted || note.isArchived) {
-                Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Active editor indicator (someone else editing now, within 60s)
+            val activeEditorEmail = note.activeEditorEmail
+            val activeEditorUpdated = note.activeEditorUpdatedAt
+            if (activeEditorEmail.isNotBlank() && activeEditorUpdated != null && System.currentTimeMillis() - activeEditorUpdated.time < 60_000) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = StudioBlue.copy(alpha = 0.12f),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(
+                        "✎ ${activeEditorEmail} is editing",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = StudioBlue,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            // Action row: Mac-style on tablet/desktop; minimal in compact for trash/archive only
+            if (showFullActionRow) {
+                Row(modifier = Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Color picker dropdown
+                    var colorMenuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { colorMenuOpen = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Outlined.Palette, contentDescription = "Color", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
+                            Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("default", "red", "orange", "yellow", "green", "blue", "purple", "pink").forEach { c ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(colorForName(c))
+                                            .border(if (note.colorName == c) 2.dp else 1.dp, if (note.colorName == c) StudioBlue else MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape)
+                                            .clickable { onChangeColor(c); colorMenuOpen = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    // Reminder picker dropdown
+                    var reminderMenuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { reminderMenuOpen = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                if (note.reminderDate != null) Icons.Filled.Notifications else Icons.Outlined.Notifications,
+                                contentDescription = "Reminder",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = reminderMenuOpen, onDismissRequest = { reminderMenuOpen = false }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Tomorrow") }, onClick = { reminderMenuOpen = false; onSetReminder(Date(System.currentTimeMillis() + 24L * 60 * 60 * 1000)) })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Next week") }, onClick = { reminderMenuOpen = false; onSetReminder(Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000)) })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Pick date…") }, onClick = { reminderMenuOpen = false; onPickDate() })
+                            if (note.reminderDate != null) {
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Remove reminder", color = MaterialTheme.colorScheme.error) }, onClick = { reminderMenuOpen = false; onSetReminder(null) })
+                            }
+                        }
+                    }
+                    // Collaborators → open inline collaborators dialog
+                    IconButton(onClick = onOpenCollaborators, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.PersonAdd, contentDescription = "Collaborators", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    // Archive / Unarchive
+                    if (!note.isDeleted) {
+                        IconButton(onClick = onArchive, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                if (note.isArchived) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                                contentDescription = if (note.isArchived) "Unarchive" else "Archive",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = onRestore, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.Restore, contentDescription = "Restore", modifier = Modifier.size(18.dp), tint = StudioBlue)
+                        }
+                    }
+                    // Drag handle — wide area for easy grab
+                    if (canReorder) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 32.dp)
+                                .then(dragHandleModifier),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.DragIndicator, contentDescription = "Drag to reorder", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    // Overflow menu
+                    var moreOpen by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { moreOpen = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.MoreHoriz, contentDescription = "More", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Edit") }, onClick = { moreOpen = false; onClick() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Duplicate") }, onClick = { moreOpen = false; onDuplicate() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Copy text") }, onClick = { moreOpen = false; onCopy() })
+                            if (allLabelsList.isNotEmpty()) {
+                                androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                Text("LABELS", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                allLabelsList.forEach { l ->
+                                    val on = note.labels.contains(l)
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("${if (on) "✓ " else ""}$l", fontWeight = if (on) FontWeight.Bold else FontWeight.Normal) },
+                                        onClick = { onToggleLabel(l) }
+                                    )
+                                }
+                            }
+                            if (canReorder) {
+                                androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move up") }, onClick = { moreOpen = false; onMoveUp() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move down") }, onClick = { moreOpen = false; onMoveDown() })
+                            }
+                            androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            if (note.isDeleted) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Delete forever", color = MaterialTheme.colorScheme.error) },
+                                    onClick = { moreOpen = false; onDelete() }
+                                )
+                            } else {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Move to trash", color = MaterialTheme.colorScheme.error) },
+                                    onClick = { moreOpen = false; onDelete() }
+                                )
+                            }
+                        }
+                    }
+                }
+            } else if (note.isDeleted || note.isArchived) {
+                // Compact action row: only when in trash/archive sections (otherwise card stays clean — iPhone parity)
+                Row(modifier = Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(modifier = Modifier.weight(1f))
                     if (note.isDeleted) {
                         IconButton(onClick = { onRestore() }, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Filled.Restore, contentDescription = "Restore", modifier = Modifier.size(16.dp), tint = StudioBlue)
                         }
-                    } else {
+                    } else if (note.isArchived) {
                         IconButton(onClick = onArchive, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Filled.Archive, contentDescription = "Unarchive", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                    if (canReorder) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 32.dp)
+                                .then(dragHandleModifier),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.DragIndicator, contentDescription = "Drag to reorder", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+                        }
+                    }
+                    var compactMoreOpen by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { compactMoreOpen = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.MoreHoriz, contentDescription = "More", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = compactMoreOpen, onDismissRequest = { compactMoreOpen = false }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Edit") }, onClick = { compactMoreOpen = false; onClick() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Duplicate") }, onClick = { compactMoreOpen = false; onDuplicate() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Copy text") }, onClick = { compactMoreOpen = false; onCopy() })
+                            if (allLabelsList.isNotEmpty()) {
+                                androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                Text("LABELS", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                allLabelsList.forEach { l ->
+                                    val on = note.labels.contains(l)
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("${if (on) "✓ " else ""}$l", fontWeight = if (on) FontWeight.Bold else FontWeight.Normal) }, onClick = { onToggleLabel(l) })
+                                }
+                            }
+                            if (canReorder) {
+                                androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move up") }, onClick = { compactMoreOpen = false; onMoveUp() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move down") }, onClick = { compactMoreOpen = false; onMoveDown() })
+                            }
+                            androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            if (note.isDeleted) {
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Delete forever", color = MaterialTheme.colorScheme.error) }, onClick = { compactMoreOpen = false; onDelete() })
+                            } else {
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move to trash", color = MaterialTheme.colorScheme.error) }, onClick = { compactMoreOpen = false; onDelete() })
+                            }
+                        }
                     }
                 }
             }
@@ -745,6 +1462,24 @@ private fun ProjectNotesList(state: StudioFlowUiState) {
                 }
             }
         }
+    }
+}
+
+private val URL_REGEX = Regex("(https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+|www\\.[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+)")
+
+private fun buildLinkifiedText(text: String): androidx.compose.ui.text.AnnotatedString {
+    return androidx.compose.ui.text.buildAnnotatedString {
+        var lastEnd = 0
+        URL_REGEX.findAll(text).forEach { m ->
+            append(text.substring(lastEnd, m.range.first))
+            pushStringAnnotation(tag = "URL", annotation = m.value)
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color(0xFF2563EB), textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline))
+            append(m.value)
+            pop()
+            pop()
+            lastEnd = m.range.last + 1
+        }
+        if (lastEnd < text.length) append(text.substring(lastEnd))
     }
 }
 

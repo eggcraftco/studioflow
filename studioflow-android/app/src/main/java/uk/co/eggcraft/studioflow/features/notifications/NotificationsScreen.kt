@@ -262,7 +262,11 @@ private fun HeaderCard(
                     Surface(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                         shape = RoundedCornerShape(50),
-                        modifier = Modifier.clickable(onClick = onMarkAllRead)
+                        modifier = Modifier.clickable {
+                            onMarkAllRead()
+                            // Also dismiss visible cards (single combined action — Mac/Web parity)
+                            onDismissAllVisible()
+                        }
                     ) {
                         Text(
                             "Mark all read",
@@ -273,9 +277,6 @@ private fun HeaderCard(
                         )
                     }
                     Spacer(Modifier.width(6.dp))
-                }
-                if (hasVisible) {
-                    CircleIconButton(icon = Icons.Filled.Close, onClick = onDismissAllVisible)
                 }
                 if (onClose != null) {
                     Spacer(Modifier.width(6.dp))
