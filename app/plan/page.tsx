@@ -31,7 +31,13 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   card_customization: "Order card customization",
   team_access: "Team access and roles",
   storage_addons: "Storage add-ons",
-  workspace_logo_upload: "Workspace logo upload"
+  workspace_logo_upload: "Workspace logo upload",
+  chatgpt_app: "ChatGPT App integration",
+  personal_notes: "Personal notes",
+  order_notes: "Order notes",
+  dashboard_summary: "Dashboard summary",
+  financial_summary: "Financial summaries",
+  messages: "Messages and quick replies"
 };
 
 const ADD_ONS = [

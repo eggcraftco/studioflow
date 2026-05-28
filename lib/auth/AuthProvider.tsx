@@ -3,15 +3,16 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
-import { arrayUnion, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
+  language: string;
 };
 
-const AuthContext = createContext<AuthContextValue>({ user: null, loading: true });
+const AuthContext = createContext<AuthContextValue>({ user: null, loading: true, language: "English" });
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -91,6 +92,19 @@ async function ensurePersonalWorkspace(currentUser: User) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [language, setLanguage] = useState<string>("English");
+
+  // Listen to the active workspace's selectedLanguage so children re-render on language change.
+  useEffect(() => {
+    if (!user) { setLanguage("English"); return; }
+    const ref = doc(db, "companySettings", user.uid);
+    const unsubscribe = onSnapshot(ref, snapshot => {
+      const raw = snapshot.exists() ? (snapshot.data() as Record<string, unknown>)?.["seciliDil"] : undefined;
+      const cleaned = typeof raw === "string" ? raw.trim() : "";
+      setLanguage(cleaned || "English");
+    }, () => setLanguage("English"));
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const value = useMemo(() => ({ user, loading }), [user, loading]);
+  const value = useMemo(() => ({ user, loading, language }), [user, loading, language]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

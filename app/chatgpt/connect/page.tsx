@@ -258,7 +258,7 @@ export default function ChatGPTConnectPage() {
         </div>
 
         <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: 0 }}>
-          Allow ChatGPT to create orders, search orders, view order details, add notes and update order status for the selected workspace.
+          Connect ChatGPT to the selected NivaDesk workspace. ChatGPT will only work inside the workspace you choose and access is still limited by your NivaDesk plan, role and permissions.
         </p>
 
         {!validRequest ? (
@@ -331,9 +331,11 @@ export default function ChatGPTConnectPage() {
               color: "#3a3a3c"
             }}>
               <strong>ChatGPT will be able to:</strong>
-              <span>• Create new orders after your request or confirmation.</span>
-              <span>• Search and summarise order details in this workspace.</span>
-              <span>• Add internal order notes and update order status.</span>
+              <span>• Search and summarise orders, tasks, timelines and dashboard information in the selected workspace.</span>
+              <span>• View financial summaries only when your NivaDesk plan and role allow financial access.</span>
+              <span>• Create new orders, add order notes, add personal notes and update order status after your request.</span>
+              <span>• Read messages and quick replies only when your plan and role allow access.</span>
+              <span>• It will not access other workspaces unless you connect them separately.</span>
             </div>
 
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>

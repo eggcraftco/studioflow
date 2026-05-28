@@ -107,6 +107,23 @@ type OrderCardInfo = {
   icon: CardIcon;
 };
 
+type FeatureDeepDive = {
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  bulletKeys: PublicSiteTranslationKey[];
+};
+
+type FeatureCapability = {
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+};
+
+type PlanFeatureBridge = {
+  titleKey: PublicSiteTranslationKey;
+  bodyKey: PublicSiteTranslationKey;
+  planKeys: StudioBillingPlan[];
+};
+
 type ScrollStoryStep = {
   eyebrowKey: PublicSiteTranslationKey;
   titleKey: PublicSiteTranslationKey;
@@ -168,6 +185,15 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     tone: "clay",
     metricKey: "feature.dashboard.metric",
     artifactKey: "feature.dashboard.artifact"
+  },
+  {
+    titleKey: "feature.chatgpt.title",
+    eyebrowKey: "feature.chatgpt.eyebrow",
+    bodyKey: "feature.chatgpt.body",
+    bulletKeys: ["feature.chatgpt.bullet1", "feature.chatgpt.bullet2", "feature.chatgpt.bullet3"],
+    tone: "sky",
+    metricKey: "feature.chatgpt.metric",
+    artifactKey: "feature.chatgpt.artifact"
   },
   {
     titleKey: "feature.export.title",
@@ -266,6 +292,107 @@ const FEATURE_GROUPS: InfoSection[] = [
   {
     titleKey: "workflow.group3.title",
     bodyKey: "workflow.group3.body"
+  }
+];
+
+const FEATURE_DEEP_DIVES: FeatureDeepDive[] = [
+  {
+    titleKey: "featuresDeep.orders.title",
+    bodyKey: "featuresDeep.orders.body",
+    bulletKeys: ["featuresDeep.orders.bullet1", "featuresDeep.orders.bullet2", "featuresDeep.orders.bullet3"]
+  },
+  {
+    titleKey: "featuresDeep.files.title",
+    bodyKey: "featuresDeep.files.body",
+    bulletKeys: ["featuresDeep.files.bullet1", "featuresDeep.files.bullet2", "featuresDeep.files.bullet3"]
+  },
+  {
+    titleKey: "featuresDeep.team.title",
+    bodyKey: "featuresDeep.team.body",
+    bulletKeys: ["featuresDeep.team.bullet1", "featuresDeep.team.bullet2", "featuresDeep.team.bullet3"]
+  }
+];
+
+const FEATURE_CAPABILITIES: FeatureCapability[] = [
+  { titleKey: "capability.offline.title", bodyKey: "capability.offline.body" },
+  { titleKey: "capability.customization.title", bodyKey: "capability.customization.body" },
+  { titleKey: "capability.finance.title", bodyKey: "capability.finance.body" },
+  { titleKey: "capability.messages.title", bodyKey: "capability.messages.body" },
+  { titleKey: "capability.chatgpt.title", bodyKey: "capability.chatgpt.body" },
+  { titleKey: "capability.notes.title", bodyKey: "capability.notes.body" },
+  { titleKey: "capability.export.title", bodyKey: "capability.export.body" }
+];
+
+const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
+  {
+    titleKey: "planBridge.orderRecords.title",
+    bodyKey: "planBridge.orderRecords.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.customerRecords.title",
+    bodyKey: "planBridge.customerRecords.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.personalNotes.title",
+    bodyKey: "planBridge.personalNotes.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.basicFinance.title",
+    bodyKey: "planBridge.basicFinance.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.export.title",
+    bodyKey: "planBridge.export.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.cardCustomization.title",
+    bodyKey: "planBridge.cardCustomization.body",
+    planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.advancedFinance.title",
+    bodyKey: "planBridge.advancedFinance.body",
+    planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.workspaceBranding.title",
+    bodyKey: "planBridge.workspaceBranding.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.clientFiles.title",
+    bodyKey: "planBridge.clientFiles.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.messages.title",
+    bodyKey: "planBridge.messages.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.storageAddons.title",
+    bodyKey: "planBridge.storageAddons.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.chatgptApp.title",
+    bodyKey: "planBridge.chatgptApp.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.teamAccess.title",
+    bodyKey: "planBridge.teamAccess.body",
+    planKeys: ["team_monthly"]
+  },
+  {
+    titleKey: "planBridge.todoAssignment.title",
+    bodyKey: "planBridge.todoAssignment.body",
+    planKeys: ["team_monthly"]
   }
 ];
 
@@ -1001,6 +1128,172 @@ function FeatureWorkflowPanel() {
   );
 }
 
+function FeatureDeepDiveSection() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-features-deep-section public-scroll-reveal">
+      <div className="public-shell public-features-deep-panel">
+        <div className="public-features-deep-copy">
+          <span className="public-eyebrow">{t("featuresDeep.eyebrow")}</span>
+          <h2>{t("featuresDeep.title")}</h2>
+          <p>{t("featuresDeep.body")}</p>
+          <div className="public-features-kpi-row" aria-hidden="true">
+            <span>{t("featuresDeep.kpi1")}</span>
+            <span>{t("featuresDeep.kpi2")}</span>
+            <span>{t("featuresDeep.kpi3")}</span>
+          </div>
+        </div>
+        <div className="public-features-deep-list">
+          {FEATURE_DEEP_DIVES.map((item, index) => (
+            <article key={item.titleKey}>
+              <div className="public-card-index">{String(index + 1).padStart(2, "0")}</div>
+              <div>
+                <h3>{t(item.titleKey)}</h3>
+                <p>{t(item.bodyKey)}</p>
+                <ul>
+                  {item.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
+                </ul>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureCapabilityMatrix() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-feature-capability-section">
+      <div className="public-shell">
+        <SectionHeader
+          eyebrowKey="capability.eyebrow"
+          titleKey="capability.title"
+          bodyKey="capability.body"
+        />
+        <div className="public-capability-grid public-scroll-stagger">
+          {FEATURE_CAPABILITIES.map((item, index) => (
+            <article className="public-capability-card" key={item.titleKey}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <h3>{t(item.titleKey)}</h3>
+              <p>{t(item.bodyKey)}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-plan-feature-bridge-section public-scroll-reveal">
+      <div className="public-shell public-plan-feature-bridge-panel">
+        <div className="public-plan-feature-bridge-copy">
+          <span className="public-eyebrow">{t("planBridge.eyebrow")}</span>
+          <h2>{t("planBridge.title")}</h2>
+          <p>{t("planBridge.body")}</p>
+        </div>
+        <div className={compact ? "public-plan-matrix-wrap compact" : "public-plan-matrix-wrap"}>
+          <div className="public-plan-matrix" role="table" aria-label={t("planBridge.matrixAria")}>
+            <div className="public-plan-matrix-head" role="row">
+              <div className="public-plan-matrix-feature-head" role="columnheader">
+                <span>{t("planBridge.featureColumn")}</span>
+              </div>
+              {PLAN_ORDER.map(planKey => {
+                const copy = PUBLIC_PLAN_COPY[planKey];
+                return (
+                  <div className="public-plan-matrix-plan-head" role="columnheader" key={planKey}>
+                    <strong>{t(copy.shortNameKey)}</strong>
+                    <small>{t(copy.priceLabelKey)}</small>
+                  </div>
+                );
+              })}
+            </div>
+            {PLAN_FEATURE_BRIDGE.map(item => (
+              <div className="public-plan-matrix-row" role="row" key={item.titleKey}>
+                <div className="public-plan-matrix-feature" role="cell">
+                  <strong>{t(item.titleKey)}</strong>
+                  <span>{t(item.bodyKey)}</span>
+                </div>
+                {PLAN_ORDER.map(planKey => {
+                  const included = item.planKeys.includes(planKey);
+                  const copy = PUBLIC_PLAN_COPY[planKey];
+                  return (
+                    <div
+                      className={included ? "public-plan-matrix-cell included" : "public-plan-matrix-cell"}
+                      role="cell"
+                      key={planKey}
+                      aria-label={`${t(copy.shortNameKey)}: ${included ? t("planBridge.included") : t("planBridge.notIncluded")}`}
+                    >
+                      {included ? <span aria-hidden="true">✓</span> : <span aria-hidden="true">–</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ChatGPTAppShowcase() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-chatgpt-app-section public-scroll-reveal">
+      <div className="public-shell public-chatgpt-app-panel">
+        <div className="public-chatgpt-app-copy">
+          <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
+          <h2>{t("chatgptApp.title")}</h2>
+          <p>{t("chatgptApp.body")}</p>
+          <div className="public-chatgpt-app-actions" aria-label={t("chatgptApp.useCasesAria")}>
+            <span>{t("chatgptApp.useCase1")}</span>
+            <span>{t("chatgptApp.useCase2")}</span>
+            <span>{t("chatgptApp.useCase3")}</span>
+          </div>
+        </div>
+        <div className="public-chatgpt-app-demo" aria-label={t("chatgptApp.demoAria")}>
+          <div className="public-chatgpt-window-bar">
+            <span />
+            <strong>{t("chatgptApp.windowTitle")}</strong>
+          </div>
+          <div className="public-chatgpt-message user">
+            <span>{t("chatgptApp.promptLabel")}</span>
+            <p>{t("chatgptApp.prompt")}</p>
+          </div>
+          <div className="public-chatgpt-result-card">
+            <div>
+              <span>{t("chatgptApp.resultMetric1Label")}</span>
+              <strong>{t("chatgptApp.resultMetric1Value")}</strong>
+            </div>
+            <div>
+              <span>{t("chatgptApp.resultMetric2Label")}</span>
+              <strong>{t("chatgptApp.resultMetric2Value")}</strong>
+            </div>
+            <div>
+              <span>{t("chatgptApp.resultMetric3Label")}</span>
+              <strong>{t("chatgptApp.resultMetric3Value")}</strong>
+            </div>
+          </div>
+          <div className="public-chatgpt-message assistant">
+            <span>{t("chatgptApp.answerLabel")}</span>
+            <p>{t("chatgptApp.answer")}</p>
+          </div>
+          <div className="public-chatgpt-safe-row">
+            <span>{t("chatgptApp.safeBadge1")}</span>
+            <span>{t("chatgptApp.safeBadge2")}</span>
+            <span>{t("chatgptApp.safeBadge3")}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PlatformLogo({ kind }: { kind: PlatformKind }) {
   if (kind === "apple") {
     return (
@@ -1144,6 +1437,21 @@ export function PublicFeaturesPage() {
 
         <FeatureWorkflowPanel />
 
+        <FeatureDeepDiveSection />
+
+        <section className="public-section public-order-flow-section">
+          <div className="public-order-flow-sticky">
+            <div className="public-shell">
+              <SectionHeader
+                eyebrowKey="section.flow.eyebrow"
+                titleKey="section.flow.title"
+                bodyKey="section.flow.body"
+              />
+              <OrderCardTitleGrid />
+            </div>
+          </div>
+        </section>
+
         <section className="public-section">
           <div className="public-shell">
             <div className="public-feature-grid">
@@ -1153,6 +1461,12 @@ export function PublicFeaturesPage() {
             </div>
           </div>
         </section>
+
+        <FeatureCapabilityMatrix />
+
+        <ChatGPTAppShowcase />
+
+        <PlanFeatureBridgeSection />
 
         <PlatformNote />
       </>
@@ -1190,6 +1504,10 @@ export function PublicPricingPage() {
             <PublicPlanGrid />
           </div>
         </section>
+
+        <PlanFeatureBridgeSection compact />
+
+        <ChatGPTAppShowcase />
 
         <section className="public-section public-section-soft">
           <div className="public-shell">

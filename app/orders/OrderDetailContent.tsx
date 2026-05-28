@@ -2059,13 +2059,48 @@ export function OrderDetailContent({
       .filter(item => item.title.length > 0) ?? [];
     return saved.length > 0 ? saved : DEFAULT_QUICK_REMINDERS;
   }, [blockHeadingSettings?.scheduleQuickReminders]);
+  const perOrderExtraNoteSections = useMemo<HeadingItem[]>(() => {
+    const raw = order.customFields["orderExtraNoteSectionsJSON"]?.trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((item: any) => ({ id: String(item?.id ?? "").trim(), title: String(item?.title ?? "").trim() }))
+        .filter((item: HeadingItem) => item.id.length > 0 && item.title.length > 0 && item.id !== PRIMARY_SPECIAL_NOTE_ID);
+    } catch {
+      return [];
+    }
+  }, [order.customFields]);
+  const perOrderExtraIds = useMemo(() => new Set(perOrderExtraNoteSections.map(s => s.id)), [perOrderExtraNoteSections]);
   const specialNoteSections = useMemo(() => {
     const saved = blockHeadingSettings?.specialNoteSections
       ?.map(item => ({ id: item.id.trim(), title: item.title.trim() }))
       .filter(item => item.id.length > 0 && item.title.length > 0) ?? [];
     const hasPrimary = saved.some(item => item.id === PRIMARY_SPECIAL_NOTE_ID);
-    return hasPrimary ? saved : [{ id: PRIMARY_SPECIAL_NOTE_ID, title: "Special Notes" }, ...saved];
-  }, [blockHeadingSettings?.specialNoteSections]);
+    const globals = hasPrimary ? saved : [{ id: PRIMARY_SPECIAL_NOTE_ID, title: "Special Notes" }, ...saved];
+    const globalIds = new Set(globals.map(s => s.id));
+    return [...globals, ...perOrderExtraNoteSections.filter(s => !globalIds.has(s.id))];
+  }, [blockHeadingSettings?.specialNoteSections, perOrderExtraNoteSections]);
+
+  const savePerOrderExtraNoteSections = (next: HeadingItem[]) => {
+    const cleaned = next
+      .map(item => ({ id: item.id.trim(), title: item.title.trim() }))
+      .filter(item => item.id.length > 0 && item.title.length > 0 && item.id !== PRIMARY_SPECIAL_NOTE_ID);
+    const json = cleaned.length > 0 ? JSON.stringify(cleaned) : "";
+    void saveDetailsPatch({ customFields: { ["orderExtraNoteSectionsJSON"]: json } }, "Note sections");
+  };
+  const addPerOrderNoteSection = () => {
+    const nextIndex = specialNoteSections.length + 1;
+    const newItem: HeadingItem = { id: webHeadingId(), title: `Special Note ${nextIndex}` };
+    savePerOrderExtraNoteSections([...perOrderExtraNoteSections, newItem]);
+  };
+  const removePerOrderNoteSection = (id: string) => {
+    savePerOrderExtraNoteSections(perOrderExtraNoteSections.filter(s => s.id !== id));
+  };
+  const renamePerOrderNoteSection = (id: string, title: string) => {
+    savePerOrderExtraNoteSections(perOrderExtraNoteSections.map(s => s.id === id ? { ...s, title } : s));
+  };
 
   const desktopColumns = useMemo(() => {
     let sourceColumns = (cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder])
@@ -5530,23 +5565,57 @@ export function OrderDetailContent({
       case "notes":
         return (
           <section key={cardId} className="card order-detail-card">
-            {renderCardTitle(cardId)}
+            <div className="order-notes-card-head">
+              {renderCardTitle(cardId)}
+              {canInlineEditFullDetails && (
+                <button
+                  type="button"
+                  className="order-notes-quick-add"
+                  onClick={addPerOrderNoteSection}
+                  title="Add note field to this order only"
+                  aria-label="Add note field"
+                >
+                  +
+                </button>
+              )}
+            </div>
             <div className="app-card-panel app-notes-panel">
               {specialNoteSections.map(section => {
                 const isPrimary = section.id === PRIMARY_SPECIAL_NOTE_ID;
+                const isPerOrderExtra = perOrderExtraIds.has(section.id);
                 const value = isPrimary ? order.notes : specialNoteValue(order.customFields, section.id);
                 return (
-                  <InlineNotesField
-                    key={section.id}
-                    title={section.title}
-                    value={value}
-                    disabled={!canInlineEditFullDetails}
-                    saving={savingInlineField === `Note ${section.id}`}
-                    onSave={nextValue => saveDetailsPatch(
-                      isPrimary ? { notes: nextValue } : { specialNotes: { [section.id]: nextValue } },
-                      `Note ${section.id}`
+                  <div key={section.id} className="order-notes-section">
+                    {isPerOrderExtra && canInlineEditFullDetails && (
+                      <div className="order-notes-extra-header">
+                        <input
+                          className="order-notes-extra-title"
+                          value={section.title}
+                          onChange={e => renamePerOrderNoteSection(section.id, e.target.value)}
+                          placeholder="Section title"
+                        />
+                        <button
+                          type="button"
+                          className="order-notes-extra-remove"
+                          onClick={() => removePerOrderNoteSection(section.id)}
+                          title="Remove this section"
+                          aria-label="Remove section"
+                        >
+                          ×
+                        </button>
+                      </div>
                     )}
-                  />
+                    <InlineNotesField
+                      title={isPerOrderExtra ? "" : section.title}
+                      value={value}
+                      disabled={!canInlineEditFullDetails}
+                      saving={savingInlineField === `Note ${section.id}`}
+                      onSave={nextValue => saveDetailsPatch(
+                        isPrimary ? { notes: nextValue } : { specialNotes: { [section.id]: nextValue } },
+                        `Note ${section.id}`
+                      )}
+                    />
+                  </div>
                 );
               })}
             </div>
@@ -6097,6 +6166,8 @@ export function OrderDetailContent({
         workspace={workspace}
         canCustomizeCards={canCustomizeCards}
         canSave={canEditCardLayout}
+        perOrderExtraNoteSections={perOrderExtraNoteSections}
+        onSavePerOrderExtraNoteSections={savePerOrderExtraNoteSections}
         onClose={() => setHeadingEditorCardId(null)}
         onSaved={settings => {
           setBlockHeadingSettings(settings);
@@ -6636,6 +6707,8 @@ function BlockHeadingsModal({
   workspace,
   canCustomizeCards,
   canSave,
+  perOrderExtraNoteSections,
+  onSavePerOrderExtraNoteSections,
   onClose,
   onSaved
 }: {
@@ -6643,6 +6716,8 @@ function BlockHeadingsModal({
   workspace: WorkspaceContext;
   canCustomizeCards: boolean;
   canSave: boolean;
+  perOrderExtraNoteSections?: HeadingItem[];
+  onSavePerOrderExtraNoteSections?: (next: HeadingItem[]) => void;
   onClose: () => void;
   onSaved?: (settings: BlockHeadingSettings) => void;
 }) {
@@ -6651,6 +6726,8 @@ function BlockHeadingsModal({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [originalPerOrderIds, setOriginalPerOrderIds] = useState<Set<string>>(new Set());
+  const [originalGlobalIds, setOriginalGlobalIds] = useState<Set<string>>(new Set());
 
   const supported = Boolean(cardId && WEB_BLOCK_HEADING_CARD_IDS.has(cardId));
 
@@ -6668,7 +6745,23 @@ function BlockHeadingsModal({
       setLoading(true);
       try {
         const loaded = await loadWorkspaceBlockHeadings(workspace);
-        if (!cancelled) setSettings(prepareBlockHeadingSettings(activeCardId, loaded));
+        if (!cancelled) {
+          let prepared = prepareBlockHeadingSettings(activeCardId, loaded);
+          if (activeCardId === "notes" && perOrderExtraNoteSections && perOrderExtraNoteSections.length > 0) {
+            const globalIds = new Set(prepared.specialNoteSections.map(s => s.id));
+            const extras = perOrderExtraNoteSections.filter(s => !globalIds.has(s.id));
+            prepared = { ...prepared, specialNoteSections: [...prepared.specialNoteSections, ...extras] };
+            setOriginalPerOrderIds(new Set(extras.map(s => s.id)));
+          } else {
+            setOriginalPerOrderIds(new Set());
+          }
+          if (activeCardId === "notes") {
+            setOriginalGlobalIds(new Set((loaded.specialNoteSections || []).map(s => s.id)));
+          } else {
+            setOriginalGlobalIds(new Set());
+          }
+          setSettings(prepared);
+        }
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load block headings.");
       } finally {
@@ -6680,7 +6773,7 @@ function BlockHeadingsModal({
     return () => {
       cancelled = true;
     };
-  }, [cardId, supported, workspace]);
+  }, [cardId, supported, workspace, perOrderExtraNoteSections]);
 
   if (!cardId) return null;
 
@@ -6723,10 +6816,40 @@ function BlockHeadingsModal({
 
     setSaving(true);
     try {
-      const saved = await saveWorkspaceBlockHeadings(workspace, activeCardId, settings);
-      const preparedSaved = prepareBlockHeadingSettings(activeCardId, saved);
+      let settingsToSave = settings;
+      let perOrderToSave: HeadingItem[] | null = null;
+      if (activeCardId === "notes" && onSavePerOrderExtraNoteSections) {
+        const globalsOnly: HeadingItem[] = [];
+        const perOrderOnly: HeadingItem[] = [];
+        for (const item of settings.specialNoteSections) {
+          if (originalPerOrderIds.has(item.id)) {
+            perOrderOnly.push(item);
+          } else if (originalGlobalIds.has(item.id) || item.id === PRIMARY_SPECIAL_NOTE_ID) {
+            globalsOnly.push(item);
+          } else {
+            // New item added in editor → per-order (no propagation)
+            perOrderOnly.push(item);
+          }
+        }
+        settingsToSave = { ...settings, specialNoteSections: globalsOnly };
+        perOrderToSave = perOrderOnly;
+      }
+      const saved = await saveWorkspaceBlockHeadings(workspace, activeCardId, settingsToSave);
+      if (perOrderToSave !== null) {
+        onSavePerOrderExtraNoteSections!(perOrderToSave);
+      }
+      let preparedSaved = prepareBlockHeadingSettings(activeCardId, saved);
+      if (activeCardId === "notes" && perOrderToSave) {
+        const globalIds = new Set(preparedSaved.specialNoteSections.map(s => s.id));
+        const extras = perOrderToSave.filter(s => !globalIds.has(s.id));
+        preparedSaved = { ...preparedSaved, specialNoteSections: [...preparedSaved.specialNoteSections, ...extras] };
+        setOriginalPerOrderIds(new Set(extras.map(s => s.id)));
+        setOriginalGlobalIds(new Set((saved.specialNoteSections || []).map(s => s.id)));
+      }
       setSettings(preparedSaved);
-      onSaved?.(preparedSaved);
+      // Notify parent with the TRUE globals only (so the card display merges with per-order from customFields)
+      const parentNotify = activeCardId === "notes" ? prepareBlockHeadingSettings(activeCardId, saved) : preparedSaved;
+      onSaved?.(parentNotify);
       setStatus("Block headings saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Could not save block headings.");

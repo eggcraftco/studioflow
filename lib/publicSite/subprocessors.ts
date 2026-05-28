@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const SUBPROCESSORS_LAST_UPDATED = "13 May 2026";
+export const SUBPROCESSORS_LAST_UPDATED = "28 May 2026";
 
 export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -9,7 +9,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "NivaDesk is operated by EGGCRAFT LIMITED.",
       "This Subprocessors page explains the third-party service providers that NivaDesk may use to host, operate, secure, support, and improve the NivaDesk service.",
-      "This document is intended to support our Privacy Policy, Terms of Service, Security Overview, and Data Processing Agreement. It should be updated before publication with the exact providers used in production."
+      "This document supports our Privacy Policy, Terms of Service, Security Overview, and Data Processing Agreement. It lists the core providers we use or may use to operate NivaDesk, depending on the features enabled for a customer."
     ]
   },
   {
@@ -48,14 +48,14 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
   },
   {
     title: "5. Current and expected subprocessors",
-    paragraphs: ["The providers below may be used or expected as NivaDesk develops. Exact production providers, services, and regions should be confirmed before publication."],
+    paragraphs: ["The providers below may be used to operate NivaDesk, depending on the platform, plan, and features a customer uses."],
     subsections: [
       {
         title: "Firebase / Google Cloud",
         paragraphs: [
           "Purpose: authentication, database, cloud storage, hosting, functions, security rules, app infrastructure, and sync.",
           "Data categories: account data, workspace data, uploaded files, metadata, and technical logs.",
-          "Location / notes: used or expected for core NivaDesk infrastructure. Exact services and regions should be confirmed before publication."
+          "Location / notes: used for core NivaDesk infrastructure such as authentication, database, storage, hosting, functions, and sync."
         ]
       },
       {
@@ -87,7 +87,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
         paragraphs: [
           "Purpose: transactional emails such as login, account, billing, security, support, and service notifications.",
           "Data categories: name, email address, message metadata, and email content needed for delivery.",
-          "Location / notes: provider to be confirmed before launch."
+          "Location / notes: used only if this service is configured for NivaDesk."
         ]
       },
       {
@@ -103,7 +103,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
         paragraphs: [
           "Purpose: crash reports, diagnostics, reliability monitoring, and bug fixing.",
           "Data categories: technical logs, device/app data, error traces, and user/session identifiers where necessary.",
-          "Location / notes: provider to be confirmed before launch."
+          "Location / notes: used only if this service is configured for NivaDesk."
         ]
       },
       {
@@ -111,7 +111,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
         paragraphs: [
           "Purpose: support tickets, help desk, user messages, screenshots, and support history.",
           "Data categories: contact details, support messages, and screenshots or attachments sent by the user.",
-          "Location / notes: provider to be confirmed if a support tool is used."
+          "Location / notes: used only if a dedicated support tool is configured for NivaDesk."
         ]
       }
     ]

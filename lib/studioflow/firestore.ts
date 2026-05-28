@@ -114,6 +114,9 @@ export type DashboardFinanceOrder = {
   deliveryCost: number;
   taxAmount: number;
   customFields: Record<string, string>;
+  customerName: string;
+  designName: string;
+  watchRef: string;
 };
 
 export type WorkspaceSettingsOverview = {
@@ -753,7 +756,10 @@ export async function loadDashboardFinanceOrders(companyId: string): Promise<Das
       paymentFee: numberValue(data.paymentFee, 0),
       deliveryCost: numberValue(data.deliveryCost, 0),
       taxAmount: numberValue(data.taxAmount, 0),
-      customFields: stringMapValue(data.customFields)
+      customFields: stringMapValue(data.customFields),
+      customerName: stringValue(data.customerName, ""),
+      designName: stringValue(data.designName, ""),
+      watchRef: stringValue(data.watchRef, "")
     };
   });
 }

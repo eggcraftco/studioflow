@@ -125,7 +125,7 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
   return {
     title: page.title,
     description: page.description,
-    metadataBase: new URL("https://nivadesk.co"),
+    metadataBase: new URL("https://nivadesk.app"),
     applicationName: "NivaDesk",
     alternates: {
       canonical: page.path
