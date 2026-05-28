@@ -13,7 +13,7 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-export const PRIVACY_POLICY_LAST_UPDATED = "13 May 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "28 May 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -268,14 +268,24 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "10. Payments and subscriptions",
+    title: "10. ChatGPT App and connected AI features",
+    paragraphs: [
+      "NivaDesk may offer a ChatGPT App or connected AI feature that allows you to connect your NivaDesk workspace to ChatGPT or a similar assistant through a secure OAuth connection and MCP server.",
+      "If you choose to connect NivaDesk to ChatGPT, the assistant may request workspace data only for the workspace you select and only for the tools and permissions you authorise. Access remains subject to your NivaDesk plan, workspace role, feature permissions, and security rules.",
+      "Depending on the tools enabled for your account, ChatGPT may be able to search, summarise, create, or update NivaDesk records such as orders, order details, dashboard summaries, financial fields, tasks, order notes, personal notes, messages, quick replies, workflow status, due dates, customer information, internal IDs, timestamps, and history or audit information.",
+      "Financial data, messages, notes, and other sensitive workspace content should only be returned where your NivaDesk role and plan allow access. Write actions, such as creating an order, adding a note, or updating an order status, should only happen after your request or confirmation.",
+      "We use the ChatGPT connection to provide the integration you choose to enable. We do not sell your workspace content or use it to advertise to your customers. You can disconnect or stop using the connected feature where the product provides that option."
+    ]
+  },
+  {
+    title: "11. Payments and subscriptions",
     paragraphs: [
       "Payments may be processed by third-party providers such as Stripe, Apple App Store, Google Play, or other payment platforms.",
       "These providers may collect and process payment information according to their own privacy policies and terms. We receive limited payment and subscription information needed to manage your NivaDesk plan, invoices, renewals, cancellations, refunds, and account status."
     ]
   },
   {
-    title: "11. Cookies and analytics",
+    title: "12. Cookies and analytics",
     paragraphs: ["Our website and services may use cookies or similar technologies to:"],
     bullets: [
       "keep you signed in;",
@@ -296,7 +306,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "12. Marketing communications",
+    title: "13. Marketing communications",
     paragraphs: [
       "We may send you emails about product updates, feature announcements, offers, or news about NivaDesk.",
       "You can unsubscribe from marketing emails at any time by using the unsubscribe link or contacting us.",
@@ -304,7 +314,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "13. Who we share personal data with",
+    title: "14. Who we share personal data with",
     paragraphs: [
       "We do not sell your personal data.",
       "We may share personal data with trusted third parties only when necessary to operate, support, secure, or improve NivaDesk. These may include:"
@@ -329,14 +339,14 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "14. International transfers",
+    title: "15. International transfers",
     paragraphs: [
       "Your data may be stored or processed in the United Kingdom, European Economic Area, United States, or other countries where our service providers operate.",
       "Where personal data is transferred outside the UK or EEA, we use appropriate safeguards where required, such as adequacy decisions, standard contractual clauses, the UK International Data Transfer Agreement, or other lawful transfer mechanisms."
     ]
   },
   {
-    title: "15. Security",
+    title: "16. Security",
     paragraphs: ["We take reasonable technical and organisational measures to protect personal data, including:"],
     bullets: [
       "secure authentication;",
@@ -358,7 +368,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "16. Data retention",
+    title: "17. Data retention",
     paragraphs: [
       "We keep personal data only for as long as necessary for the purposes described in this Privacy Policy.",
       "In general:"
@@ -381,7 +391,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "17. Account deletion and data export",
+    title: "18. Account deletion and data export",
     paragraphs: [
       "You may request account deletion by contacting us.",
       "Before deleting your account, we may need to verify your identity. If you are part of a workspace owned by someone else, we may need to direct you to the workspace owner for deletion of workspace content.",
@@ -389,7 +399,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "18. Your rights",
+    title: "19. Your rights",
     paragraphs: ["Depending on where you live, you may have rights under data protection law, including the right to:"],
     bullets: [
       "access the personal data we hold about you;",
@@ -414,21 +424,21 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "19. Children",
+    title: "20. Children",
     paragraphs: [
       "NivaDesk is not intended for children. We do not knowingly collect personal data from children.",
       "If you believe a child has provided personal data to us, please contact us and we will take appropriate steps to delete it."
     ]
   },
   {
-    title: "20. Third-party websites and services",
+    title: "21. Third-party websites and services",
     paragraphs: [
       "NivaDesk may contain links to third-party websites, services, integrations, or payment providers.",
       "We are not responsible for the privacy practices of third parties. You should review their privacy policies before using their services."
     ]
   },
   {
-    title: "21. Changes to this Privacy Policy",
+    title: "22. Changes to this Privacy Policy",
     paragraphs: [
       "We may update this Privacy Policy from time to time.",
       "If we make material changes, we may notify you by email, in-app notice, or by updating the date at the top of this page.",
@@ -436,7 +446,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "22. Contact us",
+    title: "23. Contact us",
     paragraphs: [
       "If you have questions about this Privacy Policy, your personal data, or your rights, please contact:",
       "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",

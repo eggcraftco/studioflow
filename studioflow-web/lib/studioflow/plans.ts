@@ -10,7 +10,13 @@ export type FeatureKey =
   | "card_customization"
   | "team_access"
   | "storage_addons"
-  | "workspace_logo_upload";
+  | "workspace_logo_upload"
+  | "chatgpt_app"
+  | "personal_notes"
+  | "order_notes"
+  | "dashboard_summary"
+  | "financial_summary"
+  | "messages";
 
 export type PlanEntitlements = {
   plan: StudioBillingPlan;
@@ -42,7 +48,13 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       card_customization: false,
       team_access: false,
       storage_addons: false,
-      workspace_logo_upload: false
+      workspace_logo_upload: false,
+      chatgpt_app: false,
+      personal_notes: true,
+      order_notes: true,
+      dashboard_summary: true,
+      financial_summary: true,
+      messages: false
     }
   },
   lifetime_lite: {
@@ -63,7 +75,13 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       card_customization: true,
       team_access: false,
       storage_addons: false,
-      workspace_logo_upload: false
+      workspace_logo_upload: false,
+      chatgpt_app: false,
+      personal_notes: true,
+      order_notes: true,
+      dashboard_summary: true,
+      financial_summary: true,
+      messages: false
     }
   },
   pro_monthly: {
@@ -84,7 +102,13 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       card_customization: true,
       team_access: false,
       storage_addons: true,
-      workspace_logo_upload: true
+      workspace_logo_upload: true,
+      chatgpt_app: true,
+      personal_notes: true,
+      order_notes: true,
+      dashboard_summary: true,
+      financial_summary: true,
+      messages: true
     }
   },
   team_monthly: {
@@ -105,7 +129,13 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       card_customization: true,
       team_access: true,
       storage_addons: true,
-      workspace_logo_upload: true
+      workspace_logo_upload: true,
+      chatgpt_app: true,
+      personal_notes: true,
+      order_notes: true,
+      dashboard_summary: true,
+      financial_summary: true,
+      messages: true
     }
   }
 };
