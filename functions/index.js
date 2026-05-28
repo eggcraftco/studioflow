@@ -6950,6 +6950,18 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
         setCustomField(`${prefix}${savedChannel}`, `${savedChannel} changed`, value, 500);
         continue;
       }
+      if (cleanTitle === "orderExtraNoteSectionsJSON") {
+        const previous = blockHeadingString(currentFields[cleanTitle], "", 4000);
+        const next = blockHeadingString(value, "", 4000);
+        if (previous !== next) {
+          if (next) currentFields[cleanTitle] = next;
+          else delete currentFields[cleanTitle];
+          pushHistoryChange(historyEntries, "Note sections updated", previous ? "Sections" : "-", next ? "Sections" : "-", uid, email);
+          customFieldsChanged = true;
+          changed = true;
+        }
+        continue;
+      }
       if (!allowedCustomerFieldTitles.has(cleanTitle)) continue;
       setCustomField(cleanTitle, `${cleanTitle} changed`, value, 500);
     }
@@ -6967,6 +6979,19 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
   const allowedSpecialNoteIds = new Set((materialSettings.specialNoteSections || [])
     .map((item) => blockHeadingString(item?.id, "", 80).toLowerCase())
     .filter(Boolean));
+  const parsePerOrderExtraIds = (jsonStr) => {
+    const trimmed = blockHeadingString(jsonStr, "", 4000).trim();
+    if (!trimmed) return [];
+    try {
+      const arr = JSON.parse(trimmed);
+      if (!Array.isArray(arr)) return [];
+      return arr.map((item) => blockHeadingString(item?.id, "", 80).toLowerCase()).filter(Boolean);
+    } catch (_) { return []; }
+  };
+  parsePerOrderExtraIds(currentFields.orderExtraNoteSectionsJSON).forEach((id) => allowedSpecialNoteIds.add(id));
+  if (hasOwnField(patch, "customFields") && patch.customFields && typeof patch.customFields === "object") {
+    parsePerOrderExtraIds(patch.customFields.orderExtraNoteSectionsJSON).forEach((id) => allowedSpecialNoteIds.add(id));
+  }
   const specialNoteCustomFieldKey = (rawId) => {
     const cleanId = blockHeadingString(rawId, "", 80);
     if (!cleanId || cleanId.toLowerCase() === PRIMARY_SPECIAL_NOTE_ID || !allowedSpecialNoteIds.has(cleanId.toLowerCase())) return "";

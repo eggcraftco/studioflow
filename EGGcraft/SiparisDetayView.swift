@@ -1347,7 +1347,38 @@ struct SiparisDetayView: View {
         return []
     }
     var communicationChannelLabels: [String] { normalizedCommunicationChannelLabels(from: communicationChannelLabelsJSON) }
-    var specialNoteSections: [CustomStepDTO] { normalizedSpecialNoteSections(from: specialNoteSectionsJSON) }
+    private var orderExtraNoteSectionsKey: String { "orderExtraNoteSectionsJSON" }
+    private var orderExtraNoteSections: [CustomStepDTO] {
+        let raw = (siparis.customFields?[orderExtraNoteSectionsKey] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty,
+              let data = raw.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) else { return [] }
+        return decoded.filter { $0.id != primarySpecialNoteID && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    var specialNoteSections: [CustomStepDTO] {
+        let globals = normalizedSpecialNoteSections(from: specialNoteSectionsJSON)
+        let globalIDs = Set(globals.map { $0.id })
+        return globals + orderExtraNoteSections.filter { !globalIDs.contains($0.id) }
+    }
+    private func saveOrderExtraNoteSections(_ items: [CustomStepDTO]) {
+        var current = siparis.customFields ?? [:]
+        let cleaned = items.filter { $0.id != primarySpecialNoteID && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if cleaned.isEmpty {
+            current.removeValue(forKey: orderExtraNoteSectionsKey)
+        } else if let data = try? JSONEncoder().encode(cleaned),
+                  let str = String(data: data, encoding: .utf8) {
+            current[orderExtraNoteSectionsKey] = str
+        }
+        // Update local UI immediately
+        siparis.customFields = current
+        // Surgical Firestore update — only customFields field, no full doc replace.
+        if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
+    }
+    private func addPerOrderNoteSection() {
+        let nextIndex = specialNoteSections.count + 1
+        let placeholder = t("Special Note", lang: seciliDil) + " \(nextIndex)"
+        saveOrderExtraNoteSections(orderExtraNoteSections + [CustomStepDTO(title: placeholder)])
+    }
     var customTogglesList: [CustomStepDTO] { if let data = customTogglesJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec }; return [] }
     var materialsTogglesList: [CustomStepDTO] { if let data = materialsTogglesJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec }; return [] }
     var materialsDefaultCheckLabels: [String] {
@@ -1760,6 +1791,7 @@ struct SiparisDetayView: View {
 
     private func shouldAutosaveInlineCustomFields(previous: [String: String], next: [String: String]) -> Bool {
         let changedKeys = Set(previous.keys).union(Set(next.keys)).filter { previous[$0] != next[$0] }
+        // Skip full-doc autosave for per-order note extras — they use a surgical updateData call instead.
         return changedKeys.contains { isCustomerCustomFieldKey($0) || isSpecialNoteCustomFieldKey($0) }
     }
 
@@ -1907,7 +1939,17 @@ struct SiparisDetayView: View {
                 communicationShowChannel: $communicationShowChannel,
                 communicationShowCustomerNotes: $communicationShowCustomerNotes,
                 communicationChannelLabelsJSON: $communicationChannelLabelsJSON,
-                specialNoteSectionsJSON: $specialNoteSectionsJSON
+                specialNoteSectionsJSON: $specialNoteSectionsJSON,
+                orderExtraNoteSectionsJSON: Binding(
+                    get: { siparis.customFields?[orderExtraNoteSectionsKey] ?? "" },
+                    set: { newValue in
+                        var current = siparis.customFields ?? [:]
+                        if newValue.isEmpty { current.removeValue(forKey: orderExtraNoteSectionsKey) }
+                        else { current[orderExtraNoteSectionsKey] = newValue }
+                        siparis.customFields = current
+                        if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
+                    }
+                )
             )
         }
     }
@@ -8585,7 +8627,9 @@ struct SiparisDetayView: View {
             onWidthChangeEnd: saveWidths,
             onHide: { setCardVisibleWithUndo(.notes, false) },
             onColorChange: { setKartColor(kart: .notes, color: $0) },
-            onEditHeadings: { headingEditorTarget = .notes }
+            onEditHeadings: { headingEditorTarget = .notes },
+            onQuickAdd: { addPerOrderNoteSection() },
+            quickAddTooltip: t("Add note field to this order only", lang: seciliDil)
         ) {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(specialNoteSections) { section in
@@ -10766,7 +10810,9 @@ struct DetayKarti<Content: View>: View {
     var onColorChange: (String) -> Void // 🎨 RENK DEĞİŞTİRME MOTORU
     var onEditHeadings: (() -> Void)? = nil
     var onExport: (() -> Void)? = nil
-    
+    var onQuickAdd: (() -> Void)? = nil
+    var quickAddTooltip: String? = nil
+
     let content: Content
     
     @State private var initialHeight: Double = 0
@@ -10782,7 +10828,7 @@ struct DetayKarti<Content: View>: View {
     private let altTutamacAlani: Double = 16
     private let guvenlikPayi: Double = 18
     
-    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, forceLayoutUnlocked: Bool = false, guideHighlightActive: Bool = false, guideOptionsHighlightActive: Bool = false, guideOptionsBubbleActive: Bool = false, onGuideOptionsDone: (() -> Void)? = nil, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
+    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, forceLayoutUnlocked: Bool = false, guideHighlightActive: Bool = false, guideOptionsHighlightActive: Bool = false, guideOptionsBubbleActive: Bool = false, onGuideOptionsDone: (() -> Void)? = nil, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, onQuickAdd: (() -> Void)? = nil, quickAddTooltip: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.iconName = iconName
         self.kartTipi = kartTipi
@@ -10804,6 +10850,8 @@ struct DetayKarti<Content: View>: View {
         self.onColorChange = onColorChange
         self.onEditHeadings = onEditHeadings
         self.onExport = onExport
+        self.onQuickAdd = onQuickAdd
+        self.quickAddTooltip = quickAddTooltip
         self.content = content()
     }
     
@@ -11314,6 +11362,16 @@ struct DetayKarti<Content: View>: View {
                     kartContextMenuActions
                 }
                 #endif
+
+                if let onQuickAdd {
+                    Button(action: onQuickAdd) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help(quickAddTooltip ?? "Add")
+                }
 
                 // iPad'de uzun basma yerine net bir menü hedefi olsun.
                 cardOptionsControl
@@ -11956,6 +12014,9 @@ struct BlockHeadingsEditorSheet: View {
     @Binding var communicationShowCustomerNotes: Bool
     @Binding var communicationChannelLabelsJSON: String
     @Binding var specialNoteSectionsJSON: String
+    var orderExtraNoteSectionsJSON: Binding<String>? = nil
+
+    @State private var perOrderOriginIDs: Set<UUID> = []
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -12895,7 +12956,17 @@ private var notesSupplierEditor: some View {
         }
 
         if kartTipi == .notes {
-            editableItems = normalizedSpecialNoteSections(from: specialNoteSectionsJSON)
+            let globals = normalizedSpecialNoteSections(from: specialNoteSectionsJSON)
+            let globalIDs = Set(globals.map { $0.id })
+            var extras: [CustomStepDTO] = []
+            if let raw = orderExtraNoteSectionsJSON?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines),
+               !raw.isEmpty,
+               let data = raw.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode([CustomStepDTO].self, from: data) {
+                extras = decoded.filter { $0.id != primarySpecialNoteID && !globalIDs.contains($0.id) }
+            }
+            perOrderOriginIDs = Set(extras.map { $0.id })
+            editableItems = globals + extras
             return
         }
 
@@ -13011,11 +13082,37 @@ private var notesSupplierEditor: some View {
         }
 
         if kartTipi == .notes {
-            let finalItems = normalizedSpecialNoteSections(editableItems)
-            if let data = try? JSONEncoder().encode(finalItems),
+            // Split editable items: those that were originally per-order (or new in editor) stay per-order;
+            // items that came from globals (and weren't loaded as per-order) write back to global.
+            let originalGlobals = normalizedSpecialNoteSections(from: specialNoteSectionsJSON)
+            let originalGlobalIDs = Set(originalGlobals.map { $0.id })
+            var globalItems: [CustomStepDTO] = []
+            var perOrderItems: [CustomStepDTO] = []
+            for item in editableItems {
+                if perOrderOriginIDs.contains(item.id) {
+                    perOrderItems.append(item)
+                } else if originalGlobalIDs.contains(item.id) {
+                    globalItems.append(item)
+                } else {
+                    // New item added in editor → keep as per-order (no propagation)
+                    perOrderItems.append(item)
+                }
+            }
+            let finalGlobals = normalizedSpecialNoteSections(globalItems)
+            if let data = try? JSONEncoder().encode(finalGlobals),
                let str = String(data: data, encoding: .utf8) {
                 specialNoteSectionsJSON = str
                 syncEditedSettingsToCloud()
+            }
+            if let binding = orderExtraNoteSectionsJSON {
+                let cleaned = perOrderItems.filter { $0.id != primarySpecialNoteID && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                if cleaned.isEmpty {
+                    binding.wrappedValue = ""
+                } else if let data = try? JSONEncoder().encode(cleaned),
+                          let str = String(data: data, encoding: .utf8) {
+                    binding.wrappedValue = str
+                }
+                perOrderOriginIDs = Set(cleaned.map { $0.id })
             }
             return
         }

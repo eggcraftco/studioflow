@@ -235,6 +235,8 @@ fun StudioFlowMainScreen(
     onReloadMessageWorkspaceSettings: () -> Unit,
     onConsumePendingActivityNavigation: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var section by rememberSaveable { mutableStateOf(StudioSection.Orders) }
     var settingsStartKey by rememberSaveable { mutableStateOf<String?>(null) }
     var focusedCustomerName by rememberSaveable { mutableStateOf("") }
@@ -642,6 +644,8 @@ private fun WorkspaceOnboardingScreen(
     state: StudioFlowUiState,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var businessType by rememberSaveable {
         mutableStateOf(state.workspaceSettings.businessType.ifBlank { "Photography Studio" })
     }
@@ -951,6 +955,8 @@ private fun StudioSectionContent(
     onReloadMessageWorkspaceSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(modifier = modifier.fillMaxSize()) {
         when (activeSection) {
             StudioSection.Dashboard -> DashboardScreen(
@@ -1090,6 +1096,8 @@ private fun StudioLargeTopBar(
     onOpenNotifications: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     val monthNet = remember(orders) { orders.netForCurrentMonth() }
     val yearNet = remember(orders) { orders.netForCurrentYear() }
@@ -1177,11 +1185,11 @@ private fun StudioLargeTopBar(
                 shadowElevation = 1.dp
             ) {
                 IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(if (compact) 44.dp else 50.dp)) {
-                    Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Filled.Menu, contentDescription = t("Menu"), tint = MaterialTheme.colorScheme.onSurface)
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Account", fontWeight = FontWeight.Bold) },
+                        text = { Text(t("Account"), fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                         onClick = {
                             menuOpen = false
@@ -1189,7 +1197,7 @@ private fun StudioLargeTopBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Sign Out", fontWeight = FontWeight.Bold) },
+                        text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                         onClick = {
                             menuOpen = false
@@ -1210,6 +1218,8 @@ private fun WorkspaceHeaderLogo(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val cleanLogoUrl = logoUrl.trim()
     var bitmap by remember(cleanLogoUrl) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -1250,6 +1260,8 @@ private fun WorkspaceHeaderLogo(
 private fun NivaDeskHeaderLogoFallback(
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box(
         modifier = modifier,
         contentAlignment = Alignment.CenterStart
@@ -1266,6 +1278,8 @@ private fun NivaDeskHeaderLogoFallback(
 @Composable
 private fun TopMetric(label: String, value: String, compact: Boolean) {
     Column(modifier = Modifier.width(if (compact) 86.dp else 112.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
         Text(value, color = StudioGreen, fontSize = if (compact) 12.sp else 15.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -1279,6 +1293,8 @@ private fun TopNavItem(section: StudioSection, selected: Boolean, badgeCount: In
         border = BorderStroke(1.dp, if (selected) StudioBlue.copy(alpha = 0.18f) else Color.Transparent),
         onClick = onClick
     ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1291,7 +1307,7 @@ private fun TopNavItem(section: StudioSection, selected: Boolean, badgeCount: In
                 modifier = Modifier.size(17.dp)
             )
             Text(
-                section.title,
+                t(section.title),
                 color = if (selected) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -1459,6 +1475,8 @@ private fun StudioLargeSidebar(
     messageUnreadCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
         Column(
             modifier = Modifier
@@ -1515,7 +1533,7 @@ private fun StudioLargeSidebar(
                 }
             }
             SidebarAction(
-                label = "Sign Out",
+                label = t("Sign Out"),
                 icon = Icons.AutoMirrored.Filled.Logout,
                 onClick = onSignOut
             )
@@ -1531,6 +1549,8 @@ private fun SidebarItem(section: StudioSection, selected: Boolean, badgeCount: I
         color = if (selected) StudioBlue.copy(alpha = 0.14f) else Color.Transparent,
         onClick = onClick
     ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1543,7 +1563,7 @@ private fun SidebarItem(section: StudioSection, selected: Boolean, badgeCount: I
                 modifier = Modifier.size(22.dp)
             )
             Text(
-                section.title,
+                t(section.title),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = if (selected) StudioBlue else MaterialTheme.colorScheme.onSurface,
@@ -1572,6 +1592,8 @@ private fun SidebarItem(section: StudioSection, selected: Boolean, badgeCount: I
 @Composable
 private fun SidebarAction(label: String, icon: ImageVector, onClick: () -> Unit) {
     Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = onClick) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1602,6 +1624,8 @@ private fun StudioMobileHeader(
     notesReminderCount: Int = 0,
     onOpenNotifications: () -> Unit = {}
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var menuOpen by rememberSaveable { mutableStateOf(false) }
 
     Surface(
@@ -1651,7 +1675,7 @@ private fun StudioMobileHeader(
                     shadowElevation = 1.dp
                 ) {
                     IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(46.dp)) {
-                        Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(Icons.Filled.Menu, contentDescription = t("Menu"), tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
                 if (notificationUnreadCount > 0) {
@@ -1707,7 +1731,7 @@ private fun StudioMobileHeader(
                     DropdownMenuItem(
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Notifications", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Text(t("Notifications"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 if (notificationUnreadCount > 0) {
                                     Surface(color = StudioRed, shape = RoundedCornerShape(50)) {
                                         Text(
@@ -1728,7 +1752,7 @@ private fun StudioMobileHeader(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Account", fontWeight = FontWeight.Bold) },
+                        text = { Text(t("Account"), fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = StudioBlue) },
                         onClick = {
                             menuOpen = false
@@ -1736,7 +1760,7 @@ private fun StudioMobileHeader(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Sign Out", fontWeight = FontWeight.Bold) },
+                        text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                         onClick = {
                             menuOpen = false
@@ -1758,6 +1782,8 @@ private fun NoSectionAccessScreen() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
         Text("No sections available", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -1774,9 +1800,11 @@ private fun HeaderPrivacyButton(
     size: Dp,
     iconSize: Dp
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     HeaderIconButton(
         icon = if (hideSensitiveNumbers) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-        contentDescription = if (hideSensitiveNumbers) "Show prices" else "Hide prices",
+        contentDescription = if (hideSensitiveNumbers) t("Show prices") else t("Hide prices"),
         tint = if (hideSensitiveNumbers) StudioWarningOrange else MaterialTheme.colorScheme.onSurfaceVariant,
         container = if (hideSensitiveNumbers) {
             StudioWarningOrange.copy(alpha = 0.16f)
@@ -1801,10 +1829,12 @@ private fun HeaderNotificationButton(
     size: Dp,
     iconSize: Dp
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box {
         HeaderIconButton(
             icon = Icons.Filled.Notifications,
-            contentDescription = "Notifications",
+            contentDescription = t("Notifications"),
             tint = StudioBlue,
             container = StudioBlue.copy(alpha = 0.12f),
             border = StudioBlue.copy(alpha = 0.24f),
@@ -1838,6 +1868,8 @@ private fun HeaderCloudSyncButton(
     size: Dp,
     iconSize: Dp
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var open by rememberSaveable { mutableStateOf(false) }
     val tone = cloudTone(status.state)
     Box {
@@ -1887,6 +1919,8 @@ private fun HeaderIconButton(
     iconSize: Dp = 29.dp,
     onClick: () -> Unit = {}
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = container,
@@ -1911,6 +1945,8 @@ private fun HeaderAddProjectButton(
     compact: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Button(
         onClick = onCreateOrder,
         enabled = !creatingOrder,
@@ -1941,6 +1977,8 @@ fun SectionHeader(
     subtitle: String,
     trailingIcon: ImageVector? = null
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1970,6 +2008,8 @@ fun SearchBarLike(text: String = "Search...") {
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(10.dp))

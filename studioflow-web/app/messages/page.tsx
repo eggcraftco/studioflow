@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import { loadWorkspaceContext, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   addMembersToMessageThread,
@@ -50,7 +51,8 @@ const DRAFT_KEY = (workspaceId: string, uid: string, threadId: string) =>
 
 export default function MessagesPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [threads, setThreads] = useState<StudioMessageThread[]>([]);
   const [teamMembers, setTeamMembers] = useState<StudioMessageTeamMember[]>([]);
@@ -423,7 +425,7 @@ export default function MessagesPage() {
   };
   const handleRemoveMember = async (memberUid: string) => {
     if (!workspace || !selectedThread) return;
-    if (typeof window !== "undefined" && !window.confirm("Remove this member from the group?")) return;
+    if (typeof window !== "undefined" && !window.confirm(t("Remove this member from the group?"))) return;
     try {
       await removeMemberFromMessageThread(workspace, selectedThread.id, memberUid);
     } catch (err) {
@@ -487,10 +489,10 @@ export default function MessagesPage() {
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {unreadCount > 0 && <span className="badge-pill">{unreadCount}</span>}
               {canEditWorkspace && (
-                <button type="button" className="new-conv-btn" onClick={() => setSettingsDialogOpen(true)} title="Message settings" style={{ background: "#6b7280" }}>⚙</button>
+                <button type="button" className="new-conv-btn" onClick={() => setSettingsDialogOpen(true)} title={t("Message settings")} style={{ background: "#6b7280" }}>⚙</button>
               )}
               {(workspaceSettings.directMessagesEnabled || workspaceSettings.groupConversationsEnabled) && (
-                <button type="button" className="new-conv-btn" onClick={() => setNewConvOpen(true)} title="New conversation">+</button>
+                <button type="button" className="new-conv-btn" onClick={() => setNewConvOpen(true)} title={t("New conversation")}>+</button>
               )}
             </div>
           </div>
@@ -553,7 +555,7 @@ export default function MessagesPage() {
                 <ThreadAvatar thread={selectedThread} currentUid={user.uid} members={teamMembers} />
                 <div style={{ flex: 1 }}>
                   <h2>{displayThreadTitle(selectedThread, user.uid, teamMembers)}</h2>
-                  <p>{conversationSubtitle(selectedThread)}</p>
+                  <p>{conversationSubtitle(selectedThread, t)}</p>
                 </div>
                 <div className="header-actions">
                   <button type="button" className={`header-icon-btn${showSavedOnly ? " active" : ""}`} title="Saved" onClick={() => setShowSavedOnly((v) => !v)}>
@@ -584,7 +586,7 @@ export default function MessagesPage() {
               {searchVisible && (
                 <div className="search-bar">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages…" autoFocus style={{ flex: 1 }} />
+                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("Search messages…")} autoFocus style={{ flex: 1 }} />
                     {searchQuery.trim() && (() => {
                       const matches = items.filter((m) => !m.deletedForEveryone && m.text.toLowerCase().includes(searchQuery.trim().toLowerCase()));
                       if (matches.length === 0) return <span style={{ fontSize: 12, color: "#9ca3af" }}>No results</span>;
@@ -607,7 +609,7 @@ export default function MessagesPage() {
                         className={`filter-chip${attachmentFilter === key ? " active" : ""}`}
                         onClick={() => setAttachmentFilter(key)}
                       >
-                        {key === "all" ? "All" : key === "media" ? "Media" : "Files"}
+                        {key === "all" ? "All" : key === "media" ? "Media" : t("Files")}
                       </button>
                     ))}
                   </div>
@@ -648,7 +650,7 @@ export default function MessagesPage() {
                   <span>•••</span>
                   <span>
                   {typingUsers.length === 1
-                    ? `${typingUsers[0].name || "Someone"} is typing…`
+                    ? `${typingUsers[0].name || t("Someone")} is typing…`
                     : `${typingUsers.length} people are typing…`}
                   </span>
                 </div>
@@ -800,6 +802,8 @@ function ConversationBody({
   onForward: (m: StudioMessageItem) => void;
   onOpenImage: (m: StudioMessageItem) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -858,6 +862,8 @@ function PinnedBar({
   items: StudioMessageItem[];
   onJump: (messageId: string) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   return (
     <div className="pinned-bar">
       <div className="pinned-bar__title">📌 {items.length} pinned</div>
@@ -871,7 +877,7 @@ function PinnedBar({
           >
             <span className="pinned-chip__sender">{senderLabel(item)}</span>
             <span className="pinned-chip__text">
-              {item.text.trim() || item.fileName || "Attachment"}
+              {item.text.trim() || item.fileName || t("Attachment")}
             </span>
           </button>
         ))}
@@ -901,6 +907,8 @@ function Composer({
   teamMembers: StudioMessageTeamMember[];
   attachmentsEnabled: boolean;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canSend = draft.trim().length > 0 && !sending;
@@ -949,7 +957,7 @@ function Composer({
           <div className="reply-chip__body">
             <div className="reply-chip__title">Replying to {senderLabel(replyingTo)}</div>
             <div className="reply-chip__preview">
-              {replyingTo.text.trim() || replyingTo.fileName || "Attachment"}
+              {replyingTo.text.trim() || replyingTo.fileName || t("Attachment")}
             </div>
           </div>
           <button type="button" className="reply-chip__close" onClick={onClearReply}>
@@ -989,7 +997,7 @@ function Composer({
             className="composer__attach"
             onClick={() => fileRef.current?.click()}
             disabled={sending}
-            title="Attach file"
+            title={t("Attach file")}
           >
             📎
           </button>
@@ -998,7 +1006,7 @@ function Composer({
           ref={textareaRef}
           value={draft}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Write a message…"
+          placeholder={t("Write a message…")}
           rows={1}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -1008,7 +1016,7 @@ function Composer({
           }}
         />
         <button type="button" className="composer__send" onClick={onSend} disabled={!canSend}>
-          {sending ? "…" : "Send"}
+          {sending ? "…" : t("Send")}
         </button>
       </div>
     </footer>
@@ -1154,6 +1162,8 @@ function MessageBubble({
   onForward: () => void;
   onOpenImage: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const alignment = isMine ? "right" : "left";
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -1189,10 +1199,10 @@ function MessageBubble({
         {item.replyToMessageId && (
           <div className="reply-quote">
             <div className="reply-quote__sender">
-              {item.replyToSenderName || "Someone"}
+              {item.replyToSenderName || t("Someone")}
             </div>
             <div className="reply-quote__preview">
-              {item.replyToText || item.replyToFileName || "Attachment"}
+              {item.replyToText || item.replyToFileName || t("Attachment")}
             </div>
           </div>
         )}
@@ -1206,13 +1216,13 @@ function MessageBubble({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={item.fileURL}
-                    alt={item.fileName || "Attachment"}
+                    alt={item.fileName || t("Attachment")}
                     style={{ cursor: "zoom-in" }}
                     onClick={(e) => { e.stopPropagation(); onOpenImage(); }}
                   />
                 ) : (
                   <a href={item.fileURL} target="_blank" rel="noreferrer">
-                    📎 {item.fileName || "Attachment"}
+                    📎 {item.fileName || t("Attachment")}
                   </a>
                 )}
               </div>
@@ -1273,7 +1283,7 @@ function MessageBubble({
               e.stopPropagation();
               setMenuOpen((v) => !v);
             }}
-            aria-label="Message actions"
+            aria-label={t("Message actions")}
           >
             ⋮
           </button>
@@ -1290,7 +1300,7 @@ function MessageBubble({
               Forward
             </button>
             <button type="button" onClick={() => { setMenuOpen(false); onToggleSaved(); }}>
-              {saved ? "Unsave" : "Save"}
+              {saved ? "Unsave" : t("Save")}
             </button>
             {item.text && (
               <button
@@ -1315,7 +1325,7 @@ function MessageBubble({
               </button>
             )}
             <button type="button" onClick={() => { setMenuOpen(false); onTogglePin(); }}>
-              {item.pinned ? "Unpin" : "Pin"}
+              {item.pinned ? "Unpin" : t("Pin")}
             </button>
             {canEdit && (
               <button type="button" onClick={() => { setMenuOpen(false); onEdit(); }}>
@@ -1361,6 +1371,8 @@ function ImageViewerModal({
   onChange: (next: StudioMessageItem) => void;
   onClose: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
@@ -1435,7 +1447,7 @@ function ImageViewerModal({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={item.fileURL}
-        alt={item.fileName || "Image"}
+        alt={item.fileName || t("Image")}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -1489,6 +1501,8 @@ function EditDialog({
   onCancel: () => void;
   onSave: (text: string) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [text, setText] = useState(initialText);
   const dirty = text.trim().length > 0 && text.trim() !== initialText.trim();
   return (
@@ -1522,13 +1536,15 @@ function NewConversationDialog({
   onCreateDirect: (uid: string) => void;
   onCreateGroup: (uids: string[], title: string) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [groupMode, setGroupMode] = useState(!allowDirect && allowGroup);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card dialog-card--wide" onClick={(e) => e.stopPropagation()}>
-        <h3>{groupMode ? "New group" : "New direct message"}</h3>
+        <h3>{groupMode ? t("New group") : t("New direct message")}</h3>
         {allowDirect && allowGroup && (
           <div className="dialog-tabs">
             <button type="button" className={!groupMode ? "active" : ""} onClick={() => { setGroupMode(false); setSelected(new Set()); }}>Direct</button>
@@ -1536,7 +1552,7 @@ function NewConversationDialog({
           </div>
         )}
         {groupMode && (
-          <input type="text" placeholder="Group title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", marginBottom: 8, padding: 8, borderRadius: 6, border: "1px solid #d1d5db" }} />
+          <input type="text" placeholder={t("Group title (optional)")} value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", marginBottom: 8, padding: 8, borderRadius: 6, border: "1px solid #d1d5db" }} />
         )}
         <div className="member-list">
           {teamMembers.map((m) => {
@@ -1610,6 +1626,8 @@ function ThreadInfoDialog({
   onLeave: () => void;
   onRemoveMember: (uid: string) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const isTeam = thread.type === "team" || thread.id === "team";
   const isGroup = thread.type === "group";
   return (
@@ -1629,7 +1647,7 @@ function ThreadInfoDialog({
                   <button
                     type="button"
                     onClick={() => onRemoveMember(uid)}
-                    title="Remove from group"
+                    title={t("Remove from group")}
                     style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 16, padding: "4px 8px" }}
                   >
                     ×
@@ -1659,6 +1677,8 @@ function RenameDialog({
   onCancel: () => void;
   onSave: (t: string) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [title, setTitle] = useState(initialTitle);
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
@@ -1683,6 +1703,8 @@ function AddMembersDialog({
   onCancel: () => void;
   onAdd: (uids: string[]) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
@@ -1734,6 +1756,8 @@ function ForwardDialog({
   onCancel: () => void;
   onForward: (threadId: string) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card dialog-card--wide" onClick={(e) => e.stopPropagation()}>
@@ -1763,6 +1787,8 @@ function MessageSettingsDialog({
   onCancel: () => void;
   onSave: (s: StudioMessageWorkspaceSettings) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [direct, setDirect] = useState(initial.directMessagesEnabled);
   const [group, setGroup] = useState(initial.groupConversationsEnabled);
   const [attachments, setAttachments] = useState(initial.attachmentsEnabled);
@@ -1831,6 +1857,8 @@ function ThreadRow({
   onSelect: () => void;
   onToggleArchive: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [menuOpen, setMenuOpen] = useState(false);
   const title = displayThreadTitle(thread, currentUid, members);
   const time = thread.lastMessageAtMillis ? relativeTime(thread.lastMessageAtMillis) : "";
@@ -1851,7 +1879,7 @@ function ThreadRow({
           <div className="thread-row__line">
             <span className={`thread-row__preview${thread.isUnread ? " unread" : ""}`}>
               {thread.lastMessageText.trim() ||
-                (thread.id === "team" ? "Workspace conversation" : "Tap to start the conversation")}
+                (thread.id === "team" ? t("Workspace conversation") : t("Tap to start the conversation"))}
             </span>
             {thread.isUnread && <span className="thread-row__dot" />}
           </div>
@@ -1860,7 +1888,7 @@ function ThreadRow({
       {menuOpen && (
         <div className="thread-row__menu" onMouseLeave={() => setMenuOpen(false)}>
           <button type="button" onClick={() => { setMenuOpen(false); onToggleArchive(); }}>
-            {archived ? "Unarchive" : "Archive"}
+            {archived ? "Unarchive" : t("Archive")}
           </button>
         </div>
       )}
@@ -1890,9 +1918,9 @@ function ThreadAvatar({
   return <div className="avatar-circle">{initials}</div>;
 }
 
-function conversationSubtitle(thread: StudioMessageThread): string {
-  if (thread.id === "team" || thread.type === "team") return "Workspace broadcast channel";
-  if (thread.type === "direct") return "Direct message";
+function conversationSubtitle(thread: StudioMessageThread, t: (s: string) => string): string {
+  if (thread.id === "team" || thread.type === "team") return t("Workspace broadcast channel");
+  if (thread.type === "direct") return t("Direct message");
   if (thread.type === "group") return `${thread.memberUids.length} members`;
   return "";
 }

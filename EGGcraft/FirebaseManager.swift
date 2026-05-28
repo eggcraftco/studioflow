@@ -2092,6 +2092,16 @@ class FirebaseManager: ObservableObject {
         }
     }
     
+    func updateSiparisCustomFields(_ siparisID: String, customFields: [String: String]) {
+        db.collection("siparisler").document(siparisID).updateData([
+            "customFields": customFields
+        ]) { error in
+            if let error {
+                print("updateSiparisCustomFields failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     func registerSiparisChange(before: Siparis, after: Siparis) {
         guard before != after else { return }
         registerAction(.updatedSiparis(before: before, after: after))

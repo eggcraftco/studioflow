@@ -49,10 +49,19 @@ struct AyarlarView: View {
     @State private var messageWorkspaceSettingsStatus: String = ""
     private let canEditWorkspace: Bool
 
-    init(startSection: String = "Theme & Brand", canEditWorkspace: Bool = true) {
+    init(startSection: String = "General", canEditWorkspace: Bool = true) {
         self.canEditWorkspace = canEditWorkspace
-        let allowedForReadOnly = ["Account", "Plan & Access", "Team Access", "Support", "Theme & Brand", "Language & Labels", "About"]
-        let initialSection = canEditWorkspace || allowedForReadOnly.contains(startSection) ? startSection : "Account"
+        let mappedSection: String
+        switch startSection {
+        case "Theme & Brand", "Language & Labels", "About":
+            mappedSection = "General"
+        case "Account":
+            mappedSection = "Sign-in & Security"
+        default:
+            mappedSection = startSection
+        }
+        let allowedForReadOnly = ["General", "Sign-in & Security", "Plan & Access", "Team Access", "Support"]
+        let initialSection = canEditWorkspace || allowedForReadOnly.contains(mappedSection) ? mappedSection : "Sign-in & Security"
         _seciliAyarSekmesi = State(initialValue: initialSection)
     }
     
@@ -269,7 +278,7 @@ struct AyarlarView: View {
 
     private func canShowSettingsSection(_ key: String) -> Bool {
         switch key {
-        case "Theme & Brand", "Language & Labels":
+        case "General":
             return workspaceAccessAllows("settings")
         case "Workflow":
             return workspaceAccessAllows("settings") && workspaceAccessAllows("orders")
@@ -287,7 +296,7 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settings") && workspaceAccessAllows("teamAccess")
         case "Message Settings":
             return workspaceAccessAllows("settings")
-        case "Account", "Support", "About":
+        case "Sign-in & Security", "Support":
             return true
         default:
             return false
@@ -296,8 +305,7 @@ struct AyarlarView: View {
 
     private var settingsSections: [(key: String, title: String, icon: String)] {
         let allSections: [(key: String, title: String, icon: String)] = [
-            ("Theme & Brand", t("Theme & Branding", lang: seciliDil), "paintpalette.fill"),
-            ("Language & Labels", t("Language & Labels", lang: seciliDil), "textformat.size"),
+            ("General", t("General", lang: seciliDil), "gearshape.fill"),
             ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch"),
             ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext"),
             ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill"),
@@ -305,12 +313,11 @@ struct AyarlarView: View {
             ("WooCommerce", t("WooCommerce Integration", lang: seciliDil), "cart.badge.plus"),
             ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled"),
             ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill"),
-            ("Account", t("Account", lang: seciliDil), "person.crop.circle"),
+            ("Sign-in & Security", t("Sign-in & Security", lang: seciliDil), "lock.fill"),
             ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill"),
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
-            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
-            ("About", t("About", lang: seciliDil), "info.circle.fill")
+            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill")
         ]
 
         return allSections.filter { canShowSettingsSection($0.key) }
@@ -492,10 +499,8 @@ struct AyarlarView: View {
 
     private func settingsSectionDescription(_ key: String) -> String {
         switch key {
-        case "Theme & Brand":
-            return t("Logo, theme and branding.", lang: seciliDil)
-        case "Language & Labels":
-            return t("Language, currency and label text.", lang: seciliDil)
+        case "General":
+            return t("Appearance, language, profile and workspace identity.", lang: seciliDil)
         case "Workflow":
             return t("Order steps and custom fields.", lang: seciliDil)
         case "PDF":
@@ -510,16 +515,14 @@ struct AyarlarView: View {
             return t("Upload rules, file limits and audit protection.", lang: seciliDil)
         case "Data":
             return t("Import, export and backup.", lang: seciliDil)
-        case "Account":
-            return t("Profile and sign-in security.", lang: seciliDil)
+        case "Sign-in & Security":
+            return t("Device unlock, password reset and sign out.", lang: seciliDil)
         case "Plan & Access":
             return t("Billing, limits and feature access.", lang: seciliDil)
         case "Team Access":
             return t("Members, roles and workspace requests.", lang: seciliDil)
         case "Message Settings":
             return t("Direct messages, group chats and attachment permissions.", lang: seciliDil)
-        case "About":
-            return t("App information.", lang: seciliDil)
         default:
             return ""
         }
@@ -530,11 +533,7 @@ struct AyarlarView: View {
         VStack(alignment: .leading, spacing: isPhoneLayout ? 18 : 25) {
             if !settingsSections.contains(where: { $0.key == seciliAyarSekmesi }) {
                 restrictedSettingsSection
-            } else if seciliAyarSekmesi == "Theme & Brand" {
-                temaAyari
-                if canEditWorkspace { markaAyari }
-            }
-            else if seciliAyarSekmesi == "Language & Labels" { dilAyari }
+            } else if seciliAyarSekmesi == "General" { generalAyari }
             else if seciliAyarSekmesi == "Workflow" { if canEditWorkspace { islemAdimlariAyari } }
             else if seciliAyarSekmesi == "PDF" { if canEditWorkspace { pdfAyari } }
             else if seciliAyarSekmesi == "Quick Reply" { if canEditWorkspace { quickReplyAyari } }
@@ -542,12 +541,123 @@ struct AyarlarView: View {
             else if seciliAyarSekmesi == "WooCommerce" { if canEditWorkspace { wooCommerceIntegrationAyari } }
             else if seciliAyarSekmesi == "Upload Safety" { if canEditWorkspace { uploadSafetyAyari } }
             else if seciliAyarSekmesi == "Data" { if canEditWorkspace { veriYonetimiAyari } }
-            else if seciliAyarSekmesi == "Account" { AccountProfileView(sectionMode: .account) }
+            else if seciliAyarSekmesi == "Sign-in & Security" { AccountProfileView(sectionMode: .signInSecurity) }
             else if seciliAyarSekmesi == "Plan & Access" { AccountProfileView(sectionMode: .planAccess) }
             else if seciliAyarSekmesi == "Team Access" { AccountProfileView(sectionMode: .teamAccess) }
             else if seciliAyarSekmesi == "Message Settings" { messageWorkspaceSettingsAyari }
             else if seciliAyarSekmesi == "Support" { supportTicketsAyari }
-            else if seciliAyarSekmesi == "About" { aboutAyari }
+        }
+    }
+
+    @State private var selectedGeneralSection: String? = nil
+
+    @ViewBuilder
+    private var generalAyari: some View {
+        VStack(alignment: .leading, spacing: isPhoneLayout ? 16 : 20) {
+            if let selectedGeneralSection {
+                Button {
+                    withAnimation(.snappy) {
+                        self.selectedGeneralSection = nil
+                    }
+                } label: {
+                    Label(t("General", lang: seciliDil), systemImage: "chevron.left")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
+            }
+
+            SettingsGeneralHeader(
+                title: generalSectionTitle(selectedGeneralSection),
+                subtitle: generalSectionSubtitle(selectedGeneralSection),
+                icon: generalSectionIcon(selectedGeneralSection)
+            )
+
+            switch selectedGeneralSection {
+            case "appearance":
+                temaAyari
+                if canEditWorkspace { markaAyari }
+            case "language":
+                dilAyari
+            case "profile":
+                AccountProfileView(sectionMode: .profileWorkspace)
+            case "logo":
+                AccountProfileView(sectionMode: .workspaceLogo)
+            case "about":
+                aboutAyari
+            default:
+                SettingsCard(title: t("General", lang: seciliDil), iconName: "gearshape.fill") {
+                    VStack(spacing: 0) {
+                        GeneralSettingsMenuRow(
+                            title: t("Appearance", lang: seciliDil),
+                            subtitle: appTheme.isEmpty ? "System" : appTheme,
+                            icon: "paintpalette.fill",
+                            tint: .purple
+                        ) { selectedGeneralSection = "appearance" }
+                        GeneralSettingsDivider()
+                        GeneralSettingsMenuRow(
+                            title: t("Language & Region", lang: seciliDil),
+                            subtitle: seciliDil,
+                            icon: "textformat.size",
+                            tint: .blue
+                        ) { selectedGeneralSection = "language" }
+                        GeneralSettingsDivider()
+                        GeneralSettingsMenuRow(
+                            title: t("Profile & Workspace", lang: seciliDil),
+                            subtitle: authVM.companyName.isEmpty ? t("Workspace details", lang: seciliDil) : authVM.companyName,
+                            icon: "building.2.fill",
+                            tint: .orange
+                        ) { selectedGeneralSection = "profile" }
+                        GeneralSettingsDivider()
+                        GeneralSettingsMenuRow(
+                            title: t("Workspace Logo", lang: seciliDil),
+                            subtitle: appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("No logo uploaded", lang: seciliDil) : t("Logo uploaded", lang: seciliDil),
+                            icon: "photo.badge.plus",
+                            tint: .green
+                        ) { selectedGeneralSection = "logo" }
+                        GeneralSettingsDivider()
+                        GeneralSettingsMenuRow(
+                            title: t("About", lang: seciliDil),
+                            subtitle: "NivaDesk 1.0.0",
+                            icon: "info.circle.fill",
+                            tint: .secondary
+                        ) { selectedGeneralSection = "about" }
+                    }
+                }
+            }
+        }
+    }
+
+    private func generalSectionTitle(_ section: String?) -> String {
+        switch section {
+        case "appearance": return t("Appearance", lang: seciliDil)
+        case "language": return t("Language & Region", lang: seciliDil)
+        case "profile": return t("Profile & Workspace", lang: seciliDil)
+        case "logo": return t("Workspace Logo", lang: seciliDil)
+        case "about": return t("About", lang: seciliDil)
+        default: return t("General", lang: seciliDil)
+        }
+    }
+
+    private func generalSectionSubtitle(_ section: String?) -> String {
+        switch section {
+        case "appearance": return t("Choose the app theme and workspace subtitle.", lang: seciliDil)
+        case "language": return t("Set the workspace language used across NivaDesk.", lang: seciliDil)
+        case "profile": return t("Manage your profile and studio identity.", lang: seciliDil)
+        case "logo": return t("Upload the logo shown in the app header.", lang: seciliDil)
+        case "about": return t("Version and ownership information.", lang: seciliDil)
+        default: return t("Keep everyday workspace identity settings in one quiet place.", lang: seciliDil)
+        }
+    }
+
+    private func generalSectionIcon(_ section: String?) -> String {
+        switch section {
+        case "appearance": return "paintpalette.fill"
+        case "language": return "textformat.size"
+        case "profile": return "building.2.fill"
+        case "logo": return "photo.badge.plus"
+        case "about": return "info.circle.fill"
+        default: return "gearshape.fill"
         }
     }
 
@@ -5002,16 +5112,33 @@ struct AyarlarView: View {
             VStack(alignment: .leading, spacing: 18) {
                 financialSettingsSectionTitle(t("General", lang: seciliDil))
 
-                financialSettingsRow(t("Currency Symbol", lang: seciliDil)) {
-                    Picker("", selection: $seciliParaBirimi) {
-                        ForEach(siraliParaBirimleri, id: \.self) { sembol in
-                            Text(sembol).tag(sembol)
+                if isPhoneLayout {
+                    HStack(spacing: 12) {
+                        Text(t("Currency Symbol", lang: seciliDil))
+                            .font(.system(size: 13))
+                            .foregroundColor(.primary.opacity(0.82))
+                        Spacer(minLength: 8)
+                        Picker("", selection: $seciliParaBirimi) {
+                            ForEach(siraliParaBirimleri, id: \.self) { sembol in
+                                Text(sembol).tag(sembol)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .tint(.blue)
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .frame(width: 180)
-                    .financialSettingsControlStyle()
+                } else {
+                    financialSettingsRow(t("Currency Symbol", lang: seciliDil)) {
+                        Picker("", selection: $seciliParaBirimi) {
+                            ForEach(siraliParaBirimleri, id: \.self) { sembol in
+                                Text(sembol).tag(sembol)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 180)
+                        .financialSettingsControlStyle()
+                    }
                 }
 
                 financialSettingsRow(t("Decimal Separator", lang: seciliDil)) {
@@ -5020,7 +5147,7 @@ struct AyarlarView: View {
                         Text(t("Comma (,)", lang: seciliDil)).tag(",")
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 180)
+                    .frame(maxWidth: isPhoneLayout ? .infinity : 180)
                 }
 
                 financialSettingsRow(t("Avg. Platform Fee (%)", lang: seciliDil)) {
@@ -5033,7 +5160,7 @@ struct AyarlarView: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(.secondary)
                     }
-                    .financialSettingsControlStyle(width: 180)
+                    .financialSettingsControlStyle(width: isPhoneLayout ? nil : 180)
                 }
 
                 financialSettingsSectionTitle(t("Tax / VAT Settings", lang: seciliDil))
@@ -5042,14 +5169,14 @@ struct AyarlarView: View {
                     TextField("", text: $taxRuleNameRevenue)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .semibold))
-                        .financialSettingsControlStyle(width: 420)
+                        .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420)
                 }
 
                 financialSettingsRow(t("Rule 2 (Profit)", lang: seciliDil)) {
                     TextField("", text: $taxRuleNameProfit)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .semibold))
-                        .financialSettingsControlStyle(width: 420)
+                        .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420)
                 }
 
                 financialSettingsRow(t("Default Tax Rate (%)", lang: seciliDil)) {
@@ -5062,7 +5189,7 @@ struct AyarlarView: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(.secondary)
                     }
-                    .financialSettingsControlStyle(width: 420, accent: studioWarningOrange)
+                    .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420, accent: studioWarningOrange)
                 }
 
                 financialSettingsRow(t("Calculate Tax On", lang: seciliDil)) {
@@ -5072,7 +5199,7 @@ struct AyarlarView: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
-                    .frame(width: 420)
+                    .frame(maxWidth: isPhoneLayout ? .infinity : 420)
                     .financialSettingsControlStyle()
                 }
 
@@ -5928,6 +6055,89 @@ struct AyarMenuButonu: View {
             .cornerRadius(8)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct SettingsGeneralHeader: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let title: String
+    let subtitle: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.blue)
+                .frame(width: 48, height: 48)
+                .background(Color.blue.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.primary)
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.05), radius: 14, y: 7)
+    }
+}
+
+private struct GeneralSettingsMenuRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(tint)
+                    .frame(width: 38, height: 38)
+                    .background(tint.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.primary)
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.75))
+            }
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct GeneralSettingsDivider: View {
+    var body: some View {
+        Divider()
+            .padding(.leading, 50)
+            .opacity(0.55)
     }
 }
 struct TemplateRow: View { @Binding var title: String; @Binding var desc: String; var titlePlaceholder: String; var descPlaceholder: String; var body: some View { HStack(spacing: 10) { TextField(titlePlaceholder, text: $title).textFieldStyle(.plain).font(.system(size: 13, weight: .bold)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6).frame(width: 150); TextField(descPlaceholder, text: $desc).textFieldStyle(.plain).font(.system(size: 13)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6) } } }

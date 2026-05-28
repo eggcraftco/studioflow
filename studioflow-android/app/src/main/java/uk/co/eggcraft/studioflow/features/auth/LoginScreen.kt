@@ -48,6 +48,8 @@ fun LoginScreen(
     onSignIn: (String, String) -> Unit,
     onGoogleSignIn: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -78,7 +80,7 @@ fun LoginScreen(
                     contentScale = ContentScale.Fit
                 )
                 Text(
-                    text = "Sign in with the same account you use on iPhone, iPad, Mac or web.",
+                    text = t("Sign in with the same account you use on iPhone, iPad, Mac or web."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -94,7 +96,7 @@ fun LoginScreen(
                 ) {
                     Icon(Icons.Filled.Public, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Continue with Google", fontWeight = FontWeight.Bold)
+                    Text(t("Continue with Google"), fontWeight = FontWeight.Bold)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -103,7 +105,7 @@ fun LoginScreen(
                 ) {
                     HorizontalDivider(modifier = Modifier.weight(1f))
                     Text(
-                        text = "or",
+                        text = t("or"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -114,7 +116,7 @@ fun LoginScreen(
                     value = email,
                     onValueChange = { email = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Email") },
+                    label = { Text(t("Email")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
                 )
@@ -122,7 +124,7 @@ fun LoginScreen(
                     value = password,
                     onValueChange = { password = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Password") },
+                    label = { Text(t("Password")) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
@@ -147,7 +149,7 @@ fun LoginScreen(
                     if (signingIn) {
                         CircularProgressIndicator(strokeWidth = 2.dp)
                     } else {
-                        Text("Sign In", fontWeight = FontWeight.Bold)
+                        Text(t("Sign In"), fontWeight = FontWeight.Bold)
                     }
                 }
             }

@@ -111,6 +111,8 @@ fun OrdersScreen(
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspace = state.workspace
     val context = LocalContext.current
     val ordersPrefs = remember(context, state.user?.uid, workspace?.id) {
@@ -406,6 +408,8 @@ private fun OrderListPane(
     onToggleListVisibility: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
@@ -438,7 +442,7 @@ private fun OrderListPane(
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Orders", fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Orders"), fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
                     Text("${state.orders.size} orders", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 }
                 Surface(shape = RoundedCornerShape(12.dp), color = StudioBlue.copy(alpha = 0.12f)) {
@@ -458,7 +462,7 @@ private fun OrderListPane(
                         Icon(Icons.Filled.Tune, contentDescription = null, tint = StudioBlue)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Order Filters", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(t("Order Filters"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Text("${selectedFilter.label} • ${selectedSortMode.label}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                         }
                         if (wideLayout) {
@@ -599,6 +603,8 @@ private fun OrderListVisibilityButton(
     visible: Boolean,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val label = if (visible) "Hide orders list" else "Show orders list"
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -620,6 +626,8 @@ private fun OrderListRevealRail(
     visibleCount: Int,
     onShow: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
         modifier = Modifier
             .width(52.dp)
@@ -669,6 +677,8 @@ private fun OrderListResizeHandle(
     onResizeEnd: () -> Unit,
     onResizeCancel: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box(
         modifier = Modifier
             .width(28.dp)
@@ -705,6 +715,8 @@ private fun OrderSortToggleRow(
     selectedSortMode: OrderSortMode,
     onSortModeSelected: (OrderSortMode) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -732,6 +744,8 @@ private fun OrderSortToggleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -755,6 +769,8 @@ private fun OrderSortToggleButton(
 
 @Composable
 private fun EmptyOrderDetailPane(modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box(
         modifier = modifier
             .fillMaxHeight()
@@ -784,6 +800,8 @@ private fun StudioTopBar(
     workspace: StudioWorkspace?,
     onSignOut: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -815,6 +833,8 @@ private fun OrderFilterStrip(
     visibleCount: Int,
     planName: String
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CompactPill(text = "Smart $visibleCount/$totalCount", active = true)
         if (planName.isNotBlank()) CompactPill(text = planName, active = false)
@@ -823,6 +843,8 @@ private fun OrderFilterStrip(
 
 @Composable
 private fun CompactPill(text: String, active: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val color = if (active) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
         shape = RoundedCornerShape(999.dp),
@@ -857,6 +879,8 @@ private fun OrderListCard(
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onOpenOrder: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val assignee = assigneeLabel(order, teamMembers)
     val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
     var contextMenuOpen by remember { mutableStateOf(false) }
@@ -1063,12 +1087,12 @@ private fun OrderListCard(
                             onDeleteOrder()
                         }
                     ) {
-                        Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                        Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { confirmDeleteOpen = false }) {
-                        Text("Cancel")
+                        Text(t("Cancel"))
                     }
                 }
             )
@@ -1098,13 +1122,15 @@ private fun OrderListContextMenu(
     onCancelOrder: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val canOpenCustomer = canOpenCustomerForOrder(workspace, order)
     val canAssign = canManageOrderAssignments(workspace)
     val canEditStatus = canEditOrderStatusFromList(workspace)
     val canDelete = canDeleteOrderFromList(workspace)
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            text = { Text("Open Customer") },
+            text = { Text(t("Open Customer")) },
             enabled = canOpenCustomer,
             leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
             onClick = onOpenCustomer
@@ -1116,7 +1142,7 @@ private fun OrderListContextMenu(
             onClick = onToggleSelection
         )
         DropdownMenuItem(
-            text = { Text("Assign Project") },
+            text = { Text(t("Assign Project")) },
             enabled = canAssign,
             leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
             trailingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
@@ -1144,7 +1170,7 @@ private fun OrderListContextMenu(
         }
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text("Order Card Details") },
+            text = { Text(t("Order Card Details")) },
             leadingIcon = { Icon(Icons.Filled.Tune, contentDescription = null) },
             trailingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
             onClick = onToggleDetailsMenu
@@ -1173,20 +1199,20 @@ private fun OrderListContextMenu(
         }
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text("Mark as Done") },
+            text = { Text(t("Mark as Done")) },
             enabled = canEditStatus,
             leadingIcon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
             onClick = onMarkDone
         )
         DropdownMenuItem(
-            text = { Text("Cancel Order") },
+            text = { Text(t("Cancel Order")) },
             enabled = canEditStatus,
             leadingIcon = { Icon(Icons.Filled.Cancel, contentDescription = null) },
             onClick = onCancelOrder
         )
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text("Delete", color = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
+            text = { Text(t("Delete"), color = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
             enabled = canDelete,
             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
             onClick = onRequestDelete
@@ -1196,6 +1222,8 @@ private fun OrderListContextMenu(
 
 @Composable
 private fun OrderCardDetailToggleRow(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DropdownMenuItem(
         text = { Text(label) },
         leadingIcon = {
@@ -1211,6 +1239,8 @@ private fun OrderCardDetailToggleRow(label: String, enabled: Boolean, onClick: (
 
 @Composable
 private fun OrderSelectionDot(selected: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = CircleShape,
         color = if (selected) StudioBlue else MaterialTheme.colorScheme.surfaceVariant,
@@ -1226,6 +1256,8 @@ private fun OrderSelectionDot(selected: Boolean) {
 
 @Composable
 private fun PreviewBox(order: StudioOrder, compact: Boolean = false) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val previewUrl = remember(order.id, order.designLink, order.clientFiles) {
         order.designLink.trim().ifBlank {
             order.clientFiles.firstOrNull {
@@ -1277,6 +1309,8 @@ private fun DeliveryBadge(
     order: StudioOrder,
     compact: Boolean = false
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val days = order.remainingDays
     val tone = when {
         days < 0 -> StudioRed
@@ -1313,6 +1347,8 @@ private fun DeliveryBadge(
 
 @Composable
 private fun AssignedRow(label: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         Box(
             modifier = Modifier
@@ -1342,6 +1378,8 @@ private fun AssignedRow(label: String) {
 
 @Composable
 private fun AssigneeMiniBadge(order: StudioOrder, teamMembers: List<StudioTeamMember>) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = CircleShape, color = StudioBlue.copy(alpha = 0.13f)) {
         Box(modifier = Modifier.size(34.dp), contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Person, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(22.dp))
@@ -1351,6 +1389,8 @@ private fun AssigneeMiniBadge(order: StudioOrder, teamMembers: List<StudioTeamMe
 
 @Composable
 private fun IconDetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
         Text(
@@ -1366,6 +1406,8 @@ private fun IconDetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector,
 
 @Composable
 private fun StatusLine(label: String, value: String, compact: Boolean = false) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val clean = value.ifBlank { "Not Yet" }
     val tone = statusTone(clean)
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {

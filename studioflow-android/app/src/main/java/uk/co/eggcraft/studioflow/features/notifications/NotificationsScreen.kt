@@ -92,6 +92,8 @@ fun NotificationsScreen(
     onOpen: (StudioActivityNotification) -> Unit,
     onClose: (() -> Unit)? = null
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val uid = state.user?.uid.orEmpty()
     val email = state.user?.email.orEmpty()
     val all = state.activityNotifications
@@ -150,7 +152,7 @@ fun NotificationsScreen(
                 sections.forEach { section ->
                     item("section_${section.id}") {
                         Text(
-                            section.title.uppercase(Locale.getDefault()),
+                            t(section.title).uppercase(Locale.getDefault()),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF9D9DA3),
@@ -233,6 +235,8 @@ private fun HeaderCard(
     onSetTypeFilter: (String) -> Unit,
     typeCount: (String) -> Int
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -246,13 +250,13 @@ private fun HeaderCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Notification Centre",
+                        t("Notification Centre"),
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 20.sp,
                         maxLines = 1
                     )
                     Text(
-                        "Latest activity and workflow updates",
+                        t("Latest activity and workflow updates"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
@@ -269,7 +273,7 @@ private fun HeaderCard(
                         }
                     ) {
                         Text(
-                            "Mark all read",
+                            t("Mark all read"),
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
@@ -288,13 +292,13 @@ private fun HeaderCard(
                 value = query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search notifications") },
+                placeholder = { Text(t("Search notifications")) },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                            Icon(Icons.Filled.Close, contentDescription = t("Clear"))
                         }
                     }
                 }
@@ -342,19 +346,21 @@ private fun FilterRow(
     onSetTypeFilter: (String) -> Unit,
     typeCount: (String) -> Int
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             FilterChip(
                 selected = filtersExpanded,
                 onClick = onToggleExpanded,
-                label = { Text("Filters") }
+                label = { Text(t("Filters")) }
             )
             Spacer(Modifier.width(8.dp))
             val activeSummary = buildString {
-                if (readFilter == "unread") append("Unread")
+                if (readFilter == "unread") append(t("Unread"))
                 if (typeFilter != "all") {
                     if (isNotEmpty()) append(" • ")
-                    append(typeLabel(typeFilter))
+                    append(t(typeLabel(typeFilter)))
                 }
             }
             if (activeSummary.isNotBlank()) {
@@ -367,7 +373,7 @@ private fun FilterRow(
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = {
                     onSetReadFilter("all"); onSetTypeFilter("all")
-                }) { Text("Clear") }
+                }) { Text(t("Clear")) }
             }
         }
         if (filtersExpanded) {
@@ -388,13 +394,13 @@ private fun FilterRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val types = listOf(
-                    "all" to "All types",
-                    "messages" to "Messages",
-                    "support" to "Support",
-                    "orders" to "Orders",
-                    "tasks" to "Tasks",
-                    "files" to "Files",
-                    "system" to "System"
+                    "all" to t("All types"),
+                    "messages" to t("Messages"),
+                    "support" to t("Support"),
+                    "orders" to t("Orders"),
+                    "tasks" to t("Tasks"),
+                    "files" to t("Files"),
+                    "system" to t("System")
                 )
                 items(types) { (key, label) ->
                     FilterChip(
@@ -418,6 +424,8 @@ private fun SingleNotificationCard(
     onClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var menuOpen by remember { mutableStateOf(false) }
 
     Surface(
@@ -466,7 +474,7 @@ private fun SingleNotificationCard(
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(text = { Text("Dismiss") }, onClick = { menuOpen = false; onDismiss() })
+            DropdownMenuItem(text = { Text(t("Dismiss")) }, onClick = { menuOpen = false; onDismiss() })
         }
     }
 }
@@ -482,10 +490,12 @@ private fun StackedNotificationCard(
     onToggle: () -> Unit,
     onDismissAll: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var menuOpen by remember { mutableStateOf(false) }
     val count = items.size
     val typeKey = typeKeyFor(latest)
-    val typeTitle = typeLabel(typeKey)
+    val typeTitle = t(typeLabel(typeKey))
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -565,7 +575,7 @@ private fun StackedNotificationCard(
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(text = { Text("Dismiss all") }, onClick = { menuOpen = false; onDismissAll() })
+            DropdownMenuItem(text = { Text(t("Dismiss all")) }, onClick = { menuOpen = false; onDismissAll() })
         }
     }
 }
@@ -576,6 +586,8 @@ private fun NotificationAvatar(
     showUnreadDot: Boolean,
     useCategoryIcon: Boolean = false
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val (icon, tint) = iconAndTintFor(item)
     val photo = item.senderPhotoURL.trim()
 
@@ -583,7 +595,7 @@ private fun NotificationAvatar(
         if (!useCategoryIcon && photo.isNotEmpty()) {
             AsyncImage(
                 model = photo,
-                contentDescription = item.senderName.ifBlank { "Sender" },
+                contentDescription = item.senderName.ifBlank { t("Sender") },
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(40.dp)
@@ -632,13 +644,15 @@ private fun CountPill(count: Int) {
 
 @Composable
 private fun TypePill(typeKey: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val tint = colorForType(typeKey)
     Surface(
         color = tint.copy(alpha = 0.12f),
         shape = RoundedCornerShape(50)
     ) {
         Text(
-            typeLabel(typeKey),
+            t(typeLabel(typeKey)),
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = tint,
@@ -649,6 +663,8 @@ private fun TypePill(typeKey: String) {
 
 @Composable
 private fun EmptyState(readFilter: String, hasSearch: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -667,13 +683,13 @@ private fun EmptyState(readFilter: String, hasSearch: Boolean) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (readFilter == "unread") "No unread notifications" else "No notifications yet",
+                if (readFilter == "unread") t("No unread notifications") else t("No notifications yet"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                if (hasSearch) "No notifications match your search."
+                if (hasSearch) t("No notifications match your search.")
                 else "Important updates from messages, support tickets, orders and workflow will appear here.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -685,6 +701,8 @@ private fun EmptyState(readFilter: String, hasSearch: Boolean) {
 @Composable
 private fun PermissionBanner() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
@@ -707,13 +725,13 @@ private fun PermissionBanner() {
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Notifications are off",
+                    t("Notifications are off"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
                 Text(
-                    "Turn them on to get push alerts for new messages.",
+                    t("Turn them on to get push alerts for new messages."),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
@@ -733,7 +751,7 @@ private fun PermissionBanner() {
                     }
                 }
             }) {
-                Text("Open Settings", fontWeight = FontWeight.Bold)
+                Text(t("Open Settings"), fontWeight = FontWeight.Bold)
             }
         }
     }

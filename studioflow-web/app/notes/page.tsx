@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import { loadWorkspaceContext, loadRecentOrders, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   colorForNote,
@@ -23,7 +24,8 @@ type TopTab = "personal" | "project";
 
 export default function NotesPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [notes, setNotes] = useState<StudioKeepNote[]>([]);
@@ -251,19 +253,19 @@ export default function NotesPage() {
           height: isPhone ? "100vh" : "auto",
           overflowY: "auto",
         }}>
-          <SideItem icon="lightbulb" label="Notes" count={counts.notes} active={topTab === "personal" && section === "notes" && labelFilter === null} onClick={() => { setTopTab("personal"); setSection("notes"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
-          <SideItem icon="bell" label="Reminders" count={counts.reminders} active={topTab === "personal" && section === "reminders"} onClick={() => { setTopTab("personal"); setSection("reminders"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
-          <SideItem icon="docMagnifier" label="Project Notes" active={topTab === "project"} onClick={() => { setTopTab("project"); if (isPhone) setDrawerOpen(false); }} />
+          <SideItem icon="lightbulb" label={t("Notes")} count={counts.notes} active={topTab === "personal" && section === "notes" && labelFilter === null} onClick={() => { setTopTab("personal"); setSection("notes"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
+          <SideItem icon="bell" label={t("Reminders")} count={counts.reminders} active={topTab === "personal" && section === "reminders"} onClick={() => { setTopTab("personal"); setSection("reminders"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
+          <SideItem icon="docMagnifier" label={t("Project Notes")} active={topTab === "project"} onClick={() => { setTopTab("project"); if (isPhone) setDrawerOpen(false); }} />
           {allLabels.length > 0 && (
             <>
-              <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "10px 14px 4px" }}>LABELS</div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "10px 14px 4px" }}>{t("LABELS")}</div>
               {allLabels.map((l) => (
                 <SideItem key={l} icon="tag" label={l} count={counts.labels[l] || 0} active={labelFilter === l} onClick={() => { setTopTab("personal"); setSection("notes"); setLabelFilter(l); if (isPhone) setDrawerOpen(false); }} />
               ))}
             </>
           )}
-          <SideItem icon="archive" label="Archive" count={counts.archive} active={topTab === "personal" && section === "archive"} onClick={() => { setTopTab("personal"); setSection("archive"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
-          <SideItem icon="trash" label="Trash" count={counts.trash} active={topTab === "personal" && section === "trash"} onClick={() => { setTopTab("personal"); setSection("trash"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
+          <SideItem icon="archive" label={t("Archive")} count={counts.archive} active={topTab === "personal" && section === "archive"} onClick={() => { setTopTab("personal"); setSection("archive"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
+          <SideItem icon="trash" label={t("Trash")} count={counts.trash} active={topTab === "personal" && section === "trash"} onClick={() => { setTopTab("personal"); setSection("trash"); setLabelFilter(null); if (isPhone) setDrawerOpen(false); }} />
         </aside>
 
         {/* MAIN CONTENT */}
@@ -296,7 +298,7 @@ export default function NotesPage() {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingLeft: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? "Project Notes" : (labelFilter ? `#${labelFilter}` : (section === "notes" ? "Notes" : section === "reminders" ? "Reminders" : section === "archive" ? "Archive" : "Trash"))}</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
             <div style={{ fontSize: 13, color: "#6b7280" }}>{visible.length} note{visible.length === 1 ? "" : "s"}</div>
           </div>
           <button
@@ -357,7 +359,7 @@ export default function NotesPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search notes…"
+              placeholder={t("Search notes…")}
               style={{
                 width: "100%",
                 padding: "10px 14px",
@@ -371,21 +373,21 @@ export default function NotesPage() {
             {/* Lists */}
             {pinned.length > 0 && (
               <>
-                <SectionHeader title="PINNED" />
+                <SectionHeader title={t("PINNED")} />
                 <NotesGrid notes={pinned} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
               </>
             )}
-            {pinned.length > 0 && others.length > 0 && <SectionHeader title="OTHERS" />}
+            {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
             <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
             {visible.length === 0 && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
                 {section === "trash"
-                  ? "Trash is empty."
+                  ? t("Trash is empty.")
                   : section === "archive"
-                  ? "No archived notes."
+                  ? t("No archived notes.")
                   : section === "reminders"
-                  ? "No reminders."
-                  : "Click + New Note to create your first note."}
+                  ? t("No reminders.")
+                  : t("Click + New Note to create your first note.")}
               </div>
             )}
           </>
@@ -700,6 +702,8 @@ function NoteCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   return (
     <div
       onMouseEnter={() => setHover(true)}
@@ -747,7 +751,7 @@ function NoteCard({
       {(hover || isSelected || selectionActive) && !isDragging && (
         <button
           onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
-          title={isSelected ? "Deselect" : "Select"}
+          title={isSelected ? t("Deselect") : t("Select")}
           style={{
             position: "absolute",
             top: -8,
@@ -780,7 +784,7 @@ function NoteCard({
         {!note.title && <div style={{ flex: 1 }} />}
         <span style={{ color: note.isPinned ? "#2D7BF4" : "#374151" }}>
           <IconBtn
-            title={note.isPinned ? "Unpin note" : "Pin note"}
+            title={note.isPinned ? t("Unpin") : t("Pin")}
             onClick={(e) => { e.stopPropagation(); onSave({ ...note, isPinned: !note.isPinned }); }}
           >
             <Icon name={note.isPinned ? "pinFilled" : "pin"} />
@@ -835,7 +839,7 @@ function NoteCard({
       >
         {/* Color */}
         <div style={{ position: "relative" }}>
-          <IconBtn title="Color" onClick={(e) => { e.stopPropagation(); setColorOpen((v) => !v); setReminderOpen(false); setMenuOpen(false); }}>
+          <IconBtn title={t("Color")} onClick={(e) => { e.stopPropagation(); setColorOpen((v) => !v); setReminderOpen(false); setMenuOpen(false); }}>
             <Icon name="palette" />
           </IconBtn>
           {colorOpen && (
@@ -853,7 +857,7 @@ function NoteCard({
         </div>
         {/* Reminder */}
         <div style={{ position: "relative" }}>
-          <IconBtn title="Reminder" onClick={(e) => { e.stopPropagation(); setReminderOpen((v) => !v); setColorOpen(false); setMenuOpen(false); }}>
+          <IconBtn title={t("Reminder")} onClick={(e) => { e.stopPropagation(); setReminderOpen((v) => !v); setColorOpen(false); setMenuOpen(false); }}>
             <Icon name="bell" />
           </IconBtn>
           {reminderOpen && (
@@ -872,17 +876,17 @@ function NoteCard({
           )}
         </div>
         {/* Collaborators */}
-        <IconBtn title="Collaborators" onClick={(e) => { e.stopPropagation(); onClick(); }}>
+        <IconBtn title={t("Collaborators")} onClick={(e) => { e.stopPropagation(); onClick(); }}>
           <Icon name="personPlus" />
         </IconBtn>
         {/* Archive */}
-        <IconBtn title={note.isArchived ? "Unarchive" : "Archive"} onClick={(e) => { e.stopPropagation(); onSave({ ...note, isArchived: !note.isArchived }); }}>
+        <IconBtn title={note.isArchived ? t("Unarchive") : t("Archive")} onClick={(e) => { e.stopPropagation(); onSave({ ...note, isArchived: !note.isArchived }); }}>
           <Icon name="archive" />
         </IconBtn>
         <div style={{ flex: 1 }} />
         {/* Overflow menu */}
         <div style={{ position: "relative" }}>
-          <IconBtn title="More" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); setColorOpen(false); setReminderOpen(false); }}>
+          <IconBtn title={t("More")} onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); setColorOpen(false); setReminderOpen(false); }}>
             <Icon name="ellipsis" />
           </IconBtn>
           {menuOpen && (
@@ -936,6 +940,8 @@ function NoteEditor({
   const [collabs, setCollabs] = useState<string[]>(note.collaboratorEmails);
   const [collabInput, setCollabInput] = useState("");
   const [reminderMillis, setReminderMillis] = useState<number | null>(note.reminderDateMillis);
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
 
   return (
     <div
@@ -962,19 +968,19 @@ function NoteEditor({
         }}
       >
         <h2 style={{ margin: "0 0 14px", fontWeight: 800 }}>
-          {isNoteEmpty(note) ? "New Note" : "Edit Note"}
+          {isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
         </h2>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title"
+          placeholder={t("Title")}
           style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10 }}
         />
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Note"
+          placeholder={t("Note")}
           rows={6}
           style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
         />
@@ -1051,7 +1057,7 @@ function NoteEditor({
             type="text"
             value={labelInput}
             onChange={(e) => setLabelInput(e.target.value)}
-            placeholder="Add label"
+            placeholder={t("Add label")}
             style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
           />
           <button
@@ -1081,7 +1087,7 @@ function NoteEditor({
             type="email"
             value={collabInput}
             onChange={(e) => setCollabInput(e.target.value)}
-            placeholder="Email"
+            placeholder={t("Email")}
             style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
           />
           <button
@@ -1123,7 +1129,7 @@ function NoteEditor({
             }
             style={{ padding: "8px 18px", background: "#2D7BF4", color: "white", border: "none", borderRadius: 8, fontWeight: 800, cursor: "pointer" }}
           >
-            Save
+            {t("Save")}
           </button>
         </div>
       </div>
@@ -1132,11 +1138,13 @@ function NoteEditor({
 }
 
 function ProjectNotesView({ orders }: { orders: OrderListItem[] }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const grouped = useMemo(() => {
     return orders
       .map((o) => {
         const entries: Array<{ type: string; text: string }> = [];
-        if (o.notes?.trim()) entries.push({ type: "Note", text: o.notes });
+        if (o.notes?.trim()) entries.push({ type: t("Note"), text: o.notes });
         return { order: o, entries };
       })
       .filter((g) => g.entries.length > 0)
@@ -1152,7 +1160,7 @@ function ProjectNotesView({ orders }: { orders: OrderListItem[] }) {
       {grouped.map(({ order, entries }) => (
         <div key={order.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>
-            {order.designName?.trim() || order.customerName || "Project"}
+            {order.designName?.trim() || order.customerName || t("Project")}
           </div>
           {order.customerName && (
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>{order.customerName}</div>

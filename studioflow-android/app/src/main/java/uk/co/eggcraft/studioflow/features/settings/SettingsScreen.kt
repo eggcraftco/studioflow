@@ -167,6 +167,8 @@ fun SettingsScreen(
     onReloadMessageWorkspaceSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
     val sections = rememberSettingsSections()
     val settingsRepository = remember { StudioFlowRepository() }
@@ -309,8 +311,7 @@ fun SettingsScreen(
 @Composable
 private fun rememberSettingsSections(): List<SettingsSection> = remember {
     listOf(
-        SettingsSection("theme", "Theme & Branding", "Logo, theme and branding.", Icons.Filled.Palette),
-        SettingsSection("language", "Language & Labels", "Language, currency and label text.", Icons.Filled.Language),
+        SettingsSection("general", "General", "Appearance, language, profile and workspace identity.", Icons.Filled.Settings),
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline),
         SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description),
         SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome),
@@ -319,11 +320,10 @@ private fun rememberSettingsSections(): List<SettingsSection> = remember {
         SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart),
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
-        SettingsSection("account", "Account", "Profile, company and sign-in security.", Icons.Filled.AccountCircle),
+        SettingsSection("account", "Sign-in & Security", "Device unlock, password reset and sign out.", Icons.Filled.Lock),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
-        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
-        SettingsSection("about", "About", "Version and ownership information.", Icons.Filled.Info)
+        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People)
     )
 }
 
@@ -334,6 +334,8 @@ private fun SettingsRow(
     selected: Boolean = false,
     unreadCount: Int = 0
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -394,6 +396,8 @@ private fun SettingsDetailScreen(
     onReloadMessageWorkspaceSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -403,6 +407,16 @@ private fun SettingsDetailScreen(
         item { DetailTopBar(section = section, onBack = onBack, showBack = showBack) }
         item {
             when (section.key) {
+                "general" -> GeneralSettingsDetail(
+                    state = state,
+                    onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                    onUpdateAccountProfile = onUpdateAccountProfile,
+                    onUploadAccountAvatar = onUploadAccountAvatar,
+                    onRemoveAccountAvatar = onRemoveAccountAvatar,
+                    onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                    onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                    onChangeAccountEmail = onChangeAccountEmail
+                )
                 "theme" -> ThemeBrandingDetail(state, onUpdateWorkspaceSettings)
                 "language" -> LanguageLabelsDetail(state, onUpdateWorkspaceSettings)
                 "workflow" -> WorkflowStepsDetail(state, onUpdateWorkspaceSettings)
@@ -424,7 +438,11 @@ private fun SettingsDetailScreen(
                     onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
                     onChangeAccountEmail = onChangeAccountEmail,
                     onSendPasswordResetEmail = onSendPasswordResetEmail,
-                    onSignOut = onSignOut
+                    onSignOut = onSignOut,
+                    includeHeader = false,
+                    includeProfile = false,
+                    includeLogo = false,
+                    includeSecurity = true
                 )
                 "support" -> SupportTicketsDetail(state)
                 "plan" -> PlanAccessDetail(state, onUpdateWorkspaceBillingPlan)
@@ -439,7 +457,6 @@ private fun SettingsDetailScreen(
                     onSaveCustomRole = onSaveCustomRole,
                     onDeleteCustomRole = onDeleteCustomRole
                 )
-                "about" -> AboutDetail()
             }
         }
         item {
@@ -451,6 +468,8 @@ private fun SettingsDetailScreen(
 
 @Composable
 private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
         Row(
             modifier = Modifier
@@ -462,7 +481,7 @@ private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack:
                 TextButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Settings", fontWeight = FontWeight.Bold)
+                    Text(t("Settings"), fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -475,35 +494,39 @@ private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack:
 
 @Composable
 private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     var subtitle by rememberSaveable(settings.appSubtitle) { mutableStateOf(settings.appSubtitle) }
     DetailColumn {
-        DetailCard(title = "Theme", icon = Icons.Filled.Palette) {
+        DetailCard(title = t("Theme"), icon = Icons.Filled.Palette) {
             MenuField(
-                label = "Theme",
+                label = t("Theme"),
                 value = settings.appTheme,
-                options = listOf("System", "Light", "Dark"),
-                onSelect = { onSave(mapOf("appTheme" to it), "Theme saved.") }
+                options = listOf(t("System"), t("Light"), "Dark"),
+                onSelect = { onSave(mapOf("appTheme" to it), t("Theme saved.")) }
             )
         }
-        DetailCard(title = "Theme & Branding", icon = Icons.Filled.Palette) {
+        DetailCard(title = t("Theme & Branding"), icon = Icons.Filled.Palette) {
             OutlinedTextField(
                 value = subtitle,
                 onValueChange = {
                     subtitle = it
-                    onSave(mapOf("appSubtitle" to it), "Branding saved.")
+                    onSave(mapOf("appSubtitle" to it), t("Branding saved."))
                 },
-                label = { Text("Brand Subtitle") },
+                label = { Text(t("Brand Subtitle")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Text("Workspace logo is managed from Account > Workspace Logo.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            Text(t("Workspace logo is managed from Account > Workspace Logo."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
 @Composable
 private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailColumn {
         DetailCard(title = "Language & Labels", icon = Icons.Filled.Language) {
             MenuField(
@@ -517,13 +540,195 @@ private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, 
 }
 
 @Composable
+private fun GeneralSettingsDetail(
+    state: StudioFlowUiState,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    onUpdateAccountProfile: (String, String) -> Unit,
+    onUploadAccountAvatar: (ByteArray, String) -> Unit,
+    onRemoveAccountAvatar: () -> Unit,
+    onUploadWorkspaceLogo: (ByteArray, String, Boolean) -> Unit,
+    onRemoveWorkspaceLogo: () -> Unit,
+    onChangeAccountEmail: (String) -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    val workspace = state.workspace
+    val settings = state.workspaceSettings
+    val title = when (selected) {
+        "appearance" -> "Appearance"
+        "language" -> "Language & Region"
+        "profile" -> "Profile & Workspace"
+        "logo" -> "Workspace Logo"
+        "about" -> "About"
+        else -> "General"
+    }
+
+    DetailColumn {
+        if (selected != null) {
+            TextButton(onClick = { selected = null }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(t("General"), fontWeight = FontWeight.Bold)
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    when (selected) {
+                        "appearance" -> "Choose the app theme and workspace subtitle."
+                        "language" -> "Set the workspace language used across NivaDesk."
+                        "profile" -> "Manage your profile and studio identity."
+                        "logo" -> t("Upload the logo shown in the app header.")
+                        "about" -> t("Version and ownership information.")
+                        else -> "Keep the everyday workspace identity settings in one quiet place."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        when (selected) {
+            "appearance" -> ThemeBrandingDetail(state, onUpdateWorkspaceSettings)
+            "language" -> LanguageLabelsDetail(state, onUpdateWorkspaceSettings)
+            "profile" -> AccountDetail(
+                state = state,
+                requireDeviceUnlock = false,
+                onSetRequireDeviceUnlock = {},
+                onUpdateAccountProfile = onUpdateAccountProfile,
+                onUploadAccountAvatar = onUploadAccountAvatar,
+                onRemoveAccountAvatar = onRemoveAccountAvatar,
+                onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                onChangeAccountEmail = onChangeAccountEmail,
+                onSendPasswordResetEmail = {},
+                onSignOut = {},
+                includeHeader = false,
+                includeProfile = true,
+                includeLogo = false,
+                includeSecurity = false
+            )
+            "logo" -> AccountDetail(
+                state = state,
+                requireDeviceUnlock = false,
+                onSetRequireDeviceUnlock = {},
+                onUpdateAccountProfile = onUpdateAccountProfile,
+                onUploadAccountAvatar = onUploadAccountAvatar,
+                onRemoveAccountAvatar = onRemoveAccountAvatar,
+                onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                onChangeAccountEmail = onChangeAccountEmail,
+                onSendPasswordResetEmail = {},
+                onSignOut = {},
+                includeHeader = false,
+                includeProfile = false,
+                includeLogo = true,
+                includeSecurity = false
+            )
+            "about" -> AboutDetail()
+            else -> {
+                DetailCard(title = "General", icon = Icons.Filled.Settings) {
+                    GeneralMenuRow(
+                        icon = Icons.Filled.Palette,
+                        title = "Appearance",
+                        subtitle = settings.appTheme.ifBlank { t("System") },
+                        tint = StudioPurple,
+                        onClick = { selected = "appearance" }
+                    )
+                    GeneralDivider()
+                    GeneralMenuRow(
+                        icon = Icons.Filled.Language,
+                        title = "Language & Region",
+                        subtitle = settings.selectedLanguage.ifBlank { "English" },
+                        tint = StudioBlue,
+                        onClick = { selected = "language" }
+                    )
+                    GeneralDivider()
+                    GeneralMenuRow(
+                        icon = Icons.Filled.Business,
+                        title = "Profile & Workspace",
+                        subtitle = workspace?.name ?: "Workspace details",
+                        tint = StudioOrange,
+                        onClick = { selected = "profile" }
+                    )
+                    GeneralDivider()
+                    GeneralMenuRow(
+                        icon = Icons.Filled.PhotoLibrary,
+                        title = "Workspace Logo",
+                        subtitle = if (settings.appLogoUrl.isNotBlank()) "Logo uploaded" else "No logo uploaded",
+                        tint = StudioGreen,
+                        onClick = { selected = "logo" }
+                    )
+                    GeneralDivider()
+                    GeneralMenuRow(
+                        icon = Icons.Filled.Info,
+                        title = "About",
+                        subtitle = "NivaDesk 1.0.0",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        onClick = { selected = "about" }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeneralMenuRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color.Transparent,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            IconBubble(icon = icon, tint = tint, container = tint.copy(alpha = 0.12f), size = 38.dp)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun GeneralDivider() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    HorizontalDivider(modifier = Modifier.padding(start = 52.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+}
+
+@Composable
 private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     var statusExpanded by rememberSaveable { mutableStateOf(false) }
     var businessPrompt by rememberSaveable(settings.businessDescriptionPrompt) { mutableStateOf(settings.businessDescriptionPrompt) }
-    val statusPool = listOf("Not Yet", "In Progress", "Pending", "Ready", "Ready to Ship", "Done", "Cancelled", "Design", "Painting", "Shipped")
+    val statusPool = listOf("Not Yet", "In Progress", t("Pending"), "Ready", "Ready to Ship", "Done", t("Cancelled"), "Design", "Painting", "Shipped")
     DetailColumn {
-        DetailCard(title = "Business Type", icon = Icons.Filled.Business) {
+        DetailCard(title = t("Business Type"), icon = Icons.Filled.Business) {
             MenuField(
                 label = "Select Industry",
                 value = settings.businessType,
@@ -539,26 +744,26 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     "Handmade / General",
                     "Other / Prompt Based"
                 ),
-                onSelect = { onSave(mapOf("businessType" to it), "Business type saved.") }
+                onSelect = { onSave(mapOf("businessType" to it), t("Business type saved.")) }
             )
             Surface(shape = RoundedCornerShape(12.dp), color = StudioPurple.copy(alpha = 0.08f)) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = StudioPurple)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Smart Business Description", fontWeight = FontWeight.ExtraBold)
+                        Text(t("Smart Business Description"), fontWeight = FontWeight.ExtraBold)
                         Spacer(modifier = Modifier.weight(1f))
                         TextButton(onClick = {
                             businessPrompt = ""
-                            onSave(mapOf("businessDescriptionPrompt" to ""), "Business description cleared.")
-                        }) { Text("Clear") }
+                            onSave(mapOf("businessDescriptionPrompt" to ""), t("Business description cleared."))
+                        }) { Text(t("Clear")) }
                     }
                     Text("Describe what the business does, what information it needs from customers, how the work moves from enquiry to delivery, and whether materials, shipping, appointments, approvals or deposits are important.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = businessPrompt,
                         onValueChange = {
                             businessPrompt = it
-                            onSave(mapOf("businessDescriptionPrompt" to it), "Business description saved.")
+                            onSave(mapOf("businessDescriptionPrompt" to it), t("Business description saved."))
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -570,14 +775,14 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     ) {
                         Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Smart Customize", fontWeight = FontWeight.ExtraBold)
+                        Text(t("Smart Customize"), fontWeight = FontWeight.ExtraBold)
                     }
                 }
             }
             Button(onClick = { onSave(standardWorkflowTemplate(settings.businessType), "Standard template applied.") }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Settings, contentDescription = null)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Apply Standard Template", fontWeight = FontWeight.ExtraBold)
+                Text(t("Apply Standard Template"), fontWeight = FontWeight.ExtraBold)
             }
         }
         DetailCard(title = "Status Menu Options", icon = Icons.Filled.CheckCircle) {
@@ -621,7 +826,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                 onChange = { onSave(mapOf("customTogglesJSON" to titleArrayJson(it)), "Production toggles saved.") }
             )
             HorizontalDivider()
-            Text("Dashboard Highlights", fontWeight = FontWeight.ExtraBold)
+            Text(t("Dashboard Highlights"), fontWeight = FontWeight.ExtraBold)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 MenuChip(value = settings.summaryStep1, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
                     onSave(mapOf("summaryStep1" to it), "Dashboard highlights saved.")
@@ -630,7 +835,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     onSave(mapOf("summaryStep2" to it), "Dashboard highlights saved.")
                 }
             }
-            Text("Order List Badges", fontWeight = FontWeight.ExtraBold)
+            Text(t("Order List Badges"), fontWeight = FontWeight.ExtraBold)
             Text("Choose which two production statuses appear on the small order cards.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 MenuChip(value = settings.orderListStep1, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
@@ -670,6 +875,8 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
 
 @Composable
 private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     DetailColumn {
         DetailCard(title = "PDF Export Settings", icon = Icons.Filled.Description) {
@@ -691,7 +898,7 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
             HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Company invoice numbers", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Company invoice numbers"), fontWeight = FontWeight.ExtraBold)
                     Text("VAT, EORI, company number or any reference you want to show on PDF invoices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = {
@@ -721,6 +928,8 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
 
 @Composable
 private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     var apiKey by rememberSaveable(settings.openAIKey) { mutableStateOf(settings.openAIKey) }
     var knowledge by rememberSaveable(settings.aiKnowledgeBase) { mutableStateOf(settings.aiKnowledgeBase) }
@@ -737,8 +946,8 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
         )
     }
     DetailColumn {
-        DetailCard(title = "Quick Reply Settings", icon = Icons.Outlined.AutoAwesome) {
-            Text("Reply Engine", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        DetailCard(title = t("Quick Reply Settings"), icon = Icons.Outlined.AutoAwesome) {
+            Text(t("Reply Engine"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
             SegmentedRow(listOf("Apple On-Device", "OpenAI Online", "Offline Template"), engineLabel(settings.replyMode)) {
                 val mode = when (it) {
                     "Apple On-Device" -> "Apple"
@@ -750,12 +959,12 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
             Text(engineDescription(settings.replyMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Default Reply Style", fontWeight = FontWeight.ExtraBold)
-                    Text("Politeness", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                    SegmentedRow(listOf("Direct", "Warm", "Very Polite"), settings.quickReplyPoliteness) {
+                    Text(t("Default Reply Style"), fontWeight = FontWeight.ExtraBold)
+                    Text(t("Politeness"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    SegmentedRow(listOf("Direct", "Warm", t("Very Polite")), settings.quickReplyPoliteness) {
                         onSave(mapOf("quickReplyPoliteness" to it), "Reply style saved.")
                     }
-                    Text("Length", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    Text(t("Length"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                     SegmentedRow(listOf("Short", "Balanced", "Detailed"), settings.quickReplyLength) {
                         onSave(mapOf("quickReplyLength" to it), "Reply style saved.")
                     }
@@ -768,7 +977,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     apiKey = it
                     onSave(mapOf("openAIKey" to it), "OpenAI key saved.")
                 },
-                label = { Text("OpenAI API Key") },
+                label = { Text(t("OpenAI API Key")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation()
@@ -780,7 +989,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     knowledge = it
                     onSave(mapOf("aiKnowledgeBase" to it), "Knowledge base saved.")
                 },
-                label = { Text("Company Knowledge Base (For OpenAI)") },
+                label = { Text(t("Company Knowledge Base (For OpenAI)")) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
@@ -788,7 +997,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
             HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Offline Template", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Offline Template"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     Text(
                         "Products, services and custom rules sync with Mac, iPhone and web, then feed the offline reply engine.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -852,7 +1061,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Reset Defaults", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Reset Defaults"), fontWeight = FontWeight.ExtraBold)
                 }
                 Button(
                     onClick = { saveTemplates() },
@@ -876,6 +1085,8 @@ private fun QuickReplyTemplateEditor(
     onItemsChange: (List<QuickReplyTemplateItem>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -909,7 +1120,7 @@ private fun QuickReplyTemplateEditor(
                                         if (index in list.indices) list[index] = item.copy(title = next)
                                     })
                                 },
-                                label = { Text("Title") },
+                                label = { Text(t("Title")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -935,7 +1146,7 @@ private fun QuickReplyTemplateEditor(
                                     if (index in list.indices) list[index] = item.copy(desc = next)
                                 })
                             },
-                            label = { Text("Description / answer") },
+                            label = { Text(t("Description / answer")) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(96.dp)
@@ -953,6 +1164,8 @@ private fun FinancialSettingsDetail(
     onSave: (Map<String, Any?>, String) -> Unit,
     onRecalculate: (Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     var selectedCurrency by rememberSaveable(settings.selectedCurrency) { mutableStateOf(settings.selectedCurrency) }
     var selectedDecimalSeparator by rememberSaveable(settings.selectedDecimalSeparator) { mutableStateOf(settings.selectedDecimalSeparator) }
@@ -981,7 +1194,7 @@ private fun FinancialSettingsDetail(
             "taxMilestoneDate" to settingsDateSeconds(taxMilestoneDate, settings.taxMilestoneDate),
             "financialShowBaseCost" to financialShowBaseCost,
             "financialBaseCostLabel" to financialBaseCostLabel.trim().ifBlank { "Cost (Base)" },
-            "financialRemainingItemsJSON" to genericHeadingItemsJson(financialRemainingItems.filter { isUsableFinancialTitle(it.title, "Pending") }),
+            "financialRemainingItemsJSON" to genericHeadingItemsJson(financialRemainingItems.filter { isUsableFinancialTitle(it.title, t("Pending")) }),
             "financialExpenseItemsJSON" to genericHeadingItemsJson(financialExpenseItems.filter { isUsableFinancialTitle(it.title, "Cost") })
         )
     }
@@ -996,7 +1209,7 @@ private fun FinancialSettingsDetail(
                 onSelect = { selectedCurrency = it }
             )
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Decimal Separator", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                Text(t("Decimal Separator"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                 SegmentedRow(
                     modifier = Modifier.fillMaxWidth(),
                     options = listOf("Dot (.)", "Comma (,)"),
@@ -1016,7 +1229,7 @@ private fun FinancialSettingsDetail(
             OutlinedTextField(
                 value = taxRuleNameRevenue,
                 onValueChange = { taxRuleNameRevenue = it },
-                label = { Text("Rule 1 (Revenue)") },
+                label = { Text(t("Rule 1 (Revenue)")) },
                 enabled = !state.settingsSaving,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -1024,31 +1237,31 @@ private fun FinancialSettingsDetail(
             OutlinedTextField(
                 value = taxRuleNameProfit,
                 onValueChange = { taxRuleNameProfit = it },
-                label = { Text("Rule 2 (Profit)") },
+                label = { Text(t("Rule 2 (Profit)")) },
                 enabled = !state.settingsSaving,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
             PercentTextField(
-                label = "Default Tax Rate (%)",
+                label = t("Default Tax Rate (%)"),
                 value = defaultTaxRate,
                 enabled = !state.settingsSaving,
                 onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) }
             )
             MenuField(
-                label = "Calculate Tax On",
+                label = t("Calculate Tax On"),
                 value = if (taxCalculationType == "Profit") taxRuleNameProfit.ifBlank { "Profit" } else taxRuleNameRevenue.ifBlank { "Revenue" },
                 options = listOf(taxRuleNameRevenue.ifBlank { "Revenue" }, taxRuleNameProfit.ifBlank { "Profit" }),
                 onSelect = { selected ->
                     taxCalculationType = if (selected == taxRuleNameProfit.ifBlank { "Profit" }) "Profit" else "Revenue"
                 }
             )
-            SettingSwitch("Use Tax Transition Date", taxMilestoneEnabled) { taxMilestoneEnabled = it }
+            SettingSwitch(t("Use Tax Transition Date"), taxMilestoneEnabled) { taxMilestoneEnabled = it }
             if (taxMilestoneEnabled) {
                 OutlinedTextField(
                     value = taxMilestoneDate,
                     onValueChange = { taxMilestoneDate = it.take(10) },
-                    label = { Text("VAT Registration Date") },
+                    label = { Text(t("VAT Registration Date")) },
                     placeholder = { Text("YYYY-MM-DD") },
                     enabled = !state.settingsSaving,
                     modifier = Modifier.fillMaxWidth(),
@@ -1061,7 +1274,7 @@ private fun FinancialSettingsDetail(
             OutlinedTextField(
                 value = financialBaseCostLabel,
                 onValueChange = { financialBaseCostLabel = it },
-                label = { Text("Base Cost Label") },
+                label = { Text(t("Base Cost Label")) },
                 enabled = !state.settingsSaving,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -1072,7 +1285,7 @@ private fun FinancialSettingsDetail(
                 values = financialRemainingItems,
                 normalizeValues = ::normalizeHeadingItems,
                 itemLabel = "Pending row",
-                onChange = { financialRemainingItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, "Pending") } }
+                onChange = { financialRemainingItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, t("Pending")) } }
             )
             EditableHeadingItemList(
                 title = "Extra Cost Rows",
@@ -1103,7 +1316,7 @@ private fun FinancialSettingsDetail(
                     colors = ButtonDefaults.buttonColors(containerColor = StudioOrange),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Recalculate Taxes", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Recalculate Taxes"), fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
@@ -1112,6 +1325,8 @@ private fun FinancialSettingsDetail(
 
 @Composable
 private fun SettingsSectionTitle(title: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, fontWeight = FontWeight.ExtraBold)
         HorizontalDivider(modifier = Modifier.weight(1f))
@@ -1120,6 +1335,8 @@ private fun SettingsSectionTitle(title: String) {
 
 @Composable
 private fun PercentTextField(label: String, value: String, enabled: Boolean, onValueChange: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
         OutlinedTextField(
@@ -1168,24 +1385,26 @@ private fun settingsDateSeconds(value: String, fallback: Double): Double {
 
 @Composable
 private fun WooCommerceDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
     val deliveryUrl = "https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook?companyId=$companyId"
     DetailColumn {
         DetailCard(title = "Connect WooCommerce", icon = Icons.Filled.ShoppingCart) {
             Text("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("This setup only needs to be done once in WooCommerce.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("This setup only needs to be done once in WooCommerce."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DetailCard(title = "Copy Setup Details", icon = Icons.Filled.ContentCopy) {
-            CopyableValue("Your Company ID", companyId, "Copy Company ID")
+            CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
             CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
         }
-        DetailCard(title = "What you need to do", icon = Icons.Filled.CheckCircle) {
+        DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
             StepRow("1", "Open WooCommerce webhooks", "In WordPress, open WooCommerce > Settings > Advanced > Webhooks.")
             StepRow("2", "Create a new webhook", "Create a new webhook for NivaDesk orders.")
             StepRow("3", "Set it active", "Set Status to Active and Topic to Order created.")
             StepRow("4", "Paste the Delivery URL", "Paste the copied Delivery URL, save the webhook, then place a test order.")
         }
-        DetailCard(title = "What happens when it is active", icon = Icons.Filled.CheckCircle) {
+        DetailCard(title = t("What happens when it is active"), icon = Icons.Filled.CheckCircle) {
             Text("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -1193,6 +1412,8 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
 
 @Composable
 private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     var deviceAccepted by rememberSaveable { mutableStateOf(true) }
     DetailColumn {
@@ -1201,21 +1422,21 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
             SettingSwitch("Require upload policy acceptance before upload", settings.uploadSafetyRequirePolicyAcceptance) {
                 onSave(
                     mapOf("uploadSafetyRequirePolicyAcceptanceV1" to it, "uploadSafetyRequirePolicyAcceptance" to it),
-                    "Upload safety saved."
+                    t("Upload safety saved.")
                 )
             }
-            SettingSwitch("This device has accepted the upload policy", deviceAccepted) { deviceAccepted = it }
+            SettingSwitch(t("This device has accepted the upload policy"), deviceAccepted) { deviceAccepted = it }
             StepperRow(
                 label = "Maximum upload size",
                 value = settings.uploadSafetyMaxFileSizeMB,
                 suffix = "MB",
                 onMinus = {
                     val next = (settings.uploadSafetyMaxFileSizeMB - 1).coerceAtLeast(1)
-                    onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), "Upload limit saved.")
+                    onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), t("Upload limit saved."))
                 },
                 onPlus = {
                     val next = (settings.uploadSafetyMaxFileSizeMB + 1).coerceAtMost(50)
-                    onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), "Upload limit saved.")
+                    onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), t("Upload limit saved."))
                 }
             )
             Text("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1223,7 +1444,7 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Security, contentDescription = null, tint = StudioGreen)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (deviceAccepted) "Upload policy is accepted on this device." else "The first upload will ask the user to accept the upload policy.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    Text(if (deviceAccepted) t("Upload policy is accepted on this device.") else "The first upload will ask the user to accept the upload policy.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1242,6 +1463,8 @@ private fun DataManagementDetail(
     onImportBackup: (String) -> Unit,
     onDeleteWorkspaceData: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
@@ -1259,7 +1482,7 @@ private fun DataManagementDetail(
 
     DetailColumn {
         DetailCard(title = "Data Management", icon = Icons.Filled.Storage) {
-            Text("Create a backup before importing or deleting data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Create a backup before importing or deleting data."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             ActionButton("Export Backup", Icons.Filled.Backup, StudioBlue) {
                 shareText(context, "StudioManager_Backup.json", backupJson(state.orders, state.workspaceSettings))
             }
@@ -1278,7 +1501,7 @@ private fun DataManagementDetail(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete all data?") },
+            title = { Text(t("Delete all data?")) },
             text = { Text("All orders and customers in this workspace will be permanently deleted. Export a backup first if you are unsure.") },
             confirmButton = {
                 Button(
@@ -1287,9 +1510,9 @@ private fun DataManagementDetail(
                         onDeleteWorkspaceData()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
-                ) { Text("Yes, Delete All") }
+                ) { Text(t(t("Yes, Delete All"))) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(t("Cancel")) } }
         )
     }
 }
@@ -1306,8 +1529,14 @@ private fun AccountDetail(
     onRemoveWorkspaceLogo: () -> Unit,
     onChangeAccountEmail: (String) -> Unit,
     onSendPasswordResetEmail: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    includeHeader: Boolean = true,
+    includeProfile: Boolean = true,
+    includeLogo: Boolean = true,
+    includeSecurity: Boolean = true
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val workspace = state.workspace
@@ -1347,38 +1576,47 @@ private fun AccountDetail(
     val canEditLogo = workspace?.role in setOf("owner", "admin")
 
     DetailColumn {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp
-        ) {
-            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 64)
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text("Account", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Manage your NivaDesk profile, company details and sign-in security.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (includeHeader) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp
+            ) {
+                Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 64)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(if (includeProfile || includeLogo) "Account" else "Sign-in & Security", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            if (includeProfile || includeLogo) {
+                                "Manage your NivaDesk profile, company details and sign-in security."
+                            } else {
+                                "Manage local device unlock, password reset and sign out."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
-        DetailCard(title = "Profile & Company", icon = Icons.Filled.Business) {
+        if (includeProfile) DetailCard(title = "Profile & Company", icon = Icons.Filled.Business) {
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 86)
-                    Text("Profile Photo", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Profile Photo"), fontWeight = FontWeight.ExtraBold)
                     Text("Your profile photo is shown to team members in this workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = { avatarLauncher.launch("image/*") }, enabled = !state.settingsSaving) {
                             Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (accountPhotoSet) "Change Avatar" else "Upload Avatar")
+                            Text(if (accountPhotoSet) "Change Avatar" else t("Upload Avatar"))
                         }
                         if (accountPhotoSet) {
                             TextButton(onClick = onRemoveAccountAvatar, enabled = !state.settingsSaving) {
                                 Icon(Icons.Filled.Delete, contentDescription = null, tint = DangerRed)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Remove Avatar", color = DangerRed)
+                                Text(t("Remove Avatar"), color = DangerRed)
                             }
                         }
                     }
@@ -1386,34 +1624,34 @@ private fun AccountDetail(
                     Button(onClick = {}, enabled = false) {
                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Use Google Photo")
+                        Text(t(t("Use Google Photo")))
                     }
                 }
             }
-            OutlinedTextField(value = emailDraft, onValueChange = { emailDraft = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = emailDraft, onValueChange = { emailDraft = it }, label = { Text(t("Email")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             TextButton(onClick = { onChangeAccountEmail(emailDraft) }, enabled = emailDraft.trim().lowercase() != user?.email.orEmpty().trim().lowercase()) {
                 Icon(Icons.Filled.Email, contentDescription = null)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Change Email")
+                Text(t("Change Email"))
             }
             Text("After changing your sign-in email, you can change it again after 10 days.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Your Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text("Company / Studio Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text(t("Your Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(t("Company / Studio Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
-            CopyableValue("User ID", user?.uid.orEmpty(), "Copy")
+            CopyableValue(t("User ID"), user?.uid.orEmpty(), "Copy")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextButton(onClick = { onUpdateAccountProfile(displayName, companyName) }) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Save Profile")
+                    Text(t("Save Profile"))
                 }
                 TextButton(onClick = {
                     displayName = workspace?.accountDisplayName.orEmpty()
                     companyName = workspace?.name ?: "NivaDesk"
-                }) { Text("Reset") }
+                }) { Text(t("Reset")) }
             }
         }
-        DetailCard(title = "Workspace Logo", icon = Icons.Filled.PhotoLibrary) {
+        if (includeLogo) DetailCard(title = "Workspace Logo", icon = Icons.Filled.PhotoLibrary) {
             Text("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 WorkspaceLogoPreview(
@@ -1425,28 +1663,28 @@ private fun AccountDetail(
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }
-            Text("Workspace Logo", fontWeight = FontWeight.ExtraBold)
+            Text(t("Workspace Logo"), fontWeight = FontWeight.ExtraBold)
             Text(if (logoSet) "This logo is used in the app header on Mac, iPad, iPhone and Android." else "No logo uploaded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = { logoLauncher.launch("image/*") }, enabled = !state.settingsSaving && canEditLogo) {
                     Icon(Icons.Filled.Upload, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (logoSet) "Replace Logo" else "Upload Logo")
+                    Text(if (logoSet) "Replace Logo" else t("Upload Logo"))
                 }
                 if (logoSet) {
                     TextButton(onClick = onRemoveWorkspaceLogo, enabled = !state.settingsSaving && canEditLogo) {
                         Icon(Icons.Filled.Delete, contentDescription = null, tint = DangerRed)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Remove Logo", color = DangerRed)
+                        Text(t("Remove Logo"), color = DangerRed)
                     }
                 }
             }
             if (!canEditLogo) {
-                Text("Your current workspace role cannot edit Workspace Logo.", color = DangerRed, fontWeight = FontWeight.Bold)
+                Text(t("Your current workspace role cannot edit Workspace Logo."), color = DangerRed, fontWeight = FontWeight.Bold)
             }
             Text("Logo uploads use the same upload safety rules and plan checks as the web and Apple apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DetailCard(title = "Security", icon = Icons.Filled.Lock) {
+        if (includeSecurity) DetailCard(title = "Security", icon = Icons.Filled.Lock) {
             SecurityStatusPanel(requireDeviceUnlock)
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1462,12 +1700,12 @@ private fun AccountDetail(
                         OutlinedButton(onClick = onSendPasswordResetEmail, enabled = !state.settingsSaving, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Filled.Email, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Send Password Reset Email", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(t("Send Password Reset Email"), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         TextButton(onClick = onSignOut, modifier = Modifier.weight(1f)) {
                             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Sign Out", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(t(t("Sign Out")), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 } else {
@@ -1475,12 +1713,12 @@ private fun AccountDetail(
                         OutlinedButton(onClick = onSendPasswordResetEmail, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Email, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Send Password Reset Email")
+                            Text(t("Send Password Reset Email"))
                         }
                         TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Sign Out")
+                            Text(t(t("Sign Out")))
                         }
                     }
                 }
@@ -1491,7 +1729,7 @@ private fun AccountDetail(
     if (pendingLogo != null) {
         AlertDialog(
             onDismissRequest = { pendingLogo = null },
-            title = { Text("Upload Policy") },
+            title = { Text(t(t("Upload Policy"))) },
             text = { Text("Only upload legal, safe and work-related images that belong in this workspace.") },
             confirmButton = {
                 Button(onClick = {
@@ -1499,9 +1737,9 @@ private fun AccountDetail(
                     pendingLogo = null
                     logoPolicyAccepted = true
                     onUploadWorkspaceLogo(upload.bytes, upload.contentType, true)
-                }) { Text("I Agree and Upload") }
+                }) { Text(t("I Agree and Upload")) }
             },
-            dismissButton = { TextButton(onClick = { pendingLogo = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { pendingLogo = null }) { Text(t("Cancel")) } }
         )
     }
 }
@@ -1511,6 +1749,8 @@ private fun PlanAccessDetail(
     state: StudioFlowUiState,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspace = state.workspace
     val plan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
     DetailColumn {
@@ -1530,16 +1770,16 @@ private fun PlanAccessDetail(
                     }
                 }
             }
-            StoreProductCard("NivaDesk Lite", "uk.co.eggcraft.studioflow.lite.lifetime", "Buy once")
+            StoreProductCard("NivaDesk Lite", "uk.co.eggcraft.studioflow.lite.lifetime", t("Buy once"))
             StoreProductCard("NivaDesk Pro", "uk.co.eggcraft.studioflow.pro.monthly", "Subscribe")
             StoreProductCard("NivaDesk Team", "uk.co.eggcraft.studioflow.team.monthly", "Subscribe")
         }
         DetailCard(title = "Available now", icon = Icons.Filled.CheckCircle) {
-            Text("Current plan access", fontWeight = FontWeight.ExtraBold)
+            Text(t("Current plan access"), fontWeight = FontWeight.ExtraBold)
             PlanFeatureGrid(plan = plan)
         }
         DetailCard(title = "Plan Matrix", icon = Icons.Filled.TableChart) {
-            Text("Shared app and web plan keys", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Shared app and web plan keys"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val columns = if (maxWidth >= 760.dp) 2 else 1
                 LazyVerticalGrid(
@@ -1559,7 +1799,7 @@ private fun PlanAccessDetail(
         }
         DetailCard(title = "Owner testing controls", icon = Icons.Filled.Security) {
             if (workspace?.isOwner == true) {
-                Text("Temporary manual plan switch", fontWeight = FontWeight.ExtraBold)
+                Text(t("Temporary manual plan switch"), fontWeight = FontWeight.ExtraBold)
                 Text("Plan comparison is shown for testing now. StoreKit and Google Play purchases will replace manual switching later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val columns = if (maxWidth >= 700.dp) 2 else 1
@@ -1583,7 +1823,7 @@ private fun PlanAccessDetail(
                     }
                 }
             } else {
-                Text("Only the workspace owner can manage the plan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Only the workspace owner can manage the plan."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1601,6 +1841,8 @@ private fun TeamAccessDetail(
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspace = state.workspace
     var requestIdentifier by rememberSaveable { mutableStateOf("") }
     var requestRoles by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -1622,8 +1864,8 @@ private fun TeamAccessDetail(
                 IconBubble(icon = Icons.Filled.People, tint = StudioBlue, container = StudioBlue.copy(alpha = 0.12f), size = 64.dp)
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Team Access", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Manage workspace members, roles and join requests.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("Team Access"), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Manage workspace members, roles and join requests."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -1639,7 +1881,7 @@ private fun TeamAccessDetail(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(workspace?.name ?: "NivaDesk", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Pill(workspace?.roleLabel ?: "Owner", StudioOrange)
+                                        Pill(workspace?.roleLabel ?: t("Owner"), StudioOrange)
                                         Text(if (workspace?.isOwner == true) "You own this workspace" else "Shared with you", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
@@ -1652,7 +1894,7 @@ private fun TeamAccessDetail(
                                 OutlinedTextField(
                                     value = requestIdentifier,
                                     onValueChange = { requestIdentifier = it },
-                                    placeholder = { Text("Owner email or Company ID") },
+                                    placeholder = { Text(t("Owner email or Company ID")) },
                                     modifier = Modifier.weight(1f),
                                     singleLine = true
                                 )
@@ -1662,7 +1904,7 @@ private fun TeamAccessDetail(
                                 }) {
                                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Send")
+                                    Text(t("Send"))
                                 }
                             }
                         }
@@ -1675,15 +1917,15 @@ private fun TeamAccessDetail(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(workspace?.name ?: "NivaDesk", fontWeight = FontWeight.ExtraBold)
-                                        Text(workspace?.roleLabel ?: "Owner", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(workspace?.roleLabel ?: t("Owner"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Pill("Current", StudioGreen)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Pill("Connected", MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Pill(t("Connected"), MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Advanced: connect with Company ID", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                                Text(t("Advanced: connect with Company ID"), color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                                 Spacer(modifier = Modifier.weight(1f))
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                             }
@@ -1699,7 +1941,7 @@ private fun TeamAccessDetail(
                     DetailCard(title = "Current Workspace", icon = Icons.Filled.People) {
                         Text(workspace?.name ?: "NivaDesk", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Pill(workspace?.roleLabel ?: "Owner", StudioOrange)
+                            Pill(workspace?.roleLabel ?: t("Owner"), StudioOrange)
                             Text(if (workspace?.isOwner == true) "You own this workspace" else "Shared with you", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
@@ -1710,11 +1952,11 @@ private fun TeamAccessDetail(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(workspace?.name ?: "NivaDesk", fontWeight = FontWeight.ExtraBold)
-                                Text(workspace?.roleLabel ?: "Owner", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(workspace?.roleLabel ?: t("Owner"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Pill("Current", StudioGreen)
                         }
-                        Text("Advanced: connect with Company ID", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                        Text(t("Advanced: connect with Company ID"), color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                     }
                     DetailCard(title = "Request Access", icon = Icons.AutoMirrored.Filled.Send) {
                         Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1722,7 +1964,7 @@ private fun TeamAccessDetail(
                             OutlinedTextField(
                                 value = requestIdentifier,
                                 onValueChange = { requestIdentifier = it },
-                                placeholder = { Text("Owner email or Company ID") },
+                                placeholder = { Text(t("Owner email or Company ID")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -1732,7 +1974,7 @@ private fun TeamAccessDetail(
                             }) {
                                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Send")
+                                Text(t("Send"))
                             }
                         }
                     }
@@ -1746,7 +1988,7 @@ private fun TeamAccessDetail(
         if (ownerCanManage) {
             DetailCard(title = "Join Requests", icon = Icons.Filled.Person) {
                 if (state.joinRequests.isEmpty()) {
-                    Text("No pending join requests.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("No pending join requests."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     state.joinRequests.forEach { request ->
                         Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -1758,7 +2000,7 @@ private fun TeamAccessDetail(
                                         Text(request.label, fontWeight = FontWeight.ExtraBold)
                                         Text(request.requesterEmail.ifBlank { request.requesterUid }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Pill("Pending", StudioOrange)
+                                    Pill(t("Pending"), StudioOrange)
                                 }
                                 val selectedRole = requestRoles[request.id] ?: "member"
                                 RoleDropdown(
@@ -1773,13 +2015,13 @@ private fun TeamAccessDetail(
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("Approve", fontWeight = FontWeight.ExtraBold)
+                                        Text(t("Approve"), fontWeight = FontWeight.ExtraBold)
                                     }
                                     TextButton(
                                         onClick = { onDeclineJoinRequest(request) },
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Text("Decline", color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                                        Text(t("Decline"), color = DangerRed, fontWeight = FontWeight.ExtraBold)
                                     }
                                 }
                             }
@@ -1788,21 +2030,21 @@ private fun TeamAccessDetail(
                 }
             }
             DetailCard(title = "Role Profiles", icon = Icons.Filled.Security) {
-                Text("Custom Access Roles", fontWeight = FontWeight.ExtraBold)
+                Text(t("Custom Access Roles"), fontWeight = FontWeight.ExtraBold)
                 Text("Create role presets that use the same permission keys as Mac and web.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(
                             value = customRoleName,
                             onValueChange = { customRoleName = it },
-                            label = { Text("Role name") },
+                            label = { Text(t("Role name")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         RoleDropdown(
                             label = "Base role",
                             selectedRole = customRoleBase,
-                            options = listOf(RoleOption("member", "Member"), RoleOption("viewer", "View Only"), RoleOption("workflow", "Workflow Only")),
+                            options = listOf(RoleOption("member", "Member"), RoleOption("viewer", t("View Only")), RoleOption("workflow", t("Workflow Only"))),
                             onSelect = { customRoleBase = it }
                         )
                         AccessEditor(access = customRoleAccess, onChange = { customRoleAccess = it })
@@ -1819,7 +2061,7 @@ private fun TeamAccessDetail(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text(if (customRoleId.isBlank()) "Save Role" else "Update Role", fontWeight = FontWeight.ExtraBold)
+                                Text(if (customRoleId.isBlank()) "Save Role" else t("Update Role"), fontWeight = FontWeight.ExtraBold)
                             }
                             TextButton(
                                 onClick = {
@@ -1830,13 +2072,13 @@ private fun TeamAccessDetail(
                                 },
                                 modifier = Modifier.weight(0.7f)
                             ) {
-                                Text("Reset", fontWeight = FontWeight.ExtraBold)
+                                Text(t("Reset"), fontWeight = FontWeight.ExtraBold)
                             }
                         }
                     }
                 }
                 if (state.customRoles.isEmpty()) {
-                    Text("No custom roles yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("No custom roles yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     state.customRoles.forEach { role ->
                         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -1851,10 +2093,10 @@ private fun TeamAccessDetail(
                                     customRoleBase = role.baseRole
                                     customRoleAccess = role.access
                                 }) {
-                                    Text("Edit", fontWeight = FontWeight.ExtraBold)
+                                    Text(t("Edit"), fontWeight = FontWeight.ExtraBold)
                                 }
                                 TextButton(onClick = { onDeleteCustomRole(role) }) {
-                                    Text("Delete", color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                                    Text(t("Delete"), color = DangerRed, fontWeight = FontWeight.ExtraBold)
                                 }
                             }
                         }
@@ -1863,7 +2105,7 @@ private fun TeamAccessDetail(
             }
         }
         if (state.teamMembers.isNotEmpty()) {
-            DetailCard(title = "Team Members", icon = Icons.Filled.People) {
+            DetailCard(title = t("Team Members"), icon = Icons.Filled.People) {
                 state.teamMembers.forEach { member ->
                     Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1874,7 +2116,7 @@ private fun TeamAccessDetail(
                                     Text(member.label, fontWeight = FontWeight.ExtraBold)
                                     Text(member.email.ifBlank { member.id }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Pill(if (member.isOwner) "Owner" else member.roleLabel, if (member.isOwner) StudioOrange else StudioBlue)
+                                Pill(if (member.isOwner) t("Owner") else member.roleLabel, if (member.isOwner) StudioOrange else StudioBlue)
                             }
                             if (ownerCanManage && !member.isOwner) {
                                 RoleDropdown(
@@ -1888,13 +2130,13 @@ private fun TeamAccessDetail(
                                         onClick = { editingMemberId = if (editingMemberId == member.id) "" else member.id },
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Text(if (editingMemberId == member.id) "Hide Permissions" else "Permissions", fontWeight = FontWeight.ExtraBold)
+                                        Text(if (editingMemberId == member.id) "Hide Permissions" else t("Permissions"), fontWeight = FontWeight.ExtraBold)
                                     }
                                     TextButton(
                                         onClick = { onRemoveTeamMember(member) },
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Text("Remove", color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                                        Text(t("Remove"), color = DangerRed, fontWeight = FontWeight.ExtraBold)
                                     }
                                 }
                                 if (editingMemberId == member.id) {
@@ -1907,7 +2149,7 @@ private fun TeamAccessDetail(
             }
         }
         DetailCard(title = "Current role mix", icon = Icons.Filled.People) {
-            Text("Role counts", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text(t("Role counts"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             RoleMix(state)
         }
     }
@@ -1938,6 +2180,8 @@ private fun roleLabelText(role: String): String {
 
 @Composable
 private fun RoleDropdown(label: String, selectedRole: String, options: List<RoleOption>, onSelect: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val selectedLabel = options.firstOrNull { it.value == selectedRole }?.label ?: roleLabelText(selectedRole)
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
@@ -1953,13 +2197,15 @@ private fun RoleDropdown(label: String, selectedRole: String, options: List<Role
 
 @Composable
 private fun MemberAccessPanel(member: StudioTeamMember, onSave: (WorkspaceMemberAccess) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var draft by remember(member.id, member.access) { mutableStateOf(member.access) }
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Role Permissions", fontWeight = FontWeight.ExtraBold)
+            Text(t("Role Permissions"), fontWeight = FontWeight.ExtraBold)
             AccessEditor(access = draft, onChange = { draft = it })
             Button(onClick = { onSave(draft) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                Text("Save Permissions", fontWeight = FontWeight.ExtraBold)
+                Text(t("Save Permissions"), fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -1967,6 +2213,8 @@ private fun MemberAccessPanel(member: StudioTeamMember, onSave: (WorkspaceMember
 
 @Composable
 private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemberAccess) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AccessSectionBlock(
             title = "Navigation & Menus",
@@ -1976,12 +2224,12 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
                 AccessOption("orders", "Orders"),
                 AccessOption("schedule", "Schedule"),
                 AccessOption("customers", "Customers"),
-                AccessOption("quickReply", "Quick Reply"),
+                AccessOption("quickReply", t("Quick Reply")),
                 AccessOption("settings", "Settings"),
                 AccessOption("teamAccess", "Team Access"),
                 AccessOption("clientFiles", "Client Files"),
                 AccessOption("financialInfo", "Financial Info"),
-                AccessOption("exportData", "Export Data")
+                AccessOption("exportData", t("Export Data"))
             ),
             access = access,
             accent = StudioBlue,
@@ -2009,7 +2257,7 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
                 AccessOption("cardCustomer", "Customer & Communication"),
                 AccessOption("cardMaterials", "Materials & Inventory"),
                 AccessOption("cardPriority", "Priority / Risk"),
-                AccessOption("cardDelivery", "Timeline & Delivery"),
+                AccessOption("cardDelivery", t("Timeline & Delivery")),
                 AccessOption("cardNotes", "Notes"),
                 AccessOption("cardClientFiles", "Client Files"),
                 AccessOption("cardTodo", "To Do"),
@@ -2036,6 +2284,8 @@ private fun AccessSectionBlock(
     accent: Color,
     onChange: (WorkspaceMemberAccess) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val enabledCount = options.count { access.allows(it.key) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.Top) {
@@ -2137,11 +2387,13 @@ private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): Work
 
 @Composable
 private fun SupportTicketsDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspace = state.workspace
     if (workspace == null) {
         DetailColumn {
             DetailCard("Support / Tickets", Icons.Filled.Email) {
-                Text("Sign in and select a workspace to use support tickets.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Sign in and select a workspace to use support tickets."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         return
@@ -2305,14 +2557,14 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
             OutlinedTextField(
                 value = subject,
                 onValueChange = { subject = it },
-                label = { Text("Subject") },
+                label = { Text(t("Subject")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
             OutlinedTextField(
                 value = message,
                 onValueChange = { message = it },
-                label = { Text("Message") },
+                label = { Text(t("Message")) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 4
             )
@@ -2357,7 +2609,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                     Text(if (sending) "Sending..." else "Send Ticket", fontWeight = FontWeight.ExtraBold)
                 }
                 OutlinedButton(onClick = { refreshKey += 1 }, shape = RoundedCornerShape(10.dp)) {
-                    Text("Refresh")
+                    Text(t(t("Refresh")))
                 }
             }
 
@@ -2377,7 +2629,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 Pill("Loading tickets...", StudioBlue)
             }
             if (tickets.isEmpty() && !loading) {
-                Text("No tickets yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("No tickets yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             tickets.forEach { ticket ->
                 val isUnread = if (ticket.isWorkspaceTicket) {
@@ -2457,6 +2709,8 @@ private fun SupportTicketTypeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -2494,6 +2748,8 @@ private fun SupportFormFieldMenus(
     priorities: List<String>,
     onPriority: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val narrow = maxWidth < 560.dp
         if (narrow) {
@@ -2518,6 +2774,8 @@ private fun SupportMenuField(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
         MenuChip(
@@ -2543,6 +2801,8 @@ private fun SupportTicketCard(
     onReplyTextChange: (String) -> Unit,
     onSendReply: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -2628,7 +2888,7 @@ private fun SupportTicketCard(
                     OutlinedTextField(
                         value = replyText,
                         onValueChange = onReplyTextChange,
-                        label = { Text("Reply") },
+                        label = { Text(t("Reply")) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3
                     )
@@ -2640,7 +2900,7 @@ private fun SupportTicketCard(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Send Reply", fontWeight = FontWeight.ExtraBold)
+                        Text(t("Send Reply"), fontWeight = FontWeight.ExtraBold)
                     }
                 }
             }
@@ -2650,6 +2910,8 @@ private fun SupportTicketCard(
 
 @Composable
 private fun SupportMessageBubble(message: StudioSupportTicketMessage) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface
@@ -2666,9 +2928,11 @@ private fun SupportMessageBubble(message: StudioSupportTicketMessage) {
 
 @Composable
 private fun SupportUnreadBadge(count: Int? = null) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(999.dp), color = DangerRed.copy(alpha = 0.18f)) {
         Text(
-            text = count?.coerceAtMost(99)?.toString() ?: "New",
+            text = count?.coerceAtMost(99)?.toString() ?: t("New"),
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             color = DangerRed,
             fontWeight = FontWeight.ExtraBold,
@@ -2679,11 +2943,15 @@ private fun SupportUnreadBadge(count: Int? = null) {
 
 @Composable
 private fun SupportStatusPill(status: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     SupportSmallPill(supportStatusLabel(status), supportStatusColor(status))
 }
 
 @Composable
 private fun SupportSmallPill(label: String, color: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(999.dp), color = color.copy(alpha = 0.14f)) {
         Text(label, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = color, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
     }
@@ -2746,6 +3014,8 @@ private fun supportDateText(value: Date?): String {
 
 @Composable
 private fun AboutDetail() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailColumn {
         DetailCard(title = "About", icon = Icons.Filled.Info) {
             NivaDeskLogoLockup(
@@ -2754,7 +3024,7 @@ private fun AboutDetail() {
                     .height(72.dp)
             )
             Text("Version 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("An EGGcraft brand for studio workspace management.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("An EGGcraft brand for studio workspace management."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
             Text("(c) 2026 All rights reserved.", fontWeight = FontWeight.ExtraBold)
             Text("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2764,6 +3034,8 @@ private fun AboutDetail() {
 
 @Composable
 private fun NivaDeskLogoLockup(modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Image(
         painter = painterResource(id = R.drawable.nivadesk_logo_lockup),
         contentDescription = "NivaDesk",
@@ -2779,6 +3051,8 @@ private fun WorkspaceLogoPreview(
     workspaceName: String,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val cleanLogoUrl = logoUrl.trim()
     var bitmap by remember(cleanLogoUrl) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -2815,6 +3089,8 @@ private fun WorkspaceLogoNameFallback(
     workspaceName: String,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -2839,6 +3115,8 @@ private fun WorkspaceLogoNameFallback(
 
 @Composable
 private fun DetailColumn(content: @Composable ColumnScope.() -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
         modifier = Modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -2848,6 +3126,8 @@ private fun DetailColumn(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun DetailCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -2867,6 +3147,8 @@ private fun DetailCard(title: String, icon: ImageVector, content: @Composable Co
 
 @Composable
 private fun SecurityStatusPanel(requireDeviceUnlock: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -2904,6 +3186,8 @@ private fun SecurityStatusPanel(requireDeviceUnlock: Boolean) {
 
 @Composable
 private fun IconBubble(icon: ImageVector, tint: Color, container: Color, size: androidx.compose.ui.unit.Dp = 50.dp) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box(
         modifier = Modifier
             .size(size)
@@ -2916,6 +3200,8 @@ private fun IconBubble(icon: ImageVector, tint: Color, container: Color, size: a
 
 @Composable
 private fun MenuField(label: String, value: String, options: List<String>, onSelect: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
         MenuChip(value = value, options = options, onSelect = onSelect)
@@ -2924,6 +3210,8 @@ private fun MenuField(label: String, value: String, options: List<String>, onSel
 
 @Composable
 private fun MenuChip(value: String, options: List<String>, modifier: Modifier = Modifier, onSelect: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var open by rememberSaveable { mutableStateOf(false) }
     Box(modifier = modifier) {
         Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { open = true }) {
@@ -2949,6 +3237,8 @@ private fun MenuChip(value: String, options: List<String>, modifier: Modifier = 
 
 @Composable
 private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
@@ -2957,6 +3247,8 @@ private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boo
 
 @Composable
 private fun TwoColumnSwitches(specs: List<SwitchSpec>, onSave: (String, Boolean) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.height(((specs.size + 1) / 2 * 74).dp),
@@ -2975,6 +3267,8 @@ private fun TwoColumnSwitches(specs: List<SwitchSpec>, onSave: (String, Boolean)
 
 @Composable
 private fun EditableNameList(title: String, addLabel: String, values: List<String>, onChange: (List<String>) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
         TextButton(onClick = { onChange(values + newEditableName(addLabel)) }) {
@@ -3014,6 +3308,8 @@ private fun EditableHeadingItemList(
     itemLabel: String = "Note section",
     onChange: (List<StudioHeadingItem>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val normalizedValues = normalizeValues(values)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
@@ -3058,13 +3354,15 @@ private fun EditableQuickReminderList(
     values: List<StudioQuickReminderTemplate>,
     onChange: (List<StudioQuickReminderTemplate>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val normalizedValues = normalizeQuickReminderTemplates(values)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
         TextButton(onClick = { onChange(normalizedValues + newQuickReminderTemplate()) }) {
             Icon(Icons.Filled.AddCircle, contentDescription = null)
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Add Reminder")
+            Text(t("Add Reminder"))
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -3082,7 +3380,7 @@ private fun EditableQuickReminderList(
                                 onChange(normalizedValues.updated(index, item.copy(title = titleValue)))
                             },
                             modifier = Modifier.weight(1f),
-                            label = { Text("Button text") },
+                            label = { Text(t("Button text")) },
                             singleLine = true
                         )
                         IconButton(onClick = { onChange(normalizedValues.toMutableList().also { it.removeAt(index) }) }) {
@@ -3097,7 +3395,7 @@ private fun EditableQuickReminderList(
                                 onChange(normalizedValues.updated(index, item.copy(days = next.coerceIn(0, 365))))
                             },
                             modifier = Modifier.weight(1f),
-                            label = { Text("Days") },
+                            label = { Text(t("Days")) },
                             singleLine = true
                         )
                         OutlinedTextField(
@@ -3107,20 +3405,20 @@ private fun EditableQuickReminderList(
                                 onChange(normalizedValues.updated(index, item.copy(hours = next.coerceIn(0, 23))))
                             },
                             modifier = Modifier.weight(1f),
-                            label = { Text("Hours") },
+                            label = { Text(t("Hours")) },
                             singleLine = true
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         MenuChip(
                             value = item.priority,
-                            options = listOf("Low", "Normal", "High", "Urgent"),
+                            options = listOf("Low", "Normal", "High", t("Urgent")),
                             modifier = Modifier.weight(1f)
                         ) { selected ->
                             onChange(normalizedValues.updated(index, item.copy(priority = selected)))
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Text("Notify", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(t("Notify"), modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
                             Switch(
                                 checked = item.notify,
                                 onCheckedChange = { checked ->
@@ -3148,6 +3446,8 @@ private fun newEditableName(addLabel: String): String {
 
 @Composable
 private fun SegmentedRow(options: List<String>, selected: String, modifier: Modifier = Modifier, onSelect: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(modifier = modifier, shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(modifier = Modifier.padding(3.dp)) {
             options.forEach { option ->
@@ -3172,6 +3472,8 @@ private fun SegmentedRow(options: List<String>, selected: String, modifier: Modi
 
 @Composable
 private fun CompanyNumberRow(item: StudioCompanyNumber, onChange: (StudioCompanyNumber) -> Unit, onDelete: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = item.title,
@@ -3194,6 +3496,8 @@ private fun CompanyNumberRow(item: StudioCompanyNumber, onChange: (StudioCompany
 
 @Composable
 private fun ActionButton(label: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Button(onClick = onClick, colors = ButtonDefaults.buttonColors(containerColor = color), shape = RoundedCornerShape(8.dp)) {
         Icon(icon, contentDescription = null)
         Spacer(modifier = Modifier.width(8.dp))
@@ -3203,6 +3507,8 @@ private fun ActionButton(label: String, icon: ImageVector, color: Color, onClick
 
 @Composable
 private fun CopyableValue(title: String, value: String, buttonTitle: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -3225,6 +3531,8 @@ private fun CopyableValue(title: String, value: String, buttonTitle: String) {
 
 @Composable
 private fun StepRow(number: String, title: String, detail: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -3245,6 +3553,8 @@ private fun StepRow(number: String, title: String, detail: String) {
 
 @Composable
 private fun StepperRow(label: String, value: Int, suffix: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
         Text("$value $suffix", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold)
@@ -3260,6 +3570,8 @@ private fun StepperRow(label: String, value: Int, suffix: String, onMinus: () ->
 
 @Composable
 private fun InfoLine(label: String, value: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
         Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.ExtraBold)
@@ -3268,6 +3580,8 @@ private fun InfoLine(label: String, value: String) {
 
 @Composable
 private fun Avatar(initials: String, size: Int) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box(
         modifier = Modifier
             .size(size.dp)
@@ -3280,6 +3594,8 @@ private fun Avatar(initials: String, size: Int) {
 
 @Composable
 private fun Pill(label: String, color: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(999.dp), color = color.copy(alpha = 0.14f)) {
         Text(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = color, fontWeight = FontWeight.ExtraBold)
     }
@@ -3287,6 +3603,8 @@ private fun Pill(label: String, color: Color) {
 
 @Composable
 private fun MiniPill(label: String, icon: ImageVector) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.surface) {
         Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3298,13 +3616,15 @@ private fun MiniPill(label: String, icon: ImageVector) {
 
 @Composable
 private fun PlanFeatureGrid(plan: StudioBillingPlan) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val features = listOf(
         planOrderLimitText(plan) to true,
         planCustomerLimitText(plan) to true,
         planStorageLimitText(plan) to plan.hasClientFiles,
         "Up to ${plan.teamMemberLimit} team" to plan.hasTeamAccess,
         "Client Files" to plan.hasClientFiles,
-        "Export Data" to true,
+        t("Export Data") to true,
         "Card Customise" to plan.hasCardCustomization,
         "Financial Cards" to true,
         "Advanced Finance" to plan.hasAdvancedFinance,
@@ -3336,6 +3656,8 @@ private fun PlanFeatureGrid(plan: StudioBillingPlan) {
 
 @Composable
 private fun PlanFeaturePill(title: String, enabled: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = if (enabled) StudioGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant
@@ -3358,6 +3680,8 @@ private fun PlanFeaturePill(title: String, enabled: Boolean) {
 
 @Composable
 private fun PlanComparisonCard(plan: StudioBillingPlan, current: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = if (current) StudioBlue.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant,
@@ -3391,6 +3715,8 @@ private fun PlanComparisonCard(plan: StudioBillingPlan, current: Boolean) {
 
 @Composable
 private fun PlanComparisonRow(title: String, enabled: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(if (enabled) "Yes" else "No", color = if (enabled) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold)
         Spacer(modifier = Modifier.width(6.dp))
@@ -3405,6 +3731,8 @@ private fun OwnerTestingPlanButton(
     saving: Boolean,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -3426,13 +3754,15 @@ private fun OwnerTestingPlanButton(
 
 @Composable
 private fun StoreProductCard(title: String, productId: String, button: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, fontWeight = FontWeight.ExtraBold)
-            Text("Product not loaded", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-            Text("Google Play product ID", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text(t("Product not loaded"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text(t("Google Play product ID"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             Text(productId, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Create this product ID in Google Play Console.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Create this product ID in Google Play Console."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text(button) }
         }
     }
@@ -3511,6 +3841,8 @@ private fun planBestForText(plan: StudioBillingPlan): String {
 
 @Composable
 private fun RoleMix(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val counts = state.teamMembers.groupingBy { it.role.ifBlank { "member" } }.eachCount()
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         listOf("owner", "member", "viewer", "workflow").forEach { role ->
@@ -3526,6 +3858,8 @@ private fun RoleMix(state: StudioFlowUiState) {
 
 @Composable
 private fun StatusFooter(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     if (state.settingsMessage.isBlank() && state.errorMessage.isBlank() && !state.settingsSaving) return
     Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.settingsSaving) {
@@ -4131,6 +4465,8 @@ private fun MessageSettingsDetail(
     onSave: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit,
     onReload: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val canEdit = state.workspace?.isOwner == true || state.workspace?.role == "admin"
     val current = state.messageWorkspaceSettings
     var direct by remember(current) { mutableStateOf(current.directMessagesEnabled) }
@@ -4159,21 +4495,21 @@ private fun MessageSettingsDetail(
             ) {
                 MessageSettingsToggle(
                     title = "Allow Direct Messages",
-                    description = "Team members can start one-to-one conversations.",
+                    description = t("Team members can start one-to-one conversations."),
                     checked = direct,
                     enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
                     onChange = { direct = it }
                 )
                 MessageSettingsToggle(
                     title = "Allow Group Conversations",
-                    description = "Team members can add people and create group chats.",
+                    description = t("Team members can add people and create group chats."),
                     checked = group,
                     enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
                     onChange = { group = it }
                 )
                 MessageSettingsToggle(
                     title = "Allow File & Image Sending",
-                    description = "Team members can send images and files in Messages.",
+                    description = t("Team members can send images and files in Messages."),
                     checked = attachments,
                     enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
                     onChange = { attachments = it }
@@ -4187,7 +4523,7 @@ private fun MessageSettingsDetail(
             androidx.compose.material3.OutlinedButton(
                 onClick = onReload,
                 enabled = !state.isSavingMessageWorkspaceSettings
-            ) { androidx.compose.material3.Text("Reload") }
+            ) { androidx.compose.material3.Text(t("Reload")) }
             androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.weight(1f))
             androidx.compose.material3.Button(
                 onClick = {
@@ -4234,6 +4570,8 @@ private fun MessageSettingsToggle(
     enabled: Boolean,
     onChange: (Boolean) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         androidx.compose.foundation.layout.Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
             androidx.compose.material3.Text(

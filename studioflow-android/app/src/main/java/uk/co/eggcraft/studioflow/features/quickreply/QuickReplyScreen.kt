@@ -77,6 +77,8 @@ fun QuickReplyScreen(
     state: StudioFlowUiState,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     val workspaceName = state.workspace?.name ?: "NivaDesk"
     val replyMode = normalizeReplyMode(settings.replyMode)
@@ -284,6 +286,8 @@ fun QuickReplyScreen(
 
 @Composable
 private fun QuickReplyHeader(replyMode: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -330,6 +334,8 @@ private fun ReplyEngineStatusCard(
     productsReady: Boolean,
     rulesReady: Boolean
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
@@ -388,6 +394,8 @@ private fun ReplyEngineStatusCard(
 
 @Composable
 private fun StatusPill(label: String, active: Boolean, icon: ImageVector) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = if (active) Color(0xFFE4F9EA) else Color(0xFFFFEFEF)
@@ -410,6 +418,8 @@ private fun QuickReplyStyleCard(
     onPoliteness: (String) -> Unit,
     onLength: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard {
         SegmentTitle(Icons.Filled.FavoriteBorder, "Politeness")
         SegmentRow(
@@ -446,12 +456,14 @@ private fun QuickReplyDetailsCard(
     selectedTopic: String,
     onTopicChange: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard {
         SegmentTitle(Icons.Filled.PersonOutline, "Details")
         OutlinedTextField(
             value = customerName,
             onValueChange = onCustomerNameChange,
-            label = { Text("Customer name") },
+            label = { Text(t("Customer name")) },
             placeholder = { Text("e.g. John") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
@@ -488,6 +500,8 @@ private fun DropdownPicker(
     options: List<String>,
     onSelect: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
@@ -531,6 +545,8 @@ private fun QuickReplyInputCard(
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 16.dp
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard(modifier = modifier, horizontalPadding = horizontalPadding) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(
@@ -590,7 +606,7 @@ private fun QuickReplyInputCard(
                 onClick = onClear,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Clear Draft", fontWeight = FontWeight.ExtraBold)
+                Text(t("Clear Draft"), fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -604,6 +620,8 @@ private fun QuickReplyOutputCard(
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 16.dp
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard(modifier = modifier, horizontalPadding = horizontalPadding) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(
@@ -640,7 +658,7 @@ private fun QuickReplyOutputCard(
             ) {
                 Icon(Icons.Filled.ContentCopy, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
-                Text("Copy Reply", fontWeight = FontWeight.ExtraBold)
+                Text(t("Copy Reply"), fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -652,6 +670,8 @@ private fun QuickReplyCard(
     horizontalPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -666,6 +686,8 @@ private fun QuickReplyCard(
 
 @Composable
 private fun SegmentTitle(icon: ImageVector, title: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Icon(icon, contentDescription = null, tint = Color(0xFF8385A8))
         Text(title, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
@@ -675,6 +697,8 @@ private fun SegmentTitle(icon: ImageVector, title: String) {
 
 @Composable
 private fun SegmentRow(options: List<SegmentOption>, selected: String, onSelect: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier
             .fillMaxWidth()

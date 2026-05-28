@@ -67,7 +67,11 @@ fun StudioFlowApp(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     uk.co.eggcraft.studioflow.ui.theme.StudioFlowTheme(appTheme = state.workspaceSettings.appTheme) {
-        StudioFlowAppContent(viewModel = viewModel, state = state)
+        androidx.compose.runtime.CompositionLocalProvider(
+            uk.co.eggcraft.studioflow.language.LocalStudioLanguage provides state.workspaceSettings.selectedLanguage.ifBlank { "English" }
+        ) {
+            StudioFlowAppContent(viewModel = viewModel, state = state)
+        }
     }
 }
 

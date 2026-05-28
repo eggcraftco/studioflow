@@ -16,10 +16,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Percent
@@ -27,9 +35,21 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
@@ -67,6 +88,8 @@ fun DashboardScreen(
     state: StudioFlowUiState,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit = { _, _ -> }
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var period by rememberSaveable { mutableStateOf(DashboardPeriod.Year) }
     var compareMode by rememberSaveable { mutableStateOf(DashboardCompareMode.None) }
     var periodMenuOpen by rememberSaveable { mutableStateOf(false) }
@@ -97,7 +120,7 @@ fun DashboardScreen(
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Dashboard", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(t("Dashboard"), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                             Text(period.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                         }
                         Box {
@@ -185,6 +208,16 @@ fun DashboardScreen(
             )
         }
         item {
+            ExtraSpendingSummarySection(
+                orders = state.orders,
+                workspaceSettings = state.workspaceSettings,
+                currency = currency,
+                decimalSeparator = decimalSeparator,
+                hideNumbers = hideSensitiveNumbers,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
+        item {
             Surface(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 shape = RoundedCornerShape(14.dp),
@@ -192,7 +225,7 @@ fun DashboardScreen(
                 tonalElevation = 1.dp
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Net Profit Analysis", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Net Profit Analysis"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     ProfitLineChart(
                         values = stats.chartValues,
                         labels = stats.chartLabels,
@@ -210,7 +243,7 @@ fun DashboardScreen(
                 tonalElevation = 1.dp
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Year-over-Year Summary", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Year-over-Year Summary"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -218,11 +251,11 @@ fun DashboardScreen(
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("This Year", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        Text(t("This Year"), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                         Text(money(stats.thisYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     }
-                    SummaryRow("Last Year", money(stats.lastYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers))
-                    SummaryRow("Growth", growthLabel(stats.thisYearNetProfit, stats.lastYearNetProfit))
+                    SummaryRow(t("Last Year"), money(stats.lastYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers))
+                    SummaryRow(t("Growth"), growthLabel(stats.thisYearNetProfit, stats.lastYearNetProfit))
                     if (compareEnabled) {
                         stats.comparisonSeries(compareMode).forEach { series ->
                             SummaryRow(series.label, money(series.total, currency, decimalSeparator, hideSensitiveNumbers))
@@ -362,6 +395,8 @@ private fun SummaryRow(label: String, value: String) {
 
 @Composable
 private fun SummaryTileGrid(cards: List<DashboardSummaryCardSpec>, modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val columnCount = when {
             maxWidth >= 1120.dp -> 4
@@ -373,7 +408,7 @@ private fun SummaryTileGrid(cards: List<DashboardSummaryCardSpec>, modifier: Mod
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     rowCards.forEach { card ->
                         SummaryTile(
-                            title = card.title,
+                            title = t(card.title),
                             value = card.value,
                             prefix = card.prefix,
                             color = card.color,
@@ -815,4 +850,335 @@ private fun sameWeek(first: Calendar, second: Calendar): Boolean {
     second.firstDayOfWeek = Calendar.MONDAY
     return first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
         first.get(Calendar.WEEK_OF_YEAR) == second.get(Calendar.WEEK_OF_YEAR)
+}
+
+private enum class SpendingScope(val label: String) {
+    ThisMonth("This Month"),
+    ThisYear("This Year"),
+    CustomRange("Custom Range"),
+    AllTime("All Time")
+}
+
+private data class ExtraSpendingEntry(
+    val orderId: String,
+    val customerName: String,
+    val designName: String,
+    val watchRef: String,
+    val heading: String,
+    val description: String,
+    val amount: Double,
+    val paymentDate: Date
+)
+
+private data class ExtraSpendingGroup(
+    val orderId: String,
+    val title: String,
+    val subtitle: String,
+    val entries: List<ExtraSpendingEntry>,
+    val total: Double
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExtraSpendingSummarySection(
+    orders: List<StudioOrder>,
+    workspaceSettings: StudioWorkspaceSettings,
+    currency: String,
+    decimalSeparator: String,
+    hideNumbers: Boolean,
+    modifier: Modifier = Modifier
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var scope by rememberSaveable { mutableStateOf(SpendingScope.ThisMonth) }
+    var customStartMs by rememberSaveable { mutableStateOf<Long?>(null) }
+    var customEndMs by rememberSaveable { mutableStateOf<Long?>(null) }
+    var incBase by rememberSaveable { mutableStateOf(true) }
+    var incShipping by rememberSaveable { mutableStateOf(true) }
+    var incFee by rememberSaveable { mutableStateOf(true) }
+    var incTax by rememberSaveable { mutableStateOf(true) }
+    var page by rememberSaveable { mutableStateOf(0) }
+    val pageSize = 20
+
+    val now = remember { Calendar.getInstance(Locale.UK) }
+    val (rangeStart, rangeEnd) = remember(scope, customStartMs, customEndMs) {
+        spendingDateRange(scope, customStartMs, customEndMs)
+    }
+
+    val customTitles: List<StudioHeadingItem> = workspaceSettings.financialExpenseItems
+
+    val groups: List<ExtraSpendingGroup> = remember(orders, rangeStart, rangeEnd, incBase, incShipping, incFee, incTax, customTitles) {
+        val list = mutableListOf<ExtraSpendingGroup>()
+        for (o in orders) {
+            val pd = o.paymentDate
+            if (pd.time < rangeStart || pd.time > rangeEnd) continue
+            val entries = mutableListOf<ExtraSpendingEntry>()
+            fun add(heading: String, desc: String, amount: Double) {
+                if (amount > 0) entries.add(ExtraSpendingEntry(o.id, o.customerName, o.designName, o.watchRef, heading, desc, amount, pd))
+            }
+            if (incBase) add("Base Cost", "Purchase price", o.watchPurchasePrice)
+            if (incShipping) add("Shipping", "Delivery cost", o.deliveryCost)
+            if (incFee) add("Platform Fee", "Payment fee", o.paymentFee)
+            if (incTax) add("Tax", "VAT / Tax", o.taxAmount)
+            for (item in customTitles) {
+                val raw = o.customFields["financialExpense::${item.title}"]
+                    ?: o.customFields["financialExpense::${item.id}"]
+                val amount = raw?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                if (amount > 0) add(item.title, "Custom expense", amount)
+            }
+            if (entries.isNotEmpty()) {
+                val total = entries.sumOf { it.amount }
+                val subtitle = listOf(o.designName, o.watchRef).filter { it.isNotBlank() }.joinToString(" · ")
+                list.add(ExtraSpendingGroup(o.id, o.customerName.ifBlank { "#${o.id.take(6)}" }, subtitle, entries, total))
+            }
+        }
+        list.sortedByDescending { it.total }
+    }
+
+    val totalAmount = groups.sumOf { it.total }
+    val entryCount = groups.sumOf { it.entries.size }
+    val totalPages = ((groups.size + pageSize - 1) / pageSize).coerceAtLeast(1)
+    val currentPage = page.coerceAtMost(totalPages - 1)
+    val pageGroups = groups.drop(currentPage * pageSize).take(pageSize)
+
+    Surface(
+        modifier = modifier.fillMaxWidth().clickable { expanded = true },
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(StudioRed.copy(alpha = 0.12f), RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = null, tint = StudioRed)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Extra Spending Summary", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Open a detailed page for monthly, yearly and order-based extra spending with descriptions.",
+                    fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(money(totalAmount, currency, decimalSeparator, hideNumbers), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = StudioRed)
+                Text("$entryCount entries", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+
+    if (expanded) {
+        var pickingStart by remember { mutableStateOf(false) }
+        var pickingEnd by remember { mutableStateOf(false) }
+        Dialog(onDismissRequest = { expanded = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .heightIn(max = 640.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Extra Spending Summary", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                        IconButton(onClick = { expanded = false }) { Icon(Icons.Filled.Close, contentDescription = "Close") }
+                    }
+
+                    // Scope picker
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        SpendingScope.values().forEach { s ->
+                            val selected = scope == s
+                            Surface(
+                                modifier = Modifier.weight(1f).clickable { scope = s; page = 0 },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selected) StudioBlue.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    s.label,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selected) StudioBlue else MaterialTheme.colorScheme.onSurface,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+
+                    if (scope == SpendingScope.CustomRange) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                modifier = Modifier.weight(1f).clickable { pickingStart = true },
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    "From: " + (customStartMs?.let { formatDateShort(it) } ?: "—"),
+                                    modifier = Modifier.padding(10.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Surface(
+                                modifier = Modifier.weight(1f).clickable { pickingEnd = true },
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    "To: " + (customEndMs?.let { formatDateShort(it) } ?: "—"),
+                                    modifier = Modifier.padding(10.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Toggles (wrap horizontally)
+                    androidx.compose.foundation.layout.FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        ToggleRow("Base Cost", incBase) { incBase = it; page = 0 }
+                        ToggleRow("Shipping", incShipping) { incShipping = it; page = 0 }
+                        ToggleRow("Platform Fee", incFee) { incFee = it; page = 0 }
+                        ToggleRow("VAT / Tax", incTax) { incTax = it; page = 0 }
+                    }
+
+                    // Metrics
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MetricBox("Total", money(totalAmount, currency, decimalSeparator, hideNumbers), Modifier.weight(1f))
+                        MetricBox("Orders", groups.size.toString(), Modifier.weight(1f))
+                        MetricBox("Entries", entryCount.toString(), Modifier.weight(1f))
+                    }
+
+                    HorizontalDivider()
+
+                    if (groups.isEmpty()) {
+                        Text(
+                            "No extra spending in this period.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(vertical = 24.dp).fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    } else {
+                        pageGroups.forEach { g ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(g.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        if (g.subtitle.isNotBlank()) {
+                                            Text(g.subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    Text(money(g.total, currency, decimalSeparator, hideNumbers), fontWeight = FontWeight.ExtraBold, color = StudioRed)
+                                }
+                                g.entries.forEach { e ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("${e.heading} · ${e.description}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(formatDateShort(e.paymentDate.time), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text(money(e.amount, currency, decimalSeparator, hideNumbers), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+
+                        if (totalPages > 1) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                                TextButton(onClick = { page = (page - 1).coerceAtLeast(0) }, enabled = currentPage > 0) { Text("Previous") }
+                                Text("${currentPage + 1} / $totalPages", modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.SemiBold)
+                                TextButton(onClick = { page = (page + 1).coerceAtMost(totalPages - 1) }, enabled = currentPage < totalPages - 1) { Text("Next") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (pickingStart) {
+            val ds = rememberDatePickerState(initialSelectedDateMillis = customStartMs)
+            DatePickerDialog(
+                onDismissRequest = { pickingStart = false },
+                confirmButton = {
+                    TextButton(onClick = { customStartMs = ds.selectedDateMillis; pickingStart = false; page = 0 }) { Text("OK") }
+                },
+                dismissButton = { TextButton(onClick = { pickingStart = false }) { Text("Cancel") } }
+            ) { DatePicker(state = ds) }
+        }
+        if (pickingEnd) {
+            val ds = rememberDatePickerState(initialSelectedDateMillis = customEndMs)
+            DatePickerDialog(
+                onDismissRequest = { pickingEnd = false },
+                confirmButton = {
+                    TextButton(onClick = { customEndMs = ds.selectedDateMillis; pickingEnd = false; page = 0 }) { Text("OK") }
+                },
+                dismissButton = { TextButton(onClick = { pickingEnd = false }) { Text("Cancel") } }
+            ) { DatePicker(state = ds) }
+        }
+    }
+}
+
+@Composable
+private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onCheckedChange(!checked) }) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun MetricBox(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+private fun spendingDateRange(scope: SpendingScope, customStart: Long?, customEnd: Long?): Pair<Long, Long> {
+    val now = Calendar.getInstance(Locale.UK)
+    return when (scope) {
+        SpendingScope.ThisMonth -> {
+            val start = Calendar.getInstance(Locale.UK).apply {
+                set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
+            start.timeInMillis to now.timeInMillis
+        }
+        SpendingScope.ThisYear -> {
+            val start = Calendar.getInstance(Locale.UK).apply {
+                set(Calendar.DAY_OF_YEAR, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
+            start.timeInMillis to now.timeInMillis
+        }
+        SpendingScope.CustomRange -> {
+            val s = customStart ?: 0L
+            val e = customEnd ?: now.timeInMillis
+            s to e
+        }
+        SpendingScope.AllTime -> 0L to now.timeInMillis
+    }
+}
+
+private fun formatDateShort(ms: Long): String {
+    val sdf = java.text.SimpleDateFormat("dd MMM yyyy", Locale.UK)
+    return sdf.format(Date(ms))
 }

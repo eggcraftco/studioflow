@@ -135,6 +135,8 @@ fun MessagesScreen(
     onLoadDraft: (String, String) -> String,
     onSaveDraft: (String, String, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspaceId = state.workspace?.id.orEmpty()
     val workspaceMessageSettings = state.messageWorkspaceSettings
     val canCreateAnyConversation =
@@ -259,7 +261,7 @@ fun MessagesScreen(
                                 .align(Alignment.BottomEnd)
                                 .padding(16.dp)
                         ) {
-                            Icon(Icons.Filled.Add, contentDescription = "New conversation")
+                            Icon(Icons.Filled.Add, contentDescription = t("New conversation"))
                         }
                     }
                 }
@@ -287,7 +289,7 @@ fun MessagesScreen(
                         .align(Alignment.BottomEnd)
                         .padding(16.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = "New conversation")
+                    Icon(Icons.Filled.Add, contentDescription = t("New conversation"))
                 }
             }
         }
@@ -433,6 +435,8 @@ private fun ThreadListPanel(
     onSelectThread: (String) -> Unit,
     onToggleArchive: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val active = threads.filter { thread ->
         val marker = archivedMarkers[thread.id] ?: return@filter true
         val lastTs = thread.lastMessageAt?.time ?: 0L
@@ -447,13 +451,13 @@ private fun ThreadListPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Messages", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+            Text(t("Messages"), fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
             if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (active.isEmpty() && archived.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("No conversations yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                Text(t("No conversations yet."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -531,6 +535,8 @@ private fun ThreadRow(
     onClick: () -> Unit,
     onToggleArchive: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var menuOpen by remember { mutableStateOf(false) }
     val background = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent
     Box {
@@ -569,7 +575,7 @@ private fun ThreadRow(
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        threadPreview(thread),
+                        threadPreview(thread, lang),
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -602,6 +608,8 @@ private fun ThreadAvatar(
     currentUid: String,
     teamMembers: List<StudioMessageTeamMember>
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val initials = when {
         thread.isTeamThread -> "T"
         thread.isDirectThread -> {
@@ -670,9 +678,11 @@ private fun ConversationPanel(
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     if (thread == null) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Text("Select a conversation to view messages.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Select a conversation to view messages."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
     }
@@ -727,9 +737,9 @@ private fun ConversationPanel(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         when {
-                            showSavedOnly -> "No saved messages."
-                            searchQuery.isNotBlank() || attachmentFilter != "all" -> "No results."
-                            else -> "No messages yet."
+                            showSavedOnly -> t("No saved messages.")
+                            searchQuery.isNotBlank() || attachmentFilter != "all" -> t("No results.")
+                            else -> t("No messages yet.")
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -796,6 +806,8 @@ private fun ConversationHeader(
     onSetMute: (String) -> Unit,
     onBack: (() -> Unit)? = null
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var moreOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -812,8 +824,8 @@ private fun ConversationHeader(
                 maxLines = 1
             )
             val subtitle = when {
-                thread.isTeamThread -> "Workspace group conversation"
-                thread.isDirectThread -> "Direct message"
+                thread.isTeamThread -> t("Workspace group conversation")
+                thread.isDirectThread -> t("Direct message")
                 thread.isGroupThread -> "${thread.memberUids.size} members"
                 else -> ""
             }
@@ -831,10 +843,10 @@ private fun ConversationHeader(
                 Icon(Icons.Filled.NotificationsOff, contentDescription = "Mute", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             DropdownMenu(expanded = mutePickerOpen, onDismissRequest = onDismissMutePicker) {
-                DropdownMenuItem(text = { Text("Mute for 1 hour") }, onClick = { onSetMute("oneHour") })
-                DropdownMenuItem(text = { Text("Mute for today") }, onClick = { onSetMute("today") })
-                DropdownMenuItem(text = { Text("Mute until I unmute") }, onClick = { onSetMute("forever") })
-                DropdownMenuItem(text = { Text("Unmute") }, onClick = { onSetMute("unmute") })
+                DropdownMenuItem(text = { Text(t("Mute for 1 hour")) }, onClick = { onSetMute("oneHour") })
+                DropdownMenuItem(text = { Text(t("Mute for today")) }, onClick = { onSetMute("today") })
+                DropdownMenuItem(text = { Text(t("Mute until I unmute")) }, onClick = { onSetMute("forever") })
+                DropdownMenuItem(text = { Text(t("Unmute")) }, onClick = { onSetMute("unmute") })
             }
         }
         IconButton(onClick = onToggleSearchVisible) {
@@ -846,12 +858,12 @@ private fun ConversationHeader(
             }
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text(if (showSavedOnly) "Show all" else "Saved only") },
+                    text = { Text(if (showSavedOnly) t("Show all") else t("Saved only")) },
                     leadingIcon = { Icon(if (showSavedOnly) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, contentDescription = null) },
                     onClick = { moreOpen = false; onToggleSavedFilter() }
                 )
                 DropdownMenuItem(
-                    text = { Text("Conversation info") },
+                    text = { Text(t("Conversation info")) },
                     leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
                     onClick = { moreOpen = false; onOpenInfo() }
                 )
@@ -867,12 +879,14 @@ private fun SearchBar(
     onQueryChange: (String) -> Unit,
     onFilterChange: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search messages…") },
+            placeholder = { Text(t("Search messages…")) },
             singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
@@ -884,7 +898,7 @@ private fun SearchBar(
             }
         )
         Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("all" to "All", "media" to "Media", "files" to "Files").forEach { (key, label) ->
+            listOf("all" to "All", "media" to t("Media"), "files" to t("Files")).forEach { (key, label) ->
                 FilterChip(
                     selected = filter == key,
                     onClick = { onFilterChange(key) },
@@ -984,6 +998,8 @@ private fun MessageBubble(
     onForward: () -> Unit,
     onOpenImage: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     // iPhone-style colors: navy/teal for mine, dark gray for theirs
     val mineBubble = if (isDark) Color(0xFF0D3D5C) else StudioBlue.copy(alpha = 0.18f)
@@ -1034,7 +1050,7 @@ private fun MessageBubble(
                             Spacer(Modifier.height(4.dp))
                         }
                         if (item.isDeleted) {
-                            Text("Message deleted", fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                            Text(t("Message deleted"), fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                         } else {
                             if (item.fileURL.isNotBlank()) {
                                 AttachmentCard(item, onImageClick = onOpenImage)
@@ -1047,16 +1063,16 @@ private fun MessageBubble(
                     }
                 }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(text = { Text("React") }, onClick = { menuOpen = false; showReactionPicker = true })
-                DropdownMenuItem(text = { Text("Reply") }, onClick = { menuOpen = false; onReply() })
-                DropdownMenuItem(text = { Text("Forward") }, onClick = { menuOpen = false; onForward() })
+                DropdownMenuItem(text = { Text(t("React")) }, onClick = { menuOpen = false; showReactionPicker = true })
+                DropdownMenuItem(text = { Text(t("Reply")) }, onClick = { menuOpen = false; onReply() })
+                DropdownMenuItem(text = { Text(t("Forward")) }, onClick = { menuOpen = false; onForward() })
                 DropdownMenuItem(
                     text = { Text(if (saved) "Unsave" else "Save") },
                     onClick = { menuOpen = false; onToggleSaved() }
                 )
                 if (item.text.isNotBlank()) {
                     DropdownMenuItem(
-                        text = { Text("Copy text") },
+                        text = { Text(t("Copy text")) },
                         onClick = {
                             clipboardManager.setText(AnnotatedString(item.text))
                             menuOpen = false
@@ -1070,9 +1086,9 @@ private fun MessageBubble(
                 if (isMine && !item.isDeleted && item.text.isNotBlank() && item.fileURL.isBlank()) {
                     DropdownMenuItem(text = { Text("Edit") }, onClick = { menuOpen = false; onEdit() })
                 }
-                DropdownMenuItem(text = { Text("Delete for me") }, onClick = { menuOpen = false; onDeleteForMe() })
+                DropdownMenuItem(text = { Text(t("Delete for me")) }, onClick = { menuOpen = false; onDeleteForMe() })
                 if (isMine && !item.isDeleted) {
-                    DropdownMenuItem(text = { Text("Delete for everyone") }, onClick = { menuOpen = false; onDeleteForEveryone() })
+                    DropdownMenuItem(text = { Text(t("Delete for everyone")) }, onClick = { menuOpen = false; onDeleteForEveryone() })
                 }
             }
             DropdownMenu(expanded = showReactionPicker, onDismissRequest = { showReactionPicker = false }) {
@@ -1160,6 +1176,8 @@ private fun ReactionRow(
     currentUid: String,
     onToggleReaction: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1190,6 +1208,8 @@ private fun ReactionRow(
 
 @Composable
 private fun AttachmentCard(item: StudioMessageItem, onImageClick: () -> Unit = {}) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     if (item.isImageAttachment) {
         Surface(
             shape = RoundedCornerShape(10.dp),
@@ -1199,7 +1219,7 @@ private fun AttachmentCard(item: StudioMessageItem, onImageClick: () -> Unit = {
             Column {
                 AsyncImage(
                     model = item.fileURL,
-                    contentDescription = item.fileName.ifBlank { "Image attachment" },
+                    contentDescription = item.fileName.ifBlank { t("Image attachment") },
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .widthIn(max = 240.dp)
@@ -1277,6 +1297,8 @@ private fun Composer(
     onLoadDraft: (String, String) -> String,
     onSaveDraft: (String, String, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var draft by remember(threadId) { mutableStateOf(TextFieldValue(onLoadDraft(workspaceId, threadId))) }
     val pendingMentionUids = remember(threadId) { mutableStateOf<List<String>>(emptyList()) }
     val context = LocalContext.current
@@ -1348,7 +1370,7 @@ private fun Composer(
                         Text("Replying to ${replyingTo.senderLabel()}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                         Text(replyingTo.text.ifBlank { replyingTo.fileName.ifBlank { "Attachment" } }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
-                    IconButton(onClick = onClearReply) { Icon(Icons.Filled.Close, contentDescription = "Cancel reply") }
+                    IconButton(onClick = onClearReply) { Icon(Icons.Filled.Close, contentDescription = t("Cancel reply")) }
                 }
             }
         }
@@ -1416,7 +1438,7 @@ private fun Composer(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Filled.Add,
-                                contentDescription = "Attach",
+                                contentDescription = t("Attach"),
                                 tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -1424,7 +1446,7 @@ private fun Composer(
                     }
                     DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text("Photo Library") },
+                            text = { Text(t("Photo Library")) },
                             leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null) },
                             onClick = {
                                 attachMenuOpen = false
@@ -1436,7 +1458,7 @@ private fun Composer(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Files") },
+                            text = { Text(t("Files")) },
                             leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null) },
                             onClick = {
                                 attachMenuOpen = false
@@ -1482,7 +1504,7 @@ private fun Composer(
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
+                        contentDescription = t("Send"),
                         tint = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1498,6 +1520,8 @@ private fun PillTextField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     androidx.compose.foundation.text.BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -1530,26 +1554,28 @@ private fun NewConversationDialog(
     onCreateDirect: (String) -> Unit,
     onCreateGroup: (List<String>, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var groupMode by remember(allowDirect, allowGroup) { mutableStateOf(!allowDirect && allowGroup) }
     var selectedUids by remember { mutableStateOf<Set<String>>(emptySet()) }
     var groupTitle by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (groupMode) "New group" else "New direct message") },
+        title = { Text(if (groupMode) t("New group") else t("New direct message")) },
         text = {
             Column(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
                 if (allowDirect && allowGroup) {
                     Row(modifier = Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = !groupMode, onClick = { groupMode = false; selectedUids = emptySet() }, label = { Text("Direct") })
-                        FilterChip(selected = groupMode, onClick = { groupMode = true }, label = { Text("Group") })
+                        FilterChip(selected = !groupMode, onClick = { groupMode = false; selectedUids = emptySet() }, label = { Text(t("Direct")) })
+                        FilterChip(selected = groupMode, onClick = { groupMode = true }, label = { Text(t("Group")) })
                     }
                 }
                 if (groupMode) {
                     OutlinedTextField(
                         value = groupTitle,
                         onValueChange = { groupTitle = it },
-                        placeholder = { Text("Group title (optional)") },
+                        placeholder = { Text(t("Group title (optional)")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                     )
@@ -1600,9 +1626,9 @@ private fun NewConversationDialog(
                     else selectedUids.firstOrNull()?.let { onCreateDirect(it) }
                 },
                 enabled = if (groupMode) selectedUids.size >= 2 else selectedUids.size == 1
-            ) { Text("Create") }
+            ) { Text(t("Create")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }
 
@@ -1616,6 +1642,8 @@ private fun ThreadInfoDialog(
     onAddMembers: () -> Unit,
     onLeave: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(thread.displayTitle(currentUid, teamMembers)) },
@@ -1638,11 +1666,11 @@ private fun ThreadInfoDialog(
         confirmButton = {
             Row {
                 if (!thread.isTeamThread && !thread.isDirectThread) {
-                    TextButton(onClick = onRename) { Text("Rename") }
+                    TextButton(onClick = onRename) { Text(t("Rename")) }
                     TextButton(onClick = onAddMembers) { Text("Add") }
-                    TextButton(onClick = onLeave) { Text("Leave") }
+                    TextButton(onClick = onLeave) { Text(t("Leave")) }
                 }
-                TextButton(onClick = onDismiss) { Text("Close") }
+                TextButton(onClick = onDismiss) { Text(t("Close")) }
             }
         }
     )
@@ -1654,10 +1682,12 @@ private fun RenameThreadDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var title by remember { mutableStateOf(initialTitle) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename group") },
+        title = { Text(t("Rename group")) },
         text = {
             OutlinedTextField(
                 value = title,
@@ -1669,7 +1699,7 @@ private fun RenameThreadDialog(
         confirmButton = {
             TextButton(onClick = { onConfirm(title.trim()) }, enabled = title.trim().isNotEmpty()) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }
 
@@ -1679,10 +1709,12 @@ private fun AddMembersDialog(
     onDismiss: () -> Unit,
     onConfirm: (List<String>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add people") },
+        title = { Text(t("Add people")) },
         text = {
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
                 items(availableMembers, key = { it.id }) { m ->
@@ -1702,7 +1734,7 @@ private fun AddMembersDialog(
         confirmButton = {
             TextButton(onClick = { onConfirm(selected.toList()) }, enabled = selected.isNotEmpty()) { Text("Add") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }
 
@@ -1714,9 +1746,11 @@ private fun ForwardMessageDialog(
     onDismiss: () -> Unit,
     onForward: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Forward to…") },
+        title = { Text(t("Forward to…")) },
         text = {
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
                 items(threads, key = { it.id }) { thread ->
@@ -1731,7 +1765,7 @@ private fun ForwardMessageDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }
 
@@ -1741,10 +1775,12 @@ private fun EditMessageDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var text by remember { mutableStateOf(initialText) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit message") },
+        title = { Text(t("Edit message")) },
         text = {
             OutlinedTextField(
                 value = text,
@@ -1760,7 +1796,7 @@ private fun EditMessageDialog(
                 enabled = text.trim().isNotEmpty() && text.trim() != initialText.trim()
             ) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }
 
@@ -1782,11 +1818,11 @@ private fun formatFileSize(bytes: Long): String {
     return "%.1f MB".format(mb)
 }
 
-private fun threadPreview(thread: StudioMessageThread): String {
+private fun threadPreview(thread: StudioMessageThread, lang: String): String {
     val text = thread.lastMessageText.trim()
     if (text.isNotBlank()) return text
-    if (thread.isTeamThread) return "Workspace conversation"
-    return "Tap to start the conversation"
+    if (thread.isTeamThread) return uk.co.eggcraft.studioflow.language.studioT("Workspace conversation", lang)
+    return uk.co.eggcraft.studioflow.language.studioT("Tap to start the conversation", lang)
 }
 
 private fun formatTime(date: Date): String {

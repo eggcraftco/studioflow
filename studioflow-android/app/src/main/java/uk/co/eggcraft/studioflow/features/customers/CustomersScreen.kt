@@ -46,6 +46,8 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
 @Composable
 fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val customers = remember(state.orders) { customersFromOrders(state.orders) }
     var searchText by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(focusedCustomerName) {
@@ -70,8 +72,8 @@ fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") 
             .background(MaterialTheme.colorScheme.background)
     ) {
         SectionHeader(
-            title = "Customers",
-            subtitle = "${visibleCustomers.size} customers",
+            title = t("Customers"),
+            subtitle = "${visibleCustomers.size} ${t("customers")}",
             trailingIcon = Icons.Filled.Tune
         )
         OutlinedTextField(
@@ -82,7 +84,7 @@ fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") 
                 .padding(horizontal = 16.dp),
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
-            placeholder = { Text("Search...") }
+            placeholder = { Text(t("Search...")) }
         )
         LazyColumn(
             modifier = Modifier
@@ -103,7 +105,7 @@ fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") 
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Icon(Icons.Filled.People, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${visibleCustomers.size} Customers", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text("${visibleCustomers.size} ${t("Customers")}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
     }

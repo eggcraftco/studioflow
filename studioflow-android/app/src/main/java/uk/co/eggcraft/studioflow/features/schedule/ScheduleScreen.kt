@@ -92,6 +92,8 @@ fun ScheduleScreen(
     state: StudioFlowUiState,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var rangeOffset by rememberSaveable { mutableIntStateOf(0) }
     var zoom by rememberSaveable { mutableDoubleStateOf(1.0) }
     var statusFilter by rememberSaveable { mutableStateOf(ScheduleStatusFilter.All) }
@@ -436,6 +438,8 @@ private fun ScheduleDesktopTimelineScreen(
     onResizeLeading: (StudioOrder, Int) -> Unit,
     onResizeTrailing: (StudioOrder, Int) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -449,7 +453,7 @@ private fun ScheduleDesktopTimelineScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Schedule", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Schedule"), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     Text(
                         "See who is doing what and when.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -508,6 +512,8 @@ private fun ScheduleDesktopControls(
     onResetRange: () -> Unit,
     onZoomChange: (Double) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var statusMenuOpen by rememberSaveable { mutableStateOf(false) }
     var sortMenuOpen by rememberSaveable { mutableStateOf(false) }
     var viewMenuOpen by rememberSaveable { mutableStateOf(false) }
@@ -563,7 +569,7 @@ private fun ScheduleDesktopControls(
             modifier = Modifier.width(310.dp),
             singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            placeholder = { Text("Search Tasks") }
+            placeholder = { Text(t("Search Tasks")) }
         )
         Spacer(modifier = Modifier.width(12.dp))
         ArrowButton(Icons.Filled.ArrowBackIosNew, onClick = onPreviousRange)
@@ -613,6 +619,8 @@ private fun ScheduleDesktopControl(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = onClick) {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
@@ -625,6 +633,8 @@ private fun ScheduleDesktopControl(
 
 @Composable
 private fun ScheduleDesktopZoomControls(zoom: Double, onZoomChange: (Double) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onZoomChange(zoom - 0.15) }, modifier = Modifier.size(32.dp)) {
@@ -643,6 +653,8 @@ private fun ScheduleDesktopZoomControls(zoom: Double, onZoomChange: (Double) -> 
 
 @Composable
 private fun SchedulePlanNotice() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -673,6 +685,8 @@ private fun ScheduleTimelineBoard(
     onResizeTrailing: (StudioOrder, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val horizontalState = rememberScrollState()
     val verticalState = rememberScrollState()
     val baseDayWidth = scheduleTimelineBaseDayWidth(range.days.size)
@@ -727,6 +741,8 @@ private fun ScheduleTimelineBoard(
 
 @Composable
 private fun ScheduleTimelineTitleRow(range: ScheduleRange, orderCount: Int) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
@@ -742,6 +758,8 @@ private fun ScheduleTimelineTitleRow(range: ScheduleRange, orderCount: Int) {
 
 @Composable
 private fun ScheduleTimelineDayHeader(range: ScheduleRange, dayWidth: Dp) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth().height(72.dp)) {
         range.days.forEach { day ->
             val today = isSameScheduleDay(day.date, Date())
@@ -774,6 +792,8 @@ private fun ScheduleTimelineRow(
     onResizeLeading: (StudioOrder, Int) -> Unit,
     onResizeTrailing: (StudioOrder, Int) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val metrics = timelineMetrics(order, range) ?: return
     val tone = scheduleColor(order)
     val statusTone = statusColorForScheduleValue(scheduleStatusLabel(order))
@@ -888,6 +908,8 @@ private fun ScheduleResizeHandle(
     dayWidth: Dp,
     onDelta: (Int) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     if (!visible) {
         Spacer(modifier = Modifier.width(1.dp))
         return
@@ -918,6 +940,8 @@ private fun ScheduleResizeHandle(
 
 @Composable
 private fun ScheduleTimelineThumbnail(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val previewUrl = remember(order.id, order.designLink, order.clientFiles) {
         order.designLink.trim().ifBlank {
             order.clientFiles.firstOrNull {
@@ -959,6 +983,8 @@ private fun ScheduleTimelineThumbnail(order: StudioOrder) {
 
 @Composable
 private fun ScheduleTimelineFooter(visibleOrders: List<StudioOrder>, canEditSchedule: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
@@ -984,6 +1010,8 @@ private fun ScheduleControl(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = onClick) {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = StudioBlue)
@@ -996,6 +1024,8 @@ private fun ScheduleControl(
 
 @Composable
 private fun ArrowButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         IconButton(onClick = onClick, modifier = Modifier.size(52.dp)) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
@@ -1005,6 +1035,8 @@ private fun ArrowButton(icon: androidx.compose.ui.graphics.vector.ImageVector, o
 
 @Composable
 private fun ScheduleQuickAction(label: String, active: Boolean, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = if (active) StudioBlue.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
@@ -1029,6 +1061,8 @@ private fun ScheduleGrid(
     canEditSchedule: Boolean,
     onMoveOrder: (StudioOrder, Int) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.padding(top = 14.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -1067,6 +1101,8 @@ private fun DayColumn(
     onMoveOrder: (StudioOrder, Int) -> Unit,
     modifier: Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
         modifier = modifier
             .height((360 * zoom).coerceIn(260.0, 620.0).toInt().dp)
@@ -1152,6 +1188,8 @@ private fun ScheduleBoardSummary(
     onResizeTrailing: (StudioOrder, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -1162,7 +1200,7 @@ private fun ScheduleBoardSummary(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Schedule Board", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Schedule Board"), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                     Text(
                         "Mac-style planning lanes for the current filters.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1225,6 +1263,8 @@ private fun ScheduleBoardColumn(
     onResizeTrailing: (StudioOrder, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
@@ -1282,6 +1322,8 @@ private fun ScheduleBoardOrderCard(
     onMoveOrder: (StudioOrder, Int) -> Unit,
     onResizeTrailing: (StudioOrder, Int) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var dragOffset by remember(order.id) { mutableFloatStateOf(0f) }
     Surface(
         modifier = Modifier
@@ -1391,6 +1433,8 @@ private fun ScheduleBoardOrderCard(
 
 @Composable
 private fun ScheduleMiniAction(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
@@ -1409,6 +1453,8 @@ private fun ScheduleMiniAction(label: String, modifier: Modifier = Modifier, onC
 
 @Composable
 private fun FooterMetric(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, lineHeight = 16.sp)

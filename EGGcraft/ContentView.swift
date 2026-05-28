@@ -11838,6 +11838,9 @@ struct AccountAvatarImage: View {
 struct AccountProfileView: View {
     enum SectionMode: Equatable {
         case account
+        case profileWorkspace
+        case workspaceLogo
+        case signInSecurity
         case planAccess
         case teamAccess
     }
@@ -11907,6 +11910,12 @@ struct AccountProfileView: View {
                     if canEditWorkspaceBranding {
                         workspaceLogoCard
                     }
+                    securityCard
+                case .profileWorkspace:
+                    profileCard
+                case .workspaceLogo:
+                    workspaceLogoCard
+                case .signInSecurity:
                     securityCard
                 case .planAccess:
                     planAndAccessCard
@@ -11997,6 +12006,12 @@ struct AccountProfileView: View {
         switch sectionMode {
         case .account:
             return "Account"
+        case .profileWorkspace:
+            return "Profile & Workspace"
+        case .workspaceLogo:
+            return "Workspace Logo"
+        case .signInSecurity:
+            return "Sign-in & Security"
         case .planAccess:
             return "Plan & Access"
         case .teamAccess:
@@ -12008,6 +12023,12 @@ struct AccountProfileView: View {
         switch sectionMode {
         case .account:
             return "Manage your NivaDesk profile, company details and sign-in security."
+        case .profileWorkspace:
+            return "Manage your profile, company name and workspace identifiers."
+        case .workspaceLogo:
+            return "Upload the logo used in the app header."
+        case .signInSecurity:
+            return "Manage local unlock, password reset and sign out."
         case .planAccess:
             return "Manage your plan, limits and feature access."
         case .teamAccess:
@@ -12019,6 +12040,12 @@ struct AccountProfileView: View {
         switch sectionMode {
         case .account:
             return "person.crop.circle"
+        case .profileWorkspace:
+            return "building.2.fill"
+        case .workspaceLogo:
+            return "photo.badge.plus"
+        case .signInSecurity:
+            return "lock.fill"
         case .planAccess:
             return "creditcard.fill"
         case .teamAccess:
@@ -12029,7 +12056,7 @@ struct AccountProfileView: View {
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                if sectionMode == .account {
+                if sectionMode == .account || sectionMode == .profileWorkspace {
                     AccountAvatarImage(urlString: authVM.accountPhotoURL, initials: accountInitials, size: isPhoneLayout ? 40 : 48)
                 } else {
                     Image(systemName: sectionHeaderIcon)

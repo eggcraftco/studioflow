@@ -79,6 +79,8 @@ fun NotesScreen(
     onDeclineInvite: (String) -> Unit = {},
     onRefreshInvites: () -> Unit = {}
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var topTab by rememberSaveable { mutableStateOf("personal") }
     var labelFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var sortMode by rememberSaveable { mutableStateOf("manual") }
@@ -264,15 +266,15 @@ fun NotesScreen(
             SidebarItem("Notes", sectionCounts["notes"] ?: 0, topTab == "personal" && section == "notes" && labelFilter == null) {
                 topTab = "personal"; onSetSection("notes"); labelFilter = null; closeDrawer()
             }
-            SidebarItem("Reminders", sectionCounts["reminders"] ?: 0, topTab == "personal" && section == "reminders") {
+            SidebarItem(t("Reminders"), sectionCounts["reminders"] ?: 0, topTab == "personal" && section == "reminders") {
                 topTab = "personal"; onSetSection("reminders"); labelFilter = null; closeDrawer()
             }
-            SidebarItem("Project Notes", 0, topTab == "project") {
+            SidebarItem(t("Project Notes"), 0, topTab == "project") {
                 topTab = "project"; closeDrawer()
             }
             if (allLabels.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("LABELS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 14.dp))
+                Text(t("LABELS"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 14.dp))
                 Spacer(modifier = Modifier.height(4.dp))
                 allLabels.forEach { l ->
                     SidebarItem("#$l", labelCounts[l] ?: 0, labelFilter == l) {
@@ -281,10 +283,10 @@ fun NotesScreen(
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
-            SidebarItem("Archive", sectionCounts["archive"] ?: 0, topTab == "personal" && section == "archive") {
+            SidebarItem(t("Archive"), sectionCounts["archive"] ?: 0, topTab == "personal" && section == "archive") {
                 topTab = "personal"; onSetSection("archive"); labelFilter = null; closeDrawer()
             }
-            SidebarItem("Trash", sectionCounts["trash"] ?: 0, topTab == "personal" && section == "trash") {
+            SidebarItem(t("Trash"), sectionCounts["trash"] ?: 0, topTab == "personal" && section == "trash") {
                 topTab = "personal"; onSetSection("trash"); labelFilter = null; closeDrawer()
             }
         }
@@ -346,13 +348,13 @@ fun NotesScreen(
             }
             // Refresh button (re-fetches collaboration invites)
             IconButton(onClick = { onRefreshInvites() }) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                Icon(Icons.Filled.Refresh, contentDescription = t("Refresh"))
             }
             // Grid / List toggle (Mac parity)
             IconButton(onClick = { gridMode = !gridMode }) {
                 Icon(
                     if (gridMode) Icons.AutoMirrored.Filled.ViewList else Icons.Filled.GridView,
-                    contentDescription = if (gridMode) "List view" else "Grid view"
+                    contentDescription = if (gridMode) t("List view") else t("Grid view")
                 )
             }
             // Sort menu
@@ -362,7 +364,7 @@ fun NotesScreen(
                     Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                 }
                 androidx.compose.material3.DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
-                    listOf("manual" to "Manual order", "date" to "Recently updated", "title" to "Title (A–Z)").forEach { (key, label) ->
+                    listOf("manual" to t("Manual order"), "date" to t("Recently updated"), "title" to t("Title (A–Z)")).forEach { (key, label) ->
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("${if (sortMode == key) "✓ " else ""}$label", fontWeight = if (sortMode == key) FontWeight.Bold else FontWeight.Normal) },
                             onClick = { sortMode = key; sortMenuOpen = false }
@@ -383,30 +385,30 @@ fun NotesScreen(
             ) {
                 Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { clearSelection() }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                        Icon(Icons.Filled.Close, contentDescription = t("Cancel selection"))
                     }
                     Text("${selectedIds.size} selected", fontWeight = FontWeight.Bold, color = Color(0xFF374151))
                     Spacer(modifier = Modifier.weight(1f))
                     if (section == "trash") {
                         TextButton(onClick = { bulkApply { it.copy(isDeleted = false, isArchived = false, updatedAt = Date()) } }) {
-                            Text("Restore to Notes", fontWeight = FontWeight.Bold)
+                            Text(t("Restore to Notes"), fontWeight = FontWeight.Bold)
                         }
                         TextButton(onClick = { bulkDeleteForever() }) {
-                            Text("Delete forever", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text(t("Delete forever"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         }
                     } else if (section == "archive") {
                         TextButton(onClick = { bulkApply { it.copy(isArchived = false, updatedAt = Date()) } }) {
-                            Text("Unarchive", fontWeight = FontWeight.Bold)
+                            Text(t("Unarchive"), fontWeight = FontWeight.Bold)
                         }
                         TextButton(onClick = { bulkApply { it.copy(isDeleted = true, updatedAt = Date()) } }) {
-                            Text("Move to trash", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text(t("Move to trash"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         }
                     } else {
                         TextButton(onClick = { bulkApply { it.copy(isArchived = true, updatedAt = Date()) } }) {
-                            Text("Archive", fontWeight = FontWeight.Bold)
+                            Text(t("Archive"), fontWeight = FontWeight.Bold)
                         }
                         TextButton(onClick = { bulkApply { it.copy(isDeleted = true, updatedAt = Date()) } }) {
-                            Text("Move to trash", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text(t("Move to trash"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -416,10 +418,10 @@ fun NotesScreen(
         // Big section title
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             val pageTitle = when {
-                topTab == "project" -> "Project Notes"
-                section == "reminders" -> "Reminders"
-                section == "archive" -> "Archive"
-                section == "trash" -> "Trash"
+                topTab == "project" -> t("Project Notes")
+                section == "reminders" -> t("Reminders")
+                section == "archive" -> t("Archive")
+                section == "trash" -> t("Trash")
                 labelFilter != null -> "#$labelFilter"
                 else -> "Notes"
             }
@@ -439,7 +441,7 @@ fun NotesScreen(
         // Collaboration invitations (Mac parity)
         if (state.keepCollaborationInvites.isNotEmpty() && topTab == "personal") {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("COLLABORATION INVITATIONS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+                Text(t("COLLABORATION INVITATIONS"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
                 state.keepCollaborationInvites.forEach { invite ->
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -456,15 +458,15 @@ fun NotesScreen(
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(invite.title.ifBlank { "Untitled note" }, fontWeight = FontWeight.ExtraBold, fontSize = 14.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(invite.title.ifBlank { t("Untitled note") }, fontWeight = FontWeight.ExtraBold, fontSize = 14.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("${invite.sourceEmail} invited you to collaborate on this note.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (invite.text.isNotBlank()) {
                                     Text(invite.text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            TextButton(onClick = { onDeclineInvite(invite.id) }) { Text("Decline", fontWeight = FontWeight.Bold) }
-                            TextButton(onClick = { onAcceptInvite(invite.id) }) { Text("Accept", fontWeight = FontWeight.Bold, color = StudioBlue) }
+                            TextButton(onClick = { onDeclineInvite(invite.id) }) { Text(t("Decline"), fontWeight = FontWeight.Bold) }
+                            TextButton(onClick = { onAcceptInvite(invite.id) }) { Text(t("Accept"), fontWeight = FontWeight.Bold, color = StudioBlue) }
                         }
                     }
                 }
@@ -496,7 +498,7 @@ fun NotesScreen(
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
                 )
-                Icon(Icons.Filled.Add, contentDescription = "New note", tint = StudioBlue)
+                Icon(Icons.Filled.Add, contentDescription = t("New Note"), tint = StudioBlue)
             }
         }
 
@@ -507,7 +509,7 @@ fun NotesScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 TextButton(onClick = { visible.forEach { onDelete(it.id) } }) {
-                    Text("Empty Trash", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.ExtraBold)
+                    Text(t("Empty Trash"), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
@@ -606,7 +608,7 @@ fun NotesScreen(
                         ),
                         modifier = Modifier.align(Alignment.TopStart).offset(x = (-6).dp, y = (-6).dp).size(24.dp)
                     ) {
-                        Icon(Icons.Filled.Check, contentDescription = "Select", tint = Color.White, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Filled.Check, contentDescription = t("Select"), tint = Color.White, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -623,18 +625,18 @@ fun NotesScreen(
             ) {
                 if (pinned.isNotEmpty()) {
                     item(key = "__pinned_header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
-                        Text("PINNED", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
+                        Text(t("PINNED"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
                     }
                     staggeredItems(pinned, key = { it.id }) { renderCard(it) }
                     item(key = "__others_header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
-                        Text("OTHERS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                        Text(t("OTHERS"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
                     }
                 }
                 staggeredItems(others, key = { it.id }) { renderCard(it) }
                 if (visible.isEmpty()) {
                     item(key = "__empty", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-                            Text(when (section) { "archive" -> "No archived notes."; "trash" -> "Trash is empty."; "reminders" -> "No reminders."; else -> "Tap + to create your first note." }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(when (section) { "archive" -> t("No archived notes."); "trash" -> t("Trash is empty."); "reminders" -> t("No reminders."); else -> t("Tap + to create your first note.") }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -651,7 +653,7 @@ fun NotesScreen(
             if (pinned.isNotEmpty()) {
                 item {
                     Text(
-                        "PINNED",
+                        t("PINNED"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -661,7 +663,7 @@ fun NotesScreen(
                 items(pinned, key = { it.id }) { note -> renderCard(note) }
                 item {
                     Text(
-                        "OTHERS",
+                        t("OTHERS"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -678,10 +680,10 @@ fun NotesScreen(
                     ) {
                         Text(
                             when (section) {
-                                "archive" -> "No archived notes."
-                                "trash" -> "Trash is empty."
-                                "reminders" -> "No reminders."
-                                else -> "Tap + to create your first note."
+                                "archive" -> t("No archived notes.")
+                                "trash" -> t("Trash is empty.")
+                                "reminders" -> t("No reminders.")
+                                else -> t("Tap + to create your first note.")
                             },
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -747,7 +749,7 @@ fun NotesScreen(
                     dateForNote = null
                 }) { Text("OK") }
             },
-            dismissButton = { TextButton(onClick = { dateForNote = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { dateForNote = null }) { Text(t("Cancel")) } }
         ) { androidx.compose.material3.DatePicker(state = pickerState) }
     }
 
@@ -756,14 +758,14 @@ fun NotesScreen(
         var collabs by remember(note.id) { mutableStateOf(note.collaboratorEmails) }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { collabForNote = null },
-            title = { Text("Collaborators", fontWeight = FontWeight.ExtraBold) },
+            title = { Text(t("Collaborators"), fontWeight = FontWeight.ExtraBold) },
             text = {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = emailInput,
                             onValueChange = { emailInput = it },
-                            placeholder = { Text("Email") },
+                            placeholder = { Text(t("Email")) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -789,7 +791,7 @@ fun NotesScreen(
                         }
                     } else {
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("No collaborators yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        Text(t("No collaborators yet."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
                 }
             },
@@ -811,7 +813,7 @@ fun NotesScreen(
                     collabForNote = null
                 }) { Text("Save", fontWeight = FontWeight.ExtraBold) }
             },
-            dismissButton = { TextButton(onClick = { collabForNote = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { collabForNote = null }) { Text(t("Cancel")) } }
         )
     }
 
@@ -855,6 +857,8 @@ private fun NoteCard(
     onToggleSelect: () -> Unit = {},
     teamMembers: List<uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember> = emptyList()
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = colorForNote(note.colorName),
@@ -878,7 +882,7 @@ private fun NoteCard(
                     IconButton(onClick = onTogglePin, modifier = Modifier.size(32.dp)) {
                         Icon(
                             if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (note.isPinned) "Unpin" else "Pin",
+                            contentDescription = if (note.isPinned) t("Unpin") else "Pin",
                             modifier = Modifier.size(18.dp),
                             tint = if (note.isPinned) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1005,7 +1009,7 @@ private fun NoteCard(
                     var colorMenuOpen by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { colorMenuOpen = true }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Outlined.Palette, contentDescription = "Color", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Outlined.Palette, contentDescription = t("Color"), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                             Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1028,37 +1032,37 @@ private fun NoteCard(
                         IconButton(onClick = { reminderMenuOpen = true }, modifier = Modifier.size(32.dp)) {
                             Icon(
                                 if (note.reminderDate != null) Icons.Filled.Notifications else Icons.Outlined.Notifications,
-                                contentDescription = "Reminder",
+                                contentDescription = t("Reminder"),
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         androidx.compose.material3.DropdownMenu(expanded = reminderMenuOpen, onDismissRequest = { reminderMenuOpen = false }) {
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Tomorrow") }, onClick = { reminderMenuOpen = false; onSetReminder(Date(System.currentTimeMillis() + 24L * 60 * 60 * 1000)) })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Next week") }, onClick = { reminderMenuOpen = false; onSetReminder(Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000)) })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(t("Tomorrow")) }, onClick = { reminderMenuOpen = false; onSetReminder(Date(System.currentTimeMillis() + 24L * 60 * 60 * 1000)) })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(t("Next week")) }, onClick = { reminderMenuOpen = false; onSetReminder(Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000)) })
                             androidx.compose.material3.DropdownMenuItem(text = { Text("Pick date…") }, onClick = { reminderMenuOpen = false; onPickDate() })
                             if (note.reminderDate != null) {
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Remove reminder", color = MaterialTheme.colorScheme.error) }, onClick = { reminderMenuOpen = false; onSetReminder(null) })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Remove reminder"), color = MaterialTheme.colorScheme.error) }, onClick = { reminderMenuOpen = false; onSetReminder(null) })
                             }
                         }
                     }
                     // Collaborators → open inline collaborators dialog
                     IconButton(onClick = onOpenCollaborators, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.PersonAdd, contentDescription = "Collaborators", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Filled.PersonAdd, contentDescription = t("Collaborators"), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     // Archive / Unarchive
                     if (!note.isDeleted) {
                         IconButton(onClick = onArchive, modifier = Modifier.size(32.dp)) {
                             Icon(
                                 if (note.isArchived) Icons.Filled.Unarchive else Icons.Filled.Archive,
-                                contentDescription = if (note.isArchived) "Unarchive" else "Archive",
+                                contentDescription = if (note.isArchived) t("Unarchive") else t("Archive"),
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     } else {
                         IconButton(onClick = onRestore, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Restore, contentDescription = "Restore", modifier = Modifier.size(18.dp), tint = StudioBlue)
+                            Icon(Icons.Filled.Restore, contentDescription = t("Restore"), modifier = Modifier.size(18.dp), tint = StudioBlue)
                         }
                     }
                     // Drag handle — wide area for easy grab
@@ -1070,7 +1074,7 @@ private fun NoteCard(
                                 .then(dragHandleModifier),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Filled.DragIndicator, contentDescription = "Drag to reorder", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+                            Icon(Icons.Filled.DragIndicator, contentDescription = t("Drag to reorder"), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
                         }
                     } else {
                         Spacer(modifier = Modifier.weight(1f))
@@ -1083,11 +1087,11 @@ private fun NoteCard(
                         }
                         androidx.compose.material3.DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                             androidx.compose.material3.DropdownMenuItem(text = { Text("Edit") }, onClick = { moreOpen = false; onClick() })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Duplicate") }, onClick = { moreOpen = false; onDuplicate() })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Copy text") }, onClick = { moreOpen = false; onCopy() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(t("Duplicate")) }, onClick = { moreOpen = false; onDuplicate() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(t("Copy text")) }, onClick = { moreOpen = false; onCopy() })
                             if (allLabelsList.isNotEmpty()) {
                                 androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                Text("LABELS", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                Text(t("LABELS"), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                                 allLabelsList.forEach { l ->
                                     val on = note.labels.contains(l)
                                     androidx.compose.material3.DropdownMenuItem(
@@ -1098,18 +1102,18 @@ private fun NoteCard(
                             }
                             if (canReorder) {
                                 androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move up") }, onClick = { moreOpen = false; onMoveUp() })
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move down") }, onClick = { moreOpen = false; onMoveDown() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Move up")) }, onClick = { moreOpen = false; onMoveUp() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Move down")) }, onClick = { moreOpen = false; onMoveDown() })
                             }
                             androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             if (note.isDeleted) {
                                 androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("Delete forever", color = MaterialTheme.colorScheme.error) },
+                                    text = { Text(t("Delete forever"), color = MaterialTheme.colorScheme.error) },
                                     onClick = { moreOpen = false; onDelete() }
                                 )
                             } else {
                                 androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("Move to trash", color = MaterialTheme.colorScheme.error) },
+                                    text = { Text(t("Move to trash"), color = MaterialTheme.colorScheme.error) },
                                     onClick = { moreOpen = false; onDelete() }
                                 )
                             }
@@ -1122,11 +1126,11 @@ private fun NoteCard(
                     Spacer(modifier = Modifier.weight(1f))
                     if (note.isDeleted) {
                         IconButton(onClick = { onRestore() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Restore, contentDescription = "Restore", modifier = Modifier.size(16.dp), tint = StudioBlue)
+                            Icon(Icons.Filled.Restore, contentDescription = t("Restore"), modifier = Modifier.size(16.dp), tint = StudioBlue)
                         }
                     } else if (note.isArchived) {
                         IconButton(onClick = onArchive, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Archive, contentDescription = "Unarchive", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Filled.Archive, contentDescription = t("Unarchive"), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     if (canReorder) {
@@ -1137,7 +1141,7 @@ private fun NoteCard(
                                 .then(dragHandleModifier),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Filled.DragIndicator, contentDescription = "Drag to reorder", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+                            Icon(Icons.Filled.DragIndicator, contentDescription = t("Drag to reorder"), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
                         }
                     }
                     var compactMoreOpen by remember { mutableStateOf(false) }
@@ -1147,11 +1151,11 @@ private fun NoteCard(
                         }
                         androidx.compose.material3.DropdownMenu(expanded = compactMoreOpen, onDismissRequest = { compactMoreOpen = false }) {
                             androidx.compose.material3.DropdownMenuItem(text = { Text("Edit") }, onClick = { compactMoreOpen = false; onClick() })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Duplicate") }, onClick = { compactMoreOpen = false; onDuplicate() })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Copy text") }, onClick = { compactMoreOpen = false; onCopy() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(t("Duplicate")) }, onClick = { compactMoreOpen = false; onDuplicate() })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(t("Copy text")) }, onClick = { compactMoreOpen = false; onCopy() })
                             if (allLabelsList.isNotEmpty()) {
                                 androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                Text("LABELS", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                Text(t("LABELS"), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                                 allLabelsList.forEach { l ->
                                     val on = note.labels.contains(l)
                                     androidx.compose.material3.DropdownMenuItem(text = { Text("${if (on) "✓ " else ""}$l", fontWeight = if (on) FontWeight.Bold else FontWeight.Normal) }, onClick = { onToggleLabel(l) })
@@ -1159,14 +1163,14 @@ private fun NoteCard(
                             }
                             if (canReorder) {
                                 androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move up") }, onClick = { compactMoreOpen = false; onMoveUp() })
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move down") }, onClick = { compactMoreOpen = false; onMoveDown() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Move up")) }, onClick = { compactMoreOpen = false; onMoveUp() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Move down")) }, onClick = { compactMoreOpen = false; onMoveDown() })
                             }
                             androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             if (note.isDeleted) {
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Delete forever", color = MaterialTheme.colorScheme.error) }, onClick = { compactMoreOpen = false; onDelete() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Delete forever"), color = MaterialTheme.colorScheme.error) }, onClick = { compactMoreOpen = false; onDelete() })
                             } else {
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Move to trash", color = MaterialTheme.colorScheme.error) }, onClick = { compactMoreOpen = false; onDelete() })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(t("Move to trash"), color = MaterialTheme.colorScheme.error) }, onClick = { compactMoreOpen = false; onDelete() })
                             }
                         }
                     }
@@ -1183,6 +1187,8 @@ private fun NoteEditorDialog(
     onSave: (StudioKeepNote) -> Unit,
     onPickImage: (ByteArray, String, String) -> Unit = { _, _, _ -> }
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
@@ -1205,7 +1211,7 @@ private fun NoteEditorDialog(
     val colors = listOf("default", "red", "orange", "yellow", "green", "blue", "purple", "pink")
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (note.isEmpty) "New Note" else "Edit Note", fontWeight = FontWeight.ExtraBold) },
+        title = { Text(if (note.isEmpty) t("New Note") else t("Edit Note"), fontWeight = FontWeight.ExtraBold) },
         text = {
             Column {
                 OutlinedTextField(
@@ -1225,7 +1231,7 @@ private fun NoteEditorDialog(
                         .heightIn(min = 120.dp, max = 220.dp)
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Color", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Color"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1244,7 +1250,7 @@ private fun NoteEditorDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Reminder", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Reminder"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var datePickerOpen by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -1252,15 +1258,15 @@ private fun NoteEditorDialog(
                 ) {
                     AssistChip(
                         onClick = { reminderDate = Date(System.currentTimeMillis() + 24L * 60 * 60 * 1000) },
-                        label = { Text("Tomorrow") }
+                        label = { Text(t("Tomorrow")) }
                     )
                     AssistChip(
                         onClick = { reminderDate = Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000) },
-                        label = { Text("Next week") }
+                        label = { Text(t("Next week")) }
                     )
                     AssistChip(
                         onClick = { datePickerOpen = true },
-                        label = { Text("Pick date") }
+                        label = { Text(t("Pick date")) }
                     )
                     if (reminderDate != null) {
                         AssistChip(
@@ -1287,7 +1293,7 @@ private fun NoteEditorDialog(
                                 datePickerOpen = false
                             }) { Text("OK") }
                         },
-                        dismissButton = { TextButton(onClick = { datePickerOpen = false }) { Text("Cancel") } }
+                        dismissButton = { TextButton(onClick = { datePickerOpen = false }) { Text(t("Cancel")) } }
                     ) { DatePicker(state = pickerState) }
                 }
 
@@ -1303,7 +1309,7 @@ private fun NoteEditorDialog(
                         )
                     },
                     modifier = Modifier.padding(top = 4.dp)
-                ) { Text("Add image…") }
+                ) { Text(t("Add image…")) }
                 if (note.links.isNotEmpty()) {
                     Text(
                         "${note.links.size} attachment(s)",
@@ -1314,7 +1320,7 @@ private fun NoteEditorDialog(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Labels", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Labels"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var labelInput by rememberSaveable(note.id) { mutableStateOf("") }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -1323,7 +1329,7 @@ private fun NoteEditorDialog(
                     OutlinedTextField(
                         value = labelInput,
                         onValueChange = { labelInput = it },
-                        placeholder = { Text("Add label") },
+                        placeholder = { Text(t("Add label")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -1352,7 +1358,7 @@ private fun NoteEditorDialog(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Collaborators", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Collaborators"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var collabInput by rememberSaveable(note.id) { mutableStateOf("") }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -1361,7 +1367,7 @@ private fun NoteEditorDialog(
                     OutlinedTextField(
                         value = collabInput,
                         onValueChange = { collabInput = it },
-                        placeholder = { Text("Email") },
+                        placeholder = { Text(t("Email")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -1404,18 +1410,20 @@ private fun NoteEditorDialog(
                 Text("Save", fontWeight = FontWeight.ExtraBold)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }
 
 @Composable
 private fun ProjectNotesList(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     data class Entry(val orderId: String, val title: String, val customer: String, val noteType: String, val text: String)
     val entries = remember(state.orders) {
         state.orders.flatMap { order ->
             buildList {
                 if (order.notes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, "Note", order.notes))
-                if (order.invNotes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, "Inventory", order.invNotes))
+                if (order.invNotes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, t("Inventory"), order.invNotes))
             }
         }
     }
@@ -1430,7 +1438,7 @@ private fun ProjectNotesList(state: StudioFlowUiState) {
         if (grouped.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-                    Text("No project notes yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("No project notes yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

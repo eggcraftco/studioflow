@@ -48,7 +48,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -87,9 +89,11 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -169,6 +173,7 @@ private val LocalDetailCardsUnlocked = compositionLocalOf { false }
 private val LocalOrderCardActions = compositionLocalOf<OrderCardCustomizationActions?> { null }
 private val LocalOrderHeadingEditorActions = compositionLocalOf<OrderHeadingEditorActions?> { null }
 private val LocalUnifiedBoardVerticalScroll = compositionLocalOf { false }
+private val LocalKeepOrderCardVisible = compositionLocalOf<(OrderDetailCardId) -> Unit> { {} }
 private val LocalCurrencySymbol = compositionLocalOf { "£" }
 private val LocalDecimalSeparator = compositionLocalOf { "." }
 private const val StudioCardDragMime = "application/x-studioflow-card"
@@ -213,7 +218,9 @@ private data class OrderCardCustomizationActions(
 
 private data class OrderHeadingEditorActions(
     val workspaceSettings: StudioWorkspaceSettings,
-    val onSave: (Map<String, Any?>, String) -> Unit
+    val onSave: (Map<String, Any?>, String) -> Unit,
+    val orderExtraNoteSections: List<StudioHeadingItem> = emptyList(),
+    val onSavePerOrderNoteExtras: ((List<StudioHeadingItem>) -> Unit)? = null
 )
 
 private data class OrderHeadingEditorConfig(
@@ -301,6 +308,8 @@ fun OrderDetailScreen(
     showBack: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val access = workspace?.memberAccess
     fun allowed(key: String): Boolean = access?.allows(key) != false && workspaceSettings.showsCard(key)
     val canSeeFinancial = workspace?.canSeeFinancialData == true && allowed("cardFinancial")
@@ -318,10 +327,11 @@ fun OrderDetailScreen(
     val canManageCardLayout = workspace?.let {
         it.isOwner || (it.role in setOf("admin", "member", "workflow") && it.memberAccess.orders)
     } == true
-    val independentOrderLayout = remember(order.id, order.customFields) {
-        order.customFields[OrderWorkspaceLayoutKey]
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
+    val orderLayoutSnapshotJson = order.customFields[OrderWorkspaceLayoutKey].orEmpty()
+    val independentOrderLayout = remember(order.id, orderLayoutSnapshotJson) {
+        orderLayoutSnapshotJson
+            .trim()
+            .takeIf { it.isNotBlank() }
             ?.let { orderDetailCardLayoutFromSnapshotJSON(it) }
     }
     val effectiveWorkspaceSettings = remember(workspaceSettings, independentOrderLayout) {
@@ -333,7 +343,12 @@ fun OrderDetailScreen(
             else -> allowed(cardId.accessKey)
         }
     }
+    var locallyVisibleCards by remember(order.id) { mutableStateOf(emptySet<OrderDetailCardId>()) }
+    fun isLayoutCardVisible(layout: OrderDetailCardLayout, cardId: OrderDetailCardId): Boolean {
+        return layout.isVisible(cardId) || cardId in locallyVisibleCards
+    }
     fun saveCardLayout(nextLayout: OrderDetailCardLayout) {
+        locallyVisibleCards = locallyVisibleCards.filter { nextLayout.isVisible(it) }.toSet()
         val snapshotJSON = nextLayout.toWorkspaceSnapshotJSON()
         if (independentOrderLayout != null) {
             onSaveOrderCardLayout(order, snapshotJSON)
@@ -353,10 +368,17 @@ fun OrderDetailScreen(
     CompositionLocalProvider(
         LocalCurrencySymbol provides workspaceSettings.selectedCurrency.ifBlank { "£" },
         LocalDecimalSeparator provides workspaceSettings.selectedDecimalSeparator,
-        LocalOrderHeadingEditorActions provides OrderHeadingEditorActions(
-            workspaceSettings = workspaceSettings,
-            onSave = onUpdateWorkspaceSettings
-        )
+        LocalKeepOrderCardVisible provides { cardId ->
+            locallyVisibleCards = locallyVisibleCards + cardId
+        },
+        LocalOrderHeadingEditorActions provides remember(workspaceSettings, order.id, order.customFields[ORDER_EXTRA_NOTE_SECTIONS_KEY]) {
+            OrderHeadingEditorActions(
+                workspaceSettings = workspaceSettings,
+                onSave = onUpdateWorkspaceSettings,
+                orderExtraNoteSections = perOrderExtraNoteSections(order),
+                onSavePerOrderNoteExtras = { items -> savePerOrderExtraNoteSections(order, items, onUpdateOrderFields) }
+            )
+        }
     ) {
         BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val useBoardLayout = !showBack && maxWidth >= 520.dp
@@ -381,6 +403,7 @@ fun OrderDetailScreen(
                 onRenameClientFile = onRenameClientFile,
                 onDeleteClientFile = onDeleteClientFile,
                 canManageCardLayout = canManageCardLayout,
+                locallyVisibleCards = locallyVisibleCards,
                 isOrderIndependentLayout = independentOrderLayout != null,
                 onDetachOrderLayout = {
                     onSaveOrderCardLayout(order, effectiveWorkspaceSettings.orderCardLayout.toWorkspaceSnapshotJSON())
@@ -398,9 +421,9 @@ fun OrderDetailScreen(
 
         val phoneLayout = effectiveWorkspaceSettings.orderCardLayout
         val visiblePhoneCards = phoneLayout.phoneOrder
-            .filter { cardId -> allowedCard(cardId) && phoneLayout.isVisible(cardId) }
+            .filter { cardId -> allowedCard(cardId) && isLayoutCardVisible(phoneLayout, cardId) }
         val hiddenPhoneCards = OrderDetailCardId.DefaultOrder
-            .filter { cardId -> allowedCard(cardId) && !phoneLayout.isVisible(cardId) }
+            .filter { cardId -> allowedCard(cardId) && !isLayoutCardVisible(phoneLayout, cardId) }
         var resizingPhoneCard by remember(order.id) { mutableStateOf(false) }
         var draggingPhoneCard by remember(order.id) { mutableStateOf<OrderDetailCardId?>(null) }
         var phoneCardProfilesOpen by remember(order.id) { mutableStateOf(false) }
@@ -560,6 +583,8 @@ private fun DetailTopBar(
     onCardsUnlockedChange: (Boolean) -> Unit = {},
     onOpenCardProfiles: (() -> Unit)?
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val headerDetails = rememberOrderHeaderDetailsState()
     var actionsOpen by remember { mutableStateOf(false) }
@@ -604,7 +629,7 @@ private fun DetailTopBar(
             ) {
                 if (showBack) {
                     TextButton(onClick = onBack) {
-                        Text("Orders", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
+                        Text(t("Orders"), color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                     }
                 }
                 Text(
@@ -709,6 +734,8 @@ private fun DetailHero(
     teamMembers: List<StudioTeamMember>,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -762,6 +789,8 @@ private fun DetailHero(
 
 @Composable
 private fun DetailHeroPreview(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val previewUrl = remember(order.id, order.designLink, order.clientFiles) {
         order.designLink.trim().ifBlank {
             order.clientFiles.firstOrNull {
@@ -824,6 +853,7 @@ private fun DesktopOrderDetailBoard(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit,
     canManageCardLayout: Boolean,
+    locallyVisibleCards: Set<OrderDetailCardId> = emptySet(),
     isOrderIndependentLayout: Boolean,
     onDetachOrderLayout: () -> Unit,
     onResetOrderLayout: () -> Unit,
@@ -832,6 +862,8 @@ private fun DesktopOrderDetailBoard(
     onSaveWorkspaceProfilesJSON: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val access = workspace?.memberAccess
     fun allowed(key: String): Boolean = access?.allows(key) != false && workspaceSettings.showsCard(key)
     fun allowedCard(cardId: OrderDetailCardId): Boolean {
@@ -855,6 +887,9 @@ private fun DesktopOrderDetailBoard(
     var resizeColumnBaseWidth by remember(order.id) { mutableStateOf(0) }
     var resizeColumnDeltaDp by remember(order.id) { mutableStateOf(0f) }
     var draggingBoardCard by remember(order.id) { mutableStateOf<OrderDetailCardId?>(null) }
+    fun isLayoutCardVisible(layout: OrderDetailCardLayout, cardId: OrderDetailCardId): Boolean {
+        return layout.isVisible(cardId) || cardId in locallyVisibleCards
+    }
     LaunchedEffect(draggingBoardCard) {
         val activeDrag = draggingBoardCard ?: return@LaunchedEffect
         delay(30_000)
@@ -908,7 +943,7 @@ private fun DesktopOrderDetailBoard(
                 LocalUnifiedBoardVerticalScroll provides true
             ) {
                 val lastVisibleColumnIndex = layout.columns.indices.lastOrNull { columnIndex ->
-                    layout.columns[columnIndex].any { cardId -> allowedCard(cardId) && layout.isVisible(cardId) }
+                    layout.columns[columnIndex].any { cardId -> allowedCard(cardId) && isLayoutCardVisible(layout, cardId) }
                 } ?: -1
                 val visibleColumnCount = (lastVisibleColumnIndex + 1)
                     .coerceAtLeast(1)
@@ -929,7 +964,7 @@ private fun DesktopOrderDetailBoard(
                 })
                     .coerceAtMost(MaxDesktopCardColumns)
                 val hiddenCards = OrderDetailCardId.DefaultOrder
-                    .filter { cardId -> allowedCard(cardId) && !layout.isVisible(cardId) }
+                    .filter { cardId -> allowedCard(cardId) && !isLayoutCardVisible(layout, cardId) }
                 if (hiddenCards.isNotEmpty() && cardsUnlocked && canManageCardLayout) {
                     HiddenCardsBar(
                         hiddenCards = hiddenCards,
@@ -1007,7 +1042,7 @@ private fun DesktopOrderDetailBoard(
                             }
                             val columnCards = layout.columns
                                 .getOrElse(columnIndex) { emptyList() }
-                                .filter { cardId -> allowedCard(cardId) && layout.isVisible(cardId) }
+                                .filter { cardId -> allowedCard(cardId) && isLayoutCardVisible(layout, cardId) }
                             val visibleCardHeights = columnCards.sumOf { cardId ->
                                 layout.savedHeightFor(cardId, order.id) ?: defaultRenderedCardHeight(cardId)
                             }
@@ -1218,6 +1253,8 @@ private fun DesktopOrderHeader(
     currentUserId: String,
     onSaveWorkspaceProfilesJSON: (String, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val headerDetails = rememberOrderHeaderDetailsState()
     var actionsOpen by remember { mutableStateOf(false) }
@@ -1390,6 +1427,8 @@ private fun OrderHeaderBadges(
     modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val nextSchedule = remember(order.scheduleReminders) { nextHeaderScheduleReminder(order) }
     val hasVisibleBadge = (headerDetails.showUpcomingSchedule && nextSchedule != null) ||
         headerDetails.showDeliveryTime ||
@@ -1436,6 +1475,8 @@ private fun HeaderMetricPill(
     iconText: String? = null,
     compact: Boolean = false
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = color.copy(alpha = 0.13f),
@@ -1481,7 +1522,9 @@ private fun HeaderLockPill(
     canManageCardLayout: Boolean,
     onCardsUnlockedChange: (Boolean) -> Unit
 ) {
-    val label = if (cardsUnlocked) "Cards Unlocked" else "Cards Locked"
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val label = if (cardsUnlocked) t("Cards Unlocked") else t("Cards Locked")
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -1515,6 +1558,8 @@ private fun HeaderLockPill(
 
 @Composable
 private fun HeaderActionsMenuButton(onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -1556,6 +1601,8 @@ private fun OrderHeaderActionsMenu(
     onExportPdf: () -> Unit,
     showHeaderDetailToggles: Boolean = true
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (showHeaderDetailToggles) {
             Text(
@@ -1585,14 +1632,14 @@ private fun OrderHeaderActionsMenu(
             HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
         }
         DropdownMenuItem(
-            text = { Text("Customize") },
+            text = { Text(t("Customize")) },
             leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
             enabled = canCustomize,
             onClick = onCustomize
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
         DropdownMenuItem(
-            text = { Text("Export PDF") },
+            text = { Text(t("Export PDF")) },
             leadingIcon = { Icon(Icons.Filled.Description, contentDescription = null) },
             onClick = onExportPdf
         )
@@ -1601,6 +1648,8 @@ private fun OrderHeaderActionsMenu(
 
 @Composable
 private fun HeaderDetailsToggleMenuItem(label: String, checked: Boolean, onToggle: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DropdownMenuItem(
         text = { Text(label) },
         leadingIcon = {
@@ -1631,6 +1680,8 @@ private fun CardLayoutProfilesDialog(
     onResetOrderLayout: () -> Unit,
     onSaveProfilesJSON: (String, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var profiles by remember(profilesJSON, currentUserId, currentSnapshotJSON) {
         mutableStateOf(
             savedCardLayoutProfilesForCurrentUser(
@@ -1699,7 +1750,7 @@ private fun CardLayoutProfilesDialog(
             activeSnapshotJSON = profile.snapshotJSON
         )
         if (updatedJSON != null) {
-            onSaveProfilesJSON(updatedJSON, "${profile.name.trim().ifBlank { "Card profile" }} loaded.")
+            onSaveProfilesJSON(updatedJSON, "${profile.name.trim().ifBlank { t("Card profile") }} loaded.")
         }
         onLoadLayout(layout)
     }
@@ -1735,7 +1786,7 @@ private fun CardLayoutProfilesDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Workspace Customization", fontWeight = FontWeight.ExtraBold)
+                Text(t("Workspace Customization"), fontWeight = FontWeight.ExtraBold)
                 Text(
                     "Choose which blocks are visible and manage the layout for this order.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1791,7 +1842,7 @@ private fun CardLayoutProfilesDialog(
                                 )
                             }
                             TextButton(onClick = { stopFollowingTeamProfile() }) {
-                                Text("Use mine")
+                                Text(t("Use mine"))
                             }
                         }
                     }
@@ -1855,17 +1906,17 @@ private fun CardLayoutProfilesDialog(
                         ) {
                             if (isOrderIndependentLayout) {
                                 Button(onClick = { onApplyLayout(workingLayout) }) {
-                                    Text("Save this order")
+                                    Text(t("Save this order"))
                                 }
                                 TextButton(onClick = onResetOrderLayout) {
-                                    Text("Rejoin shared")
+                                    Text(t("Rejoin shared"))
                                 }
                             } else {
                                 Button(onClick = onDetachOrderLayout) {
-                                    Text("Make independent")
+                                    Text(t("Make independent"))
                                 }
                                 TextButton(onClick = { onApplyLayout(workingLayout) }) {
-                                    Text("Save shared")
+                                    Text(t("Save shared"))
                                 }
                             }
                         }
@@ -1885,12 +1936,12 @@ private fun CardLayoutProfilesDialog(
                                     enabled = OrderDetailCardId.DefaultOrder.any { !workingLayout.isVisible(it) },
                                     onClick = { applyWorkingLayout(workingLayout.withAllCardsVisible()) }
                                 ) {
-                                    Text("Restore hidden")
+                                    Text(t("Restore hidden"))
                                 }
                                 TextButton(
                                     onClick = { applyWorkingLayout(workingLayout.withAllCardsAutoHeight(orderId)) }
                                 ) {
-                                    Text("Auto-size cards")
+                                    Text(t("Auto-size cards"))
                                 }
                             }
                             Row(
@@ -1901,12 +1952,12 @@ private fun CardLayoutProfilesDialog(
                                 TextButton(
                                     onClick = { applyWorkingLayout(workingLayout.withDefaultColumnWidths()) }
                                 ) {
-                                    Text("Reset columns")
+                                    Text(t("Reset columns"))
                                 }
                                 TextButton(
                                     onClick = { applyWorkingLayout(workingLayout.withDefaultDesktopBoard(orderId)) }
                                 ) {
-                                    Text("Reset board")
+                                    Text(t("Reset board"))
                                 }
                             }
                         }
@@ -1945,7 +1996,7 @@ private fun CardLayoutProfilesDialog(
                                         name = "Profile $nextIndex",
                                         snapshotJSON = workingSnapshotJSON
                                     ),
-                                    "Card profile added."
+                                    t("Card profile added.")
                                 )
                             }
                         ) {
@@ -2007,7 +2058,7 @@ private fun CardLayoutProfilesDialog(
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { Text("Profile name") }
+                                label = { Text(t("Profile name")) }
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2021,25 +2072,25 @@ private fun CardLayoutProfilesDialog(
                                             name = profile.name.trim().ifBlank { "Profile ${index + 1}" },
                                             snapshotJSON = workingSnapshotJSON
                                         )
-                                        persist(next, "Card profile saved.")
+                                        persist(next, t("Card profile saved."))
                                     }
                                 ) {
-                                    Text("Save")
+                                    Text(t("Save"))
                                 }
                                 TextButton(
                                     enabled = parsedLayout != null,
                                     onClick = { loadPersonalProfile(profile) }
                                 ) {
-                                    Text("Load")
+                                    Text(t("Load"))
                                 }
                                 TextButton(
                                     enabled = profiles.size > 1,
                                     onClick = {
                                         val next = profiles.toMutableList().also { it.removeAt(index) }
-                                        persist(next, "Card profile deleted.")
+                                        persist(next, t("Card profile deleted."))
                                     }
                                 ) {
-                                    Text("Delete", color = if (profiles.size > 1) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(t("Delete"), color = if (profiles.size > 1) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -2254,12 +2305,12 @@ private fun CardLayoutProfilesDialog(
         },
         confirmButton = {
             Button(onClick = onDismiss) {
-                Text("Done")
+                Text(t("Done"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(t("Close"))
             }
         }
     )
@@ -2277,6 +2328,8 @@ private fun DesktopColumn(
     onResizeCancel: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Box(
         modifier = Modifier
             .width(widthDp.dp)
@@ -2335,6 +2388,8 @@ private fun BoardQuickActionsStrip(
     onResetColumns: () -> Unit,
     onResetBoard: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2356,13 +2411,15 @@ private fun BoardQuickActionsStrip(
             BoardActionChip("Reset columns", onResetColumns)
             BoardActionChip("Reset board", onResetBoard)
         } else {
-            BoardInfoPill(if (canManageCardLayout) "Cards locked" else "Layout read-only", MaterialTheme.colorScheme.onSurfaceVariant)
+            BoardInfoPill(if (canManageCardLayout) t("Cards locked") else "Layout read-only", MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
 private fun BoardInfoPill(label: String, color: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = color.copy(alpha = 0.10f),
@@ -2381,6 +2438,8 @@ private fun BoardInfoPill(label: String, color: Color) {
 
 @Composable
 private fun BoardActionChip(label: String, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = StudioBlue.copy(alpha = 0.10f),
@@ -2403,6 +2462,8 @@ private fun HiddenCardsBar(
     hiddenCards: List<OrderDetailCardId>,
     onShowCard: (OrderDetailCardId) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2448,6 +2509,8 @@ private fun OrderLayoutCardFrame(
     onDropCard: (OrderDetailCardId, Boolean) -> Unit,
     content: @Composable () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var isDropTarget by remember(cardId) { mutableStateOf(false) }
     var dropAfter by remember(cardId) { mutableStateOf(true) }
     var cardHeightPx by remember(cardId) { mutableStateOf(0) }
@@ -2551,6 +2614,8 @@ private fun BoardEdgeScrollDropZone(
     onScrollStep: () -> Unit,
     onDropCard: ((OrderDetailCardId) -> Unit)? = null
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var isActive by remember { mutableStateOf(false) }
     val latestOnScrollStep by rememberUpdatedState(onScrollStep)
     val latestOnDropCard by rememberUpdatedState(onDropCard)
@@ -2613,6 +2678,8 @@ private fun ColumnDropZone(
     onDragEnd: () -> Unit = {},
     onDropCard: (OrderDetailCardId) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var isDropTarget by remember { mutableStateOf(false) }
     val target = remember(enabled) {
         object : DragAndDropTarget {
@@ -2683,6 +2750,8 @@ private fun CardInsertionDropZone(
     onDragEnd: () -> Unit = {},
     onDropCard: (OrderDetailCardId) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     if (!enabled) return
     var isDropTarget by remember { mutableStateOf(false) }
     val target = remember(enabled) {
@@ -2760,6 +2829,8 @@ private fun OrderDetailCardContent(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     when (cardId) {
         OrderDetailCardId.Preview -> DesktopPreviewCard(
             order = order,
@@ -2860,6 +2931,8 @@ private fun DesktopPreviewCard(
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     onUploadPreviewImage: (StudioOrder, ByteArray, String, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val previewUrl = order.designLink.trim()
@@ -2998,7 +3071,7 @@ private fun DesktopPreviewCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Use Latest Client Image") },
+                        text = { Text(t("Use Latest Client Image")) },
                         leadingIcon = { Icon(Icons.Filled.TableChart, contentDescription = null) },
                         enabled = canEditPreview && latestImageFile != null && latestImageFile.downloadUrl != previewUrl,
                         onClick = {
@@ -3009,7 +3082,7 @@ private fun DesktopPreviewCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Open Image") },
+                        text = { Text(t("Open Image")) },
                         enabled = displayPreviewUrl.isNotBlank(),
                         onClick = {
                             actionMenuOpen = false
@@ -3017,7 +3090,7 @@ private fun DesktopPreviewCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Remove Image", color = StudioRed) },
+                        text = { Text(t("Remove Image"), color = StudioRed) },
                         leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = StudioRed) },
                         enabled = canEditPreview && previewUrl.isNotBlank(),
                         onClick = {
@@ -3032,7 +3105,7 @@ private fun DesktopPreviewCard(
             OutlinedTextField(
                 value = linkDraft,
                 onValueChange = { linkDraft = it },
-                label = { Text("Paste photo link...") },
+                label = { Text(t("Paste photo link...")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -3045,7 +3118,7 @@ private fun DesktopPreviewCard(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Save Link", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Save Link"), fontWeight = FontWeight.ExtraBold)
                 }
                 TextButton(
                     onClick = {
@@ -3054,7 +3127,7 @@ private fun DesktopPreviewCard(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Cancel", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Cancel"), fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
@@ -3068,18 +3141,119 @@ private fun DesktopNotesCard(
     canEditWorkflow: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
-    val sections = normalizedSpecialNoteSections(workspaceSettings.specialNoteSections)
-    DetailCard(title = "Notes") {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val keepOrderCardVisible = LocalKeepOrderCardVisible.current
+    val globals = normalizedSpecialNoteSections(workspaceSettings.specialNoteSections)
+    // Local optimistic state — survives rapid clicks even before Firestore round-trip completes.
+    var localExtras by remember(order.id) { mutableStateOf(perOrderExtraNoteSections(order)) }
+    var lastLocalWriteJson by remember(order.id) { mutableStateOf<String?>(null) }
+    val remoteExtrasJson = order.customFields[ORDER_EXTRA_NOTE_SECTIONS_KEY].orEmpty()
+    LaunchedEffect(order.id, remoteExtrasJson) {
+        // Adopt remote only if it matches our last write (round-trip confirmed) — otherwise keep local optimistic.
+        // Also adopt remote if we've never written locally (initial load or remote change from another device).
+        val remote = perOrderExtraNoteSections(order)
+        val remoteIds = remote.map { it.id }.toSet()
+        val localIds = localExtras.map { it.id }.toSet()
+        if (lastLocalWriteJson == null) {
+            // No local write yet — adopt remote.
+            if (remoteIds != localIds) localExtras = remote
+        } else if (remoteExtrasJson == lastLocalWriteJson) {
+            // Round-trip matches our last write — clear flag, accept remote (which equals local).
+            localExtras = remote
+            lastLocalWriteJson = null
+        } else if (remote.size >= localExtras.size && remoteIds.containsAll(localIds)) {
+            // Remote has at least everything local has — possibly a peer added more. Adopt.
+            localExtras = remote
+            lastLocalWriteJson = null
+        }
+        // Otherwise: remote is stale (shorter / missing items) — keep local optimistic.
+    }
+    val globalIds = globals.map { it.id }.toSet()
+    val mergedExtras = localExtras.filter { it.id !in globalIds }
+    val sections = globals + mergedExtras
+    val perOrderIds = mergedExtras.map { it.id }.toSet()
+    val minimumNotesHeight = (340 + mergedExtras.size * 120).coerceAtMost(760)
+    val commitExtras: (List<StudioHeadingItem>) -> Unit = { next ->
+        keepOrderCardVisible(OrderDetailCardId.Notes)
+        localExtras = next
+        val cleaned = next.filter { it.id.isNotBlank() && it.title.isNotBlank() && !it.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true) }
+        lastLocalWriteJson = if (cleaned.isEmpty()) "" else org.json.JSONArray().apply {
+            cleaned.forEach { put(org.json.JSONObject().put("id", it.id).put("title", it.title)) }
+        }.toString()
+        savePerOrderExtraNoteSections(order, next, onUpdateOrderFields)
+    }
+    DetailCard(
+        title = "Notes",
+        minimumHeightOverride = minimumNotesHeight,
+        headerAction = if (canEditWorkflow) {
+            {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = StudioBlue.copy(alpha = 0.12f),
+                    onClick = {
+                        val next = localExtras + StudioHeadingItem(java.util.UUID.randomUUID().toString(), "Special Note ${globals.size + localExtras.size + 1}")
+                        commitExtras(next)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = t("Add note field to this order"),
+                        modifier = Modifier.padding(5.dp).size(15.dp),
+                        tint = StudioBlue
+                    )
+                }
+            }
+        } else null
+    ) {
         sections.forEachIndexed { index, section ->
             if (index > 0) HorizontalDivider()
             SpecialNoteSectionEditor(
                 order = order,
                 section = section,
                 canEditWorkflow = canEditWorkflow,
-                onUpdateOrderFields = onUpdateOrderFields
+                isPerOrderExtra = section.id in perOrderIds,
+                onUpdateOrderFields = onUpdateOrderFields,
+                onRenameExtra = { newTitle ->
+                    val next = localExtras.map { if (it.id == section.id) it.copy(title = newTitle) else it }
+                    commitExtras(next)
+                },
+                onRemoveExtra = {
+                    val next = localExtras.filter { it.id != section.id }
+                    commitExtras(next)
+                }
             )
         }
     }
+}
+
+private const val ORDER_EXTRA_NOTE_SECTIONS_KEY = "orderExtraNoteSectionsJSON"
+
+private fun perOrderExtraNoteSections(order: StudioOrder): List<StudioHeadingItem> {
+    val raw = order.customFields[ORDER_EXTRA_NOTE_SECTIONS_KEY]?.trim().orEmpty()
+    if (raw.isEmpty()) return emptyList()
+    return try {
+        val arr = org.json.JSONArray(raw)
+        (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+            val id = obj.optString("id").trim()
+            val title = obj.optString("title").trim()
+            if (id.isBlank() || title.isBlank() || id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true)) null
+            else StudioHeadingItem(id, title)
+        }
+    } catch (_: Throwable) { emptyList() }
+}
+
+private fun savePerOrderExtraNoteSections(
+    order: StudioOrder,
+    sections: List<StudioHeadingItem>,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+) {
+    val cleaned = sections.filter { it.id.isNotBlank() && it.title.isNotBlank() && !it.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true) }
+    val json = if (cleaned.isEmpty()) "" else org.json.JSONArray().apply {
+        cleaned.forEach { put(org.json.JSONObject().put("id", it.id).put("title", it.title)) }
+    }.toString()
+    onUpdateOrderFields(order, mapOf("details" to mapOf("customFields" to mapOf(ORDER_EXTRA_NOTE_SECTIONS_KEY to json))))
 }
 
 @Composable
@@ -3087,36 +3261,95 @@ private fun SpecialNoteSectionEditor(
     order: StudioOrder,
     section: StudioHeadingItem,
     canEditWorkflow: Boolean,
-    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+    isPerOrderExtra: Boolean = false,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onRenameExtra: (String) -> Unit = {},
+    onRemoveExtra: () -> Unit = {}
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val sourceValue = specialNoteValue(order, section)
     var draft by remember(order.id, section.id, sourceValue) { mutableStateOf(sourceValue) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(section.title, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            label = { Text(section.title) },
-            enabled = canEditWorkflow,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(118.dp)
-        )
-        if (canEditWorkflow) {
-            Button(
-                onClick = {
-                    val details = if (section.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true)) {
-                        mapOf("notes" to draft)
-                    } else {
-                        mapOf("specialNotes" to mapOf(section.id to draft))
-                    }
-                    onUpdateOrderFields(order, mapOf("details" to details))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Save ${section.title}", fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val isPrimary = section.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true)
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val noteBg = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)
+
+    // Auto-save draft (debounced) on change
+    LaunchedEffect(draft, order.id, section.id) {
+        if (!canEditWorkflow) return@LaunchedEffect
+        if (draft == sourceValue) return@LaunchedEffect
+        delay(700)
+        if (draft == sourceValue) return@LaunchedEffect
+        val details = if (isPrimary) mapOf("notes" to draft) else mapOf("specialNotes" to mapOf(section.id to draft))
+        onUpdateOrderFields(order, mapOf("details" to details))
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (isPerOrderExtra && canEditWorkflow) {
+            var titleDraft by remember(section.id, section.title) { mutableStateOf(section.title) }
+            // Auto-save title (debounced)
+            LaunchedEffect(titleDraft, section.id) {
+                if (titleDraft == section.title) return@LaunchedEffect
+                delay(600)
+                if (titleDraft != section.title && titleDraft.isNotBlank()) onRenameExtra(titleDraft)
             }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                BasicTextField(
+                    value = titleDraft,
+                    onValueChange = { titleDraft = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = labelColor,
+                        letterSpacing = 0.6.sp
+                    ),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary)
+                )
+                IconButton(onClick = onRemoveExtra, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Remove section", tint = labelColor, modifier = Modifier.size(16.dp))
+                }
+            }
+        } else {
+            Text(
+                text = section.title.uppercase(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = labelColor,
+                letterSpacing = 0.6.sp
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = noteBg,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            BasicTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                enabled = canEditWorkflow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                textStyle = LocalTextStyle.current.copy(
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { inner ->
+                    Box(modifier = Modifier.heightIn(min = 64.dp)) {
+                        if (draft.isEmpty()) {
+                            Text(
+                                t("Add note here…"),
+                                color = labelColor.copy(alpha = 0.7f),
+                                fontSize = 14.sp
+                            )
+                        }
+                        inner()
+                    }
+                }
+            )
         }
     }
 }
@@ -3129,6 +3362,8 @@ private fun DesktopClientFilesCard(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var renameFileId by remember(order.id) { mutableStateOf("") }
@@ -3158,7 +3393,7 @@ private fun DesktopClientFilesCard(
                 onClick = { filePicker.launch(arrayOf("*/*")) },
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Upload File", fontWeight = FontWeight.ExtraBold)
+                Text(t("Upload File"), fontWeight = FontWeight.ExtraBold)
             }
             if (order.clientFiles.isEmpty()) {
                 DetailListRow("No client files yet.", "Upload PDFs, images, PSD or PSB files that belong to this client order.", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3176,7 +3411,7 @@ private fun DesktopClientFilesCard(
                             enabled = file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Open", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Open"), fontWeight = FontWeight.ExtraBold)
                         }
                         TextButton(
                             onClick = {
@@ -3187,7 +3422,7 @@ private fun DesktopClientFilesCard(
                             enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Preview", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Preview"), fontWeight = FontWeight.ExtraBold)
                         }
                         TextButton(
                             onClick = {
@@ -3196,14 +3431,14 @@ private fun DesktopClientFilesCard(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Rename", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Rename"), fontWeight = FontWeight.ExtraBold)
                         }
                     }
                     if (renameFileId == file.id) {
                         OutlinedTextField(
                             value = renameText,
                             onValueChange = { renameText = it },
-                            label = { Text("File name") },
+                            label = { Text(t("File name")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -3216,7 +3451,7 @@ private fun DesktopClientFilesCard(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Save", fontWeight = FontWeight.ExtraBold)
+                                Text(t("Save"), fontWeight = FontWeight.ExtraBold)
                             }
                             TextButton(
                                 onClick = {
@@ -3225,7 +3460,7 @@ private fun DesktopClientFilesCard(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                                Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
                             }
                         }
                     }
@@ -3245,6 +3480,8 @@ private fun ClientFileDropUploadArea(
     onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     var isDropTarget by remember(order.id) { mutableStateOf(false) }
     val dropTarget = remember(order.id, context, enabled, onUploadClientFile) {
@@ -3311,6 +3548,8 @@ private fun DesktopTodoCard(
     canAssignTasks: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var newTaskTitle by remember(order.id) { mutableStateOf("") }
     var newTaskPriority by remember(order.id) { mutableStateOf("Normal") }
     var newTaskHasDue by remember(order.id) { mutableStateOf(false) }
@@ -3355,7 +3594,7 @@ private fun DesktopTodoCard(
                             OutlinedTextField(
                                 value = newTaskTitle,
                                 onValueChange = { newTaskTitle = it },
-                                placeholder = { Text("Add a task...") },
+                                placeholder = { Text(t(t("Add a task..."))) },
                                 singleLine = true,
                                 textStyle = TextStyle(
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -3449,6 +3688,8 @@ private fun DesktopTodoCard(
 
 @Composable
 private fun TodoCountTile(modifier: Modifier, label: String, value: Int, color: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.height(84.dp),
         shape = RoundedCornerShape(16.dp),
@@ -3485,6 +3726,8 @@ private fun TodoComposerSelectRow(
     enabled: Boolean,
     onSelect: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -3546,6 +3789,8 @@ private fun TodoComposerSelectRow(
 
 @Composable
 private fun TodoDueSwitchRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -3567,6 +3812,8 @@ private fun CompactTodoSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val activeColor = StudioBlue
     val inactiveColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
     Surface(
@@ -3596,6 +3843,8 @@ private fun CompactTodoSwitch(
 
 @Composable
 private fun TodoEmptyState() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -3626,6 +3875,8 @@ private fun TodoCompactItemRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val tone = if (item.isDone) StudioGreen else priorityColor(item.priority)
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -3675,7 +3926,7 @@ private fun TodoCompactItemRow(
                 )
             }
             TextButton(onClick = onDelete) {
-                Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -3683,6 +3934,8 @@ private fun TodoCompactItemRow(
 
 @Composable
 private fun DesktopWorkTimeCard(order: StudioOrder, onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var workTitle by remember(order.id) { mutableStateOf("Work session") }
 
     DetailCard(title = "Work Time") {
@@ -3702,6 +3955,8 @@ private fun WorkTimeCardBody(
     onWorkTitleChange: (String) -> Unit,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val activeSession = order.workSessions.firstOrNull { it.endedAt == null }
     var nowMillis by remember(activeSession?.id) { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(activeSession?.id) {
@@ -3753,6 +4008,8 @@ private fun WorkTimeCardBody(
 
 @Composable
 private fun WorkTimeTotalPanel(totalSeconds: Int) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -3779,6 +4036,8 @@ private fun WorkTimeTotalPanel(totalSeconds: Int) {
 
 @Composable
 private fun WorkTimeActivePanel(session: StudioWorkSession, nowMillis: Long) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -3838,6 +4097,8 @@ private fun WorkTimeComposerRow(
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     order: StudioOrder
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -3846,7 +4107,7 @@ private fun WorkTimeComposerRow(
         OutlinedTextField(
             value = workTitle,
             onValueChange = { onWorkTitleChange(it.take(80)) },
-            placeholder = { Text("Work title...") },
+            placeholder = { Text(t("Work title...")) },
             singleLine = true,
             textStyle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
             shape = RoundedCornerShape(10.dp),
@@ -3881,6 +4142,8 @@ private fun WorkTimeComposerRow(
 
 @Composable
 private fun WorkTimeActionButton(label: String, icon: ImageVector, tone: Color, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier
             .width(108.dp)
@@ -3909,6 +4172,8 @@ private fun WorkTimeSessionGroups(
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     order: StudioOrder
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val groups = sessions.groupBy { workSessionDateKey(it.startedAt) }
     groups.forEach { (_, groupSessions) ->
         val groupDate = workSessionDateLabel(groupSessions.firstOrNull()?.startedAt)
@@ -3959,6 +4224,8 @@ private fun WorkTimeSessionRow(
     onContinue: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val isRunning = session.endedAt == null
     val canContinue = !isRunning && activeSession == null
     Surface(
@@ -4054,6 +4321,8 @@ private fun WorkTimeSessionRow(
 
 @Composable
 private fun WorkTimeDurationChip(label: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = StudioGreen.copy(alpha = 0.12f)
@@ -4071,6 +4340,8 @@ private fun WorkTimeDurationChip(label: String) {
 
 @Composable
 private fun WorkTimeEmptyState() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -4082,7 +4353,7 @@ private fun WorkTimeEmptyState() {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(Icons.Filled.Timeline, contentDescription = null, modifier = Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("No work sessions yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+            Text(t("No work sessions yet."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -4093,16 +4364,18 @@ private fun DesktopScheduleAlertsCard(
     workspaceSettings: StudioWorkspaceSettings,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val templates = quickReminderTemplates(workspaceSettings)
     val firstTemplate = templates.firstOrNull()
-    var title by remember(order.id, firstTemplate?.id) { mutableStateOf(firstTemplate?.title ?: "Follow up customer") }
+    var title by remember(order.id, firstTemplate?.id) { mutableStateOf(firstTemplate?.title ?: t("Follow up customer")) }
     var dueDays by remember(order.id, firstTemplate?.id) { mutableStateOf((firstTemplate?.days ?: 1).toString()) }
     var dueHours by remember(order.id, firstTemplate?.id) { mutableStateOf((firstTemplate?.hours ?: 0).toString()) }
     var priority by remember(order.id, firstTemplate?.id) { mutableStateOf(firstTemplate?.priority ?: "Normal") }
     var notify by remember(order.id, firstTemplate?.id) { mutableStateOf(firstTemplate?.notify ?: true) }
     var note by remember(order.id) { mutableStateOf("") }
 
-    DetailCard(title = "Schedule & Alerts") {
+    DetailCard(title = t("Schedule & Alerts")) {
         ChoiceRow(
             label = "Quick Reminder",
             value = title,
@@ -4121,7 +4394,7 @@ private fun DesktopScheduleAlertsCard(
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text("Reminder title") },
+            label = { Text(t("Reminder title")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -4129,14 +4402,14 @@ private fun DesktopScheduleAlertsCard(
             OutlinedTextField(
                 value = dueDays,
                 onValueChange = { dueDays = it.filter { char -> char.isDigit() }.take(3) },
-                label = { Text("Days") },
+                label = { Text(t("Days")) },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
             OutlinedTextField(
                 value = dueHours,
                 onValueChange = { dueHours = it.filter { char -> char.isDigit() }.take(2) },
-                label = { Text("Hours") },
+                label = { Text(t("Hours")) },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
@@ -4157,7 +4430,7 @@ private fun DesktopScheduleAlertsCard(
         OutlinedTextField(
             value = note,
             onValueChange = { note = it },
-            label = { Text("Optional note") },
+            label = { Text(t("Optional note")) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(74.dp)
@@ -4179,7 +4452,7 @@ private fun DesktopScheduleAlertsCard(
                             )
                         )
                     )
-                    title = "Follow up customer"
+                    title = t("Follow up customer")
                     dueDays = "1"
                     priority = "Normal"
                     notify = true
@@ -4189,7 +4462,7 @@ private fun DesktopScheduleAlertsCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
         ) {
-            Text("Add Reminder", fontWeight = FontWeight.ExtraBold)
+            Text(t("Add Reminder"), fontWeight = FontWeight.ExtraBold)
         }
         val reminders = order.scheduleReminders
         if (reminders.isEmpty()) {
@@ -4212,6 +4485,8 @@ private fun ScheduleReminderRow(
     reminder: StudioScheduleReminder,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val done = reminder.status.equals("Done", ignoreCase = true)
     DetailListRow(
         title = reminder.title,
@@ -4230,26 +4505,28 @@ private fun ScheduleReminderRow(
             enabled = !done,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Done", fontWeight = FontWeight.ExtraBold)
+            Text(t("Done"), fontWeight = FontWeight.ExtraBold)
         }
         TextButton(
             onClick = { onUpdateOrderFields(order, mapOf("schedule" to mapOf("action" to "snooze", "reminderId" to reminder.id, "hours" to 24))) },
             enabled = !done,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Snooze", fontWeight = FontWeight.ExtraBold)
+            Text(t("Snooze"), fontWeight = FontWeight.ExtraBold)
         }
         TextButton(
             onClick = { onUpdateOrderFields(order, mapOf("schedule" to mapOf("action" to "delete", "reminderId" to reminder.id))) },
             modifier = Modifier.weight(1f)
         ) {
-            Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+            Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
 
 @Composable
 private fun DesktopHistoryLogCard(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailCard(title = "History / Log") {
         if (order.historyLog.isEmpty()) {
             DetailListRow("No changes recorded yet", "", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -4275,6 +4552,8 @@ private fun CustomerContactEditCard(
     workspaceSettings: StudioWorkspaceSettings,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var customerName by remember(order.id, order.customerName) { mutableStateOf(order.displayCustomerName) }
     var designName by remember(order.id, order.designName) { mutableStateOf(order.designName) }
     var watchRef by remember(order.id, order.watchRef) { mutableStateOf(order.watchRef) }
@@ -4294,7 +4573,7 @@ private fun CustomerContactEditCard(
         mutableStateOf(channelLabels.associateWith { label -> customFieldValue(order, communicationChannelCustomKey(label)) })
     }
 
-    DetailCard(title = "Customer & Communication") {
+    DetailCard(title = t("Customer & Communication")) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -4306,7 +4585,7 @@ private fun CustomerContactEditCard(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 CustomerInlineTextRow(
-                    label = "Customer Name",
+                    label = t("Customer Name"),
                     value = customerName,
                     onValueChange = { customerName = it },
                     singleLine = true
@@ -4368,7 +4647,7 @@ private fun CustomerContactEditCard(
                         tint = StudioBlue
                     )
                     Text(
-                        "Communication",
+                        t("Communication"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -4389,7 +4668,7 @@ private fun CustomerContactEditCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            FinanceRowLabel("Channel", modifier = Modifier.weight(0.34f))
+                            FinanceRowLabel(t("Channel"), modifier = Modifier.weight(0.34f))
                             Row(
                                 modifier = Modifier
                                     .weight(0.66f)
@@ -4430,7 +4709,7 @@ private fun CustomerContactEditCard(
                 }
                 if (workspaceSettings.communicationShowCustomerNotes) {
                     Text(
-                        "Customer Notes",
+                        t("Customer Notes"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -4472,7 +4751,7 @@ private fun CustomerContactEditCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
         ) {
-            Text("Save Customer & Communication", fontWeight = FontWeight.ExtraBold)
+            Text(t("Save Customer & Communication"), fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -4485,6 +4764,8 @@ private fun CustomerInlineTextRow(
     singleLine: Boolean = false,
     minHeight: Dp = 48.dp
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -4517,12 +4798,14 @@ private fun CustomerInlineTextRow(
 
 @Composable
 private fun CustomerNotesBox(value: String, onValueChange: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         placeholder = {
             Text(
-                "Add customer note...",
+                t("Add customer note..."),
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                 fontWeight = FontWeight.SemiBold
             )
@@ -4553,6 +4836,8 @@ private fun CustomerChannelChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.height(36.dp),
         shape = RoundedCornerShape(18.dp),
@@ -4587,6 +4872,8 @@ private fun CommunicationChannelValueField(
     onAddress: (String) -> Unit,
     onCustom: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     when (communicationChannelKind(channel)) {
         CommunicationChannelKind.Email -> CustomerInlineTextRow(
             label = channel,
@@ -4628,6 +4915,8 @@ private fun WorkflowEditCard(
     statusOptions: List<String>,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val statuses = statusOptions.ifEmpty {
         listOf("Not Yet", "In Progress", "Pending", "Ready", "Done", "Cancelled", "Design", "Painting", "Shipped")
     }
@@ -4666,7 +4955,7 @@ private fun WorkflowEditCard(
             )
         }
         if (statusToggles.isNotEmpty()) {
-            Text("Production Toggles", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(t("Production Toggles"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             statusToggles.forEach { toggle ->
                 YesNoChoiceRow(toggle, statusToggleValue(order, toggle)) {
                     onUpdateOrderFields(order, mapOf("details" to mapOf("customToggles" to mapOf(toggle to it))))
@@ -4685,7 +4974,7 @@ private fun WorkflowEditCard(
             TextButton(
                 onClick = { onUpdateOrderFields(order, mapOf("details" to mapOf("statusNotesSupplier" to statusNotes))) }
             ) {
-                Text("Save Status Notes", fontWeight = FontWeight.ExtraBold)
+                Text(t("Save Status Notes"), fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -4693,6 +4982,8 @@ private fun WorkflowEditCard(
 
 @Composable
 private fun ChoiceRow(label: String, value: String, options: List<String>, onSelect: (String) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -4738,6 +5029,8 @@ private fun ChoiceRow(label: String, value: String, options: List<String>, onSel
 
 @Composable
 private fun ToggleChip(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(10.dp),
@@ -4759,6 +5052,8 @@ private fun ToggleChip(label: String, active: Boolean, modifier: Modifier = Modi
 
 @Composable
 private fun YesNoChoiceRow(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -4778,6 +5073,8 @@ private fun YesNoChoiceRow(label: String, value: Boolean, onChange: (Boolean) ->
 
 @Composable
 private fun MoneyField(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -4789,6 +5086,8 @@ private fun MoneyField(label: String, value: String, onValueChange: (String) -> 
 
 @Composable
 private fun HorizontalRule() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -4803,11 +5102,13 @@ private fun SummaryCard(
     workspaceSettings: StudioWorkspaceSettings,
     canSeeFinancial: Boolean
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val step1 = summaryStepLabel(workspaceSettings.summaryStep1, workspaceSettings, 0)
     val step2 = summaryStepLabel(workspaceSettings.summaryStep2, workspaceSettings, 1)
     val value1 = summaryStepValue(order, workspaceSettings, step1)
     val value2 = summaryStepValue(order, workspaceSettings, step2)
-    DetailCard(title = "Order Summary") {
+    DetailCard(title = t("Order Summary")) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -4866,22 +5167,24 @@ private fun SummaryCard(
 
 @Composable
 private fun CustomerCard(order: StudioOrder, workspaceSettings: StudioWorkspaceSettings) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val channelLabels = communicationChannelLabels(workspaceSettings)
-    DetailCard(title = "Customer & Communication") {
-        InfoRow("Customer Name", order.displayCustomerName)
+    DetailCard(title = t("Customer & Communication")) {
+        InfoRow(t("Customer Name"), order.displayCustomerName)
         InfoRow("Design Name", order.designName.ifBlank { "-" })
         InfoRow("Design Link", order.designLink.ifBlank { "-" })
         if (workspaceSettings.communicationShowEmail) InfoRow("Email", order.emailAddress.ifBlank { "-" })
         if (workspaceSettings.communicationShowTelephone) InfoRow("Telephone", order.whatsappNumber.ifBlank { "-" })
         if (workspaceSettings.communicationShowAddress) InfoRow("Address", customFieldValue(order, "communicationAddress").ifBlank { "-" })
         if (workspaceSettings.communicationShowChannel) {
-            InfoRow("Channel", order.communication.joinToString(" · ").ifBlank { "-" })
+            InfoRow(t("Channel"), order.communication.joinToString(" · ").ifBlank { "-" })
             channelLabels.filter { label -> order.communication.any { it.equals(label, ignoreCase = true) } }.forEach { channel ->
                 InfoRow(channel, communicationChannelDisplayValue(order, channel).ifBlank { "-" })
             }
         }
         if (workspaceSettings.communicationShowCustomerNotes) {
-            InfoRow("Customer Notes", customFieldValue(order, "communicationCustomerNotes").ifBlank { "-" })
+            InfoRow(t("Customer Notes"), customFieldValue(order, "communicationCustomerNotes").ifBlank { "-" })
         }
         orderedCustomFieldsForDisplay(order.customFields, workspaceSettings.customFields).forEach { (key, value) ->
             InfoRow(key, value.ifBlank { "-" })
@@ -4895,6 +5198,8 @@ private fun TimelineDeliveryCard(
     canEditWorkflow: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     var deliveryDays by remember(order.id, order.deliveryTime) { mutableStateOf(order.deliveryTime.coerceAtLeast(1)) }
     var createdDateText by remember(order.id, order.paymentDate) { mutableStateOf(longDate(order.paymentDate)) }
@@ -4955,6 +5260,8 @@ private fun TimelineDeliveryCard(
 
 @Composable
 private fun TimelineDateTile(modifier: Modifier, label: String, value: String, accent: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.height(86.dp),
         shape = RoundedCornerShape(14.dp),
@@ -4994,6 +5301,8 @@ private fun TimelineDateTile(modifier: Modifier, label: String, value: String, a
 
 @Composable
 private fun TimelineRemainingPanel(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val tone = deliveryColor(order)
     Surface(
         modifier = Modifier
@@ -5035,6 +5344,8 @@ private fun TimelineRemainingPanel(order: StudioOrder) {
 
 @Composable
 private fun TimelineCalendarAction(onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -5082,6 +5393,8 @@ private fun TimelineCalendarAction(onClick: () -> Unit) {
 
 @Composable
 private fun TimelineDeliveryDaysRow(days: Int, canEdit: Boolean, onChange: (Int) -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         FinanceRowLabel("Delivery Time", modifier = Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -5107,6 +5420,8 @@ private fun TimelineDeliveryDaysRow(days: Int, canEdit: Boolean, onChange: (Int)
 
 @Composable
 private fun TimelineStepperButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier.size(width = 30.dp, height = 24.dp),
         shape = RoundedCornerShape(8.dp),
@@ -5132,6 +5447,8 @@ private fun TimelineCreatedDateRow(
     onValueChange: (String) -> Unit,
     onSave: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -5163,7 +5480,7 @@ private fun TimelineCreatedDateRow(
                 .height(48.dp)
         )
         TextButton(onClick = onSave, enabled = canEdit, modifier = Modifier.weight(0.25f)) {
-            Text("Save", fontWeight = FontWeight.ExtraBold)
+            Text(t("Save"), fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -5174,6 +5491,8 @@ private fun PriorityRiskCard(
     canEditWorkflow: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var riskReason by remember(order.id, order.riskReason) {
         mutableStateOf(order.riskReason.takeUnless { it == "-" }.orEmpty())
     }
@@ -5195,7 +5514,7 @@ private fun PriorityRiskCard(
                 OutlinedTextField(
                     value = riskReason,
                     onValueChange = { riskReason = it },
-                    label = { Text("Reason / blocker note") },
+                    label = { Text(t("Reason / blocker note")) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(92.dp)
@@ -5205,7 +5524,7 @@ private fun PriorityRiskCard(
                         onUpdateOrderFields(order, mapOf("details" to mapOf("riskReason" to riskReason.trim().ifBlank { "-" })))
                     }
                 ) {
-                    Text("Save Risk Reason", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Save Risk Reason"), fontWeight = FontWeight.ExtraBold)
                 }
             }
         } else {
@@ -5225,6 +5544,8 @@ private fun MaterialsInventoryCard(
     canEditWorkflow: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var invNotes by remember(order.id, order.invNotes) { mutableStateOf(order.invNotes) }
     val materialLabels = materialDefaultCheckLabels(workspaceSettings)
     val notesLabel = workspaceSettings.materialsNotesSupplierLabel.ifBlank { "Notes / Supplier" }
@@ -5235,7 +5556,7 @@ private fun MaterialsInventoryCard(
         }
     }
 
-    DetailCard(title = "Materials & Inventory") {
+    DetailCard(title = t("Materials & Inventory")) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -5278,7 +5599,7 @@ private fun MaterialsInventoryCard(
                         OutlinedTextField(
                             value = invNotes,
                             onValueChange = { invNotes = it.take(1500) },
-                            placeholder = { Text("Add notes or supplier details...") },
+                            placeholder = { Text(t(t("Add notes or supplier details..."))) },
                             textStyle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                             shape = RoundedCornerShape(10.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -5323,6 +5644,8 @@ private fun MaterialsYesNoRow(
     enabled: Boolean,
     onChange: (Boolean) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -5362,6 +5685,8 @@ private fun MaterialsBinaryChip(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = Modifier
             .width(66.dp)
@@ -5385,6 +5710,8 @@ private fun MaterialsBinaryChip(
 
 @Composable
 private fun PriorityMaterialsCard(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailCard(title = "Priority, Risk & Materials") {
         InfoRow("Priority", order.priority.ifBlank { "Normal" }, priorityColor(order.priority))
         InfoRow("Risk", order.risk.ifBlank { "None" }, riskColor(order.risk))
@@ -5408,6 +5735,8 @@ private fun FinancialCard(
     advancedEnabled: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var paidAmount by remember(order.id, order.paidAmount) { mutableStateOf(decimalText(order.paidAmount)) }
     var remainingAmount by remember(order.id, order.remainingAmount) { mutableStateOf(decimalText(order.remainingAmount)) }
     var baseCost by remember(order.id, order.watchPurchasePrice) { mutableStateOf(decimalText(order.watchPurchasePrice)) }
@@ -5460,7 +5789,7 @@ private fun FinancialCard(
         onUpdateOrderFields(order, mapOf("finance" to finance))
     }
 
-    DetailCard(title = "Financial Info") {
+    DetailCard(title = t("Financial Info")) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -5621,6 +5950,8 @@ private fun FinanceMoneyInlineRow(
     dangerSurface: Boolean = false,
     onCommit: () -> Unit = {}
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val currencySymbol = LocalCurrencySymbol.current
     val decimalSeparator = LocalDecimalSeparator.current
     val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
@@ -5722,6 +6053,8 @@ private fun FinanceDisplayInlineRow(
     valueColor: Color,
     muted: Boolean = false
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -5757,6 +6090,8 @@ private fun FinanceSelectInlineRow(
     enabled: Boolean,
     onSelect: (String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -5817,6 +6152,8 @@ private fun FinanceYesNoInlineRow(
     enabled: Boolean,
     onChange: (Boolean) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -5856,6 +6193,8 @@ private fun FinanceBinaryChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier.height(42.dp),
         shape = RoundedCornerShape(10.dp),
@@ -5878,6 +6217,8 @@ private fun FinanceBinaryChip(
 
 @Composable
 private fun FinanceFinalProfitRow(finalProfit: Double) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             "Final Profit",
@@ -5899,6 +6240,8 @@ private fun FinanceFinalProfitRow(finalProfit: Double) {
 
 @Composable
 private fun FinanceRowLabel(label: String, modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Text(
         label,
         modifier = modifier,
@@ -5913,9 +6256,11 @@ private fun FinanceRowLabel(label: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ProductionStatusCard(order: StudioOrder, workspaceSettings: StudioWorkspaceSettings) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val extraStatusSteps = workspaceSettings.customSteps.drop(2).map { it.trim() }.filter { it.isNotBlank() }
     val statusToggles = workspaceSettings.customToggles.map { it.trim() }.filter { it.isNotBlank() }
-    DetailCard(title = "Production Status") {
+    DetailCard(title = t("Production Status")) {
         val designLabel = workspaceSettings.customSteps.getOrNull(0)?.ifBlank { "Design" } ?: "Design"
         val productionLabel = workspaceSettings.customSteps.getOrNull(1)?.ifBlank { "Production" } ?: "Production"
         InfoRow(designLabel, order.designStatus.ifBlank { "Not Yet" }, statusColor(order.designStatus))
@@ -5947,12 +6292,14 @@ private fun ShippingCard(
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     onRefreshLiveTracking: (StudioOrder) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val uriHandler = LocalUriHandler.current
     var courier by remember(order.id, order.courier) { mutableStateOf(order.courier.ifBlank { "Auto Detect" }) }
     var trackingNumber by remember(order.id, order.trackingNumber) { mutableStateOf(order.trackingNumber) }
     val savedTrackingNumber = order.trackingNumber.trim()
 
-    DetailCard(title = "Shipping & Tracking") {
+    DetailCard(title = t("Shipping & Tracking")) {
         if (canEditWorkflow) {
             YesNoChoiceRow("Dispatched", order.isDispatched) { value ->
                 onUpdateOrderFields(
@@ -5975,7 +6322,7 @@ private fun ShippingCard(
             OutlinedTextField(
                 value = trackingNumber,
                 onValueChange = { trackingNumber = it.take(160) },
-                label = { Text("Tracking No.") },
+                label = { Text(t("Tracking No.")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -5990,14 +6337,14 @@ private fun ShippingCard(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Save Shipping", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Save Shipping"), fontWeight = FontWeight.ExtraBold)
                 }
                 TextButton(
                     onClick = { onRefreshLiveTracking(order) },
                     enabled = savedTrackingNumber.isNotBlank(),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Refresh Live Status", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Refresh Live Status"), fontWeight = FontWeight.ExtraBold)
                 }
             }
         } else {
@@ -6016,14 +6363,14 @@ private fun ShippingCard(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Open Tracking", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Open Tracking"), fontWeight = FontWeight.ExtraBold)
                 }
                 TextButton(
                     onClick = { onRefreshLiveTracking(order) },
                     enabled = canEditWorkflow,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Check Again", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Check Again"), fontWeight = FontWeight.ExtraBold)
                 }
             }
         } else {
@@ -6039,6 +6386,8 @@ private fun ShippingCard(
 
 @Composable
 private fun LiveTrackingPanel(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val status = trackingDisplayStatus(order)
     val supportStatus = trackingValue(order, "trackingSupportStatus")
     val statusColor = trackingSupportColor(supportStatus, trackingStatusColor(status))
@@ -6084,7 +6433,7 @@ private fun LiveTrackingPanel(order: StudioOrder) {
             if (supportStatus.isNotBlank() && !supportStatus.equals("active", ignoreCase = true)) {
                 TrackingInfoRow("Tracking Support", trackingSupportLabel(supportStatus))
             }
-            TrackingInfoRow("Carrier", carrier.ifBlank { order.courier.ifBlank { "-" } })
+            TrackingInfoRow(t("Carrier"), carrier.ifBlank { order.courier.ifBlank { "-" } })
             TrackingInfoRow("Last Update", trackingValue(order, "lastUpdate").ifBlank { "-" })
             TrackingInfoRow("Estimated Delivery", trackingValue(order, "eta").ifBlank { "-" })
             TrackingInfoRow("Latest Checkpoint", listOf(checkpoint, location).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "-" })
@@ -6120,6 +6469,8 @@ private fun LiveTrackingPanel(order: StudioOrder) {
 
 @Composable
 private fun TrackingInfoRow(label: String, value: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
         Text(
             label,
@@ -6141,6 +6492,8 @@ private fun TrackingInfoRow(label: String, value: String) {
 
 @Composable
 private fun NotesCard(order: StudioOrder) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailCard(title = "Notes") {
         Text(
             text = order.notes.ifBlank { "No special notes provided." },
@@ -6164,6 +6517,8 @@ private fun OperationsCard(
     canAssignTasks: Boolean,
     workspaceSettings: StudioWorkspaceSettings
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     fun allowed(key: String): Boolean = access?.allows(key) != false && workspaceSettings.showsCard(key)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -6194,14 +6549,14 @@ private fun OperationsCard(
 
     DetailCard(title = "Files, To Do & Work Time") {
         if (allowed("cardClientFiles")) {
-            Text("Client Files", fontWeight = FontWeight.ExtraBold)
+            Text(t("Client Files"), fontWeight = FontWeight.ExtraBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { filePicker.launch(arrayOf("*/*")) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Upload File", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Upload File"), fontWeight = FontWeight.ExtraBold)
                 }
                 TextButton(
                     onClick = {
@@ -6211,7 +6566,7 @@ private fun OperationsCard(
                     enabled = order.clientFiles.any { it.downloadUrl.isNotBlank() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Open Latest", fontWeight = FontWeight.ExtraBold)
+                    Text(t("Open Latest"), fontWeight = FontWeight.ExtraBold)
                 }
             }
             if (order.clientFiles.isEmpty()) {
@@ -6229,7 +6584,7 @@ private fun OperationsCard(
                             enabled = file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Open", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Open"), fontWeight = FontWeight.ExtraBold)
                         }
                         TextButton(
                             onClick = {
@@ -6240,7 +6595,7 @@ private fun OperationsCard(
                             enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Use Preview", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Use Preview"), fontWeight = FontWeight.ExtraBold)
                         }
                         TextButton(
                             onClick = {
@@ -6249,7 +6604,7 @@ private fun OperationsCard(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Rename", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Rename"), fontWeight = FontWeight.ExtraBold)
                         }
                     }
                     if (renameFileId == file.id) {
@@ -6257,7 +6612,7 @@ private fun OperationsCard(
                             OutlinedTextField(
                                 value = renameText,
                                 onValueChange = { renameText = it },
-                                label = { Text("File name") },
+                                label = { Text(t("File name")) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -6268,7 +6623,7 @@ private fun OperationsCard(
                                 },
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Save")
+                                Text(t("Save"))
                             }
                             TextButton(
                                 onClick = {
@@ -6276,7 +6631,7 @@ private fun OperationsCard(
                                     renameFileId = ""
                                 }
                             ) {
-                                Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                                Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
                             }
                         }
                     }
@@ -6286,13 +6641,13 @@ private fun OperationsCard(
         }
         if (allowed("cardTodo")) {
             HorizontalRule()
-            Text("To Do", fontWeight = FontWeight.ExtraBold)
+            Text(t("To Do"), fontWeight = FontWeight.ExtraBold)
             InfoRow("Progress", "${order.completedTodoCount}/${order.todoCount} completed")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = newTaskTitle,
                     onValueChange = { newTaskTitle = it },
-                    label = { Text("New task") },
+                    label = { Text(t("New task")) },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
@@ -6328,7 +6683,7 @@ private fun OperationsCard(
             OutlinedTextField(
                 value = newTaskNote,
                 onValueChange = { newTaskNote = it },
-                label = { Text("Task note") },
+                label = { Text(t("Task note")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -6350,12 +6705,12 @@ private fun OperationsCard(
                 OutlinedTextField(
                     value = newTaskDueDays,
                     onValueChange = { newTaskDueDays = it.filter { char -> char.isDigit() }.take(3) },
-                    label = { Text("Due in days") },
+                    label = { Text(t("Due in days")) },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(onClick = { newTaskDueDays = "" }, modifier = Modifier.weight(0.55f)) {
-                    Text("No Due", fontWeight = FontWeight.ExtraBold)
+                    Text(t("No Due"), fontWeight = FontWeight.ExtraBold)
                 }
             }
             order.todoItems.take(4).forEach { item ->
@@ -6395,7 +6750,7 @@ private fun OperationsCard(
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Edit", fontWeight = FontWeight.ExtraBold)
+                        Text(t("Edit"), fontWeight = FontWeight.ExtraBold)
                     }
                     TextButton(
                         onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "move", "taskId" to item.id, "move" to "up"))) },
@@ -6407,21 +6762,21 @@ private fun OperationsCard(
                         onClick = { onUpdateOrderFields(order, mapOf("todo" to mapOf("action" to "move", "taskId" to item.id, "move" to "down"))) },
                         modifier = Modifier.weight(0.9f)
                     ) {
-                        Text("Down", fontWeight = FontWeight.ExtraBold)
+                        Text(t("Down"), fontWeight = FontWeight.ExtraBold)
                     }
                 }
                 if (editingTaskId == item.id) {
                     OutlinedTextField(
                         value = editingTaskTitle,
                         onValueChange = { editingTaskTitle = it },
-                        label = { Text("Task title") },
+                        label = { Text(t("Task title")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = editingTaskNote,
                         onValueChange = { editingTaskNote = it },
-                        label = { Text("Task note") },
+                        label = { Text(t("Task note")) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(84.dp)
@@ -6444,12 +6799,12 @@ private fun OperationsCard(
                         OutlinedTextField(
                             value = editingTaskDueDays,
                             onValueChange = { editingTaskDueDays = it.filter { char -> char.isDigit() }.take(3) },
-                            label = { Text("Due in days") },
+                            label = { Text(t("Due in days")) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = { editingTaskDueDays = "" }, modifier = Modifier.weight(0.55f)) {
-                            Text("Clear", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Clear"), fontWeight = FontWeight.ExtraBold)
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -6480,7 +6835,7 @@ private fun OperationsCard(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("Save Task", fontWeight = FontWeight.ExtraBold)
+                            Text(t("Save Task"), fontWeight = FontWeight.ExtraBold)
                         }
                         TextButton(
                             onClick = {
@@ -6489,7 +6844,7 @@ private fun OperationsCard(
                             },
                             modifier = Modifier.weight(0.85f)
                         ) {
-                            Text("Delete", color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                            Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                 }
@@ -6498,7 +6853,7 @@ private fun OperationsCard(
         }
         if (allowed("cardWorkTime")) {
             HorizontalRule()
-            Text("Work Time", fontWeight = FontWeight.ExtraBold)
+            Text(t("Work Time"), fontWeight = FontWeight.ExtraBold)
             WorkTimeCardBody(
                 order = order,
                 workTitle = workTitle,
@@ -6508,7 +6863,7 @@ private fun OperationsCard(
         }
         if (allowed("cardHistoryLog")) {
             HorizontalRule()
-            Text("History / Log", fontWeight = FontWeight.ExtraBold)
+            Text(t("History / Log"), fontWeight = FontWeight.ExtraBold)
             if (order.historyLog.isEmpty()) {
                 InfoRow("Log", "No changes recorded yet")
             } else {
@@ -6525,14 +6880,21 @@ private fun OperationsCard(
 }
 
 @Composable
-private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun DetailCard(
+    title: String,
+    headerAction: (@Composable () -> Unit)? = null,
+    minimumHeightOverride: Int? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val cardsUnlocked = LocalDetailCardsUnlocked.current
     val cardActions = LocalOrderCardActions.current
     val headingEditorActions = LocalOrderHeadingEditorActions.current
     val useUnifiedBoardScroll = LocalUnifiedBoardVerticalScroll.current
     val headerCardId = cardActions?.cardId ?: orderDetailCardIdForTitle(title)
-    val headingEditorConfig = remember(headerCardId, headingEditorActions?.workspaceSettings) {
-        orderHeadingEditorConfig(headerCardId, headingEditorActions?.workspaceSettings)
+    val headingEditorConfig = remember(headerCardId, headingEditorActions?.workspaceSettings, headingEditorActions?.orderExtraNoteSections) {
+        orderHeadingEditorConfig(headerCardId, headingEditorActions?.workspaceSettings, headingEditorActions?.orderExtraNoteSections.orEmpty())
     }
     val cardColorName = cardActions?.layout?.cardColors?.get(cardActions.cardId).orEmpty()
     val cardTint = studioCardThemeColor(cardColorName)
@@ -6546,7 +6908,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
     var dragBaseWidth by remember(title, cardActions?.orderId) { mutableStateOf<Int?>(null) }
     var dragWidthDelta by remember(title, cardActions?.orderId) { mutableStateOf(0f) }
     var dragHadHeightChange by remember(title, cardActions?.orderId) { mutableStateOf(false) }
-    val minimumCardHeight = minimumRenderedCardHeight(headerCardId)
+    val minimumCardHeight = maxOf(minimumRenderedCardHeight(headerCardId), minimumHeightOverride ?: 0)
     val desktopDefaultHeight = if (cardActions != null && !cardActions.isPhoneLayout) {
         defaultRenderedCardHeight(cardActions.cardId)
     } else {
@@ -6622,6 +6984,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                headerAction?.invoke()
                 Box {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -6640,7 +7003,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         val actions = cardActions
                         DropdownMenuItem(
-                            text = { Text("Hide Block") },
+                            text = { Text(t("Hide Block")) },
                             leadingIcon = { Icon(Icons.Filled.VisibilityOff, contentDescription = null) },
                             enabled = actions != null && cardsUnlocked,
                             onClick = {
@@ -6651,7 +7014,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Edit Block Headings") },
+                            text = { Text(t("Edit Block Headings")) },
                             leadingIcon = {
                                 Text(
                                     "Aa",
@@ -6670,7 +7033,7 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                         DropdownMenuItem(
-                            text = { Text("Color") },
+                            text = { Text(t("Color")) },
                             leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null) },
                             trailingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                             enabled = actions != null && cardsUnlocked,
@@ -6919,7 +7282,15 @@ private fun DetailCard(title: String, content: @Composable ColumnScope.() -> Uni
             config = headingEditorConfig,
             onDismiss = { headingEditorOpen = false },
             onSave = { updates, message ->
-                headingEditorActions.onSave(updates, message)
+                @Suppress("UNCHECKED_CAST")
+                val perOrderExtras = updates["__perOrderNoteExtras__"] as? List<StudioHeadingItem>
+                val cleanedUpdates = updates.filterKeys { it != "__perOrderNoteExtras__" }
+                if (cleanedUpdates.isNotEmpty()) {
+                    headingEditorActions.onSave(cleanedUpdates, message)
+                }
+                if (perOrderExtras != null) {
+                    headingEditorActions.onSavePerOrderNoteExtras?.invoke(perOrderExtras)
+                }
                 headingEditorOpen = false
             }
         )
@@ -6932,6 +7303,8 @@ private fun OrderBlockHeadingEditorDialog(
     onDismiss: () -> Unit,
     onSave: (Map<String, Any?>, String) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var groupValues by remember(config.title) {
         mutableStateOf(config.groups.associate { it.key to it.items })
     }
@@ -7013,12 +7386,12 @@ private fun OrderBlockHeadingEditorDialog(
                     onSave(config.buildUpdates(draft), config.saveMessage)
                 }
             ) {
-                Text("Save")
+                Text(t("Save"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(t("Cancel"))
             }
         }
     )
@@ -7030,6 +7403,8 @@ private fun OrderHeadingEditorGroupView(
     items: List<StudioHeadingItem>,
     onItemsChange: (List<StudioHeadingItem>) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(15.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f)
@@ -7090,13 +7465,13 @@ private fun OrderHeadingEditorGroupView(
                         enabled = index < items.lastIndex,
                         onClick = { onItemsChange(items.movedHeadingItem(index, index + 1)) }
                     ) {
-                        Text("Down")
+                        Text(t("Down"))
                     }
                     TextButton(
                         enabled = canDelete,
                         onClick = { onItemsChange(items.toMutableList().also { it.removeAt(index) }) }
                     ) {
-                        Text("Delete")
+                        Text(t("Delete"))
                     }
                 }
             }
@@ -7119,7 +7494,8 @@ private fun OrderHeadingEditorGroupView(
 
 private fun orderHeadingEditorConfig(
     cardId: OrderDetailCardId?,
-    settings: StudioWorkspaceSettings?
+    settings: StudioWorkspaceSettings?,
+    perOrderExtraNoteSections: List<StudioHeadingItem> = emptyList()
 ): OrderHeadingEditorConfig? {
     if (cardId == null || settings == null) return null
     return when (cardId) {
@@ -7269,27 +7645,48 @@ private fun orderHeadingEditorConfig(
                 )
             }
         )
-        OrderDetailCardId.Notes -> OrderHeadingEditorConfig(
-            title = "Edit Notes Headings",
-            subtitle = "Add, remove, or rename the special note fields shown inside Notes.",
-            groups = listOf(
-                OrderHeadingEditorGroup(
-                    key = "notes",
-                    title = "Special Note Fields",
-                    description = "The first Special Notes field is kept as the primary shared notes field.",
-                    addLabel = "Add Note Field",
-                    emptyText = "No special note fields yet.",
-                    items = normalizeSpecialNoteSectionsForOrder(settings.specialNoteSections),
-                    lockedFirstId = STUDIO_PRIMARY_SPECIAL_NOTE_ID,
-                    minimumCount = 1
-                )
-            ),
-            saveMessage = "Notes headings saved.",
-            buildUpdates = { draft ->
-                val json = specialNoteSectionsJsonForOrder(draft.groups["notes"].orEmpty())
-                mapOf("specialNoteSectionsJSON" to json, "specialNoteSectionsJSONV1" to json)
-            }
-        )
+        OrderDetailCardId.Notes -> {
+            val normalizedGlobals = normalizeSpecialNoteSectionsForOrder(settings.specialNoteSections)
+            val globalIds = normalizedGlobals.map { it.id }.toSet()
+            val extras = perOrderExtraNoteSections.filter { it.id !in globalIds }
+            val originalGlobalIds = normalizedGlobals.map { it.id }.toSet()
+            val originalPerOrderIds = extras.map { it.id }.toSet()
+            OrderHeadingEditorConfig(
+                title = "Edit Notes Headings",
+                subtitle = "Add, remove, or rename note fields. New ones are added to this order only.",
+                groups = listOf(
+                    OrderHeadingEditorGroup(
+                        key = "notes",
+                        title = "Special Note Fields",
+                        description = "The first Special Notes field is kept as the primary shared notes field.",
+                        addLabel = "Add Note Field",
+                        emptyText = "No special note fields yet.",
+                        items = normalizedGlobals + extras,
+                        lockedFirstId = STUDIO_PRIMARY_SPECIAL_NOTE_ID,
+                        minimumCount = 1
+                    )
+                ),
+                saveMessage = "Notes headings saved.",
+                buildUpdates = { draft ->
+                    val allItems = draft.groups["notes"].orEmpty()
+                    val globalsOnly = mutableListOf<StudioHeadingItem>()
+                    val perOrderOnly = mutableListOf<StudioHeadingItem>()
+                    for (item in allItems) {
+                        when {
+                            item.id in originalPerOrderIds -> perOrderOnly.add(item)
+                            item.id in originalGlobalIds || item.id.equals(STUDIO_PRIMARY_SPECIAL_NOTE_ID, ignoreCase = true) -> globalsOnly.add(item)
+                            else -> perOrderOnly.add(item) // New item → per-order
+                        }
+                    }
+                    val json = specialNoteSectionsJsonForOrder(globalsOnly)
+                    mapOf(
+                        "specialNoteSectionsJSON" to json,
+                        "specialNoteSectionsJSONV1" to json,
+                        "__perOrderNoteExtras__" to perOrderOnly
+                    )
+                }
+            )
+        }
         OrderDetailCardId.Materials -> OrderHeadingEditorConfig(
             title = "Edit Materials Headings",
             subtitle = "Edit default material checks, extra Yes / No checks, and the Notes / Supplier field.",
@@ -7641,6 +8038,8 @@ private fun cardTransferData(cardId: OrderDetailCardId): DragAndDropTransferData
 
 @Composable
 private fun CardColorSwatch(colorName: String, selected: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val swatchColor = studioCardThemeColor(colorName) ?: MaterialTheme.colorScheme.surfaceVariant
     Surface(
         modifier = Modifier.size(18.dp),
@@ -8481,6 +8880,8 @@ private fun SummaryValueBlock(
     value: String,
     valueColor: Color
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
@@ -8513,6 +8914,8 @@ private fun SummaryValueBlock(
 
 @Composable
 private fun SummaryStatusLine(label: String, value: String, tone: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -8538,6 +8941,8 @@ private fun SummaryDateBlock(
     value: String,
     valueColor: Color
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(13.dp),
@@ -8569,6 +8974,8 @@ private fun SummaryDateBlock(
 
 @Composable
 private fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -8597,6 +9004,8 @@ private fun InfoRow(label: String, value: String, valueColor: Color = MaterialTh
 
 @Composable
 private fun DetailListRow(title: String, subtitle: String, tone: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(
             modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
@@ -8634,11 +9043,15 @@ private fun DetailListRow(title: String, subtitle: String, tone: Color) {
 
 @Composable
 private fun BooleanRow(label: String, value: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     InfoRow(label, yesNo(value), if (value) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
 private fun StatusPill(label: String, color: Color) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = color.copy(alpha = 0.15f),
@@ -8661,17 +9074,19 @@ private fun AssignmentMenuForDetail(
     teamMembers: List<StudioTeamMember>,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var expanded by remember { mutableStateOf(false) }
     Button(
         onClick = { expanded = true },
         shape = RoundedCornerShape(9.dp),
         modifier = Modifier.height(34.dp)
     ) {
-        Text("Assign", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(t("Assign"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
         DropdownMenuItem(
-            text = { Text("Unassigned") },
+            text = { Text(t("Unassigned")) },
             onClick = {
                 expanded = false
                 onAssignOrder(order, null)
@@ -8696,6 +9111,8 @@ private fun TodoAssigneeMenu(
     teamMembers: List<StudioTeamMember>,
     onSelect: (StudioTeamMember?) -> Unit
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var expanded by remember { mutableStateOf(false) }
     val selectedMember = teamMembers.firstOrNull { it.id == selectedMemberId }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -8727,7 +9144,7 @@ private fun TodoAssigneeMenu(
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 DropdownMenuItem(
-                    text = { Text("Unassigned") },
+                    text = { Text(t("Unassigned")) },
                     onClick = {
                         expanded = false
                         onSelect(null)

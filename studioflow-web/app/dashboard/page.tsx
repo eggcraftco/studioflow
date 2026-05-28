@@ -497,6 +497,10 @@ export default function DashboardPage() {
                 {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t("Net Profit")} value={canSeeAdvancedFinance ? money(totals.netProfit, hideNumbers, settings) : t("Locked")} tone="green" locked={!canSeeAdvancedFinance} /> : null}
               </section>
 
+              {canSeeAdvancedFinance && (
+                <ExtraSpendingSection orders={financeOrders} settings={settings} hideNumbers={hideNumbers} />
+              )}
+
               <section className="card app-card dashboard-chart-card">
                 <CardTitle icon="finance" title={t("Net Profit Analysis")} />
                 {canSeeAdvancedFinance ? (
@@ -523,9 +527,6 @@ export default function DashboardPage() {
                 </div>
               </section>
 
-              {canSeeAdvancedFinance && (
-                <ExtraSpendingSection orders={orders} settings={settings} hideNumbers={hideNumbers} />
-              )}
             </>
           )}
 
@@ -772,4 +773,343 @@ function formatAxisCurrency(value: number, symbol: string): string {
     return `${symbol}${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k`;
   }
   return `${symbol}${Math.round(value)}`;
+}
+
+type SpendingScope = "thisMonth" | "thisYear" | "customRange" | "allTime";
+
+type ExtraSpendingEntry = {
+  orderId: string;
+  customerName: string;
+  designName: string;
+  watchRef: string;
+  heading: string;
+  description: string;
+  amount: number;
+  paymentDate: Date | null;
+};
+
+type ExtraSpendingGroup = {
+  orderId: string;
+  title: string;
+  subtitle: string;
+  entries: ExtraSpendingEntry[];
+  total: number;
+};
+
+function parseCustomExpenseTitles(json: string): string[] {
+  if (!json.trim()) return [];
+  try {
+    const parsed = JSON.parse(json);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(item => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const obj = item as Record<string, unknown>;
+            const title = obj.title ?? obj.name ?? obj.label;
+            return typeof title === "string" ? title : "";
+          }
+          return "";
+        })
+        .filter(t => t.length > 0);
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function ExtraSpendingSection({
+  orders,
+  settings,
+  hideNumbers,
+}: {
+  orders: DashboardFinanceOrder[];
+  settings: WorkspaceSettingsOverview | null;
+  hideNumbers: boolean;
+}) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+  const [expanded, setExpanded] = useState(false);
+  const [scope, setScope] = useState<SpendingScope>("thisMonth");
+  const [customStart, setCustomStart] = useState(dateInputValue(startOfMonth(new Date())));
+  const [customEnd, setCustomEnd] = useState(dateInputValue(new Date()));
+  const [incBase, setIncBase] = useState(true);
+  const [incShipping, setIncShipping] = useState(true);
+  const [incFee, setIncFee] = useState(true);
+  const [incTax, setIncTax] = useState(true);
+  const [page, setPage] = useState(0);
+  const [isPhone, setIsPhone] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  const pageSize = isPhone ? 12 : 20;
+
+  const { start, end } = useMemo(() => {
+    const now = new Date();
+    if (scope === "thisMonth") return { start: startOfMonth(now), end: endOfDay(now) };
+    if (scope === "thisYear") return { start: startOfYear(now), end: endOfDay(now) };
+    if (scope === "customRange") {
+      return {
+        start: startOfDay(parseInputDate(customStart, startOfMonth(now))),
+        end: endOfDay(parseInputDate(customEnd, now)),
+      };
+    }
+    return { start: new Date(0), end: endOfDay(now) };
+  }, [scope, customStart, customEnd]);
+
+  const customTitles = useMemo(
+    () => parseCustomExpenseTitles(settings?.financialExpenseItemsJSON ?? ""),
+    [settings?.financialExpenseItemsJSON]
+  );
+
+  const filteredOrders = useMemo(
+    () => orders.filter(o => o.paymentDate && o.paymentDate >= start && o.paymentDate <= end),
+    [orders, start, end]
+  );
+
+  const groups: ExtraSpendingGroup[] = useMemo(() => {
+    const out: ExtraSpendingGroup[] = [];
+    for (const o of filteredOrders) {
+      const entries: ExtraSpendingEntry[] = [];
+      const push = (heading: string, description: string, amount: number) => {
+        if (amount > 0) {
+          entries.push({
+            orderId: o.id,
+            customerName: o.customerName,
+            designName: o.designName,
+            watchRef: o.watchRef,
+            heading,
+            description,
+            amount,
+            paymentDate: o.paymentDate,
+          });
+        }
+      };
+      if (incBase) push(t("Base Cost"), t("Purchase price"), o.watchPurchasePrice);
+      if (incShipping) push(t("Shipping"), t("Delivery cost"), o.deliveryCost);
+      if (incFee) push(t("Platform Fee"), t("Payment fee"), o.paymentFee);
+      if (incTax) push(t("Tax"), t("VAT / Tax"), o.taxAmount);
+      for (const title of customTitles) {
+        const raw = o.customFields[`financialExpense::${title}`];
+        const amount = raw ? parseFloat(raw.replace(/,/g, "")) : 0;
+        if (!Number.isNaN(amount) && amount > 0) {
+          push(title, t("Custom expense"), amount);
+        }
+      }
+      if (entries.length > 0) {
+        const total = entries.reduce((s, e) => s + e.amount, 0);
+        const subtitleParts = [o.customerName, o.designName, o.watchRef].filter(p => p && p.length > 0);
+        out.push({
+          orderId: o.id,
+          title: o.customerName || o.designName || `#${o.id.slice(0, 6)}`,
+          subtitle: subtitleParts.slice(1).join(" · "),
+          entries,
+          total,
+        });
+      }
+    }
+    return out.sort((a, b) => b.total - a.total);
+  }, [filteredOrders, incBase, incShipping, incFee, incTax, customTitles, t]);
+
+  const totalAmount = useMemo(() => groups.reduce((s, g) => s + g.total, 0), [groups]);
+  const entryCount = useMemo(() => groups.reduce((s, g) => s + g.entries.length, 0), [groups]);
+  const totalPages = Math.max(1, Math.ceil(groups.length / pageSize));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageGroups = groups.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+
+  useEffect(() => {
+    setPage(0);
+  }, [scope, incBase, incShipping, incFee, incTax, customStart, customEnd]);
+
+  const exportCsv = () => {
+    const rows = [["Order", "Customer", "Design", "Ref", "Heading", "Description", "Date", "Amount"]];
+    for (const g of groups) {
+      for (const e of g.entries) {
+        rows.push([
+          e.orderId,
+          e.customerName,
+          e.designName,
+          e.watchRef,
+          e.heading,
+          e.description,
+          e.paymentDate ? e.paymentDate.toISOString().slice(0, 10) : "",
+          e.amount.toFixed(2),
+        ]);
+      }
+    }
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `extra-spending-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const compactCard = (
+    <button type="button" className="extra-spending-compact" onClick={() => setExpanded(true)}>
+      <span className="extra-spending-compact-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="4" y="3" width="16" height="18" rx="2" />
+          <path d="M8 8h8M8 12h8M8 16h5" />
+        </svg>
+      </span>
+      <span className="extra-spending-compact-text">
+        <span className="extra-spending-compact-title">{t("Extra Spending Summary")}</span>
+        <span className="extra-spending-compact-subtitle">
+          {t("Open a detailed page for monthly, yearly and order-based extra spending with descriptions.")}
+        </span>
+      </span>
+      <span className="extra-spending-compact-meta">
+        <span className="extra-spending-compact-amount">{money(totalAmount, hideNumbers, settings)}</span>
+        <span className="extra-spending-compact-count">{entryCount} {t("entries")}</span>
+      </span>
+      <span className="extra-spending-compact-chevron" aria-hidden="true">›</span>
+    </button>
+  );
+
+  if (!expanded) return compactCard;
+
+  return (
+    <>
+      {compactCard}
+      <div className="modal-backdrop extra-spending-backdrop" onClick={() => setExpanded(false)}>
+        <section className="extra-spending-modal" onClick={e => e.stopPropagation()}>
+      <div className="extra-spending-header">
+        <CardTitle icon="finance" eyebrow={t("Spending")} title={t("Extra Spending Summary")} />
+        <div className="extra-spending-header-actions">
+          <button className="ghost-button" type="button" onClick={exportCsv}>
+            {t("Export CSV")}
+          </button>
+          <button className="ghost-button" type="button" onClick={() => setExpanded(false)}>
+            {t("Close")}
+          </button>
+        </div>
+      </div>
+
+      <div className="segmented-control" role="tablist" aria-label={t("Spending scope")}>
+        {([
+          ["thisMonth", t("This Month")],
+          ["thisYear", t("This Year")],
+          ["customRange", t("Custom Range")],
+          ["allTime", t("All Time")],
+        ] as Array<[SpendingScope, string]>).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={scope === key ? "is-active" : ""}
+            onClick={() => setScope(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {scope === "customRange" && (
+        <div className="dashboard-range-fields">
+          <label className="dashboard-range-field">
+            {t("From")}
+            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+          </label>
+          <label className="dashboard-range-field">
+            {t("To")}
+            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+          </label>
+        </div>
+      )}
+
+      <div className="extra-spending-toggles">
+        <label><input type="checkbox" checked={incBase} onChange={e => setIncBase(e.target.checked)} /> {t("Base Cost")}</label>
+        <label><input type="checkbox" checked={incShipping} onChange={e => setIncShipping(e.target.checked)} /> {t("Shipping")}</label>
+        <label><input type="checkbox" checked={incFee} onChange={e => setIncFee(e.target.checked)} /> {t("Platform Fee")}</label>
+        <label><input type="checkbox" checked={incTax} onChange={e => setIncTax(e.target.checked)} /> {t("VAT / Tax")}</label>
+      </div>
+
+      <div className="extra-spending-metrics">
+        <div className="extra-spending-metric">
+          <p className="muted-copy">{t("Total")}</p>
+          <p className="extra-spending-amount">{money(totalAmount, hideNumbers, settings)}</p>
+        </div>
+        <div className="extra-spending-metric">
+          <p className="muted-copy">{t("Orders")}</p>
+          <p className="extra-spending-amount">{groups.length}</p>
+        </div>
+        <div className="extra-spending-metric">
+          <p className="muted-copy">{t("Entries")}</p>
+          <p className="extra-spending-amount">{entryCount}</p>
+        </div>
+      </div>
+
+      {groups.length === 0 ? (
+        <p className="muted-copy" style={{ padding: "24px 0", textAlign: "center" }}>
+          {t("No extra spending in this period.")}
+        </p>
+      ) : (
+        <>
+          <div className="extra-spending-groups">
+            {pageGroups.map(g => (
+              <div className="extra-spending-group" key={g.orderId}>
+                <div className="extra-spending-group-header">
+                  <div>
+                    <p className="extra-spending-group-title">{g.title}</p>
+                    {g.subtitle ? <p className="muted-copy">{g.subtitle}</p> : null}
+                  </div>
+                  <p className="extra-spending-group-total">{money(g.total, hideNumbers, settings)}</p>
+                </div>
+                <ul className="extra-spending-entries">
+                  {g.entries.map((e, i) => (
+                    <li key={i} className="extra-spending-entry">
+                      <div>
+                        <span className="extra-spending-entry-heading">{e.heading}</span>
+                        <span className="muted-copy"> · {e.description}</span>
+                        {e.paymentDate ? (
+                          <span className="muted-copy"> · {e.paymentDate.toLocaleDateString()}</span>
+                        ) : null}
+                      </div>
+                      <span>{money(e.amount, hideNumbers, settings)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="extra-spending-pagination">
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={currentPage === 0}
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+              >
+                {t("Previous")}
+              </button>
+              <span className="muted-copy">
+                {currentPage + 1} / {totalPages}
+              </span>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={currentPage >= totalPages - 1}
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              >
+                {t("Next")}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+        </section>
+      </div>
+    </>
+  );
 }
