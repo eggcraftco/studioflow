@@ -12700,14 +12700,23 @@ function nvTimestampFromInput(value, fallbackDate = new Date()) {
   return admin.firestore.Timestamp.fromDate(parsed);
 }
 
-function nvDeliveryDaysFromDueDate(dueDateValue, fallbackDays = 45) {
+function nvDeliveryDaysFromDueDate(dueDateValue, startDateValue = new Date(), fallbackDays = 45) {
   if (!dueDateValue) return fallbackDays;
-  const due = new Date(String(dueDateValue));
-  if (Number.isNaN(due.getTime())) return fallbackDays;
-  const now = new Date();
-  const days = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const due = dateFromISODate(dueDateValue);
+  if (!due) return fallbackDays;
+
+  const start = startDateValue instanceof Date
+    ? startDateValue
+    : new Date(String(startDateValue || ""));
+
+  if (Number.isNaN(start.getTime())) return fallbackDays;
+
+  const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const dueDay = Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+  const days = Math.round((dueDay - startDay) / (24 * 60 * 60 * 1000));
+
   if (!Number.isFinite(days)) return fallbackDays;
-  return Math.max(0, days);
+  return days;
 }
 
 function nvHistoryItem(title = "", oldValue = "", newValue = "") {
@@ -12754,6 +12763,10 @@ function nvSafeOrderForChatGPT(doc) {
     watchPurchasePrice: Number(data.watchPurchasePrice || 0),
     deliveryTime: Number(data.deliveryTime || 0),
     paymentDate: data.paymentDate || null,
+    deliveryDueDate: data.deliveryDueDate || data.dueDate || data.deliveryDate || null,
+    dueDate: nvChatGPTDueDateMillis(data)
+      ? new Date(nvChatGPTDueDateMillis(data)).toISOString().slice(0, 10)
+      : "",
     labels: data.labels || [],
     todoCount: Array.isArray(data.todoItems) ? data.todoItems.length : 0,
     clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
@@ -13336,9 +13349,37 @@ function nvOrderDefaults(args = {}, context = {}) {
   const customerName = nvCleanString(args.customerName || args.customer || "New Project", 240) || "New Project";
   const designBrief = nvCleanString(args.designBrief || args.notes || "", 5000);
   const watchModel = nvCleanString(args.watchModel || args.watchRef || "", 240);
-  const deliveryDays = Number.isFinite(Number(args.deliveryDays))
-    ? Math.max(0, Number(args.deliveryDays))
-    : nvDeliveryDaysFromDueDate(args.dueDate, 45);
+
+  const paymentDateInput = args.paymentDate || args.createdDate || args.orderDate || "";
+  const paymentDate = nvTimestampFromInput(paymentDateInput, new Date());
+  const paymentDateValue = paymentDate.toDate();
+  const dueDateInput = nvCleanString(args.deliveryDueDate || args.dueDate || "", 40);
+  const deliveryDueDate = dueDateInput ? dateFromISODate(dueDateInput) : null;
+
+  if (dueDateInput && !deliveryDueDate) {
+    throw new HttpsError("invalid-argument", "Delivery due date must be in YYYY-MM-DD format.");
+  }
+
+  let deliveryDays;
+  if (Number.isFinite(Number(args.deliveryDays))) {
+    deliveryDays = Math.max(0, Number(args.deliveryDays));
+  } else if (deliveryDueDate) {
+    deliveryDays = nvDeliveryDaysFromDueDate(dueDateInput, paymentDateValue, 45);
+    if (deliveryDays < 0 && !paymentDateInput) {
+      throw new HttpsError(
+        "invalid-argument",
+        "A past delivery due date requires the original created date. Please provide paymentDate or createdDate in YYYY-MM-DD format."
+      );
+    }
+    if (deliveryDays < 0) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Created date must be on or before the delivery due date."
+      );
+    }
+  } else {
+    deliveryDays = 45;
+  }
 
   const paidAmount = nvCleanNumber(args.paidAmount ?? args.depositPaid ?? 0);
   const totalPrice = nvCleanNumber(args.totalPrice ?? args.price ?? 0);
@@ -13356,7 +13397,8 @@ function nvOrderDefaults(args = {}, context = {}) {
     companyId: context.companyId,
     paymentMethod: nvCleanString(args.paymentMethod || "Card", 120),
     customerName,
-    paymentDate: nvTimestampFromInput(args.paymentDate, new Date()),
+    paymentDate,
+    ...(deliveryDueDate ? { deliveryDueDate: admin.firestore.Timestamp.fromDate(deliveryDueDate) } : {}),
     paidAmount,
     remainingAmount,
     watchPurchasePrice: nvCleanNumber(args.watchPurchasePrice || 0),
@@ -13770,23 +13812,6 @@ const NV_CHATGPT_OAUTH_ISSUER_NAME = "NivaDesk";
 const NV_CHATGPT_PUBLIC_BASE_URL = "https://nivadesk.app";
 const NV_CHATGPT_LOGIN_URL = `${NV_CHATGPT_PUBLIC_BASE_URL}/chatgpt/connect`;
 
-function nvOAuthSafeUrlRoute(value = "") {
-  try {
-    const url = new URL(String(value || ""));
-    return `${url.origin}${url.pathname}`;
-  } catch (_) {
-    return "";
-  }
-}
-
-function nvOAuthTrace(event = "", details = {}) {
-  // Never log tokens, authorization codes, email addresses, user IDs or workspace IDs.
-  console.info("NivaDesk OAuth trace", JSON.stringify({
-    event: String(event || ""),
-    ...details
-  }));
-}
-
 function nvBase64Url(buffer) {
   return Buffer.from(buffer)
     .toString("base64")
@@ -14083,18 +14108,13 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
   }
 
   const clientId = `chatgpt_${nvRandomToken(18)}`;
-  nvOAuthTrace("register.success", {
-    method: req.method,
-    redirectUriCount: Array.isArray(req.body?.redirect_uris) ? req.body.redirect_uris.length : 0,
-    financeScopeIncluded: true
-  });
   nvOAuthJson(res, 201, {
     client_id: clientId,
     client_id_issued_at: Math.floor(Date.now() / 1000),
     token_endpoint_auth_method: "none",
     grant_types: ["authorization_code"],
     response_types: ["code"],
-    scope: "orders.read orders.write notes.read notes.write finance.read tasks.write"
+    scope: "orders.read orders.write notes.read notes.write tasks.write"
   });
 });
 
@@ -14103,21 +14123,9 @@ exports.chatgptOAuthAuthorize = onRequest({ region: "europe-west2", cors: true }
 
   const params = nvOAuthValidateAuthorizeParams(req);
   if (!params.ok) {
-    nvOAuthTrace("authorize.invalid_request", {
-      method: req.method,
-      error: params.error || "invalid_request"
-    });
     nvOAuthJson(res, 400, params);
     return;
   }
-
-  nvOAuthTrace("authorize.valid_request", {
-    method: req.method,
-    callbackRoute: nvOAuthSafeUrlRoute(params.redirectUri),
-    hasState: Boolean(params.state),
-    usesPkceS256: params.codeChallengeMethod === "S256",
-    financeScopeRequested: String(params.scope || "").split(/\\s+/).includes("finance.read")
-  });
 
   // Safety-first skeleton:
   // This endpoint intentionally does not auto-approve OAuth yet.
@@ -14132,9 +14140,6 @@ exports.chatgptOAuthAuthorize = onRequest({ region: "europe-west2", cors: true }
     login.searchParams.set("state", params.state);
     login.searchParams.set("code_challenge", params.codeChallenge);
     login.searchParams.set("code_challenge_method", params.codeChallengeMethod);
-    nvOAuthTrace("authorize.redirect_to_login", {
-      loginRoute: nvOAuthSafeUrlRoute(login.toString())
-    });
     res.redirect(302, login.toString());
     return;
   }
@@ -14265,17 +14270,7 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     const codeChallengeMethod = nvCleanString(body.code_challenge_method || body.codeChallengeMethod || "", 50);
     const companyId = nvCleanString(body.companyId || "", 160);
 
-    nvOAuthTrace("approve.request_received", {
-      callbackRoute: nvOAuthSafeUrlRoute(redirectUri),
-      hasClientId: Boolean(clientId),
-      hasState: Boolean(state),
-      hasCompanySelection: Boolean(companyId),
-      usesPkceS256: codeChallengeMethod === "S256",
-      financeScopeRequested: String(scope || "").split(/\\s+/).includes("finance.read")
-    });
-
     if (!clientId || !redirectUri || !codeChallenge || codeChallengeMethod !== "S256") {
-      nvOAuthTrace("approve.invalid_request", { reason: "missing_oauth_parameters_or_pkce" });
       nvOAuthJson(res, 400, {
         error: "invalid_request",
         message: "client_id, redirect_uri, code_challenge and code_challenge_method=S256 are required."
@@ -14284,7 +14279,6 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     }
 
     if (!companyId) {
-      nvOAuthTrace("approve.invalid_request", { reason: "missing_workspace_selection" });
       nvOAuthJson(res, 400, {
         error: "invalid_request",
         message: "companyId is required."
@@ -14308,12 +14302,6 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     redirect.searchParams.set("code", code);
     if (state) redirect.searchParams.set("state", state);
 
-    nvOAuthTrace("approve.success", {
-      callbackRoute: nvOAuthSafeUrlRoute(redirectUri),
-      hasState: Boolean(state),
-      authorizationCodeCreated: true
-    });
-
     nvOAuthJson(res, 200, {
       ok: true,
       redirect_uri: redirect.toString(),
@@ -14324,7 +14312,6 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     const status = nvMcpHttpStatusFromHttps(error);
     const message = error?.message || String(error);
     console.error("chatgptOAuthApprove failed:", error?.code || status, message);
-    nvOAuthTrace("approve.failure", { status, error: String(error?.code || "internal") });
     nvOAuthJson(res, status, {
       error: error?.code || "internal",
       message
@@ -14346,21 +14333,11 @@ exports.chatgptOAuthToken = onRequest({ region: "europe-west2", cors: true }, as
   const clientId = nvCleanString(req.body?.client_id || "", 500);
   const codeVerifier = nvCleanString(req.body?.code_verifier || "", 500);
 
-  nvOAuthTrace("token.request_received", {
-    grantType,
-    callbackRoute: nvOAuthSafeUrlRoute(redirectUri),
-    hasCode: Boolean(code),
-    hasClientId: Boolean(clientId),
-    hasCodeVerifier: Boolean(codeVerifier)
-  });
-
   if (grantType !== "authorization_code") {
-    nvOAuthTrace("token.failure", { reason: "unsupported_grant_type" });
     nvOAuthJson(res, 400, { error: "unsupported_grant_type", message: "Only authorization_code is supported." });
     return;
   }
   if (!code || !redirectUri || !clientId || !codeVerifier) {
-    nvOAuthTrace("token.failure", { reason: "missing_exchange_parameters" });
     nvOAuthJson(res, 400, { error: "invalid_request", message: "code, redirect_uri, client_id and code_verifier are required." });
     return;
   }
@@ -14370,7 +14347,6 @@ exports.chatgptOAuthToken = onRequest({ region: "europe-west2", cors: true }, as
   const codeSnap = await codeRef.get();
 
   if (!codeSnap.exists) {
-    nvOAuthTrace("token.failure", { reason: "authorization_code_not_found" });
     nvOAuthJson(res, 400, { error: "invalid_grant", message: "Invalid or expired authorization code." });
     return;
   }
@@ -14379,20 +14355,14 @@ exports.chatgptOAuthToken = onRequest({ region: "europe-west2", cors: true }, as
   const nowMs = Date.now();
 
   if (Number(codeData.consumedAtMs || 0) > 0 || Number(codeData.expiresAtMs || 0) <= nowMs) {
-    nvOAuthTrace("token.failure", { reason: "authorization_code_expired_or_used" });
     nvOAuthJson(res, 400, { error: "invalid_grant", message: "Authorization code has expired or was already used." });
     return;
   }
   if (String(codeData.clientId || "") !== clientId || String(codeData.redirectUri || "") !== redirectUri) {
-    nvOAuthTrace("token.failure", {
-      reason: "client_or_callback_mismatch",
-      callbackRoute: nvOAuthSafeUrlRoute(redirectUri)
-    });
     nvOAuthJson(res, 400, { error: "invalid_grant", message: "Authorization code does not match this client or redirect URI." });
     return;
   }
   if (!nvOAuthVerifyPkce(codeVerifier, codeData.codeChallenge || "")) {
-    nvOAuthTrace("token.failure", { reason: "pkce_verification_failed" });
     nvOAuthJson(res, 400, { error: "invalid_grant", message: "PKCE verification failed." });
     return;
   }
@@ -14408,11 +14378,6 @@ exports.chatgptOAuthToken = onRequest({ region: "europe-west2", cors: true }, as
     uid: codeData.uid || "",
     email: codeData.email || "",
     companyId: codeData.companyId || ""
-  });
-
-  nvOAuthTrace("token.success", {
-    callbackRoute: nvOAuthSafeUrlRoute(redirectUri),
-    financeScopeGranted: String(codeData.scope || "").split(/\\s+/).includes("finance.read")
   });
 
   nvOAuthJson(res, 200, {
@@ -14572,7 +14537,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "create_order",
       title: "Create order",
-      description: "Create a new NivaDesk / StudioFlow order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. Use this only after the user provides enough order details or confirms creating a draft order.",
+      description: "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -14618,13 +14583,21 @@ function nvMcpOrderToolSchemas() {
             type: "number",
             description: "Already paid amount, for example deposit amount."
           },
+          paymentDate: {
+            type: "string",
+            description: "Order created/intake date in YYYY-MM-DD format. Required when creating an already overdue active order."
+          },
+          deliveryDueDate: {
+            type: "string",
+            description: "Preferred delivery due date field in YYYY-MM-DD format. Always pass this field when the user provides a delivery date."
+          },
           dueDate: {
             type: "string",
-            description: "Delivery due date in YYYY-MM-DD format where possible."
+            description: "Legacy alias for deliveryDueDate in YYYY-MM-DD format. Prefer deliveryDueDate."
           },
           deliveryDays: {
             type: "number",
-            description: "Alternative to dueDate: number of days until due."
+            description: "Alternative only when no calendar due date was provided: number of days from created date until due."
           },
           status: {
             type: "string",
@@ -15112,21 +15085,13 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
 
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
-    nvOAuthTrace("mcp.request_received", {
-      rpcMethod: nvCleanString(body.method || "", 120),
-      hasBearerAuthorization: /^Bearer\\s+/i.test(String(req.get("authorization") || ""))
-    });
     const response = await nvHandleMcpRequest(req, body);
-    nvOAuthTrace("mcp.success", {
-      rpcMethod: nvCleanString(body.method || "", 120)
-    });
     res.status(200).json(response);
   } catch (error) {
     const code = nvMcpErrorCodeFromHttps(error);
     const status = nvMcpHttpStatusFromHttps(error);
     const message = error?.message || String(error);
     console.error("chatgptMcp failed:", error?.code || code, message);
-    nvOAuthTrace("mcp.failure", { status, error: String(error?.code || code) });
     if (status === 401) {
       const metadataUrl = nvOAuthEndpointUrl(req, "chatgptOAuthProtectedResource");
       res.set("WWW-Authenticate", `Bearer realm="NivaDesk", resource_metadata="${metadataUrl}"`);
