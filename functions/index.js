@@ -5694,6 +5694,87 @@ exports.changeAccountEmail = onCall({ region: "europe-west2" }, async (request) 
   };
 });
 
+exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = String(request.auth?.uid || "").trim();
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in is required before creating a workspace.");
+  }
+
+  const fullName = cleanQuickReplyText(request.data?.fullName || request.auth?.token?.name || "", 80);
+  const workspaceName = cleanQuickReplyText(request.data?.workspaceName || "", 100);
+  if (fullName.length < 2 || workspaceName.length < 2) {
+    throw new HttpsError("invalid-argument", "Full name and workspace name are required.");
+  }
+
+  const email = String(request.auth?.token?.email || "").trim();
+  const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  const db = admin.firestore();
+  const userRef = db.collection("users").doc(uid);
+  const companyRef = db.collection("companies").doc(uid);
+  const companySnapshot = await companyRef.get();
+  const existing = companySnapshot.exists ? (companySnapshot.data() || {}) : {};
+
+  if (companySnapshot.exists) {
+    const existingOwner = String(existing.ownerUid || uid).trim();
+    const existingSource = String(existing.billingPlanSource || "").trim();
+    const existingPlan = String(existing.billingPlan || "demo").trim();
+    const existingName = String(existing.name || existing.companyName || "").trim();
+    const isAutomaticBootstrap = existingOwner === uid && existingPlan === "demo" && (
+      !existingSource ||
+      existingSource === "new_workspace_default" ||
+      existingSource === "signup_free_demo" ||
+      existingName === "My Studio"
+    );
+
+    if (!isAutomaticBootstrap) {
+      throw new HttpsError("failed-precondition", "This account already has an active workspace. Open the portal instead.");
+    }
+  }
+
+  const ownerMember = {
+    uid,
+    email,
+    displayName: fullName,
+    role: "owner",
+    updatedAt: timestamp
+  };
+
+  const batch = db.batch();
+  batch.set(userRef, {
+    uid,
+    email,
+    displayName: fullName,
+    activeCompanyId: uid,
+    updatedAt: timestamp
+  }, { merge: true });
+
+  batch.set(companyRef, {
+    companyId: uid,
+    ownerUid: uid,
+    ownerEmail: email,
+    ownerDisplayName: fullName,
+    appName: "NivaDesk",
+    name: workspaceName,
+    companyName: workspaceName,
+    memberUids: admin.firestore.FieldValue.arrayUnion(uid),
+    memberRoles: { [uid]: "owner" },
+    members: { [uid]: ownerMember },
+    billingPlan: "demo",
+    billingPlanName: "Free Demo",
+    billingPlanSource: "signup_free_demo",
+    billingStatus: "free",
+    billingProviderRawStatus: "free",
+    billingStorageLimitMB: 50,
+    billingTeamMemberLimit: 1,
+    signupCompletedAt: timestamp,
+    updatedAt: timestamp,
+    createdAt: companySnapshot.exists ? (existing.createdAt || timestamp) : timestamp
+  }, { merge: true });
+
+  await batch.commit();
+  return { ok: true, companyId: uid, plan: "demo", message: "Free Demo workspace created." };
+});
+
 exports.saveAccountProfile = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const profile = request.data?.profile && typeof request.data.profile === "object" ? request.data.profile : {};
