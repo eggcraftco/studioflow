@@ -15,7 +15,7 @@ export const COOKIE_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "1. Who we are",
     paragraphs: [
       "NivaDesk is operated by EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom.",
-      "For cookie, privacy, or data protection questions, contact us at: nivadesk@gmail.com."
+      "For cookie, privacy, or data protection questions, contact us at: contact@nivadesk.co.uk."
     ]
   },
   {
@@ -172,7 +172,7 @@ export const COOKIE_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "London",
       "W9 1DN",
       "United Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -225,7 +225,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "İletişim"
     ],
     sectionSummaries: [
-      "NivaDesk, EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom tarafından işletilir. Çerez ve gizlilik soruları için: nivadesk@gmail.com.",
+      "NivaDesk, EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom tarafından işletilir. Çerez ve gizlilik soruları için: contact@nivadesk.co.uk.",
       "Çerezler, bir web sitesini ziyaret ettiğinizde veya çevrimiçi hizmet kullandığınızda tarayıcınıza ya da cihazınıza yerleştirilen küçük metin dosyalarıdır. Bu politika yerel depolama, oturum depolama, piksel, etiket, SDK ve cihaz tanımlayıcıları gibi benzer teknolojileri de kapsar.",
       "Çerezleri oturumunuzu açık tutmak, dil ve workspace tercihlerini hatırlamak, güvenliği sağlamak, dolandırıcılığı önlemek, abonelik ve ödeme süreçlerini desteklemek, kullanım ve performansı anlamak, hataları teşhis etmek ve izin verilen yerlerde pazarlama performansını ölçmek için kullanabiliriz.",
       "NivaDesk; kesinlikle gerekli, tercih veya işlevsellik, analitik ve performans, pazarlama ve üçüncü taraf çerezleri kullanabilir. Zorunlu olmayan çerezler, yerel hukuka göre onay gerektirebilir.",
@@ -240,7 +240,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Bazı tarayıcılar Do Not Track veya global gizlilik sinyalleri sunar. Tek bir sektör standardı yoktur; ancak uygulanabilir hukuk veya araçlarımız desteklediğinde tanınan opt-out sinyallerine uyarız.",
       "Çerezler oturum çerezi veya kalıcı çerez olabilir. Süre, amaca ve sağlayıcıya bağlıdır; çerez sürelerini amaçlarıyla orantılı tutmayı hedefleriz.",
       "Bu politikayı web sitesi, uygulama, sağlayıcılar, yasal gereklilikler veya iş operasyonlarındaki değişiklikleri yansıtmak için zaman zaman güncelleyebiliriz.",
-      "Bu Çerez Politikası veya NivaDesk'in çerez kullanımı hakkında sorularınız için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom veya nivadesk@gmail.com üzerinden bize ulaşabilirsiniz."
+      "Bu Çerez Politikası veya NivaDesk'in çerez kullanımı hakkında sorularınız için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom veya contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -269,7 +269,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Kontakt"
     ],
     sectionSummaries: [
-      "NivaDesk wird von EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Fragen zu Cookies oder Datenschutz: nivadesk@gmail.com.",
+      "NivaDesk wird von EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Fragen zu Cookies oder Datenschutz: contact@nivadesk.co.uk.",
       "Cookies sind kleine Textdateien auf Browser oder Gerät. Diese Richtlinie umfasst auch lokalen Speicher, Session Storage, Pixel, Tags, SDKs, Gerätekennungen und ähnliche Technologien.",
       "Wir können Cookies nutzen, um Sitzungen zu erhalten, Sprache und Workspace-Präferenzen zu speichern, Sicherheit bereitzustellen, Betrug zu verhindern, Abrechnung zu unterstützen, Nutzung und Leistung zu verstehen, Fehler zu diagnostizieren und erlaubte Marketingmessung zu ermöglichen.",
       "NivaDesk kann unbedingt erforderliche, Präferenz-, Analyse-, Performance-, Marketing- und Drittanbieter-Cookies verwenden. Nicht notwendige Cookies können je nach lokalem Recht eine Einwilligung erfordern.",
@@ -284,7 +284,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Einige Browser bieten Do Not Track oder globale Datenschutzsignale. Es gibt keinen einheitlichen Branchenstandard; rechtlich anerkannte Opt-out-Signale beachten wir, soweit erforderlich oder technisch unterstützt.",
       "Cookies können sitzungsbasiert oder dauerhaft sein. Die Dauer hängt von Zweck und Anbieter ab; wir versuchen, sie verhältnismäßig zu halten.",
       "Wir können diese Richtlinie aktualisieren, wenn sich Website, App, Cookies, Anbieter, rechtliche Anforderungen oder Geschäftsabläufe ändern.",
-      "Fragen zu dieser Cookie-Richtlinie beantwortet EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder nivadesk@gmail.com."
+      "Fragen zu dieser Cookie-Richtlinie beantwortet EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -313,7 +313,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Contact"
     ],
     sectionSummaries: [
-      "NivaDesk est exploité par EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Questions cookies ou confidentialité : nivadesk@gmail.com.",
+      "NivaDesk est exploité par EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Questions cookies ou confidentialité : contact@nivadesk.co.uk.",
       "Les cookies sont de petits fichiers texte placés sur votre navigateur ou appareil. Cette politique couvre aussi le stockage local, le stockage de session, pixels, tags, SDK, identifiants d'appareil et technologies similaires.",
       "Nous pouvons utiliser ces technologies pour maintenir la connexion, mémoriser la langue et le workspace, sécuriser l'accès, prévenir la fraude, gérer les paiements, comprendre l'usage, améliorer la performance, diagnostiquer les erreurs et mesurer le marketing lorsque permis.",
       "NivaDesk peut utiliser des cookies strictement nécessaires, de préférences, d'analyse, de performance, marketing et de tiers. Les cookies non essentiels peuvent nécessiter votre consentement selon la loi locale.",
@@ -328,7 +328,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Certains navigateurs proposent Do Not Track ou des signaux globaux de confidentialité. Il n'existe pas de standard unique; nous respecterons les signaux reconnus lorsque la loi l'exige ou lorsque nos outils le permettent.",
       "Les cookies peuvent être de session ou persistants. Leur durée dépend du but et du prestataire; nous visons des durées proportionnées.",
       "Nous pouvons mettre à jour cette politique pour refléter les changements du site, de l'app, des cookies, prestataires, exigences légales ou opérations.",
-      "Pour toute question, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Pour toute question, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -357,7 +357,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Contatti"
     ],
     sectionSummaries: [
-      "NivaDesk è gestito da EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Domande su cookie o privacy: nivadesk@gmail.com.",
+      "NivaDesk è gestito da EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Domande su cookie o privacy: contact@nivadesk.co.uk.",
       "I cookie sono piccoli file di testo sul browser o dispositivo. Questa informativa include anche local storage, session storage, pixel, tag, SDK, identificatori dispositivo e tecnologie simili.",
       "Possiamo usarli per mantenere la sessione, ricordare lingua e workspace, proteggere l'accesso, prevenire abusi, gestire pagamenti, capire l'uso, migliorare prestazioni, diagnosticare errori e misurare marketing quando consentito.",
       "NivaDesk può usare cookie necessari, preferenze, analisi, prestazioni, marketing e terze parti. I cookie non essenziali possono richiedere consenso secondo la legge locale.",
@@ -372,7 +372,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Alcuni browser offrono Do Not Track o segnali globali privacy. Non esiste uno standard unico; rispettiamo segnali riconosciuti quando richiesto o supportato.",
       "I cookie possono essere di sessione o persistenti. La durata dipende da scopo e fornitore; cerchiamo di mantenerla proporzionata.",
       "Possiamo aggiornare questa informativa per cambiamenti a sito, app, cookie, fornitori, leggi o operazioni.",
-      "Per domande contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o nivadesk@gmail.com."
+      "Per domande contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -401,7 +401,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Contacto"
     ],
     sectionSummaries: [
-      "NivaDesk es operado por EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Preguntas sobre cookies o privacidad: nivadesk@gmail.com.",
+      "NivaDesk es operado por EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Preguntas sobre cookies o privacidad: contact@nivadesk.co.uk.",
       "Las cookies son pequeños archivos de texto en tu navegador o dispositivo. Esta política también cubre almacenamiento local, almacenamiento de sesión, píxeles, etiquetas, SDK, identificadores de dispositivo y tecnologías similares.",
       "Podemos usarlas para mantener sesión, recordar idioma y workspace, proteger el acceso, prevenir fraude, gestionar pagos, entender uso, mejorar rendimiento, diagnosticar errores y medir marketing cuando esté permitido.",
       "NivaDesk puede usar cookies necesarias, de preferencias, analítica, rendimiento, marketing y terceros. Las cookies no esenciales pueden requerir consentimiento según la ley local.",
@@ -416,7 +416,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Algunos navegadores ofrecen Do Not Track o señales globales de privacidad. No hay un estándar único; respetaremos señales reconocidas cuando la ley o nuestras herramientas lo permitan.",
       "Las cookies pueden ser de sesión o persistentes. La duración depende del propósito y proveedor; intentamos que sea proporcional.",
       "Podemos actualizar esta política para reflejar cambios en sitio, app, cookies, proveedores, requisitos legales u operaciones.",
-      "Para preguntas, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o nivadesk@gmail.com."
+      "Para preguntas, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -445,7 +445,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Contacto"
     ],
     sectionSummaries: [
-      "A NivaDesk é operada pela EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Questões sobre cookies ou privacidade: nivadesk@gmail.com.",
+      "A NivaDesk é operada pela EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Questões sobre cookies ou privacidade: contact@nivadesk.co.uk.",
       "Cookies são pequenos ficheiros de texto no navegador ou dispositivo. Esta política também cobre armazenamento local, sessão, pixels, tags, SDKs, identificadores de dispositivo e tecnologias semelhantes.",
       "Podemos usá-los para manter sessão, lembrar idioma e workspace, proteger acesso, prevenir fraude, gerir pagamentos, compreender uso, melhorar desempenho, diagnosticar erros e medir marketing quando permitido.",
       "A NivaDesk pode usar cookies necessários, preferências, analytics, desempenho, marketing e terceiros. Cookies não essenciais podem exigir consentimento conforme a lei local.",
@@ -460,7 +460,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Alguns navegadores oferecem Do Not Track ou sinais globais de privacidade. Não há padrão único; respeitamos sinais reconhecidos quando exigido ou suportado.",
       "Cookies podem ser de sessão ou persistentes. A duração depende do objetivo e fornecedor; procuramos mantê-la proporcional.",
       "Podemos atualizar esta política por alterações no website, app, cookies, fornecedores, lei ou operações.",
-      "Para questões, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Para questões, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -489,7 +489,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Контакт"
     ],
     sectionSummaries: [
-      "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Вопросы о cookies или приватности: nivadesk@gmail.com.",
+      "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Вопросы о cookies или приватности: contact@nivadesk.co.uk.",
       "Cookies — небольшие текстовые файлы в браузере или устройстве. Эта политика также охватывает local storage, session storage, пиксели, теги, SDK, идентификаторы устройств и похожие технологии.",
       "Мы можем использовать их для сохранения входа, языка и workspace, защиты доступа, предотвращения мошенничества, платежей, анализа использования, улучшения performance, диагностики ошибок и разрешенного маркетингового измерения.",
       "NivaDesk может использовать необходимые, preference, analytics, performance, marketing и third-party cookies. Необязательные cookies могут требовать согласия по местному закону.",
@@ -504,7 +504,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "Некоторые браузеры предлагают Do Not Track или глобальные сигналы приватности. Единого стандарта нет; мы учитываем признанные сигналы, когда это требуется или поддерживается.",
       "Cookies бывают session или persistent. Срок зависит от цели и провайдера; мы стремимся сохранять его пропорциональным.",
       "Мы можем обновлять эту политику при изменениях сайта, приложения, cookies, провайдеров, законов или операций.",
-      "По вопросам обращайтесь: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или nivadesk@gmail.com."
+      "По вопросам обращайтесь: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -533,7 +533,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "お問い合わせ"
     ],
     sectionSummaries: [
-      "NivaDesk は EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom が運営します。Cookie またはプライバシーに関する連絡先: nivadesk@gmail.com。",
+      "NivaDesk は EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom が運営します。Cookie またはプライバシーに関する連絡先: contact@nivadesk.co.uk。",
       "Cookies はブラウザや端末に保存される小さなテキストファイルです。このポリシーは local storage、session storage、pixels、tags、SDK、端末識別子などの類似技術も対象にします。",
       "ログイン維持、言語や workspace 設定の保存、安全なアクセス、不正防止、支払い、利用状況把握、性能改善、エラー診断、許可されたマーケティング測定のために使用する場合があります。",
       "NivaDesk は必須、設定、分析、パフォーマンス、マーケティング、第三者 cookies を使用する場合があります。必須でない cookies は地域の法律により同意が必要になることがあります。",
@@ -548,7 +548,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "一部ブラウザは Do Not Track やグローバルプライバシー信号を提供します。統一標準はありませんが、法律上必要または技術的に対応可能な認識済み信号を尊重します。",
       "Cookies は session または persistent です。保存期間は目的と provider によりますが、目的に比例する期間を目指します。",
       "サイト、アプリ、cookies、provider、法的要件、運営の変更に応じてこのポリシーを更新する場合があります。",
-      "お問い合わせは EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または nivadesk@gmail.com まで。"
+      "お問い合わせは EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk まで。"
     ]
   },
   "中文 (Chinese)": {
@@ -577,7 +577,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "联系"
     ],
     sectionSummaries: [
-      "NivaDesk 由 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 运营。Cookie 或隐私问题请联系 nivadesk@gmail.com。",
+      "NivaDesk 由 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 运营。Cookie 或隐私问题请联系 contact@nivadesk.co.uk。",
       "Cookies 是保存在浏览器或设备上的小型文本文件。本政策也涵盖 local storage、session storage、pixels、tags、SDK、设备标识符和类似技术。",
       "我们可能用它们保持登录、记住语言和 workspace、安全访问、防止欺诈、支持付款、了解使用、提升性能、诊断错误以及在允许时衡量营销效果。",
       "NivaDesk 可能使用必要、偏好、分析、性能、营销和第三方 cookies。非必要 cookies 可能依法需要同意。",
@@ -592,7 +592,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "某些浏览器提供 Do Not Track 或全球隐私信号。行业没有统一标准；在法律要求或工具支持时，我们会尊重被认可的退出信号。",
       "Cookies 可以是会话或持久 cookies。保存时间取决于目的和服务商；我们会尽量保持与目的相称。",
       "我们可能因网站、应用、cookies、服务商、法律要求或运营变化而更新本政策。",
-      "如有问题，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 nivadesk@gmail.com。"
+      "如有问题，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -621,7 +621,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "التواصل"
     ],
     sectionSummaries: [
-      "تدير EGGCRAFT LIMITED خدمة NivaDesk من 141 Randolph Avenue, London, W9 1DN, United Kingdom. للأسئلة حول cookies أو الخصوصية: nivadesk@gmail.com.",
+      "تدير EGGCRAFT LIMITED خدمة NivaDesk من 141 Randolph Avenue, London, W9 1DN, United Kingdom. للأسئلة حول cookies أو الخصوصية: contact@nivadesk.co.uk.",
       "ملفات تعريف الارتباط هي ملفات نصية صغيرة على المتصفح أو الجهاز. تشمل هذه السياسة أيضاً التخزين المحلي وتخزين الجلسة والبكسلات والوسوم وSDK ومعرفات الجهاز والتقنيات المشابهة.",
       "قد نستخدمها للحفاظ على تسجيل الدخول، وتذكر اللغة وworkspace، وتأمين الوصول، ومنع الاحتيال، ودعم المدفوعات، وفهم الاستخدام، وتحسين الأداء، وتشخيص الأخطاء، وقياس التسويق حيث يسمح القانون.",
       "قد تستخدم NivaDesk ملفات ضرورية وتفضيلات وتحليلات وأداء وتسويق وطرف ثالث. قد تتطلب الملفات غير الضرورية موافقة حسب القانون المحلي.",
@@ -636,7 +636,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "توفر بعض المتصفحات Do Not Track أو إشارات خصوصية عالمية. لا يوجد معيار واحد؛ نحترم الإشارات المعترف بها عندما يتطلب القانون أو تدعمها أدواتنا.",
       "قد تكون cookies جلسة أو دائمة. تعتمد المدة على الغرض والمزود، ونحاول إبقاءها متناسبة مع الغرض.",
       "قد نحدث هذه السياسة عند تغير الموقع أو التطبيق أو cookies أو المزودين أو المتطلبات القانونية أو العمليات.",
-      "للأسئلة، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو nivadesk@gmail.com."
+      "للأسئلة، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -665,7 +665,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "संपर्क"
     ],
     sectionSummaries: [
-      "NivaDesk का संचालन EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom द्वारा किया जाता है। Cookie या privacy सवाल: nivadesk@gmail.com.",
+      "NivaDesk का संचालन EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom द्वारा किया जाता है। Cookie या privacy सवाल: contact@nivadesk.co.uk.",
       "Cookies browser या device पर रखी छोटी text files होती हैं। यह policy local storage, session storage, pixels, tags, SDKs, device identifiers और similar technologies को भी cover करती है।",
       "हम इन्हें signed-in रखने, language और workspace preferences याद रखने, secure access, fraud prevention, payments, usage understanding, performance improvement, bug diagnosis और permitted marketing measurement के लिए इस्तेमाल कर सकते हैं।",
       "NivaDesk necessary, preference, analytics, performance, marketing और third-party cookies इस्तेमाल कर सकता है। Non-essential cookies के लिए local law के अनुसार consent चाहिए हो सकता है।",
@@ -680,7 +680,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
       "कुछ browsers Do Not Track या global privacy signals देते हैं। कोई एक industry standard नहीं है; जहाँ law या tools support करें, हम recognised opt-out signals का सम्मान करेंगे।",
       "Cookies session या persistent हो सकती हैं। Duration purpose और provider पर निर्भर करता है; हम इसे proportionate रखने की कोशिश करते हैं।",
       "Website, app, cookies, providers, legal requirements या operations बदलने पर हम यह policy update कर सकते हैं।",
-      "सवालों के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या nivadesk@gmail.com से संपर्क करें।"
+      "सवालों के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk से संपर्क करें।"
     ]
   }
 };
