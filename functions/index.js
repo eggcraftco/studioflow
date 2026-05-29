@@ -14517,7 +14517,7 @@ function nvMcpToolResult(result = {}) {
 function nvMcpToolErrorResult(error = {}) {
   const code = error?.code || "internal";
   const message = error?.message || String(error);
-  return {
+  const result = {
     content: [
       {
         type: "text",
@@ -14531,6 +14531,63 @@ function nvMcpToolErrorResult(error = {}) {
     },
     isError: true
   };
+
+  if (code === "unauthenticated") {
+    result._meta = {
+      "mcp/www_authenticate": [
+        `Bearer resource_metadata="${nvMcpProtectedResourceMetadataUrl()}", error="insufficient_scope", error_description="Sign in to NivaDesk to continue"`
+      ]
+    };
+  }
+
+  return result;
+}
+
+function nvMcpOAuthScopesForTool(toolName = "") {
+  switch (String(toolName || "")) {
+    case "search_orders":
+    case "get_order_detail":
+      return ["orders.read"];
+    case "create_order":
+    case "update_order_status":
+      return ["orders.write"];
+    case "add_order_note":
+      return ["orders.write", "notes.write"];
+    case "search_notes":
+    case "get_note_detail":
+      return ["notes.read"];
+    case "create_note":
+    case "append_note":
+    case "update_note":
+    case "pin_note":
+    case "archive_note":
+      return ["notes.write"];
+    case "get_order_financials":
+    case "get_extra_spending_overview":
+    case "get_financial_overview":
+      return ["finance.read"];
+    case "get_dashboard_summary":
+      return ["orders.read", "finance.read"];
+    default:
+      return ["orders.read"];
+  }
+}
+
+function nvMcpToolsWithSecuritySchemes() {
+  return nvMcpOrderToolSchemas().map((tool) => {
+    const securitySchemes = [
+      { type: "oauth2", scopes: nvMcpOAuthScopesForTool(tool.name) }
+    ];
+
+    return {
+      ...tool,
+      securitySchemes,
+      _meta: {
+        ...(tool._meta || {}),
+        securitySchemes
+      }
+    };
+  });
 }
 
 function nvMcpOrderToolSchemas() {
@@ -15058,7 +15115,7 @@ async function nvHandleMcpRequest(req, body = {}) {
       return nvMcpJsonRpcResult(id, {});
 
     case "tools/list":
-      return nvMcpJsonRpcResult(id, { tools: nvMcpOrderToolSchemas() });
+      return nvMcpJsonRpcResult(id, { tools: nvMcpToolsWithSecuritySchemes() });
 
     case "tools/call": {
       try {
@@ -15083,10 +15140,11 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
       name: "NivaDesk",
       serverInfo: nvMcpServerInfo(),
       protectedResource: nvMcpProtectedResourceMetadata(req),
-      tools: nvMcpOrderToolSchemas().map((tool) => ({
+      tools: nvMcpToolsWithSecuritySchemes().map((tool) => ({
         name: tool.name,
         title: tool.title,
-        description: tool.description
+        description: tool.description,
+        securitySchemes: tool.securitySchemes
       }))
     });
     return;
@@ -15097,14 +15155,8 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
     return;
   }
 
-  // NivaDesk tools expose private workspace data, so the MCP endpoint is authenticated
-  // from the first protocol request. This 401 challenge lets ChatGPT discover OAuth.
-  const oauth = await nvResolveChatGPTOAuthBearer(req);
-  if (!oauth?.uid) {
-    nvSendMcpOAuthChallenge(res);
-    return;
-  }
-
+  // Allow MCP initialize and tools/list so ChatGPT can discover the app.
+  // Protected tools enforce OAuth individually and return mcp/www_authenticate when linking is required.
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const response = await nvHandleMcpRequest(req, body);
