@@ -129,6 +129,8 @@ type ScrollStoryStep = {
   titleKey: PublicSiteTranslationKey;
   bodyKey: PublicSiteTranslationKey;
   cardKey: PublicSiteTranslationKey;
+  detailKey: PublicSiteTranslationKey;
+  valueKey: PublicSiteTranslationKey;
 };
 
 const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
@@ -258,25 +260,33 @@ const SCROLL_STORY_STEPS: ScrollStoryStep[] = [
     eyebrowKey: "scrollStory.step1.eyebrow",
     titleKey: "scrollStory.step1.title",
     bodyKey: "scrollStory.step1.body",
-    cardKey: "scrollStory.card1"
+    cardKey: "scrollStory.card1",
+    detailKey: "scrollStory.detail1",
+    valueKey: "scrollStory.value1"
   },
   {
     eyebrowKey: "scrollStory.step2.eyebrow",
     titleKey: "scrollStory.step2.title",
     bodyKey: "scrollStory.step2.body",
-    cardKey: "scrollStory.card2"
+    cardKey: "scrollStory.card2",
+    detailKey: "scrollStory.detail2",
+    valueKey: "scrollStory.value2"
   },
   {
     eyebrowKey: "scrollStory.step3.eyebrow",
     titleKey: "scrollStory.step3.title",
     bodyKey: "scrollStory.step3.body",
-    cardKey: "scrollStory.card3"
+    cardKey: "scrollStory.card3",
+    detailKey: "scrollStory.detail3",
+    valueKey: "scrollStory.value3"
   },
   {
     eyebrowKey: "scrollStory.step4.eyebrow",
     titleKey: "scrollStory.step4.title",
     bodyKey: "scrollStory.step4.body",
-    cardKey: "scrollStory.card4"
+    cardKey: "scrollStory.card4",
+    detailKey: "scrollStory.detail4",
+    valueKey: "scrollStory.value4"
   }
 ];
 
@@ -357,7 +367,7 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
   {
     titleKey: "planBridge.advancedFinance.title",
     bodyKey: "planBridge.advancedFinance.body",
-    planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
+    planKeys: ["pro_monthly", "team_monthly"]
   },
   {
     titleKey: "planBridge.workspaceBranding.title",
@@ -387,6 +397,21 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
   {
     titleKey: "planBridge.teamAccess.title",
     bodyKey: "planBridge.teamAccess.body",
+    planKeys: ["team_monthly"]
+  },
+  {
+    titleKey: "planBridge.teamSeats.title",
+    bodyKey: "planBridge.teamSeats.body",
+    planKeys: ["team_monthly"]
+  },
+  {
+    titleKey: "planBridge.additionalSeats.title",
+    bodyKey: "planBridge.additionalSeats.body",
+    planKeys: ["team_monthly"]
+  },
+  {
+    titleKey: "planBridge.largeTeams.title",
+    bodyKey: "planBridge.largeTeams.body",
     planKeys: ["team_monthly"]
   },
   {
@@ -436,10 +461,10 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     shortNameKey: "plan.lite.shortName",
     publicNameKey: "plan.lite.publicName",
     priceLabelKey: "plan.lite.price",
-    modelKey: "plan.model.oneTime",
+    modelKey: "plan.model.monthly",
     noteKey: "plan.lite.note",
-    ctaKey: "cta.getStarted",
-    billingKey: "lifetime_lite",
+    ctaKey: "cta.billingSoon",
+    disabled: true,
     bulletKeys: ["plan.lite.bullet1", "plan.lite.bullet2", "plan.lite.bullet3"]
   },
   pro_monthly: {
@@ -448,8 +473,8 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.pro.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.pro.note",
-    ctaKey: "cta.getStarted",
-    billingKey: "pro_monthly",
+    ctaKey: "cta.billingSoon",
+    disabled: true,
     featured: true,
     badgeKey: "plan.pro.badge",
     bulletKeys: ["plan.pro.bullet1", "plan.pro.bullet2", "plan.pro.bullet3"]
@@ -460,9 +485,8 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.team.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.team.note",
-    ctaKey: "cta.getStarted",
-    billingKey: "team_monthly",
-    href: "/contact",
+    ctaKey: "cta.billingSoon",
+    disabled: true,
     bulletKeys: ["plan.team.bullet1", "plan.team.bullet2", "plan.team.bullet3"]
   }
 };
@@ -659,7 +683,7 @@ function PublicFooter() {
           <p>{t("brand.footerDescription")}</p>
           <div className="public-footer-contact">
             <span>{t("footer.company")}</span>
-            <a href="mailto:nivadesk@gmail.com">nivadesk@gmail.com</a>
+            <a href="mailto:contact@nivadesk.co.uk">contact@nivadesk.co.uk</a>
           </div>
         </div>
         <div className="public-footer-groups" aria-label={t("nav.footer")}>
@@ -988,11 +1012,11 @@ function PublicPlanCard({ plan, compact = false }: { plan: PlanEntitlements; com
         </div>
         <div>
           <dt>{t("plan.limit.storage")}</dt>
-          <dd>{storageLimitLabel(plan)}</dd>
+          <dd>{plan.features.client_files ? storageLimitLabel(plan) : t("plan.limit.notIncluded")}</dd>
         </div>
         <div>
           <dt>{t("plan.limit.team")}</dt>
-          <dd>{plan.teamMemberLimit}</dd>
+          <dd>{plan.plan === "team_monthly" ? t("plan.limit.teamIncluded") : plan.teamMemberLimit}</dd>
         </div>
       </dl>
       <ul>
@@ -1068,20 +1092,30 @@ function ScrollStoryShowcase() {
       <div className="public-shell public-scroll-story-grid">
         <div className="public-scroll-stage" data-active-step={activeStep}>
           <div className="public-scroll-stage-window">
-            <span className="public-scroll-stage-label">{t("scrollStory.stageLabel")}</span>
-            <div className="public-scroll-stage-toolbar">
-              <span />
-              <span />
-              <span />
+            <div className="public-story-record-head">
+              <div>
+                <span className="public-scroll-stage-label">{t("scrollStory.stageLabel")}</span>
+                <strong>{t("scrollStory.orderTitle")}</strong>
+                <small>{t("scrollStory.orderClient")}</small>
+              </div>
+              <span className="public-story-status">{t("scrollStory.orderStatus")}</span>
             </div>
+
+            <div className="public-story-progress" aria-hidden="true">
+              <span style={{ width: `${((activeStep + 1) / SCROLL_STORY_STEPS.length) * 100}%` }} />
+            </div>
+
             <div className="public-scroll-stage-cards">
               {SCROLL_STORY_STEPS.map((step, index) => (
                 <article data-active={activeStep === index ? "true" : "false"} key={step.cardKey}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <strong>{t(step.cardKey)}</strong>
+                  <div className="public-story-card-title">
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <strong>{t(step.cardKey)}</strong>
+                  </div>
+                  <p>{t(step.detailKey)}</p>
+                  <b>{t(step.valueKey)}</b>
                 </article>
               ))}
-              <span className="public-story-cursor" aria-hidden="true" />
             </div>
           </div>
         </div>
@@ -1390,6 +1424,8 @@ export function PublicHomePage() {
             </div>
           </div>
         </section>
+
+        <ChatGPTAppShowcase />
 
         <section className="public-section public-scroll-reveal">
           <div className="public-shell">

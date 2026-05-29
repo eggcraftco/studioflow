@@ -8,6 +8,8 @@ export type StripeBillingItemKey =
   | "pro_yearly"
   | "team_monthly"
   | "team_yearly"
+  | "additional_team_seat_monthly"
+  | "additional_team_seat_yearly"
   | "storage_100gb"
   | "storage_200gb";
 

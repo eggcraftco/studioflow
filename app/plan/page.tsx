@@ -208,7 +208,7 @@ export default function PlanPage() {
               <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginTop: 18 }}>
                 <MiniMetric title="Status" value={workspace.billingStatus} note={workspace.billingProviderRawStatus || "Workspace billing state"} />
                 <MiniMetric title="Orders" value={String(counts.orderCount)} note="Existing data" />
-                <MiniMetric title="Team limit" value={String(workspace.billingTeamMemberLimit)} note="Members allowed" />
+                <MiniMetric title="Current seat allowance" value={String(workspace.billingTeamMemberLimit)} note="Team includes 5 seats · up to 10 self-service" />
                 <MiniMetric title="Storage" value={formatStorageFromMB(workspace.billingStorageLimitMB)} note="Base + add-ons" />
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 18 }}>
@@ -335,6 +335,11 @@ function MiniMetric({ title, value, note }: { title: string; value: string; note
   );
 }
 
+function teamSeatLabel(plan: PlanEntitlements) {
+  if (plan.plan !== "team_monthly") return String(plan.teamMemberLimit);
+  return `${plan.includedTeamSeats ?? 5} included`;
+}
+
 function PlanCard({
   plan,
   active,
@@ -358,7 +363,15 @@ function PlanCard({
         Orders: {plan.orderLimit ?? "Unlimited"}<br />
         Customers: {plan.customerLimit ?? "Unlimited"}<br />
         Client Files storage: {plan.features.client_files ? storageLimitLabel(plan) : "Not included"}<br />
-        Team members: {plan.teamMemberLimit}
+        Team members: {teamSeatLabel(plan)}
+        {plan.plan === "team_monthly" ? (
+          <>
+            <br />
+            Additional seats: £5/month or £50/year each<br />
+            Self-service maximum: 10 users<br />
+            More than 10 users: contact@nivadesk.co.uk
+          </>
+        ) : null}
       </p>
       <div className="grid" style={{ gap: 8 }}>
         {Object.entries(plan.features).filter(([, enabled]) => enabled).slice(0, 4).map(([key]) => (
