@@ -500,11 +500,24 @@ export default function DashboardPage() {
               </button>
             </div>
             ) : (
-              <div className="dashboard-compare-controls" aria-label={t("Advanced comparison available on Pro")}>
-                <span className="compare-pill" aria-disabled="true">{t("1 Yr Compare")}</span>
-                <span className="compare-pill" aria-disabled="true">{t("3 Yrs Compare")}</span>
-                <span className="studio-pill">{t("Pro")}</span>
-                <button className={showCustomize ? "compare-pill active" : "compare-pill"} type="button" onClick={() => setShowCustomize(value => !value)}>
+              <div className="dashboard-compare-controls" aria-label={t("Advanced comparison available on Pro")} style={{ alignItems: "center", gap: 12 }}>
+                <span
+                  className="compare-pill"
+                  aria-disabled="true"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 7, borderRadius: 999, opacity: 0.78 }}
+                >
+                  <span aria-hidden="true" style={{ display: "inline-flex", width: 13, height: 13 }}>
+                    <CardIconGlyph icon="lock" />
+                  </span>
+                  {t("1Y / 3Y Compare")}
+                  <span className="studio-pill" style={{ padding: "2px 8px", fontSize: 11 }}>{t("Pro")}</span>
+                </span>
+                <button
+                  className="compare-pill active"
+                  style={{ borderRadius: 12, paddingInline: 17 }}
+                  type="button"
+                  onClick={() => setShowCustomize(value => !value)}
+                >
                   {t("Customize")}
                 </button>
               </div>
