@@ -49,6 +49,22 @@ const STRIPE_BILLING_ITEMS = {
     mode: "subscription",
     priceEnv: "STRIPE_PRICE_TEAM_YEARLY"
   },
+  additional_team_seat_monthly: {
+    key: "additional_team_seat_monthly",
+    type: "team_seat_addon",
+    mode: "subscription",
+    interval: "month",
+    availableForCheckout: false,
+    priceEnv: "STRIPE_PRICE_ADDITIONAL_TEAM_SEAT_MONTHLY"
+  },
+  additional_team_seat_yearly: {
+    key: "additional_team_seat_yearly",
+    type: "team_seat_addon",
+    mode: "subscription",
+    interval: "year",
+    availableForCheckout: false,
+    priceEnv: "STRIPE_PRICE_ADDITIONAL_TEAM_SEAT_YEARLY"
+  },
   storage_100gb: {
     key: "storage_100gb",
     type: "storage_addon",
@@ -116,6 +132,8 @@ function createStripeBillingFunctions({
     if (compact === "pro_yearly" || compact === "pro_annual") return "pro_yearly";
     if (compact === "team" || compact === "team_monthly") return "team_monthly";
     if (compact === "team_yearly" || compact === "team_annual") return "team_yearly";
+    if (compact === "additional_team_seat_monthly" || compact === "team_seat_monthly") return "additional_team_seat_monthly";
+    if (compact === "additional_team_seat_yearly" || compact === "team_seat_yearly") return "additional_team_seat_yearly";
     if (compact === "100gb" || compact === "storage_100gb") return "storage_100gb";
     if (compact === "200gb" || compact === "storage_200gb") return "storage_200gb";
     return "";
@@ -128,7 +146,10 @@ function createStripeBillingFunctions({
       throw new HttpsError("invalid-argument", "A valid NivaDesk billing item key is required.");
     }
     if (item.availableForCheckout === false) {
-      throw new HttpsError("failed-precondition", "Additional Client Files storage will be available after the initial billing launch.");
+      const message = item.type === "team_seat_addon"
+        ? "Additional team seat checkout will be enabled after the seat entitlement rollout is complete."
+        : "Additional Client Files storage will be available after the initial billing launch.";
+      throw new HttpsError("failed-precondition", message);
     }
     return item;
   }
@@ -270,6 +291,12 @@ function createStripeBillingFunctions({
         const doc = addonSnap.docs[0];
         return { ref: doc.ref, id: doc.id, data: doc.data() || {} };
       }
+
+      const teamSeatSnap = await db.collection("companies").where("billingAdditionalTeamSeatSubscriptionId", "==", subId).limit(1).get();
+      if (!teamSeatSnap.empty) {
+        const doc = teamSeatSnap.docs[0];
+        return { ref: doc.ref, id: doc.id, data: doc.data() || {} };
+      }
     }
 
     const custId = String(customerId || "").trim();
@@ -294,6 +321,8 @@ function createStripeBillingFunctions({
       billingProviderRawStatus: rawStatus || status,
       billingStorageLimitMB: entitlements.storageLimitMB,
       billingTeamMemberLimit: entitlements.teamMemberLimit,
+      billingTeamIncludedSeats: entitlements.plan === "team_monthly" ? 5 : entitlements.teamMemberLimit,
+      billingTeamSelfServiceMax: entitlements.plan === "team_monthly" ? 10 : entitlements.teamMemberLimit,
       billingExportAccessPreserved: true,
       billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       billingUpdatedBy: "stripe_webhook",
@@ -362,6 +391,29 @@ function createStripeBillingFunctions({
       return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive };
     }
 
+    if (item.type === "team_seat_addon") {
+      const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
+      const firstSubscriptionItem = Array.isArray(subscription.items?.data) ? subscription.items.data[0] : null;
+      const requestedQuantity = Math.max(1, Number(firstSubscriptionItem?.quantity || 1) || 1);
+      const purchasedSeatQuantity = addonActive ? Math.min(5, Math.floor(requestedQuantity)) : 0;
+      await workspace.ref.set({
+        billingCustomerId: customerId,
+        billingAdditionalTeamSeatQuantity: purchasedSeatQuantity,
+        billingAdditionalTeamSeatKey: addonActive ? item.key : "",
+        billingAdditionalTeamSeatStatus: addonActive ? status : "cancelled",
+        billingAdditionalTeamSeatSubscriptionId: addonActive ? subscription.id : "",
+        billingAdditionalTeamSeatCurrentPeriodEnd: periodEnd,
+        billingTeamIncludedSeats: 5,
+        billingTeamSelfServiceMax: 10,
+        billingTeamMemberLimit: 5 + purchasedSeatQuantity,
+        billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        billingUpdatedBy: "stripe_webhook",
+        billingExportAccessPreserved: true
+      }, { merge: true });
+
+      return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive, purchasedSeatQuantity };
+    }
+
     if (shouldFallback) {
       await workspace.ref.set(planUpdatePayload("demo", status === "unpaid" ? "expired" : "cancelled", status, {
         billingCustomerId: customerId,
@@ -370,7 +422,11 @@ function createStripeBillingFunctions({
         billingPreviousSubscriptionItemKey: item.key,
         billingPreviousInterval: item.interval || "",
         billingCurrentPeriodEnd: periodEnd,
-        billingStorageAddonMB: 0
+        billingStorageAddonMB: 0,
+        billingAdditionalTeamSeatQuantity: 0,
+        billingAdditionalTeamSeatKey: "",
+        billingAdditionalTeamSeatStatus: "cancelled",
+        billingAdditionalTeamSeatSubscriptionId: ""
       }), { merge: true });
 
       return { updated: true, workspaceId: workspace.id, plan: "demo", fallbackFrom: item.plan };
@@ -500,7 +556,7 @@ function createStripeBillingFunctions({
       billingInterval: item.interval || "",
       studioFlowBillingKey: item.key,
       plan: item.plan || "",
-      addonKey: item.type === "storage_addon" ? item.key : ""
+      addonKey: item.type !== "plan" ? item.key : ""
     };
 
     const sessionPayload = {

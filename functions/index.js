@@ -1870,7 +1870,11 @@ const PLAN_ENTITLEMENTS = {
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 51200,
-    teamMemberLimit: 10,
+    teamMemberLimit: 5,
+    teamMemberIncludedSeats: 5,
+    teamMemberSelfServiceMax: 10,
+    additionalTeamSeatMonthlyPriceGBP: 5,
+    additionalTeamSeatYearlyPriceGBP: 50,
     clientFilesEnabled: true,
     shareSheetEnabled: true,
     teamAccessEnabled: true,
@@ -1926,6 +1930,27 @@ function numericLimit(value) {
   if (value === null || value === undefined) return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+const TEAM_INCLUDED_SEATS = 5;
+const TEAM_SELF_SERVICE_MAX_SEATS = 10;
+
+function activeAdditionalTeamSeats(companyData = {}) {
+  const rawCount = Number(companyData.billingAdditionalTeamSeatQuantity || 0);
+  const status = String(companyData.billingAdditionalTeamSeatStatus || "").trim().toLowerCase();
+  if (!["active", "trialing", "past_due"].includes(status)) return 0;
+  if (!Number.isFinite(rawCount) || rawCount <= 0) return 0;
+  return Math.min(TEAM_SELF_SERVICE_MAX_SEATS - TEAM_INCLUDED_SEATS, Math.floor(rawCount));
+}
+
+function effectiveTeamSeatLimit(entitlements = {}, companyData = {}) {
+  if (String(entitlements.plan || "") !== "team_monthly") {
+    return numericLimit(entitlements.teamMemberLimit) || 1;
+  }
+  return Math.min(
+    TEAM_SELF_SERVICE_MAX_SEATS,
+    TEAM_INCLUDED_SEATS + activeAdditionalTeamSeats(companyData)
+  );
 }
 
 function parseClientFileSize(file = {}) {
@@ -2270,15 +2295,28 @@ async function workspaceBillingUsage(companyId, companyData = {}) {
   };
 }
 
-function planLimitsFromEntitlements(entitlements = {}) {
+function planLimitsFromEntitlements(entitlements = {}, companyData = {}) {
+  const teamMemberLimit = effectiveTeamSeatLimit(entitlements, companyData);
   return {
     orderLimit: numericLimit(entitlements.orderLimit),
     customerLimit: numericLimit(entitlements.customerLimit),
     storageLimitMB: numericLimit(entitlements.storageLimitMB) || 0,
     storageLimitBytes: (numericLimit(entitlements.storageLimitMB) || 0) * 1024 * 1024,
-    teamMemberLimit: numericLimit(entitlements.teamMemberLimit) || 1,
+    teamMemberLimit,
+    teamMemberIncludedSeats: String(entitlements.plan || "") === "team_monthly" ? TEAM_INCLUDED_SEATS : teamMemberLimit,
+    teamMemberAdditionalSeatCount: String(entitlements.plan || "") === "team_monthly" ? activeAdditionalTeamSeats(companyData) : 0,
+    teamMemberSelfServiceMax: String(entitlements.plan || "") === "team_monthly" ? TEAM_SELF_SERVICE_MAX_SEATS : teamMemberLimit,
     taskLimitPerOrder: numericLimit(entitlements.taskLimitPerOrder)
   };
+}
+
+function teamSeatLimitMessage(limits = {}) {
+  const currentLimit = Number(limits.teamMemberLimit || 1);
+  const maximum = Number(limits.teamMemberSelfServiceMax || TEAM_SELF_SERVICE_MAX_SEATS);
+  if (currentLimit >= maximum) {
+    return `This workspace has reached the self-service maximum of ${maximum} users. Contact contact@nivadesk.co.uk for a tailored plan.`;
+  }
+  return `This workspace has reached its current seat allowance of ${currentLimit} users. NivaDesk Team includes ${TEAM_INCLUDED_SEATS} seats; additional seats will be available for £5/month or £50/year each, up to ${maximum} users.`;
 }
 
 function publicEntitlements(entitlements = {}) {
@@ -2361,6 +2399,9 @@ async function saveWorkspaceBillingUsage(companyRef, usage, entitlements, limits
     storageLimitMB: limits.storageLimitMB,
     storageLimitBytes: limits.storageLimitBytes,
     teamMemberLimit: limits.teamMemberLimit,
+    teamMemberIncludedSeats: limits.teamMemberIncludedSeats,
+    teamMemberAdditionalSeatCount: limits.teamMemberAdditionalSeatCount,
+    teamMemberSelfServiceMax: limits.teamMemberSelfServiceMax,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     source
   };
@@ -2383,7 +2424,7 @@ async function saveWorkspaceBillingUsage(companyRef, usage, entitlements, limits
 exports.getWorkspacePlanUsage = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
 
   return {
@@ -2402,7 +2443,7 @@ exports.validateWorkspacePlanAction = onCall({ region: "europe-west2" }, async (
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
   const action = String(request.data?.action || "").trim();
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   const result = validateBillingAction(action, entitlements, usage, limits, request.data || {});
 
@@ -2416,7 +2457,7 @@ exports.validateWorkspacePlanAction = onCall({ region: "europe-west2" }, async (
 exports.recalculateWorkspacePlanUsage = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   const saved = await saveWorkspaceBillingUsage(companyRef, usage, entitlements, limits, "owner_recalculate");
 
@@ -6213,7 +6254,7 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2" }, async (reques
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   if (limits.orderLimit !== null && limits.orderLimit !== undefined && usage.orderCount + orderItems.length > limits.orderLimit) {
     throw new HttpsError("failed-precondition", "Import would exceed this workspace order limit.");
@@ -6314,7 +6355,7 @@ exports.deleteWorkspaceData = onCall({ region: "europe-west2" }, async (request)
   try {
     const updatedCompanySnap = await companyRef.get();
     const entitlements = billingEntitlementsForCompany(updatedCompanySnap.data() || companyData);
-    const limits = planLimitsFromEntitlements(entitlements);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
     const updatedUsage = await workspaceBillingUsage(companyId, updatedCompanySnap.data() || companyData);
     await saveWorkspaceBillingUsage(companyRef, updatedUsage, entitlements, limits, "web_delete_workspace_data");
   } catch (error) {
@@ -8156,7 +8197,7 @@ exports.createWebCustomer = onCall({ region: "europe-west2" }, async (request) =
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   const validation = validateBillingAction("create_customer", entitlements, usage, limits, request.data || {});
   if (!validation.allowed) {
@@ -8275,7 +8316,7 @@ exports.deleteWebCustomer = onCall({ region: "europe-west2" }, async (request) =
   const clearedOrderCount = await clearDeletedCustomerFromOrders(companyId, deletedCustomerName, uid, email);
 
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const updatedUsage = await workspaceBillingUsage(companyId, companyData);
   await saveWorkspaceBillingUsage(companyRef, updatedUsage, entitlements, limits, "web_customer_deleted");
 
@@ -8295,7 +8336,7 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   const validation = validateBillingAction("create_order", entitlements, usage, limits, request.data || {});
   if (!validation.allowed) {
@@ -8447,7 +8488,7 @@ exports.deleteWebOrder = onCall({ region: "europe-west2" }, async (request) => {
 
   try {
     const entitlements = billingEntitlementsForCompany(companyData);
-    const limits = planLimitsFromEntitlements(entitlements);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
     const updatedCompanySnap = await companyRef.get();
     const updatedUsage = await workspaceBillingUsage(companyId, updatedCompanySnap.data() || companyData);
     await saveWorkspaceBillingUsage(companyRef, updatedUsage, entitlements, limits, "web_order_deleted");
@@ -8620,7 +8661,7 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   const validation = validateBillingAction("create_order", entitlements, usage, limits, request.data || {});
   if (!validation.allowed) {
@@ -9057,7 +9098,7 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
 
 function validateClientFileMutationPlan(action, companyData = {}, companyId = "", requestData = {}) {
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = {
     orderCount: Number(companyData.billingUsageOrderCount || 0),
     customerCount: Number(companyData.billingUsageCustomerCount || 0),
@@ -9221,7 +9262,7 @@ exports.appendClientFile = onCall({ region: "europe-west2" }, async (request) =>
   try {
     const updatedCompanySnap = await companyRef.get();
     const entitlements = billingEntitlementsForCompany(updatedCompanySnap.data() || companyData);
-    const limits = planLimitsFromEntitlements(entitlements);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
     const usage = await workspaceBillingUsage(companyId, updatedCompanySnap.data() || companyData);
     await saveWorkspaceBillingUsage(companyRef, usage, entitlements, limits, "web_client_file_uploaded");
   } catch (error) {
@@ -9513,11 +9554,11 @@ exports.approveWorkspaceJoinRequest = onCall({ region: "europe-west2" }, async (
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
   const validation = validateBillingAction("add_team_member", entitlements, usage, limits, request.data || {});
   if (!validation.allowed) {
-    throw new HttpsError("failed-precondition", "This workspace plan cannot add another team member.", validation);
+    throw new HttpsError("failed-precondition", teamSeatLimitMessage(limits), validation);
   }
 
   const db = admin.firestore();
@@ -9799,11 +9840,11 @@ exports.addWorkspaceTeamMember = onCall({ region: "europe-west2" }, async (reque
   const members = companyMembersMap(companyData);
   const alreadyMember = Boolean(members[memberUid]);
   if (!alreadyMember) {
-    const limits = planLimitsFromEntitlements(entitlements);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
     const usage = await workspaceBillingUsage(companyId, companyData);
     const validation = validateBillingAction("add_team_member", entitlements, usage, limits, request.data || {});
     if (!validation.allowed) {
-      throw new HttpsError("failed-precondition", "This workspace plan cannot add another team member.", validation);
+      throw new HttpsError("failed-precondition", teamSeatLimitMessage(limits), validation);
     }
   }
 
@@ -9839,7 +9880,7 @@ exports.addWorkspaceTeamMember = onCall({ region: "europe-west2" }, async (reque
 
   const updatedCompanySnap = await companyRef.get();
   const updatedCompanyData = updatedCompanySnap.data() || companyData;
-  const limits = planLimitsFromEntitlements(billingEntitlementsForCompany(updatedCompanyData));
+  const limits = planLimitsFromEntitlements(billingEntitlementsForCompany(updatedCompanyData), updatedCompanyData);
   const usage = await workspaceBillingUsage(companyId, updatedCompanyData);
   await saveWorkspaceBillingUsage(companyRef, usage, billingEntitlementsForCompany(updatedCompanyData), limits, alreadyMember ? "team_member_updated" : "team_member_added");
 
@@ -10067,7 +10108,7 @@ exports.removeWorkspaceTeamMember = onCall({ region: "europe-west2" }, async (re
   const updatedCompanySnap = await companyRef.get();
   const updatedCompanyData = updatedCompanySnap.data() || companyData;
   const entitlements = billingEntitlementsForCompany(updatedCompanyData);
-  const limits = planLimitsFromEntitlements(entitlements);
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, updatedCompanyData);
   await saveWorkspaceBillingUsage(companyRef, usage, entitlements, limits, "team_member_removed");
 
@@ -10086,7 +10127,7 @@ exports.syncWorkspaceAcceptedJoinRequests = onCall({ region: "europe-west2" }, a
   if (result.repairedCount > 0) {
     const updatedCompanySnap = await companyRef.get();
     const entitlements = billingEntitlementsForCompany(updatedCompanySnap.data() || companyData);
-    const limits = planLimitsFromEntitlements(entitlements);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
     const usage = await workspaceBillingUsage(companyId, updatedCompanySnap.data() || companyData);
     await saveWorkspaceBillingUsage(companyRef, usage, entitlements, limits, "accepted_join_request_sync");
   }
