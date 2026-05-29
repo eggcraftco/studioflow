@@ -24,7 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
@@ -74,6 +74,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
+import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
@@ -94,14 +95,17 @@ fun DashboardScreen(
     var compareMode by rememberSaveable { mutableStateOf(DashboardCompareMode.None) }
     var periodMenuOpen by rememberSaveable { mutableStateOf(false) }
     var dashboardOptionsOpen by rememberSaveable { mutableStateOf(false) }
-    val stats = remember(state.orders, period) { DashboardStats.from(state.orders, period) }
     val currency = state.workspaceSettings.selectedCurrency.ifBlank { "£" }
     val decimalSeparator = state.workspaceSettings.selectedDecimalSeparator
     val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
     val widgetVisibility = DashboardWidgetVisibility.from(state.workspaceSettings)
-    val compareEnabled = compareMode != DashboardCompareMode.None && period.supportsYearCompare
-    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers) {
-        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers)
+    val advancedFinanceEnabled = state.workspace?.billingPlan == StudioBillingPlan.ProMonthly || state.workspace?.billingPlan == StudioBillingPlan.TeamMonthly
+    val stats = remember(state.orders, period, advancedFinanceEnabled) {
+        DashboardStats.from(state.orders, period, advancedFinanceEnabled)
+    }
+    val compareEnabled = advancedFinanceEnabled && compareMode != DashboardCompareMode.None && period.supportsYearCompare
+    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled) {
+        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled)
     }
 
     LazyColumn(
@@ -129,7 +133,7 @@ fun DashboardScreen(
                                 color = StudioBlue.copy(alpha = 0.12f),
                                 onClick = { dashboardOptionsOpen = true }
                             ) {
-                                Icon(Icons.Filled.Tune, contentDescription = "Dashboard controls", tint = StudioBlue, modifier = Modifier.padding(13.dp))
+                                Icon(Icons.Filled.Tune, contentDescription = t("Dashboard controls"), tint = StudioBlue, modifier = Modifier.padding(13.dp))
                             }
                             DashboardOptionsMenu(
                                 expanded = dashboardOptionsOpen,
@@ -171,20 +175,39 @@ fun DashboardScreen(
                                 }
                             )
                         }
-                        FilterChipLike(
-                            icon = Icons.Filled.CompareArrows,
-                            label = compareMode.label,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                compareMode = when (compareMode) {
-                                    DashboardCompareMode.None -> DashboardCompareMode.OneYear
-                                    DashboardCompareMode.OneYear -> DashboardCompareMode.ThreeYears
-                                    DashboardCompareMode.ThreeYears -> DashboardCompareMode.None
+                        if (advancedFinanceEnabled) {
+                            FilterChipLike(
+                                icon = Icons.AutoMirrored.Filled.CompareArrows,
+                                label = compareMode.label,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    compareMode = when (compareMode) {
+                                        DashboardCompareMode.None -> DashboardCompareMode.OneYear
+                                        DashboardCompareMode.OneYear -> DashboardCompareMode.ThreeYears
+                                        DashboardCompareMode.ThreeYears -> DashboardCompareMode.None
+                                    }
+                                }
+                            )
+                        } else {
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("1Y / 3Y", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text("Pro", color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
                                 }
                             }
-                        )
+                        }
                     }
-                    if (compareMode != DashboardCompareMode.None && !period.supportsYearCompare) {
+                    if (advancedFinanceEnabled && compareMode != DashboardCompareMode.None && !period.supportsYearCompare) {
                         Text(
                             "1Y / 3Y compare is available for Month and Year views.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -207,15 +230,17 @@ fun DashboardScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
-        item {
-            ExtraSpendingSummarySection(
-                orders = state.orders,
-                workspaceSettings = state.workspaceSettings,
-                currency = currency,
-                decimalSeparator = decimalSeparator,
-                hideNumbers = hideSensitiveNumbers,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+        if (advancedFinanceEnabled) {
+            item {
+                ExtraSpendingSummarySection(
+                    orders = state.orders,
+                    workspaceSettings = state.workspaceSettings,
+                    currency = currency,
+                    decimalSeparator = decimalSeparator,
+                    hideNumbers = hideSensitiveNumbers,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
         }
         item {
             Surface(
@@ -225,13 +250,16 @@ fun DashboardScreen(
                 tonalElevation = 1.dp
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(t("Net Profit Analysis"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t(if (advancedFinanceEnabled) "Net Profit Analysis" else "Basic Balance Analysis"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     ProfitLineChart(
                         values = stats.chartValues,
                         labels = stats.chartLabels,
                         axisLabels = stats.chartAxisLabels,
                         comparisonSeries = if (compareEnabled) stats.comparisonSeries(compareMode) else emptyList()
                     )
+                    if (!advancedFinanceEnabled) {
+                        Text(t("Received minus Base Cost only. Detailed profit and year comparisons are available on Pro."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
                 }
             }
         }
@@ -243,7 +271,7 @@ fun DashboardScreen(
                 tonalElevation = 1.dp
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(t("Year-over-Year Summary"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(t(if (advancedFinanceEnabled) "Year-over-Year Summary" else "Yearly Basic Finance"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -251,11 +279,16 @@ fun DashboardScreen(
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(t("This Year"), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                        Text(money(stats.thisYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(t(if (advancedFinanceEnabled) "This Year" else "This Year Received"), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        Text(money(if (advancedFinanceEnabled) stats.thisYearNetProfit else stats.thisYearReceived, currency, decimalSeparator, hideSensitiveNumbers), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     }
-                    SummaryRow(t("Last Year"), money(stats.lastYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers))
-                    SummaryRow(t("Growth"), growthLabel(stats.thisYearNetProfit, stats.lastYearNetProfit))
+                    if (advancedFinanceEnabled) {
+                        SummaryRow(t("Last Year"), money(stats.lastYearNetProfit, currency, decimalSeparator, hideSensitiveNumbers))
+                        SummaryRow(t("Growth"), growthLabel(stats.thisYearNetProfit, stats.lastYearNetProfit))
+                    } else {
+                        SummaryRow(t("This Year Base Cost"), money(stats.thisYearBaseCost, currency, decimalSeparator, hideSensitiveNumbers))
+                        SummaryRow(t("This Year Basic Balance"), money(stats.thisYearBasicBalance, currency, decimalSeparator, hideSensitiveNumbers))
+                    }
                     if (compareEnabled) {
                         stats.comparisonSeries(compareMode).forEach { series ->
                             SummaryRow(series.label, money(series.total, currency, decimalSeparator, hideSensitiveNumbers))
@@ -329,7 +362,7 @@ private fun DashboardOptionsMenu(
                 text = { Text(item.label, fontWeight = FontWeight.Bold) },
                 leadingIcon = {
                     Icon(
-                        if (item == compareMode) Icons.Filled.Done else Icons.Filled.CompareArrows,
+                        if (item == compareMode) Icons.Filled.Done else Icons.AutoMirrored.Filled.CompareArrows,
                         contentDescription = null,
                         tint = if (item == compareMode) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -526,6 +559,8 @@ private fun ChartLegendDot(label: String, color: Color) {
 }
 
 private data class DashboardStats(
+    val received: Double,
+    val basicBalance: Double,
     val revenue: Double,
     val pending: Double,
     val baseCost: Double,
@@ -544,6 +579,9 @@ private data class DashboardStats(
     val previousThreeYearNetProfit: Double?,
     val thisYearNetProfit: Double,
     val lastYearNetProfit: Double,
+    val thisYearReceived: Double,
+    val thisYearBaseCost: Double,
+    val thisYearBasicBalance: Double,
     val orderCount: Int,
     val lateCount: Int,
     val readyToShipCount: Int
@@ -562,13 +600,13 @@ private data class DashboardStats(
     }
 
     companion object {
-        fun from(orders: List<StudioOrder>, period: DashboardPeriod): DashboardStats {
+        fun from(orders: List<StudioOrder>, period: DashboardPeriod, advancedFinanceEnabled: Boolean): DashboardStats {
             val now = Calendar.getInstance(Locale.UK)
             val currentYear = now.get(Calendar.YEAR)
             val currentMonth = now.get(Calendar.MONTH)
             val bucketCount = period.bucketCount(now)
             val selectedOrders = orders.filter { order -> period.includes(order, currentYear, currentMonth, 0) }
-            val chartValues = buildChartValues(orders, period, currentYear, currentMonth, 0, bucketCount)
+            val chartValues = buildChartValues(orders, period, currentYear, currentMonth, 0, bucketCount, advancedFinanceEnabled)
             val previousOne = period.previousOrders(orders, currentYear, currentMonth, 1)
             val previousTwo = period.previousOrders(orders, currentYear, currentMonth, 2)
             val previousThree = period.previousOrders(orders, currentYear, currentMonth, 3)
@@ -578,7 +616,13 @@ private data class DashboardStats(
             val lastYearOrders = orders.filter { order ->
                 Calendar.getInstance(Locale.UK).apply { time = order.paymentDate }.get(Calendar.YEAR) == currentYear - 1
             }
+            val selectedReceived = selectedOrders.sumOf { it.paidAmount }
+            val selectedBaseCost = selectedOrders.sumOf { it.watchPurchasePrice }
+            val yearReceived = thisYearOrders.sumOf { it.paidAmount }
+            val yearBaseCost = thisYearOrders.sumOf { it.watchPurchasePrice }
             return DashboardStats(
+                received = selectedReceived,
+                basicBalance = selectedReceived - selectedBaseCost,
                 revenue = selectedOrders.sumOf { it.orderValue },
                 pending = selectedOrders.sumOf { it.remainingAmount },
                 baseCost = selectedOrders.sumOf { it.watchPurchasePrice },
@@ -589,14 +633,17 @@ private data class DashboardStats(
                 chartValues = chartValues,
                 chartLabels = period.chartLabels(now),
                 chartAxisLabels = period.chartAxisLabels(now),
-                previousOneYearValues = buildChartValues(orders, period, currentYear, currentMonth, 1, bucketCount),
-                previousTwoYearValues = buildChartValues(orders, period, currentYear, currentMonth, 2, bucketCount),
-                previousThreeYearValues = buildChartValues(orders, period, currentYear, currentMonth, 3, bucketCount),
+                previousOneYearValues = buildChartValues(orders, period, currentYear, currentMonth, 1, bucketCount, true),
+                previousTwoYearValues = buildChartValues(orders, period, currentYear, currentMonth, 2, bucketCount, true),
+                previousThreeYearValues = buildChartValues(orders, period, currentYear, currentMonth, 3, bucketCount, true),
                 previousOneYearNetProfit = previousOne?.sumOf { it.netProfit },
                 previousTwoYearNetProfit = previousTwo?.sumOf { it.netProfit },
                 previousThreeYearNetProfit = previousThree?.sumOf { it.netProfit },
                 thisYearNetProfit = thisYearOrders.sumOf { it.netProfit },
                 lastYearNetProfit = lastYearOrders.sumOf { it.netProfit },
+                thisYearReceived = yearReceived,
+                thisYearBaseCost = yearBaseCost,
+                thisYearBasicBalance = yearReceived - yearBaseCost,
                 orderCount = selectedOrders.size,
                 lateCount = selectedOrders.count { it.remainingDays < 0 && !it.isClosed },
                 readyToShipCount = selectedOrders.count { it.status.equals("Done", ignoreCase = true) && !it.isDispatched }
@@ -609,12 +656,19 @@ private data class DashboardStats(
             currentYear: Int,
             currentMonth: Int,
             yearBack: Int,
-            bucketCount: Int
+            bucketCount: Int,
+            advancedFinanceEnabled: Boolean
         ): List<Double> {
             val values = MutableList(bucketCount) { 0.0 }
             orders.filter { period.includes(it, currentYear, currentMonth, yearBack) }.forEach { order ->
                 val bucket = period.bucketIndex(order)
-                if (bucket in values.indices) values[bucket] += order.netProfit
+                if (bucket in values.indices) {
+                    values[bucket] += if (advancedFinanceEnabled) {
+                        order.netProfit
+                    } else {
+                        order.paidAmount - order.watchPurchasePrice
+                    }
+                }
             }
             return values
         }
@@ -641,8 +695,17 @@ private fun dashboardSummaryCards(
     currency: String,
     decimalSeparator: String,
     visibility: DashboardWidgetVisibility,
-    hideNumbers: Boolean
+    hideNumbers: Boolean,
+    advancedFinanceEnabled: Boolean
 ): List<DashboardSummaryCardSpec> {
+    if (!advancedFinanceEnabled) {
+        return listOf(
+            DashboardSummaryCardSpec("Received", money(stats.received, currency, decimalSeparator, hideNumbers), currency, StudioBlue, null),
+            DashboardSummaryCardSpec("Base Cost", money(stats.baseCost, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.ShoppingCart),
+            DashboardSummaryCardSpec("Basic Balance", money(stats.basicBalance, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done)
+        )
+    }
+
     val rolledCost = stats.baseCost +
         (if (!visibility.dashShowFee) stats.platformFee else 0.0) +
         (if (!visibility.dashShowShipping) stats.shipping else 0.0) +

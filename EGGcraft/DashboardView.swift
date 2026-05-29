@@ -1,6 +1,7 @@
 import SwiftUI
 import Charts
 import FirebaseFirestore
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -125,6 +126,12 @@ struct DashboardView: View {
     @AppStorage("dashShowShipping") private var dashShowShipping = true
     @AppStorage("dashShowTax") private var dashShowTax = true // Yeni Tax Kartı
     @AppStorage("dashShowProfit") private var dashShowProfit = true
+    @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan = StudioBillingPlan.teamMonthly.rawValue
+
+    private var canSeeAdvancedFinance: Bool {
+        let plan = StudioBillingPlan(rawValue: storedBillingPlan) ?? .teamMonthly
+        return plan == .proMonthly || plan == .teamMonthly
+    }
 
     var filtrelenmisSiparisler: [Siparis] {
         let cal = Calendar.current; let simdi = Date()
@@ -437,6 +444,12 @@ struct DashboardView: View {
         return salesTotal - baseCostTotal(for: siparis) - customExpenseTotal(for: siparis) - siparis.paymentFee - siparis.deliveryCost - siparis.taxAmount
     }
 
+    private func dashboardChartAmount(for siparis: Siparis) -> Double {
+        canSeeAdvancedFinance
+            ? adjustedNetProfit(for: siparis)
+            : (siparis.paidAmount - siparis.watchPurchasePrice)
+    }
+
     private func dashboardCostTotal(for siparis: Siparis) -> Double {
         var total = baseCostTotal(for: siparis) + customExpenseTotal(for: siparis)
 
@@ -449,6 +462,9 @@ struct DashboardView: View {
         return total
     }
 
+    var toplamReceived: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.paidAmount } }
+    var toplamBaseCost: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.watchPurchasePrice } }
+    var toplamBasicBalance: Double { toplamReceived - toplamBaseCost }
     var toplamCiro: Double { filtrelenmisSiparisler.reduce(0) { $0 + ($1.paidAmount + $1.remainingAmount) } }
     var bekleyenAlacak: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.remainingAmount + customPendingTotal(for: $1) } }
     var toplamGider: Double { filtrelenmisSiparisler.reduce(0) { $0 + dashboardCostTotal(for: $1) } }
@@ -482,7 +498,7 @@ struct DashboardView: View {
         for s in firebaseManager.siparisler {
             if s.paymentDate >= start && s.paymentDate <= end {
                 let groupedDate = cal.dateInterval(of: comp, for: s.paymentDate)!.start
-                if let existing = dict[groupedDate] { dict[groupedDate] = existing + adjustedNetProfit(for: s) } // 🌟 GRAFİK DE VERGİYİ DÜŞER
+                if let existing = dict[groupedDate] { dict[groupedDate] = existing + dashboardChartAmount(for: s) }
             }
         }
         
@@ -496,7 +512,11 @@ struct DashboardView: View {
     var veriEksi2: [GrafikVerisi] { verileriHazirla(yilGeri: 2) }
     var veriEksi3: [GrafikVerisi] { verileriHazirla(yilGeri: 3) }
     
-    var buYilKari: Double { let cal = Calendar.current; return firebaseManager.siparisler.filter { cal.isDate($0.paymentDate, equalTo: Date(), toGranularity: .year) }.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
+    var buYilSiparisleri: [Siparis] { let cal = Calendar.current; return firebaseManager.siparisler.filter { cal.isDate($0.paymentDate, equalTo: Date(), toGranularity: .year) } }
+    var buYilReceived: Double { buYilSiparisleri.reduce(0) { $0 + $1.paidAmount } }
+    var buYilBaseCost: Double { buYilSiparisleri.reduce(0) { $0 + $1.watchPurchasePrice } }
+    var buYilBasicBalance: Double { buYilReceived - buYilBaseCost }
+    var buYilKari: Double { buYilSiparisleri.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
     var gecenYilKari: Double { let cal = Calendar.current; guard let gecenYil = cal.date(byAdding: .year, value: -1, to: Date()) else { return 0 }; return firebaseManager.siparisler.filter { cal.isDate($0.paymentDate, equalTo: gecenYil, toGranularity: .year) }.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
     var buyumeYuzdesi: Double { if gecenYilKari == 0 { return buYilKari > 0 ? 100.0 : 0.0 }; return ((buYilKari - gecenYilKari) / gecenYilKari) * 100.0 }
     
@@ -506,7 +526,9 @@ struct DashboardView: View {
                 VStack(spacing: isPhoneLayout ? 14 : 20) {
                     headerFiltreAlani
                     ozetKartlariAlani
-                    extraSpendingSummaryAlani
+                    if canSeeAdvancedFinance {
+                        extraSpendingSummaryAlani
+                    }
                     grafikAlani
                     yillikPerformansAlani
                 }
@@ -771,13 +793,40 @@ struct DashboardView: View {
         .menuStyle(.borderlessButton)
     }
 
+    private var basicComparisonUpgradeHint: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 10, weight: .semibold))
+            Text(t("1Y / 3Y Compare", lang: seciliDil))
+                .font(.system(size: 11, weight: .semibold))
+            Text("Pro")
+                .font(.system(size: 10, weight: .bold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.blue.opacity(0.12))
+                .foregroundColor(.blue)
+                .clipShape(Capsule())
+        }
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.05))
+        .clipShape(Capsule())
+    }
+
     private var yillikPerformansAlani: some View {
         VStack(alignment: .leading, spacing: isPhoneLayout ? 12 : 15) {
-            Text(t("Year-over-Year Summary", lang: seciliDil))
+            Text(t(canSeeAdvancedFinance ? "Year-over-Year Summary" : "Yearly Basic Finance", lang: seciliDil))
                 .font(.system(size: isPhoneLayout ? 15 : 16, weight: .bold))
                 .foregroundColor(.primary)
 
-            if isPhoneLayout {
+            if !canSeeAdvancedFinance {
+                VStack(spacing: 10) {
+                    yearlySummaryRow(title: t("This Year Received", lang: seciliDil), value: buYilReceived, color: .blue)
+                    yearlySummaryRow(title: t("This Year Base Cost", lang: seciliDil), value: buYilBaseCost, color: .red)
+                    yearlySummaryRow(title: t("This Year Basic Balance", lang: seciliDil), value: buYilBasicBalance, color: .green)
+                }
+            } else if isPhoneLayout {
                 VStack(spacing: 10) {
                     yearlySummaryRow(title: t("This Year", lang: seciliDil), value: buYilKari, color: .primary)
                     yearlySummaryRow(title: t("Last Year", lang: seciliDil), value: gecenYilKari, color: .gray.opacity(0.8))
@@ -887,7 +936,11 @@ struct DashboardView: View {
                     phoneFilterMenu
 
                     if seciliFiltre == .buAy || seciliFiltre == .buYil {
-                        phoneCompareMenu
+                        if canSeeAdvancedFinance {
+                            phoneCompareMenu
+                        } else {
+                            basicComparisonUpgradeHint
+                        }
                     }
 
                     Spacer(minLength: 0)
@@ -946,18 +999,22 @@ struct DashboardView: View {
                     HStack(spacing: 14) {
                         Spacer(minLength: 0)
 
-                        Toggle(t("1 Yr Compare", lang: seciliDil), isOn: $karsilastir1Yil)
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .fixedSize(horizontal: true, vertical: false)
+                        if canSeeAdvancedFinance {
+                            Toggle(t("1 Yr Compare", lang: seciliDil), isOn: $karsilastir1Yil)
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .fixedSize(horizontal: true, vertical: false)
 
-                        Toggle(t("3 Yrs Compare", lang: seciliDil), isOn: $karsilastir3Yil)
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .onChange(of: karsilastir3Yil) { _, isV3 in
-                                if isV3 { karsilastir1Yil = true }
-                            }
+                            Toggle(t("3 Yrs Compare", lang: seciliDil), isOn: $karsilastir3Yil)
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .onChange(of: karsilastir3Yil) { _, isV3 in
+                                    if isV3 { karsilastir1Yil = true }
+                                }
+                        } else {
+                            basicComparisonUpgradeHint
+                        }
 
                         dashboardCustomizeButton
                     }
@@ -995,14 +1052,33 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var summaryCards: some View {
-        if dashShowRevenue { OzetKart(title: t("Revenue", lang: seciliDil), value: toplamCiro, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi) }
-        if dashShowPending { OzetKart(title: t("Pending", lang: seciliDil), value: bekleyenAlacak, iconName: "clock", color: studioWarningOrange, sembol: seciliParaBirimi) }
-        if dashShowCost { OzetKart(title: t("Cost", lang: seciliDil), value: toplamGider, iconName: "cart", color: .red, sembol: seciliParaBirimi) }
-        if dashShowFee { OzetKart(title: t("Platform Fee", lang: seciliDil), value: toplamKesinti, iconName: "percent", color: .red, sembol: seciliParaBirimi) }
-        if dashShowShipping { OzetKart(title: t("Shipping", lang: seciliDil), value: toplamKargo, iconName: "shippingbox", color: .red, sembol: seciliParaBirimi) }
-        if dashShowTax { OzetKart(title: t("Tax Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
-        if dashShowProfit { OzetKart(title: t("Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+        if canSeeAdvancedFinance {
+            if dashShowRevenue { OzetKart(title: t("Revenue", lang: seciliDil), value: toplamCiro, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi) }
+            if dashShowPending { OzetKart(title: t("Pending", lang: seciliDil), value: bekleyenAlacak, iconName: "clock", color: studioWarningOrange, sembol: seciliParaBirimi) }
+            if dashShowCost { OzetKart(title: t("Cost", lang: seciliDil), value: toplamGider, iconName: "cart", color: .red, sembol: seciliParaBirimi) }
+            if dashShowFee { OzetKart(title: t("Platform Fee", lang: seciliDil), value: toplamKesinti, iconName: "percent", color: .red, sembol: seciliParaBirimi) }
+            if dashShowShipping { OzetKart(title: t("Shipping", lang: seciliDil), value: toplamKargo, iconName: "shippingbox", color: .red, sembol: seciliParaBirimi) }
+            if dashShowTax { OzetKart(title: t("Tax Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
+            if dashShowProfit { OzetKart(title: t("Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+        } else {
+            OzetKart(title: t("Received", lang: seciliDil), value: toplamReceived, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi)
+            OzetKart(title: t("Base Cost", lang: seciliDil), value: toplamBaseCost, iconName: "cart", color: .red, sembol: seciliParaBirimi)
+            OzetKart(title: t("Basic Balance", lang: seciliDil), value: toplamBasicBalance, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi)
+        }
     }
+    private var basicFinanceNoticeCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(t("Basic Balance", lang: seciliDil)).font(.headline)
+            Text(t("Received minus Base Cost only. Upgrade to NivaDesk Pro for VAT, shipping, platform fees, custom expenses, detailed profit and financial comparisons.", lang: seciliDil))
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(16)
+    }
+
     private var extraSpendingSummaryAlani: some View {
         Button {
             showExtraSpendingPage = true
@@ -1554,7 +1630,7 @@ struct DashboardView: View {
         let panel = NSSavePanel()
         panel.title = t("Export Extra Spending", lang: seciliDil)
         panel.nameFieldStringValue = "extra-spending-\(extraSpendingScope.rawValue).csv"
-        panel.allowedFileTypes = ["csv"]
+        panel.allowedContentTypes = [UTType.commaSeparatedText]
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
@@ -1568,9 +1644,29 @@ struct DashboardView: View {
 
     private var grafikAlani: some View {
         VStack(alignment: .leading, spacing: isPhoneLayout ? 12 : 15) {
-            Text(t("Net Profit Analysis", lang: seciliDil))
-                .font(.system(size: isPhoneLayout ? 15 : 16, weight: .bold))
-                .foregroundColor(.primary)
+            HStack {
+                Text(t(canSeeAdvancedFinance ? "Net Profit Analysis" : "Basic Balance Analysis", lang: seciliDil))
+                    .font(.system(size: isPhoneLayout ? 15 : 16, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                if !canSeeAdvancedFinance {
+                    Text("Lite")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if !canSeeAdvancedFinance {
+                Text(t("Received minus Base Cost only. Detailed profit and comparisons are available on Pro.", lang: seciliDil))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
 
             if veriMevcut.isEmpty {
                 Color.primary.opacity(0.05)
@@ -1634,8 +1730,8 @@ struct DashboardView: View {
     @ChartContentBuilder
     private var chartIcerigi: some ChartContent {
         ForEach(veriMevcut) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Kar", v.kar), series: .value("Yıl", "Mevcut")).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 3)); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Kar", v.kar)).foregroundStyle(Color.green) }
-        if karsilastir1Yil || karsilastir3Yil { ForEach(veriEksi1) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi1", v.kar), series: .value("Yıl", "Eksi1")).foregroundStyle(studioWarningOrange.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 2, dash: [5])); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi1", v.kar)).foregroundStyle(studioWarningOrange.opacity(0.8)) } }
-        if karsilastir3Yil { ForEach(veriEksi2) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi2", v.kar), series: .value("Yıl", "Eksi2")).foregroundStyle(Color.purple.opacity(0.6)).lineStyle(StrokeStyle(lineWidth: 2, dash: [5])); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi2", v.kar)).foregroundStyle(Color.purple.opacity(0.6)) }; ForEach(veriEksi3) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi3", v.kar), series: .value("Yıl", "Eksi3")).foregroundStyle(Color.gray.opacity(0.6)).lineStyle(StrokeStyle(lineWidth: 2, dash: [5])); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi3", v.kar)).foregroundStyle(Color.gray.opacity(0.6)) } }
+        if canSeeAdvancedFinance && (karsilastir1Yil || karsilastir3Yil) { ForEach(veriEksi1) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi1", v.kar), series: .value("Yıl", "Eksi1")).foregroundStyle(studioWarningOrange.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 2, dash: [5])); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi1", v.kar)).foregroundStyle(studioWarningOrange.opacity(0.8)) } }
+        if canSeeAdvancedFinance && karsilastir3Yil { ForEach(veriEksi2) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi2", v.kar), series: .value("Yıl", "Eksi2")).foregroundStyle(Color.purple.opacity(0.6)).lineStyle(StrokeStyle(lineWidth: 2, dash: [5])); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi2", v.kar)).foregroundStyle(Color.purple.opacity(0.6)) }; ForEach(veriEksi3) { v in LineMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi3", v.kar), series: .value("Yıl", "Eksi3")).foregroundStyle(Color.gray.opacity(0.6)).lineStyle(StrokeStyle(lineWidth: 2, dash: [5])); PointMark(x: .value("Tarih", v.tarih, unit: bilesen), y: .value("Eksi3", v.kar)).foregroundStyle(Color.gray.opacity(0.6)) } }
         if let hDate = hoveredDate { RuleMark(x: .value("Seçili", hDate, unit: bilesen)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4])).foregroundStyle(.gray) }
     }
     
@@ -1644,10 +1740,10 @@ struct DashboardView: View {
         let match = veriMevcut.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }); let xPos = proxy.position(forX: hDate) ?? 0; let yPos = proxy.position(forY: match?.kar ?? 0) ?? plotFrame.midY; let yatayKaydirma: CGFloat = xPos > (plotFrame.width - 120) ? -90 : 90
         VStack(alignment: .leading, spacing: 6) {
             Text(hDate, format: bilesen == .month ? .dateTime.month().year() : .dateTime.day().month()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
-            if let d = match { HStack(spacing: 5) { Circle().fill(.green).frame(width:8,height:8); Text("Net: \(seciliParaBirimi)\(d.kar.toCurrencyString())").font(.system(size:13, weight: .bold)).foregroundColor(.primary) } }
-            if (karsilastir1Yil || karsilastir3Yil), let d1 = veriEksi1.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(studioWarningOrange.opacity(0.8)).frame(width:6,height:6); Text("-1 Yr: \(seciliParaBirimi)\(d1.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
-            if karsilastir3Yil, let d2 = veriEksi2.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(.purple.opacity(0.6)).frame(width:6,height:6); Text("-2 Yrs: \(seciliParaBirimi)\(d2.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
-            if karsilastir3Yil, let d3 = veriEksi3.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(.gray.opacity(0.6)).frame(width:6,height:6); Text("-3 Yrs: \(seciliParaBirimi)\(d3.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
+            if let d = match { HStack(spacing: 5) { Circle().fill(.green).frame(width:8,height:8); Text("\(canSeeAdvancedFinance ? "Net" : "Basic Balance"): \(seciliParaBirimi)\(d.kar.toCurrencyString())").font(.system(size:13, weight: .bold)).foregroundColor(.primary) } }
+            if canSeeAdvancedFinance && (karsilastir1Yil || karsilastir3Yil), let d1 = veriEksi1.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(studioWarningOrange.opacity(0.8)).frame(width:6,height:6); Text("-1 Yr: \(seciliParaBirimi)\(d1.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
+            if canSeeAdvancedFinance && karsilastir3Yil, let d2 = veriEksi2.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(.purple.opacity(0.6)).frame(width:6,height:6); Text("-2 Yrs: \(seciliParaBirimi)\(d2.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
+            if canSeeAdvancedFinance && karsilastir3Yil, let d3 = veriEksi3.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(.gray.opacity(0.6)).frame(width:6,height:6); Text("-3 Yrs: \(seciliParaBirimi)\(d3.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
         }.padding(12).background(colorScheme == .dark ? Color(white: 0.15) : Color.white).cornerRadius(8).shadow(color: Color.black.opacity(0.2), radius: 5, y: 2).fixedSize().allowsHitTesting(false).position(x: plotFrame.origin.x + xPos + yatayKaydirma, y: plotFrame.origin.y + yPos - 10)
     }
 }

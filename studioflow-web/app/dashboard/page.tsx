@@ -34,6 +34,9 @@ type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
 
 type FinanceTotals = {
+  received: number;
+  baseCost: number;
+  basicBalance: number;
   revenue: number;
   pending: number;
   cost: number;
@@ -118,6 +121,9 @@ function totalsForOrders(
   visibility: DashboardWidgetVisibility
 ): FinanceTotals {
   return orders.reduce<FinanceTotals>((totals, order) => ({
+    received: totals.received + order.paidAmount,
+    baseCost: totals.baseCost + order.watchPurchasePrice,
+    basicBalance: totals.basicBalance + order.paidAmount - order.watchPurchasePrice,
     revenue: totals.revenue + order.paidAmount + order.remainingAmount,
     pending: totals.pending + order.remainingAmount + customPendingTotal(order, settings),
     cost: totals.cost + dashboardCostTotal(order, settings, {
@@ -129,7 +135,7 @@ function totalsForOrders(
     shipping: totals.shipping + order.deliveryCost,
     tax: totals.tax + order.taxAmount,
     netProfit: totals.netProfit + adjustedDashboardNetProfit(order, settings)
-  }), { revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0 });
+  }), { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0 });
 }
 
 function startOfDay(date: Date) {
@@ -230,7 +236,8 @@ function buildChartSeries(
   start: Date,
   end: Date,
   unit: BucketUnit,
-  yearsBack = 0
+  yearsBack = 0,
+  metric: "netProfit" | "basicBalance" = "netProfit"
 ): ChartPoint[] {
   const points: ChartPoint[] = [];
   let cursor = unit === "month" ? startOfMonth(start) : startOfDay(start);
@@ -242,7 +249,9 @@ function buildChartSeries(
     const sourceEnd = addYears(visibleBucketEnd, -yearsBack);
     const value = orders.reduce((total, order) => {
       if (!order.paymentDate || order.paymentDate < sourceStart || order.paymentDate >= sourceEnd) return total;
-      return total + adjustedDashboardNetProfit(order, settings);
+      return total + (metric === "basicBalance"
+        ? order.paidAmount - order.watchPurchasePrice
+        : adjustedDashboardNetProfit(order, settings));
     }, 0);
 
     points.push({ label: bucketLabel(visibleBucketStart, unit), value });
@@ -262,7 +271,10 @@ function yearTotals(orders: DashboardFinanceOrder[], settings: WorkspaceSettings
     .filter(order => order.paymentDate?.getFullYear() === thisYear - 1)
     .reduce((total, order) => total + adjustedDashboardNetProfit(order, settings), 0);
   const growth = previous === 0 ? (current > 0 ? 100 : 0) : ((current - previous) / previous) * 100;
-  return { current, previous, growth };
+  const basicOrders = orders.filter(order => order.paymentDate?.getFullYear() === thisYear);
+  const received = basicOrders.reduce((total, order) => total + order.paidAmount, 0);
+  const baseCost = basicOrders.reduce((total, order) => total + order.watchPurchasePrice, 0);
+  return { current, previous, growth, received, baseCost, basicBalance: received - baseCost };
 }
 
 export default function DashboardPage() {
@@ -358,8 +370,16 @@ export default function DashboardPage() {
     [dashboardVisibility, filteredFinanceOrders, settings]
   );
   const currentSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings]
+    () => buildChartSeries(
+      financeOrders,
+      settings,
+      currentWindow.start,
+      currentWindow.end,
+      currentWindow.unit,
+      0,
+      canSeeAdvancedFinance ? "netProfit" : "basicBalance"
+    ),
+    [canSeeAdvancedFinance, currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings]
   );
   const previousYearSeries = useMemo(
     () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 1),
@@ -429,7 +449,7 @@ export default function DashboardPage() {
 
           <section className="dashboard-filter-card">
             <div className="segmented-control" aria-label={t("Dashboard time range")}>
-              {RANGE_OPTIONS.map(option => (
+              {(canSeeAdvancedFinance ? RANGE_OPTIONS : RANGE_OPTIONS.filter(option => option.key !== "custom")).map(option => (
                 <button
                   key={option.key}
                   className={range === option.key ? "active" : ""}
@@ -454,6 +474,7 @@ export default function DashboardPage() {
               </div>
             ) : null}
 
+            {canSeeAdvancedFinance ? (
             <div className="dashboard-compare-controls">
               <button
                 className={compareOneYear ? "compare-pill active" : "compare-pill"}
@@ -478,6 +499,16 @@ export default function DashboardPage() {
                 {t("Customize")}
               </button>
             </div>
+            ) : (
+              <div className="dashboard-compare-controls" aria-label={t("Advanced comparison available on Pro")}>
+                <span className="compare-pill" aria-disabled="true">{t("1 Yr Compare")}</span>
+                <span className="compare-pill" aria-disabled="true">{t("3 Yrs Compare")}</span>
+                <span className="studio-pill">{t("Pro")}</span>
+                <button className={showCustomize ? "compare-pill active" : "compare-pill"} type="button" onClick={() => setShowCustomize(value => !value)}>
+                  {t("Customize")}
+                </button>
+              </div>
+            )}
           </section>
 
           {!canSeeFinance ? (
@@ -488,13 +519,23 @@ export default function DashboardPage() {
           ) : (
             <>
               <section className="dashboard-summary-grid">
-                {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t(revenueCardTitle)} value={canSeeAdvancedFinance ? money(totals.revenue, hideNumbers, settings) : t("Locked")} tone="blue" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Pending")} value={canSeeAdvancedFinance ? money(totals.pending, hideNumbers, settings) : t("Locked")} tone="orange" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
-                {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={canSeeAdvancedFinance ? money(totals.fee, hideNumbers, settings) : t("Locked")} tone="red" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={canSeeAdvancedFinance ? money(totals.shipping, hideNumbers, settings) : t("Locked")} tone="red" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("Tax Amount")} value={canSeeAdvancedFinance ? money(totals.tax, hideNumbers, settings) : t("Locked")} tone="red" locked={!canSeeAdvancedFinance} /> : null}
-                {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t("Net Profit")} value={canSeeAdvancedFinance ? money(totals.netProfit, hideNumbers, settings) : t("Locked")} tone="green" locked={!canSeeAdvancedFinance} /> : null}
+                {canSeeAdvancedFinance ? (
+                  <>
+                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t(revenueCardTitle)} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
+                    {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Pending")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
+                    {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("Tax Amount")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t("Net Profit")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                  </>
+                ) : (
+                  <>
+                    <DashboardSummaryCard icon="finance" title={t("Received")} value={money(totals.received, hideNumbers, settings)} tone="blue" />
+                    <DashboardSummaryCard icon="shippingBox" title={t("Base Cost")} value={money(totals.baseCost, hideNumbers, settings)} tone="red" />
+                    <DashboardSummaryCard icon="check" title={t("Basic Balance")} value={money(totals.basicBalance, hideNumbers, settings)} tone="green" />
+                  </>
+                )}
               </section>
 
               {canSeeAdvancedFinance && (
@@ -502,28 +543,37 @@ export default function DashboardPage() {
               )}
 
               <section className="card app-card dashboard-chart-card">
-                <CardTitle icon="finance" title={t("Net Profit Analysis")} />
-                {canSeeAdvancedFinance ? (
-                  <ProfitChart
-                    current={currentSeries}
-                    previous={compareOneYear || compareThreeYears ? previousYearSeries : []}
-                    twoBack={compareThreeYears ? twoYearsBackSeries : []}
-                    threeBack={compareThreeYears ? threeYearsBackSeries : []}
-                    settings={settings}
-                  />
-                ) : (
+                <CardTitle icon="finance" title={t(canSeeAdvancedFinance ? "Net Profit Analysis" : "Basic Balance Analysis")} />
+                <ProfitChart
+                  current={currentSeries}
+                  previous={canSeeAdvancedFinance && (compareOneYear || compareThreeYears) ? previousYearSeries : []}
+                  twoBack={canSeeAdvancedFinance && compareThreeYears ? twoYearsBackSeries : []}
+                  threeBack={canSeeAdvancedFinance && compareThreeYears ? threeYearsBackSeries : []}
+                  settings={settings}
+                />
+                {!canSeeAdvancedFinance ? (
                   <div className="dashboard-chart-locked">
-                    <CardTitle icon="lock" eyebrow={t("Advanced finance locked")} title={t("Net profit analysis is available from NivaDesk Lite.")} />
+                    <p className="muted-copy">{t("Received minus Base Cost only. Detailed profit and year comparisons are available on Pro.")}</p>
                   </div>
-                )}
+                ) : null}
               </section>
 
               <section className="card app-card yearly-summary-card">
                 <CardTitle icon="calendar" title={t("Year-over-Year Summary")} />
                 <div className="yearly-summary-grid">
-                  <YearSummary title={t("This Year")} value={canSeeAdvancedFinance ? money(yearly.current, hideNumbers, settings) : t("Locked") } />
-                  <YearSummary title={t("Last Year")} value={canSeeAdvancedFinance ? money(yearly.previous, hideNumbers, settings) : t("Locked") } />
-                  <YearSummary title={t("Growth")} value={canSeeAdvancedFinance ? `${Math.abs(yearly.growth).toFixed(1)}%` : t("Locked")} trend={yearly.growth >= 0 ? "up" : "down"} />
+                  {canSeeAdvancedFinance ? (
+                    <>
+                      <YearSummary title={t("This Year")} value={money(yearly.current, hideNumbers, settings)} />
+                      <YearSummary title={t("Last Year")} value={money(yearly.previous, hideNumbers, settings)} />
+                      <YearSummary title={t("Growth")} value={`${Math.abs(yearly.growth).toFixed(1)}%`} trend={yearly.growth >= 0 ? "up" : "down"} />
+                    </>
+                  ) : (
+                    <>
+                      <YearSummary title={t("This Year Received")} value={money(yearly.received, hideNumbers, settings)} />
+                      <YearSummary title={t("This Year Base Cost")} value={money(yearly.baseCost, hideNumbers, settings)} />
+                      <YearSummary title={t("This Year Basic Balance")} value={money(yearly.basicBalance, hideNumbers, settings)} />
+                    </>
+                  )}
                 </div>
               </section>
 
