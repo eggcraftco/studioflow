@@ -13766,7 +13766,9 @@ const NV_CHATGPT_OAUTH_CODE_TTL_MS = 10 * 60 * 1000;
 // Keep ChatGPT connector access stable for a private workspace integration.
 // Users can still revoke access by reconnecting/removing the connector.
 const NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const NV_CHATGPT_OAUTH_ISSUER_NAME = "NivaDesk StudioFlow";
+const NV_CHATGPT_OAUTH_ISSUER_NAME = "NivaDesk";
+const NV_CHATGPT_PUBLIC_BASE_URL = "https://nivadesk.app";
+const NV_CHATGPT_LOGIN_URL = `${NV_CHATGPT_PUBLIC_BASE_URL}/chatgpt/connect`;
 
 function nvBase64Url(buffer) {
   return Buffer.from(buffer)
@@ -13804,13 +13806,10 @@ function nvSafeOAuthUri(value = "") {
   }
 }
 
-function nvOAuthBaseUrl(req) {
-  const publicBaseUrl = String(process.env.STUDIOFLOW_CHATGPT_PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
-  if (publicBaseUrl) return publicBaseUrl;
-
-  const host = String(req.get("x-forwarded-host") || req.get("host") || "").trim();
-  const protocol = String(req.get("x-forwarded-proto") || "https").split(",")[0].trim() || "https";
-  return `${protocol}://${host}`;
+function nvOAuthBaseUrl(_req) {
+  // Public ChatGPT App review must expose one stable production origin.
+  // Keep OAuth discovery, MCP metadata and authorization redirects on nivadesk.app.
+  return NV_CHATGPT_PUBLIC_BASE_URL;
 }
 
 function nvOAuthEndpointUrl(req, functionName = "") {
@@ -13835,7 +13834,7 @@ function nvOAuthProtectedResourceMetadata(req) {
       "finance.read",
       "tasks.write"
     ],
-    resource_documentation: "https://eggcraft.co.uk/"
+    resource_documentation: `${NV_CHATGPT_PUBLIC_BASE_URL}/privacy`
   };
 }
 
@@ -13858,7 +13857,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
       "finance.read",
       "tasks.write"
     ],
-    service_documentation: "https://eggcraft.co.uk/",
+    service_documentation: `${NV_CHATGPT_PUBLIC_BASE_URL}/privacy`,
     ui_locales_supported: ["en", "tr"]
   };
 }
@@ -14088,7 +14087,7 @@ exports.chatgptOAuthAuthorize = onRequest({ region: "europe-west2", cors: true }
   // This endpoint intentionally does not auto-approve OAuth yet.
   // Next step: redirect to StudioFlow web login, verify Firebase user session,
   // choose workspace, then call nvOAuthCreateCodeRecord and redirect back.
-  const loginUrl = process.env.STUDIOFLOW_CHATGPT_LOGIN_URL || "";
+  const loginUrl = NV_CHATGPT_LOGIN_URL;
   if (loginUrl) {
     const login = new URL(loginUrl);
     login.searchParams.set("client_id", params.clientId);
