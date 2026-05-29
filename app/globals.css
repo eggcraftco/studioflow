@@ -14288,6 +14288,152 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(239, 229, 201, 0.34));
 }
 
+.public-signup-form-layout {
+  align-items: start;
+  grid-template-columns: minmax(320px, 0.78fr) minmax(390px, 0.66fr);
+}
+
+.public-signup-copy {
+  padding-top: 20px;
+}
+
+.public-signup-copy > p {
+  max-width: 580px;
+}
+
+.public-signup-includes {
+  max-width: 500px;
+  margin-top: 34px;
+  padding: 22px 24px;
+  border: 1px solid var(--public-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.public-signup-includes h2 {
+  margin: 0 0 14px;
+  color: var(--public-text);
+  font-size: 18px;
+}
+
+.public-signup-includes ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--public-muted);
+  font-weight: 760;
+}
+
+.public-signup-form {
+  display: grid;
+  gap: 16px;
+  padding: clamp(22px, 3vw, 30px);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.public-signup-form h2 {
+  margin: 2px 0 0;
+  color: var(--public-text);
+  font-size: clamp(25px, 3vw, 31px);
+}
+
+.public-signup-form > p {
+  margin: -8px 0 6px;
+}
+
+.public-signup-form label:not(.public-signup-consent) {
+  display: grid;
+  gap: 7px;
+}
+
+.public-signup-form label:not(.public-signup-consent) > span {
+  color: var(--public-text);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.public-signup-form input:not([type="checkbox"]) {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid rgba(31, 35, 38, 0.14);
+  border-radius: 13px;
+  padding: 0 14px;
+  background: #fff;
+  color: var(--public-text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.public-signup-form input:not([type="checkbox"]):focus {
+  border-color: rgba(50, 109, 103, 0.48);
+  box-shadow: 0 0 0 4px rgba(50, 109, 103, 0.11);
+}
+
+.public-signup-form input:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.public-signup-form-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.public-signup-consent {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  margin-top: 4px;
+  color: var(--public-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 700;
+}
+
+.public-signup-consent input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--public-accent);
+}
+
+.public-signup-consent a,
+.public-signup-login a {
+  color: var(--public-accent-strong);
+  font-weight: 900;
+  text-decoration: underline;
+}
+
+.public-signup-error {
+  margin: 0 !important;
+  padding: 11px 13px;
+  border: 1px solid rgba(168, 69, 57, 0.18);
+  border-radius: 12px;
+  background: rgba(168, 69, 57, 0.07);
+  color: #9d4034 !important;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.public-signup-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.public-signup-login {
+  margin: 2px 0 0 !important;
+  text-align: center;
+  font-size: 14px;
+}
+
+.public-signup-complete {
+  max-width: 760px;
+}
+
 .public-signup-mini {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -14334,111 +14480,146 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   overflow: hidden;
   border: 1px solid rgba(31, 35, 38, 0.10);
   border-radius: 28px;
-  padding: 22px;
+  padding: 26px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(220, 232, 221, 0.42) 54%, rgba(220, 232, 238, 0.40));
-  box-shadow: 0 30px 76px rgba(31, 35, 38, 0.13);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.97), rgba(241, 245, 241, 0.88));
+  box-shadow: 0 30px 76px rgba(31, 35, 38, 0.11);
+}
+
+.public-story-record-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+
+.public-story-record-head > div {
+  display: grid;
+  gap: 7px;
 }
 
 .public-scroll-stage-label {
-  display: inline-flex;
+  width: fit-content;
   border-radius: 999px;
-  padding: 8px 11px;
-  background: rgba(255, 255, 255, 0.76);
-  color: var(--public-muted);
-  font-size: 12px;
+  padding: 7px 10px;
+  background: rgba(50, 109, 103, 0.10);
+  color: var(--public-accent);
+  font-size: 11px;
   font-weight: 950;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
-.public-scroll-stage-toolbar {
-  display: flex;
-  gap: 7px;
-  margin: 22px 0 14px;
+.public-story-record-head strong {
+  color: var(--public-text);
+  font-size: clamp(23px, 2.4vw, 29px);
+  line-height: 1.12;
 }
 
-.public-scroll-stage-toolbar span {
-  width: 10px;
-  height: 10px;
+.public-story-record-head small {
+  color: var(--public-muted);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.public-story-status {
+  flex: 0 0 auto;
   border-radius: 999px;
-  background: rgba(31, 35, 38, 0.18);
+  padding: 9px 12px;
+  background: rgba(50, 109, 103, 0.10);
+  color: var(--public-accent);
+  font-size: 12px;
+  font-weight: 920;
+}
+
+.public-story-progress {
+  height: 4px;
+  overflow: hidden;
+  margin: 0 0 20px;
+  border-radius: 999px;
+  background: rgba(31, 35, 38, 0.08);
+}
+
+.public-story-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--public-accent);
+  transition: width 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .public-scroll-stage-cards {
-  position: relative;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  min-height: 390px;
+  gap: 10px;
 }
 
 .public-scroll-stage-cards article {
   display: grid;
-  align-content: end;
-  gap: 10px;
-  min-height: 180px;
-  border: 1px solid rgba(31, 35, 38, 0.10);
-  border-radius: 20px;
-  padding: 18px;
-  background: rgba(255, 255, 255, 0.70);
+  grid-template-columns: minmax(170px, 1fr) minmax(135px, 0.84fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 70px;
+  border: 1px solid rgba(31, 35, 38, 0.075);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.60);
   color: var(--public-text);
-  box-shadow: 0 14px 30px rgba(31, 35, 38, 0.055);
-  transform: scale(0.96);
-  opacity: 0.72;
   transition:
-    opacity 420ms ease,
-    transform 520ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    background 420ms ease,
-    border-color 420ms ease;
+    background 380ms ease,
+    border-color 380ms ease,
+    box-shadow 380ms ease;
 }
 
 .public-scroll-stage-cards article[data-active="true"] {
-  border-color: rgba(50, 109, 103, 0.28);
-  background: rgba(255, 255, 255, 0.94);
-  opacity: 1;
-  transform: scale(1);
+  border-color: rgba(50, 109, 103, 0.22);
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(31, 35, 38, 0.065);
 }
 
-.public-scroll-stage-cards article span {
-  width: fit-content;
+.public-story-card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.public-story-card-title span {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
   border-radius: 10px;
-  padding: 7px 9px;
-  background: rgba(50, 109, 103, 0.12);
+  background: rgba(50, 109, 103, 0.08);
   color: var(--public-accent);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 950;
 }
 
-.public-scroll-stage-cards article strong {
-  font-size: clamp(20px, 2.6vw, 34px);
-  line-height: 1.02;
-}
-
-.public-story-cursor {
-  position: absolute;
-  z-index: 3;
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.92);
-  border-radius: 999px;
+.public-scroll-stage-cards article[data-active="true"] .public-story-card-title span {
   background: var(--public-accent);
-  box-shadow: 0 16px 34px rgba(50, 109, 103, 0.30);
-  transition: transform 620ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  color: #ffffff;
 }
 
-.public-scroll-stage[data-active-step="0"] .public-story-cursor {
-  transform: translate(42px, 104px);
+.public-story-card-title strong {
+  color: var(--public-text);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.25;
 }
 
-.public-scroll-stage[data-active-step="1"] .public-story-cursor {
-  transform: translate(315px, 104px);
+.public-scroll-stage-cards article p {
+  margin: 0;
+  color: var(--public-muted);
+  font-size: 13px;
+  font-weight: 720;
 }
 
-.public-scroll-stage[data-active-step="2"] .public-story-cursor {
-  transform: translate(42px, 298px);
-}
-
-.public-scroll-stage[data-active-step="3"] .public-story-cursor {
-  transform: translate(315px, 298px);
+.public-scroll-stage-cards article b {
+  color: var(--public-text);
+  font-size: 14px;
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .public-scroll-steps {
@@ -14464,20 +14645,21 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-story-step h2 {
-  max-width: 620px;
-  margin: 16px 0 12px;
+  max-width: 540px;
+  margin: 15px 0 11px;
   color: var(--public-text);
-  font-size: clamp(36px, 5vw, 66px);
-  line-height: 0.98;
+  font-size: clamp(34px, 4.2vw, 56px);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
 }
 
 .public-story-step p {
-  max-width: 560px;
+  max-width: 460px;
   margin: 0;
   color: var(--public-muted);
-  font-size: 18px;
-  font-weight: 760;
-  line-height: 1.58;
+  font-size: 17px;
+  font-weight: 740;
+  line-height: 1.55;
 }
 
 .public-info-list {
@@ -14706,17 +14888,20 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     padding: 16px;
   }
 
-  .public-scroll-stage-cards {
-    grid-template-columns: 1fr;
-    min-height: auto;
+  .public-story-record-head {
+    display: grid;
+    gap: 14px;
   }
 
   .public-scroll-stage-cards article {
-    min-height: 112px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    min-height: auto;
   }
 
-  .public-story-cursor {
-    display: none;
+  .public-scroll-stage-cards article b {
+    text-align: left;
+    padding-left: 42px;
   }
 
   .public-story-step h2 {
@@ -15934,4 +16119,9 @@ html[dir="rtl"] .login-public-shell {
   .public-chatgpt-message {
     max-width: 100%;
   }
+}
+
+@media (max-width: 700px) {
+  .public-signup-form-split { grid-template-columns: 1fr; }
+  .public-signup-copy { padding-top: 0; }
 }

@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   PLAN_ENTITLEMENTS,
@@ -1579,40 +1582,161 @@ export function PublicPricingPage() {
   );
 }
 
+type FreeDemoWorkspaceResult = {
+  ok?: boolean;
+  companyId?: string;
+  message?: string;
+};
+
+function signupErrorMessage(error: unknown, t: (key: PublicSiteTranslationKey) => string) {
+  const raw = error instanceof Error ? error.message : "";
+  if (/email-already-in-use/i.test(raw)) return t("signup.error.emailExists");
+  if (/weak-password/i.test(raw)) return t("signup.error.weakPassword");
+  if (/invalid-email/i.test(raw)) return t("signup.error.invalidEmail");
+  if (/network|offline/i.test(raw)) return t("signup.error.network");
+  return raw || t("signup.error.generic");
+}
+
 export function PublicSignupPage() {
   const Page = () => {
+    const router = useRouter();
     const { user } = useAuth();
     const { t } = usePublicSiteLanguage();
-    return (
-      <section className="public-page-hero public-signup-hero">
-        <div className="public-shell public-signup-layout">
-          <div>
-            <span className="public-eyebrow">{t("signup.eyebrow")}</span>
-            <h1>{t("signup.title")}</h1>
-            <p>{t("signup.body")}</p>
+    const [signupStarted, setSignupStarted] = useState(false);
+    const [fullName, setFullName] = useState("");
+    const [workspaceName, setWorkspaceName] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [accepted, setAccepted] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
+      event.preventDefault();
+      setError(null);
+      const cleanFullName = fullName.trim();
+      const cleanWorkspaceName = workspaceName.trim();
+      const cleanEmail = email.trim();
+
+      if (cleanFullName.length < 2 || cleanWorkspaceName.length < 2) {
+        setError(t("signup.error.required"));
+        return;
+      }
+      if (!auth.currentUser && password.length < 8) {
+        setError(t("signup.error.passwordLength"));
+        return;
+      }
+      if (!auth.currentUser && password !== confirmPassword) {
+        setError(t("signup.error.passwordMismatch"));
+        return;
+      }
+      if (!accepted) {
+        setError(t("signup.error.terms"));
+        return;
+      }
+
+      setSignupStarted(true);
+      setSubmitting(true);
+      try {
+        let currentUser = auth.currentUser;
+        if (!currentUser) {
+          const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          currentUser = credential.user;
+        }
+        if (currentUser.displayName !== cleanFullName) {
+          await updateProfile(currentUser, { displayName: cleanFullName });
+        }
+
+        const initialiseWorkspace = httpsCallable<Record<string, string>, FreeDemoWorkspaceResult>(
+          functions,
+          "initializeFreeDemoWorkspace"
+        );
+        await initialiseWorkspace({
+          fullName: cleanFullName,
+          workspaceName: cleanWorkspaceName
+        });
+        router.replace("/dashboard");
+      } catch (signupError) {
+        setError(signupErrorMessage(signupError, t));
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    if (user && !signupStarted) {
+      return (
+        <section className="public-page-hero public-signup-hero">
+          <div className="public-shell public-signup-complete">
+            <span className="public-eyebrow">{t("signup.signedIn.eyebrow")}</span>
+            <h1>{t("signup.signedIn.title")}</h1>
+            <p>{t("signup.signedIn.body")}</p>
             <div className="public-hero-actions">
-              <Link href={user ? "/dashboard" : "/login"} className="public-button large">
-                {user ? t("cta.openPortal") : t("cta.loginToNivaDesk")}
-              </Link>
+              <Link href="/dashboard" className="public-button large">{t("cta.openPortal")}</Link>
               <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
             </div>
           </div>
-          <aside className="public-card public-signup-card">
-            <span className="public-eyebrow">{t("signup.safe.eyebrow")}</span>
-            <h2>{t("signup.safe.title")}</h2>
-            <p>{t("signup.safe.body")}</p>
-            <ul>
-              <li>{t("signup.safe.bullet1")}</li>
-              <li>{t("signup.safe.bullet2")}</li>
-              <li>{t("signup.safe.bullet3")}</li>
-            </ul>
-            <div className="public-signup-mini" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
+        </section>
+      );
+    }
+
+    return (
+      <section className="public-page-hero public-signup-hero">
+        <div className="public-shell public-signup-layout public-signup-form-layout">
+          <div className="public-signup-copy">
+            <span className="public-eyebrow">{t("signup.eyebrow")}</span>
+            <h1>{t("signup.title")}</h1>
+            <p>{t("signup.body")}</p>
+            <div className="public-signup-includes">
+              <h2>{t("signup.includes.title")}</h2>
+              <ul>
+                <li>{t("signup.includes.bullet1")}</li>
+                <li>{t("signup.includes.bullet2")}</li>
+                <li>{t("signup.includes.bullet3")}</li>
+              </ul>
             </div>
-          </aside>
+          </div>
+
+          <form className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
+            <span className="public-eyebrow">{t("signup.form.eyebrow")}</span>
+            <h2>{t("signup.form.title")}</h2>
+            <p>{t("signup.form.body")}</p>
+            <label>
+              <span>{t("signup.form.fullName")}</span>
+              <input autoComplete="name" value={fullName} onChange={event => setFullName(event.target.value)} required disabled={submitting} />
+            </label>
+            <label>
+              <span>{t("signup.form.workspaceName")}</span>
+              <input autoComplete="organization" value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} required disabled={submitting} />
+            </label>
+            <label>
+              <span>{t("signup.form.email")}</span>
+              <input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={submitting || Boolean(auth.currentUser)} />
+            </label>
+            <div className="public-signup-form-split">
+              <label>
+                <span>{t("signup.form.password")}</span>
+                <input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} required={!auth.currentUser} disabled={submitting || Boolean(auth.currentUser)} />
+              </label>
+              <label>
+                <span>{t("signup.form.confirmPassword")}</span>
+                <input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required={!auth.currentUser} disabled={submitting || Boolean(auth.currentUser)} />
+              </label>
+            </div>
+            <label className="public-signup-consent">
+              <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={submitting} required />
+              <span>
+                {t("signup.form.agreePrefix")} <Link href="/terms">{t("nav.terms")}</Link> {t("signup.form.agreeAnd")} <Link href="/privacy">{t("nav.privacy")}</Link>.
+              </span>
+            </label>
+            {error ? <p className="public-signup-error" role="alert">{error}</p> : null}
+            <button className="public-button large public-signup-submit" type="submit" disabled={submitting}>
+              {submitting ? t("signup.form.creating") : t("signup.form.submit")}
+            </button>
+            <p className="public-signup-login">
+              {t("signup.form.haveAccount")} <Link href="/login">{t("cta.login")}</Link>
+            </p>
+          </form>
         </div>
       </section>
     );
