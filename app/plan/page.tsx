@@ -88,6 +88,15 @@ function isOwnerLike(role: string) {
   return normalized === "owner" || normalized === "admin";
 }
 
+function showInternalBillingControls(email: string) {
+  if (process.env.NEXT_PUBLIC_NIVADESK_INTERNAL_BILLING_TESTS !== "true") return false;
+  const allowedEmails = String(process.env.NEXT_PUBLIC_NIVADESK_INTERNAL_BILLING_TEST_EMAILS || "")
+    .split(",")
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean);
+  return allowedEmails.includes(email.trim().toLowerCase());
+}
+
 export default function PlanPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -138,6 +147,8 @@ export default function PlanPage() {
     return usagePercent(counts.estimatedFileUsageMB, workspace.billingStorageLimitMB);
   }, [counts, workspace]);
 
+  const allowInternalBillingTests = showInternalBillingControls(user?.email || "");
+
   async function handleManageBilling() {
     if (!workspace || billingLoading) return;
     setBillingLoading(true);
@@ -184,7 +195,7 @@ export default function PlanPage() {
         <div className="pill">Plan & Billing</div>
         <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "14px 0 8px" }}>Membership, storage and access</h1>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          Test-mode subscription checkout for Lite, Pro and Team can be configured here. No live charges are enabled until the live billing switch is deliberately activated.
+          Compare access levels, review your workspace allowance and manage a connected subscription securely.
         </p>
       </section>
 
@@ -282,6 +293,7 @@ export default function PlanPage() {
                 canManage={isOwnerLike(workspace.role)}
                 checkoutLoadingKey={checkoutLoadingKey}
                 onCheckout={handleTestCheckout}
+                allowInternalBillingTests={allowInternalBillingTests}
               />
             ))}
           </section>
@@ -366,13 +378,15 @@ function PlanCard({
   active,
   canManage,
   checkoutLoadingKey,
-  onCheckout
+  onCheckout,
+  allowInternalBillingTests
 }: {
   plan: PlanEntitlements;
   active: boolean;
   canManage: boolean;
   checkoutLoadingKey: StripeBillingItemKey | null;
   onCheckout: (itemKey: StripeBillingItemKey) => void;
+  allowInternalBillingTests: boolean;
 }) {
   const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
 
@@ -399,9 +413,9 @@ function PlanCard({
           <span key={key} className="pill">{FEATURE_LABELS[key as FeatureKey]}</span>
         ))}
       </div>
-      {checkout ? (
+      {checkout && allowInternalBillingTests ? (
         <div style={{ marginTop: 18, display: "grid", gap: 8 }}>
-          <div className="pill">Stripe test mode</div>
+          <div className="pill">Internal billing test</div>
           <button
             className="button secondary"
             type="button"
