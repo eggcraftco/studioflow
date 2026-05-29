@@ -15017,6 +15017,19 @@ function nvMcpProtectedResourceMetadata(req) {
   return nvOAuthProtectedResourceMetadata(req);
 }
 
+function nvMcpProtectedResourceMetadataUrl() {
+  return `${NV_CHATGPT_PUBLIC_BASE_URL}/.well-known/oauth-protected-resource`;
+}
+
+function nvSendMcpOAuthChallenge(res, message = "Authentication required.") {
+  const metadataUrl = nvMcpProtectedResourceMetadataUrl();
+  res.set(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${metadataUrl}", scope="orders.read notes.read finance.read"`
+  );
+  res.status(401).json(nvMcpJsonRpcError(null, -32001, message));
+}
+
 async function nvHandleMcpToolCall(req, params = {}) {
   const toolName = nvCleanString(params.name || "", 120);
   const args = params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
@@ -15084,6 +15097,14 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
     return;
   }
 
+  // NivaDesk tools expose private workspace data, so the MCP endpoint is authenticated
+  // from the first protocol request. This 401 challenge lets ChatGPT discover OAuth.
+  const oauth = await nvResolveChatGPTOAuthBearer(req);
+  if (!oauth?.uid) {
+    nvSendMcpOAuthChallenge(res);
+    return;
+  }
+
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const response = await nvHandleMcpRequest(req, body);
@@ -15094,8 +15115,8 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
     const message = error?.message || String(error);
     console.error("chatgptMcp failed:", error?.code || code, message);
     if (status === 401) {
-      const metadataUrl = nvOAuthEndpointUrl(req, "chatgptOAuthProtectedResource");
-      res.set("WWW-Authenticate", `Bearer realm="NivaDesk", resource_metadata="${metadataUrl}"`);
+      nvSendMcpOAuthChallenge(res, message);
+      return;
     }
     res.status(status).json(nvMcpJsonRpcError(null, code, message));
   }
