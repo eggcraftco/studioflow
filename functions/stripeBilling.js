@@ -1,31 +1,60 @@
 const STRIPE_BILLING_REGION = "europe-west2";
 
 const STRIPE_BILLING_ITEMS = {
-  lifetime_lite: {
-    key: "lifetime_lite",
+  lite_monthly: {
+    key: "lite_monthly",
     type: "plan",
     plan: "lifetime_lite",
-    mode: "payment",
-    priceEnv: "STRIPE_PRICE_LIFETIME_LITE"
+    interval: "month",
+    mode: "subscription",
+    priceEnv: "STRIPE_PRICE_LITE_MONTHLY"
+  },
+  lite_yearly: {
+    key: "lite_yearly",
+    type: "plan",
+    plan: "lifetime_lite",
+    interval: "year",
+    mode: "subscription",
+    priceEnv: "STRIPE_PRICE_LITE_YEARLY"
   },
   pro_monthly: {
     key: "pro_monthly",
     type: "plan",
     plan: "pro_monthly",
+    interval: "month",
     mode: "subscription",
     priceEnv: "STRIPE_PRICE_PRO_MONTHLY"
+  },
+  pro_yearly: {
+    key: "pro_yearly",
+    type: "plan",
+    plan: "pro_monthly",
+    interval: "year",
+    mode: "subscription",
+    priceEnv: "STRIPE_PRICE_PRO_YEARLY"
   },
   team_monthly: {
     key: "team_monthly",
     type: "plan",
     plan: "team_monthly",
+    interval: "month",
     mode: "subscription",
     priceEnv: "STRIPE_PRICE_TEAM_MONTHLY"
+  },
+  team_yearly: {
+    key: "team_yearly",
+    type: "plan",
+    plan: "team_monthly",
+    interval: "year",
+    mode: "subscription",
+    priceEnv: "STRIPE_PRICE_TEAM_YEARLY"
   },
   storage_100gb: {
     key: "storage_100gb",
     type: "storage_addon",
     mode: "subscription",
+    interval: "month",
+    availableForCheckout: false,
     priceEnv: "STRIPE_PRICE_ADDON_100GB",
     storageAddonMB: 100 * 1024
   },
@@ -33,6 +62,8 @@ const STRIPE_BILLING_ITEMS = {
     key: "storage_200gb",
     type: "storage_addon",
     mode: "subscription",
+    interval: "month",
+    availableForCheckout: false,
     priceEnv: "STRIPE_PRICE_ADDON_200GB",
     storageAddonMB: 200 * 1024
   }
@@ -79,9 +110,12 @@ function createStripeBillingFunctions({
     const raw = String(value || "").trim();
     if (STRIPE_BILLING_ITEMS[raw]) return raw;
     const compact = raw.toLowerCase().replace(/[\s-]+/g, "_");
-    if (compact === "lite" || compact === "lifetime_lite") return "lifetime_lite";
+    if (compact === "lite" || compact === "lifetime_lite" || compact === "lite_monthly") return "lite_monthly";
+    if (compact === "lite_yearly" || compact === "lite_annual") return "lite_yearly";
     if (compact === "pro" || compact === "pro_monthly") return "pro_monthly";
+    if (compact === "pro_yearly" || compact === "pro_annual") return "pro_yearly";
     if (compact === "team" || compact === "team_monthly") return "team_monthly";
+    if (compact === "team_yearly" || compact === "team_annual") return "team_yearly";
     if (compact === "100gb" || compact === "storage_100gb") return "storage_100gb";
     if (compact === "200gb" || compact === "storage_200gb") return "storage_200gb";
     return "";
@@ -92,6 +126,9 @@ function createStripeBillingFunctions({
     const item = STRIPE_BILLING_ITEMS[key];
     if (!item) {
       throw new HttpsError("invalid-argument", "A valid NivaDesk billing item key is required.");
+    }
+    if (item.availableForCheckout === false) {
+      throw new HttpsError("failed-precondition", "Additional Client Files storage will be available after the initial billing launch.");
     }
     return item;
   }
@@ -264,26 +301,29 @@ function createStripeBillingFunctions({
     };
   }
 
-  async function applyLifetimeCheckout(session) {
-    const metadata = session.metadata || {};
-    const workspace = await workspaceRefFromStripeRefs({
-      workspaceId: metadata.workspaceId,
-      customerId: typeof session.customer === "string" ? session.customer : session.customer?.id
-    });
-    if (!workspace) return { skipped: true, reason: "workspace_not_found" };
-
-    const item = STRIPE_BILLING_ITEMS[normalizeBillingItemKey(metadata.studioFlowBillingKey || metadata.plan)];
-    if (!item || item.plan !== "lifetime_lite" || session.payment_status !== "paid") {
-      return { skipped: true, reason: "not_paid_lifetime_checkout" };
+  async function applyCompletedSubscriptionCheckout(stripe, session) {
+    if (String(session.mode || "") !== "subscription") {
+      return { skipped: true, reason: "non_subscription_checkout" };
     }
 
-    await workspace.ref.set(planUpdatePayload("lifetime_lite", "active", "checkout.session.completed", {
-      billingCustomerId: typeof session.customer === "string" ? session.customer : session.customer?.id || "",
-      billingCheckoutSessionId: session.id,
-      billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp()
-    }), { merge: true });
+    const subscriptionId = typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id || "";
+    if (!subscriptionId) {
+      return { skipped: true, reason: "subscription_not_found_on_checkout" };
+    }
 
-    return { updated: true, workspaceId: workspace.id, plan: "lifetime_lite" };
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const result = await applySubscription(subscription, "checkout.session.completed");
+
+    if (result.updated && result.workspaceId) {
+      await admin.firestore().collection("companies").doc(result.workspaceId).set({
+        billingCheckoutSessionId: session.id || "",
+        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    return result;
   }
 
   async function applySubscription(subscription, eventType) {
@@ -327,6 +367,8 @@ function createStripeBillingFunctions({
         billingCustomerId: customerId,
         billingSubscriptionId: subscription.id,
         billingPreviousPaidPlan: item.plan,
+        billingPreviousSubscriptionItemKey: item.key,
+        billingPreviousInterval: item.interval || "",
         billingCurrentPeriodEnd: periodEnd,
         billingStorageAddonMB: 0
       }), { merge: true });
@@ -338,10 +380,32 @@ function createStripeBillingFunctions({
     await workspace.ref.set(planUpdatePayload(item.plan, mappedStatus, status, {
       billingCustomerId: customerId,
       billingSubscriptionId: subscription.id,
+      billingSubscriptionItemKey: item.key,
+      billingInterval: item.interval || "",
       billingCurrentPeriodEnd: periodEnd
     }), { merge: true });
 
     return { updated: true, workspaceId: workspace.id, plan: item.plan, status: mappedStatus };
+  }
+
+  async function applyInvoicePaid(stripe, invoice) {
+    const subscriptionId = typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id || "";
+    if (!subscriptionId) {
+      return { skipped: true, reason: "invoice_without_subscription" };
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const result = await applySubscription(subscription, "invoice.paid");
+    if (result.updated && result.workspaceId) {
+      await admin.firestore().collection("companies").doc(result.workspaceId).set({
+        billingLastInvoiceId: invoice.id || "",
+        billingLastInvoicePaidAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    return result;
   }
 
   async function applyInvoicePaymentFailed(stripe, invoice) {
@@ -393,13 +457,15 @@ function createStripeBillingFunctions({
     const object = event.data?.object || {};
 
     if (event.type === "checkout.session.completed") {
-      result = await applyLifetimeCheckout(object);
+      result = await applyCompletedSubscriptionCheckout(stripe, object);
     } else if (
       event.type === "customer.subscription.created" ||
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
       result = await applySubscription(object, event.type);
+    } else if (event.type === "invoice.paid") {
+      result = await applyInvoicePaid(stripe, object);
     } else if (event.type === "invoice.payment_failed") {
       result = await applyInvoicePaymentFailed(stripe, object);
     }
@@ -430,7 +496,8 @@ function createStripeBillingFunctions({
       requestedByUid: uid,
       requestedByRole: role,
       billingSource: "stripe",
-      billingEnvironment: "test",
+      billingEnvironment: config.secretKey.startsWith("sk_live_") ? "live" : "test",
+      billingInterval: item.interval || "",
       studioFlowBillingKey: item.key,
       plan: item.plan || "",
       addonKey: item.type === "storage_addon" ? item.key : ""
