@@ -12975,8 +12975,61 @@ function nvChatGPTOrderFinancialsFromData(data = {}, orderId = "") {
 
 async function nvChatGPTGetOrderFinancials(context, args = {}) {
   nvRequireFinancialAccess(context);
-  const orderId = nvCleanString(args.orderId || args.id || "", 160);
-  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  let orderId = nvCleanString(args.orderId || args.id || "", 160);
+  const query = nvCleanString(
+    args.query || args.orderName || args.designName || args.customerName || "",
+    240
+  ).toLowerCase();
+
+  if (!orderId && query) {
+    const snap = await admin.firestore()
+      .collection("siparisler")
+      .where("companyId", "==", context.companyId)
+      .limit(250)
+      .get();
+
+    const matchingDocs = snap.docs.filter((doc) => {
+      const data = doc.data() || {};
+      const designName = String(data.designName || data.projectName || "").trim().toLowerCase();
+      const customerName = String(data.customerName || "").trim().toLowerCase();
+      const watchRef = String(data.watchRef || "").trim().toLowerCase();
+      const exactMatch =
+        doc.id.toLowerCase() === query ||
+        designName === query ||
+        customerName === query;
+
+      if (exactMatch) return true;
+
+      const haystack = [designName, customerName, watchRef].join(" ");
+      return haystack.includes(query);
+    });
+
+    if (matchingDocs.length === 0) {
+      throw new HttpsError("not-found", "No order matching that name or customer was found in the connected workspace.");
+    }
+
+    const exactDocs = matchingDocs.filter((doc) => {
+      const data = doc.data() || {};
+      return [
+        doc.id,
+        data.designName,
+        data.projectName,
+        data.customerName
+      ].some((value) => String(value || "").trim().toLowerCase() === query);
+    });
+
+    const selectedDocs = exactDocs.length > 0 ? exactDocs : matchingDocs;
+    if (selectedDocs.length > 1) {
+      throw new HttpsError("failed-precondition", "More than one order matches this request. Please specify the order more precisely.");
+    }
+
+    orderId = selectedDocs[0].id;
+  }
+
+  if (!orderId) {
+    throw new HttpsError("invalid-argument", "Provide orderId or query/orderName/customerName to read financial information.");
+  }
 
   const ref = admin.firestore().collection("siparisler").doc(orderId);
   const snap = await ref.get();
@@ -12990,6 +13043,7 @@ async function nvChatGPTGetOrderFinancials(context, args = {}) {
     ok: true,
     action: "get_order_financials",
     orderId,
+    resolvedBy: query && !(args.orderId || args.id) ? "query" : "orderId",
     financials: nvChatGPTOrderFinancialsFromData(data, orderId)
   };
 }
@@ -14918,11 +14972,11 @@ function nvMcpOrderToolSchemas() {
     {
       name: "get_order_financials",
       title: "Get order financials",
-      description: "Read the Financial Info card values for one order. Requires financial access in the connected workspace. Do not use if the user role cannot see financial info.",
+      description: "Read the Financial Info card values for one order. You may provide the orderId, or provide query/orderName/customerName so NivaDesk finds the order in the connected workspace. Do not ask the user for companyId. Requires financial access.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["orderId"],
+        required: [],
         properties: {
           companyId: {
             type: "string",
@@ -14930,7 +14984,19 @@ function nvMcpOrderToolSchemas() {
           },
           orderId: {
             type: "string",
-            description: "Order document ID."
+            description: "Optional order document ID when already known."
+          },
+          query: {
+            type: "string",
+            description: "Order name, customer name or identifying keyword when orderId is not known, for example Ocean Scene Dial."
+          },
+          orderName: {
+            type: "string",
+            description: "Optional order/project name alias when orderId is not known."
+          },
+          customerName: {
+            type: "string",
+            description: "Optional customer name when orderId is not known."
           }
         }
       },
@@ -15064,7 +15130,7 @@ function nvMcpInitializeResult() {
     instructions: [
       "This MCP server connects ChatGPT to NivaDesk / StudioFlow workspace order and personal note actions.",
       "Always ask for confirmation before creating or changing important order data when user intent is ambiguous.",
-      "Never reveal data from another workspace. All tool calls require companyId and a valid Firebase ID token.",
+      "Never reveal data from another workspace. Use the workspace selected during NivaDesk sign-in automatically; do not ask the user for companyId.",
       "Respect workspace roles: view-only and workflow-only users cannot create or update orders. Personal note tools only affect the connected user own Notes area; collaboration is not changed automatically."
     ].join("\n")
   };
@@ -15118,10 +15184,21 @@ async function nvHandleMcpRequest(req, body = {}) {
       return nvMcpJsonRpcResult(id, { tools: nvMcpToolsWithSecuritySchemes() });
 
     case "tools/call": {
+      const requestedToolName = nvCleanString(params.name || "", 120);
       try {
         const result = await nvHandleMcpToolCall(req, params);
+        console.info("NivaDesk MCP tool result", JSON.stringify({
+          tool: requestedToolName,
+          ok: true,
+          action: String(result?.action || requestedToolName)
+        }));
         return nvMcpJsonRpcResult(id, nvMcpToolResult(result));
       } catch (error) {
+        console.warn("NivaDesk MCP tool error", JSON.stringify({
+          tool: requestedToolName,
+          error: String(error?.code || "internal"),
+          message: String(error?.message || "Tool call failed.").slice(0, 240)
+        }));
         return nvMcpJsonRpcResult(id, nvMcpToolErrorResult(error));
       }
     }
