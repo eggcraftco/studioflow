@@ -956,7 +956,7 @@ class FirebaseManager: ObservableObject {
 
     private var currentStoredBillingPlan: StudioBillingPlan {
         let rawPlan = UserDefaults.standard.string(forKey: "studioFlowBillingPlanV1") ?? ""
-        return StudioBillingPlan(rawValue: rawPlan) ?? .teamMonthly
+        return StudioBillingPlan(rawValue: rawPlan) ?? .demo
     }
 
 

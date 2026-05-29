@@ -11,7 +11,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth } from "@/lib/firebase/client";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
-import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
+import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
 import {
   loadDashboardCounts,
   loadQuickReplySettings,
@@ -40,7 +40,7 @@ import {
 } from "@/lib/studioflow/blockHeadings";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, canUseOwnerTestingControlsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings, updateWorkspaceBillingPlan } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
@@ -359,13 +359,6 @@ export default function SettingsPage() {
     return nextTeamData;
   }
 
-  async function refreshWorkspaceContext() {
-    if (!user) return null;
-    const nextWorkspace = await loadWorkspaceContext(user.uid);
-    setWorkspace(nextWorkspace);
-    return nextWorkspace;
-  }
-
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -420,7 +413,6 @@ export default function SettingsPage() {
             onQuickReplySettingsChange: setQuickReplySettings,
             teamData,
             onRefreshTeamAccess: refreshTeamAccessData,
-            onWorkspacePlanChanged: refreshWorkspaceContext,
             supportUnreadCount,
             onSupportUnreadChanged: setSupportUnreadCount,
             storagePercent,
@@ -444,7 +436,6 @@ function renderSettingsSection({
   onQuickReplySettingsChange,
   teamData,
   onRefreshTeamAccess,
-  onWorkspacePlanChanged,
   supportUnreadCount,
   onSupportUnreadChanged,
   storagePercent,
@@ -461,7 +452,6 @@ function renderSettingsSection({
   onQuickReplySettingsChange: (settings: QuickReplySettings) => void;
   teamData: TeamAccessData | null;
   onRefreshTeamAccess: () => Promise<TeamAccessData | null>;
-  onWorkspacePlanChanged: () => Promise<WorkspaceContext | null>;
   supportUnreadCount: number;
   onSupportUnreadChanged: (count: number) => void;
   storagePercent: number;
@@ -490,7 +480,7 @@ function renderSettingsSection({
     case "account":
       return <AccountSection workspace={workspace} settings={settings} userEmail={userEmail} onSaved={onWorkspaceSettingsChange} />;
     case "plan-access":
-      return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} onPlanChanged={onWorkspacePlanChanged} />;
+      return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} />;
     case "team-access":
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} />;
     case "support-tickets":
@@ -3040,19 +3030,13 @@ function DataManagementSection({
 function PlanAccessSection({
   workspace,
   counts,
-  storagePercent,
-  onPlanChanged
+  storagePercent
 }: {
   workspace: WorkspaceContext;
   counts: DashboardCounts | null;
   storagePercent: number;
-  onPlanChanged: () => Promise<WorkspaceContext | null>;
 }) {
   const currentPlan = workspace.entitlements;
-  const canUseOwnerTestingControls = canUseOwnerTestingControlsForRole(workspace.role);
-  const [savingPlan, setSavingPlan] = useState<StudioBillingPlan | "">("");
-  const [testingStatus, setTestingStatus] = useState("");
-  const [testingError, setTestingError] = useState("");
   const featurePills = [
     { title: planOrderLimitText(currentPlan), enabled: true },
     { title: planCustomerLimitText(currentPlan), enabled: true },
@@ -3067,22 +3051,6 @@ function PlanAccessSection({
     { title: "Team Access", enabled: currentPlan.features.team_access },
     { title: "Storage Add-ons", enabled: currentPlan.features.storage_addons }
   ];
-
-  async function handleTestingPlanChange(plan: StudioBillingPlan) {
-    if (plan === workspace.billingPlan || savingPlan) return;
-    setSavingPlan(plan);
-    setTestingStatus("");
-    setTestingError("");
-    try {
-      const result = await updateWorkspaceBillingPlan(workspace, plan);
-      setTestingStatus(result.message);
-      await onPlanChanged();
-    } catch (planError) {
-      setTestingError(planError instanceof Error ? planError.message : "Plan could not be updated.");
-    } finally {
-      setSavingPlan("");
-    }
-  }
 
   return (
     <div className="settings-card-stack">
@@ -3157,51 +3125,13 @@ function PlanAccessSection({
         </div>
       </section>
 
-      {canUseOwnerTestingControls ? (
-        <section className="card app-card owner-testing-card">
-          <details className="owner-testing-controls">
-            <summary>
-              <span className="owner-testing-icon" aria-hidden="true">T</span>
-              <span>
-                <strong>Owner testing controls</strong>
-                <small>Temporary manual plan switch</small>
-              </span>
-            </summary>
-            <div className="owner-testing-body">
-              <p className="muted-copy">Plan comparison is shown for testing now. StoreKit purchases will replace manual switching later.</p>
-              <div className="owner-testing-plan-grid">
-                {Object.values(PLAN_ENTITLEMENTS).map(plan => {
-                  const active = plan.plan === workspace.billingPlan;
-                  const busy = savingPlan === plan.plan;
-                  return (
-                    <button
-                      key={plan.plan}
-                      type="button"
-                      className={active ? "owner-testing-plan active" : "owner-testing-plan"}
-                      aria-pressed={active}
-                      disabled={Boolean(savingPlan) || active}
-                      onClick={() => void handleTestingPlanChange(plan.plan)}
-                    >
-                      <span className={`settings-plan-icon plan-${plan.plan}`} aria-hidden="true">{planIconMark(plan.plan)}</span>
-                      <span>
-                        <strong>{plan.title}</strong>
-                        <small>{busy ? "Saving..." : active ? "Current plan" : plan.purchaseModel}</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {testingStatus ? <p className="settings-save-status">{testingStatus}</p> : null}
-              {testingError ? <p className="layout-error">{testingError}</p> : null}
-            </div>
-          </details>
-        </section>
-      ) : (
-        <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Plan controls" title="Owner testing controls" />
-          <p className="muted-copy">Only the workspace owner can manage the plan.</p>
-        </section>
-      )}
+      <section className="card app-card">
+        <CardTitle icon="lock" eyebrow="Billing security" title="Plan changes are protected" />
+        <p className="muted-copy">
+          Subscription access is managed through secure billing and updates automatically when a payment status changes.
+        </p>
+        <Link className="button secondary" href="/plan">Open Plan &amp; Billing</Link>
+      </section>
     </div>
   );
 }

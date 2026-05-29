@@ -50,6 +50,80 @@ service cloud.firestore {
         );
     }
 
+    function protectedBillingFields() {
+      return [
+        'billingPlan',
+        'billingPlanName',
+        'billingPlanSource',
+        'billingStatus',
+        'billingProviderRawStatus',
+        'billingStorageLimitMB',
+        'billingTeamMemberLimit',
+        'billingTeamIncludedSeats',
+        'billingTeamSelfServiceMax',
+        'billingAdditionalTeamSeatQuantity',
+        'billingAdditionalTeamSeatKey',
+        'billingAdditionalTeamSeatStatus',
+        'billingAdditionalTeamSeatSubscriptionId',
+        'billingAdditionalTeamSeatCurrentPeriodEnd',
+        'billingStorageAddonMB',
+        'billingStorageAddonKey',
+        'billingStorageAddonStatus',
+        'billingStorageAddonSubscriptionId',
+        'billingStorageAddonCurrentPeriodEnd',
+        'billingCustomerId',
+        'billingStripeCustomerId',
+        'billingCustomerCreatedAt',
+        'billingSubscriptionId',
+        'billingSubscriptionItemKey',
+        'billingInterval',
+        'billingCurrentPeriodEnd',
+        'billingPreviousPaidPlan',
+        'billingPreviousSubscriptionItemKey',
+        'billingPreviousInterval',
+        'billingCheckoutSessionId',
+        'billingCheckoutCompletedAt',
+        'billingEnvironment',
+        'billingExportAccessPreserved',
+        'billingLastInvoiceId',
+        'billingLastInvoicePaidAt',
+        'billingPaymentFailedAt',
+        'billingUpdatedAt',
+        'billingUpdatedBy'
+      ];
+    }
+
+    function hasSafeFreeDemoBillingValues(data) {
+      return data.billingPlan == 'demo'
+        && data.billingPlanName == 'Free Demo'
+        && data.billingPlanSource in ['new_workspace_default', 'signup_free_demo']
+        && data.billingStorageLimitMB == 50
+        && data.billingTeamMemberLimit == 1
+        && (!('billingStatus' in data) || data.billingStatus == 'free')
+        && (!('billingProviderRawStatus' in data) || data.billingProviderRawStatus == 'free')
+        && !data.keys().hasAny([
+          'billingCustomerId',
+          'billingStripeCustomerId',
+          'billingSubscriptionId',
+          'billingSubscriptionItemKey',
+          'billingAdditionalTeamSeatQuantity',
+          'billingStorageAddonMB'
+        ]);
+    }
+
+    function validNewCompanyBillingState() {
+      return !request.resource.data.keys().hasAny(protectedBillingFields())
+        || hasSafeFreeDemoBillingValues(request.resource.data);
+    }
+
+    function validCompanyBillingUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedBillingFields())
+        || (
+          (!resource.data.keys().hasAny(['billingPlan']) || resource.data.billingPlan == 'demo')
+          && hasSafeFreeDemoBillingValues(request.resource.data)
+        );
+    }
+
     function isOwnMessagePreferenceDoc(userId) {
       return signedIn() && userId == request.auth.uid;
     }
@@ -97,10 +171,17 @@ service cloud.firestore {
     match /companies/{companyId} {
       allow create: if signedIn()
         && companyId == request.auth.uid
-        && request.resource.data.ownerUid == request.auth.uid;
+        && request.resource.data.ownerUid == request.auth.uid
+        && validNewCompanyBillingState();
 
       allow read: if canReadCompany(companyId);
-      allow update, delete: if isCompanyOwner(companyId);
+      allow update: if isCompanyOwner(companyId) && validCompanyBillingUpdate();
+      allow delete: if isCompanyOwner(companyId);
+    }
+
+    match /companies/{companyId}/billing/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
     }
 
     match /companies/{companyId}/messageUserPreferences/{userId} {
@@ -110,8 +191,12 @@ service cloud.firestore {
     }
 
     match /companies/{companyId}/{collectionId}/{document=**} {
-      allow read: if collectionId != 'messageUserPreferences' && canReadCompany(companyId);
-      allow write: if collectionId != 'messageUserPreferences' && canWriteCompanyData(companyId);
+      allow read: if collectionId != 'messageUserPreferences'
+        && collectionId != 'billing'
+        && canReadCompany(companyId);
+      allow write: if collectionId != 'messageUserPreferences'
+        && collectionId != 'billing'
+        && canWriteCompanyData(companyId);
     }
 
     match /siparisler/{orderId} {

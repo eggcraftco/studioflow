@@ -112,6 +112,36 @@ function createStripeBillingFunctions({
     return String(process.env.STRIPE_BILLING_ENABLED || "").trim().toLowerCase() === "true";
   }
 
+  function internalTestBillingEnabled() {
+    return String(process.env.STRIPE_INTERNAL_TEST_BILLING_ENABLED || "").trim().toLowerCase() === "true";
+  }
+
+  function internalTestBillingEmails() {
+    return new Set(
+      String(process.env.STRIPE_INTERNAL_TEST_EMAILS || "")
+        .split(",")
+        .map(value => value.trim().toLowerCase())
+        .filter(Boolean)
+    );
+  }
+
+  function authenticatedEmail(request) {
+    return String(request.auth?.token?.email || "").trim().toLowerCase();
+  }
+
+  function requireBillingEnvironmentAccess(request, config) {
+    if (!config.secretKey.startsWith("sk_test_")) return;
+
+    const allowedEmails = internalTestBillingEmails();
+    const email = authenticatedEmail(request);
+    if (!internalTestBillingEnabled() || !email || !allowedEmails.has(email)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Stripe test billing is restricted to authorised internal test accounts."
+      );
+    }
+  }
+
   function defaultWebUrl() {
     return String(process.env.STUDIOFLOW_WEB_APP_URL || process.env.NEXT_PUBLIC_STUDIOFLOW_WEB_URL || "http://localhost:3000").replace(/\/+$/, "");
   }
@@ -543,6 +573,7 @@ function createStripeBillingFunctions({
     if (!config.configured) {
       return { ok: true, configured: false, message: config.message };
     }
+    requireBillingEnvironmentAccess(request, config);
 
     const stripe = stripeClient(config.secretKey);
     const customerId = await getOrCreateCustomer(stripe, companyRef, companyData, companyId, uid);
@@ -603,6 +634,7 @@ function createStripeBillingFunctions({
     if (!config.configured) {
       return { ok: true, configured: false, message: config.message };
     }
+    requireBillingEnvironmentAccess(request, config);
 
     const customerId = String(companyData.billingCustomerId || companyData.billingStripeCustomerId || "").trim();
     if (!customerId) {

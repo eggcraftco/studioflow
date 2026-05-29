@@ -574,25 +574,8 @@ class StudioFlowRepository(
             .await()
     }
 
-    suspend fun updateWorkspaceBillingPlan(workspace: StudioWorkspace, plan: StudioBillingPlan): String {
-        if (!workspace.isOwner) {
-            error("Only the workspace owner can change the plan.")
-        }
-        db.collection("companies").document(workspace.id)
-            .set(
-                mapOf(
-                    "billingPlan" to plan.raw,
-                    "billingPlanName" to plan.title,
-                    "billingPlanSource" to "manual_workspace",
-                    "billingStorageLimitMB" to plan.storageLimitMb,
-                    "billingTeamMemberLimit" to plan.teamMemberLimit,
-                    "billingUpdatedAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                com.google.firebase.firestore.SetOptions.merge()
-            )
-            .await()
-        return "Plan updated to ${plan.title}."
+    suspend fun updateWorkspaceBillingPlan(_workspace: StudioWorkspace, _plan: StudioBillingPlan): String {
+        error("Manual plan switching is disabled. Plans are managed through secure billing.")
     }
 
     suspend fun recalculateFinancialSettings(workspace: StudioWorkspace): String {

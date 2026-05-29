@@ -1777,7 +1777,7 @@ private fun PlanAccessDetail(
                     }
                 }
             }
-            StoreProductCard(t("NivaDesk Lite"), "uk.co.eggcraft.studioflow.lite.lifetime", t("Buy once"))
+            StoreProductCard(t("NivaDesk Lite"), "uk.co.eggcraft.studioflow.lite.monthly", t("Subscribe"))
             StoreProductCard(t("NivaDesk Pro"), "uk.co.eggcraft.studioflow.pro.monthly", t("Subscribe"))
             StoreProductCard("NivaDesk Team", "uk.co.eggcraft.studioflow.team.monthly", t("Subscribe"))
         }
@@ -1804,34 +1804,8 @@ private fun PlanAccessDetail(
                 }
             }
         }
-        DetailCard(title = t("Owner testing controls"), icon = Icons.Filled.Security) {
-            if (workspace?.isOwner == true) {
-                Text(t("Temporary manual plan switch"), fontWeight = FontWeight.ExtraBold)
-                Text("Plan comparison is shown for testing now. StoreKit and Google Play purchases will replace manual switching later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    val columns = if (maxWidth >= 700.dp) 2 else 1
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(columns),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(if (columns == 1) 290.dp else 150.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        userScrollEnabled = false
-                    ) {
-                        items(StudioBillingPlan.entries.toList()) { item ->
-                            OwnerTestingPlanButton(
-                                plan = item,
-                                active = item == plan,
-                                saving = state.settingsSaving,
-                                onClick = { onUpdateWorkspaceBillingPlan(item) }
-                            )
-                        }
-                    }
-                }
-            } else {
-                Text(t("Only the workspace owner can manage the plan."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        DetailCard(title = t("Billing security"), icon = Icons.Filled.Security) {
+            Text(t("Plan changes are managed securely through subscription billing."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
