@@ -1,7 +1,49 @@
 import type { NextConfig } from "next";
 
+const firebaseFunctionsBaseUrl = "https://europe-west2-eggcraft-studio.cloudfunctions.net";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async rewrites() {
+    return [
+      {
+        source: "/.well-known/oauth-protected-resource",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthProtectedResource`
+      },
+      {
+        source: "/.well-known/oauth-authorization-server",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthAuthorizationServer`
+      },
+      {
+        source: "/chatgptMcp",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptMcp`
+      },
+      {
+        source: "/chatgptOAuthAuthorizationServer",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthAuthorizationServer`
+      },
+      {
+        source: "/chatgptOAuthAuthorize",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthAuthorize`
+      },
+      {
+        source: "/chatgptOAuthToken",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthToken`
+      },
+      {
+        source: "/chatgptOAuthRegister",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthRegister`
+      },
+      {
+        source: "/chatgptOAuthApprove",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthApprove`
+      },
+      {
+        source: "/chatgptOAuthWorkspaces",
+        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthWorkspaces`
+      }
+    ];
+  },
   async headers() {
     return [
       {
