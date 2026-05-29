@@ -13822,8 +13822,10 @@ function nvOAuthProtectedResourceMetadata(req) {
   const resource = nvOAuthEndpointUrl(req, "chatgptMcp");
   return {
     resource,
+    // OAuth authorization server issuer base URL.
+    // ChatGPT discovers /.well-known/oauth-authorization-server from this origin.
     authorization_servers: [
-      nvOAuthEndpointUrl(req, "chatgptOAuthAuthorizationServer")
+      NV_CHATGPT_PUBLIC_BASE_URL
     ],
     bearer_methods_supported: ["header"],
     scopes_supported: [
@@ -13839,7 +13841,7 @@ function nvOAuthProtectedResourceMetadata(req) {
 }
 
 function nvOAuthAuthorizationServerMetadata(req) {
-  const issuer = nvOAuthEndpointUrl(req, "chatgptOAuthAuthorizationServer");
+  const issuer = NV_CHATGPT_PUBLIC_BASE_URL;
   return {
     issuer,
     authorization_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthAuthorize"),
@@ -14351,7 +14353,7 @@ const NV_MCP_PROTOCOL_VERSION = "2024-11-05";
 
 function nvMcpServerInfo() {
   return {
-    name: "NivaDesk StudioFlow",
+    name: "NivaDesk",
     version: "0.1.0"
   };
 }
@@ -15014,7 +15016,7 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
   if (req.method === "GET") {
     res.status(200).json({
       ok: true,
-      name: "NivaDesk StudioFlow MCP",
+      name: "NivaDesk",
       serverInfo: nvMcpServerInfo(),
       protectedResource: nvMcpProtectedResourceMetadata(req),
       tools: nvMcpOrderToolSchemas().map((tool) => ({
@@ -15042,7 +15044,7 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
     console.error("chatgptMcp failed:", error?.code || code, message);
     if (status === 401) {
       const metadataUrl = nvOAuthEndpointUrl(req, "chatgptOAuthProtectedResource");
-      res.set("WWW-Authenticate", `Bearer realm="NivaDesk StudioFlow MCP", resource_metadata="${metadataUrl}"`);
+      res.set("WWW-Authenticate", `Bearer realm="NivaDesk", resource_metadata="${metadataUrl}"`);
     }
     res.status(status).json(nvMcpJsonRpcError(null, code, message));
   }
