@@ -385,7 +385,7 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
   {
     titleKey: "planBridge.messages.title",
     bodyKey: "planBridge.messages.body",
-    planKeys: ["pro_monthly", "team_monthly"]
+    planKeys: ["team_monthly"]
   },
   {
     titleKey: "planBridge.storageAddons.title",

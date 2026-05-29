@@ -112,7 +112,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       order_notes: true,
       dashboard_summary: true,
       financial_summary: true,
-      messages: true
+      messages: false
     }
   },
   team_monthly: {

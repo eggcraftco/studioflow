@@ -1273,6 +1273,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   !canSeeToolbarFinance
                 )
                   return null;
+                if (
+                  "href" in item &&
+                  item.href === "/messages" &&
+                  workspace?.entitlements.features.messages !== true
+                )
+                  return null;
                 if ("href" in item) {
                   const accessKey = NAV_ACCESS_BY_HREF[item.href];
                   if (accessKey && !memberCanAccess(workspace, accessKey))
