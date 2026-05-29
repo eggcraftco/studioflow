@@ -225,9 +225,12 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (!workspace) return true;
   if (sectionId === "account" || sectionId === "about" || sectionId === "support-tickets") return true;
   if (!workspaceAccessAllows(workspace.memberAccess, "settings")) return false;
-  if (sectionId === "team-access") return workspaceAccessAllows(workspace.memberAccess, "teamAccess");
+  if (sectionId === "team-access") {
+    return workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess");
+  }
   if (sectionId === "quick-reply") return workspaceAccessAllows(workspace.memberAccess, "quickReply");
-  if (sectionId === "financial" || sectionId === "plan-access") return workspaceAccessAllows(workspace.memberAccess, "financialInfo");
+  if (sectionId === "financial") return workspace.entitlements.features.financial_advanced && workspaceAccessAllows(workspace.memberAccess, "financialInfo");
+  if (sectionId === "plan-access") return workspaceAccessAllows(workspace.memberAccess, "financialInfo");
   if (sectionId === "pdf" || sectionId === "data") return workspaceAccessAllows(workspace.memberAccess, "exportData");
   if (sectionId === "safety-uploads") return workspaceAccessAllows(workspace.memberAccess, "clientFiles");
   return true;
@@ -268,16 +271,18 @@ export default function SettingsPage() {
       setError("");
       try {
         const loadedWorkspace = await loadWorkspaceContext(currentUser.uid);
-        const teamDataPromise = (async () => {
-          if (normalizeWorkspaceRole(loadedWorkspace.role) === "owner") {
-            try {
-              await syncAcceptedJoinRequests(loadedWorkspace);
-            } catch (syncError) {
-              console.warn("Team access sync skipped:", syncError);
-            }
-          }
-          return loadTeamAccessData(loadedWorkspace).catch(() => null);
-        })();
+        const teamDataPromise = loadedWorkspace.entitlements.features.team_access
+          ? (async () => {
+              if (normalizeWorkspaceRole(loadedWorkspace.role) === "owner") {
+                try {
+                  await syncAcceptedJoinRequests(loadedWorkspace);
+                } catch (syncError) {
+                  console.warn("Team access sync skipped:", syncError);
+                }
+              }
+              return loadTeamAccessData(loadedWorkspace).catch(() => null);
+            })()
+          : Promise.resolve(null);
         const [loadedCounts, loadedSettings, loadedQuickReplySettings, loadedTeamData, loadedSupportUnreadSummary] = await Promise.all([
           loadDashboardCounts(loadedWorkspace.id),
           loadWorkspaceSettingsOverview(loadedWorkspace.id),
@@ -341,7 +346,7 @@ export default function SettingsPage() {
   }
 
   async function refreshTeamAccessData() {
-    if (!workspace) return null;
+    if (!workspace || !workspace.entitlements.features.team_access) return null;
     if (normalizeWorkspaceRole(workspace.role) === "owner") {
       try {
         await syncAcceptedJoinRequests(workspace);

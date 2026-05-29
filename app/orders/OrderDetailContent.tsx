@@ -4636,7 +4636,7 @@ export function OrderDetailContent({
                 ) : (
                   <>
                     <FinanceInlineRow
-                      label="Paid"
+                      label="Paid / Received"
                       displayValue={money(order.paidAmount, hideNumbers)}
                       value={order.paidAmount}
                       tone="positive"
@@ -4645,7 +4645,7 @@ export function OrderDetailContent({
                       onSave={savePaidFinanceValue}
                     />
                     <FinanceInlineRow
-                      label="Cost (Base)"
+                      label="Base Cost"
                       displayValue={money(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
@@ -4653,7 +4653,8 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Cost (Base)"}
                       onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
-                    <LockedInline title="Advanced financial fields" note="Remaining, VAT, shipping, platform fee and final profit are available from NivaDesk Lite." />
+                    <DetailRow label="Basic Balance" value={money(order.paidAmount - order.watchPurchasePrice, hideNumbers)} tone="positive" emphasis />
+                    <LockedInline title="Advanced finance" note="VAT, shipping, platform fees, custom expenses and detailed profit are available on NivaDesk Pro and Team." />
                   </>
                   )}
                 </div>
