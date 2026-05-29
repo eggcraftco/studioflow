@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -127,33 +128,36 @@ fun DashboardScreen(
                             Text(t("Dashboard"), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                             Text(period.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                         }
-                        Box {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = StudioBlue.copy(alpha = 0.12f),
-                                onClick = { dashboardOptionsOpen = true }
-                            ) {
-                                Icon(Icons.Filled.Tune, contentDescription = t("Dashboard controls"), tint = StudioBlue, modifier = Modifier.padding(13.dp))
-                            }
-                            DashboardOptionsMenu(
-                                expanded = dashboardOptionsOpen,
-                                selectedPeriod = period,
-                                compareMode = compareMode,
-                                widgetVisibility = widgetVisibility,
-                                onDismiss = { dashboardOptionsOpen = false },
-                                onPeriodSelected = {
-                                    period = it
-                                    dashboardOptionsOpen = false
-                                },
-                                onCompareSelected = {
-                                    compareMode = it
-                                    dashboardOptionsOpen = false
-                                },
-                                onToggleWidget = { widget ->
-                                    val next = widgetVisibility.toggled(widget)
-                                    onUpdateWorkspaceSettings(next.toPayload(), "${widget.label} visibility saved.")
+                        if (advancedFinanceEnabled) {
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = StudioBlue.copy(alpha = 0.12f),
+                                    onClick = { dashboardOptionsOpen = true }
+                                ) {
+                                    Icon(Icons.Filled.Tune, contentDescription = t("Dashboard controls"), tint = StudioBlue, modifier = Modifier.padding(13.dp))
                                 }
-                            )
+                                DashboardOptionsMenu(
+                                    expanded = dashboardOptionsOpen,
+                                    selectedPeriod = period,
+                                    compareMode = compareMode,
+                                    widgetVisibility = widgetVisibility,
+                                    allowComparison = true,
+                                    onDismiss = { dashboardOptionsOpen = false },
+                                    onPeriodSelected = {
+                                        period = it
+                                        dashboardOptionsOpen = false
+                                    },
+                                    onCompareSelected = {
+                                        compareMode = it
+                                        dashboardOptionsOpen = false
+                                    },
+                                    onToggleWidget = { widget ->
+                                        val next = widgetVisibility.toggled(widget)
+                                        onUpdateWorkspaceSettings(next.toPayload(), "${widget.label} visibility saved.")
+                                    }
+                                )
+                            }
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -188,22 +192,63 @@ fun DashboardScreen(
                                     }
                                 }
                             )
-                        } else {
+                        }
+                    }
+                    if (!advancedFinanceEnabled) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(40.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("1Y / 3Y", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
+                                    Text("1Y / 3Y Compare", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     Spacer(modifier = Modifier.weight(1f))
-                                    Text("Pro", color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                                    Surface(shape = RoundedCornerShape(18.dp), color = StudioBlue.copy(alpha = 0.12f)) {
+                                        Text("Pro", color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                                    }
                                 }
+                            }
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = StudioBlue.copy(alpha = 0.12f),
+                                    onClick = { dashboardOptionsOpen = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Filled.Tune, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(17.dp))
+                                        Text(t("Customize"), color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                                    }
+                                }
+                                DashboardOptionsMenu(
+                                    expanded = dashboardOptionsOpen,
+                                    selectedPeriod = period,
+                                    compareMode = compareMode,
+                                    widgetVisibility = widgetVisibility,
+                                    allowComparison = false,
+                                    onDismiss = { dashboardOptionsOpen = false },
+                                    onPeriodSelected = {
+                                        period = it
+                                        dashboardOptionsOpen = false
+                                    },
+                                    onCompareSelected = {
+                                        compareMode = it
+                                        dashboardOptionsOpen = false
+                                    },
+                                    onToggleWidget = { widget ->
+                                        val next = widgetVisibility.toggled(widget)
+                                        onUpdateWorkspaceSettings(next.toPayload(), "${widget.label} visibility saved.")
+                                    }
+                                )
                             }
                         }
                     }
@@ -328,6 +373,7 @@ private fun DashboardOptionsMenu(
     selectedPeriod: DashboardPeriod,
     compareMode: DashboardCompareMode,
     widgetVisibility: DashboardWidgetVisibility,
+    allowComparison: Boolean,
     onDismiss: () -> Unit,
     onPeriodSelected: (DashboardPeriod) -> Unit,
     onCompareSelected: (DashboardCompareMode) -> Unit,
@@ -352,23 +398,25 @@ private fun DashboardOptionsMenu(
                 onClick = { onPeriodSelected(item) }
             )
         }
-        DropdownMenuItem(
-            text = { Text("Compare", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) },
-            enabled = false,
-            onClick = {}
-        )
-        DashboardCompareMode.values().forEach { item ->
+        if (allowComparison) {
             DropdownMenuItem(
-                text = { Text(item.label, fontWeight = FontWeight.Bold) },
-                leadingIcon = {
-                    Icon(
-                        if (item == compareMode) Icons.Filled.Done else Icons.AutoMirrored.Filled.CompareArrows,
-                        contentDescription = null,
-                        tint = if (item == compareMode) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                onClick = { onCompareSelected(item) }
+                text = { Text("Compare", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) },
+                enabled = false,
+                onClick = {}
             )
+            DashboardCompareMode.values().forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(item.label, fontWeight = FontWeight.Bold) },
+                    leadingIcon = {
+                        Icon(
+                            if (item == compareMode) Icons.Filled.Done else Icons.AutoMirrored.Filled.CompareArrows,
+                            contentDescription = null,
+                            tint = if (item == compareMode) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    onClick = { onCompareSelected(item) }
+                )
+            }
         }
         DropdownMenuItem(
             text = { Text("Dashboard cards", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) },

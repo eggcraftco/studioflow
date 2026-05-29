@@ -8937,66 +8937,34 @@ struct SiparisDetayView: View {
         Button {
             openPlanAccessFromLockedFeature()
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(studioWarningOrange)
-                        .frame(width: 34, height: 34)
-                        .background(studioWarningOrange.opacity(colorScheme == .dark ? 0.18 : 0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            HStack(spacing: 7) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .bold))
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(t("Available from", lang: seciliDil) + " " + financialAdvancedPlanLabel)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(studioWarningOrange)
-                        Text(t("Financial Info", lang: seciliDil))
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                    }
+                Text(t("Advanced finance", lang: seciliDil))
+                    .font(.system(size: 11, weight: .semibold))
 
-                    Spacer(minLength: 8)
+                Text("Pro")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.blue.opacity(0.11))
+                    .clipShape(Capsule())
 
-                    HStack(spacing: 5) {
-                        Text(t("Plan & Access", lang: seciliDil))
-                            .font(.system(size: 10, weight: .semibold))
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .bold))
-                    }
-                    .foregroundColor(studioWarningOrange)
-                }
+                Spacer(minLength: 6)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(titles, id: \.self) { title in
-                        HStack(spacing: 5) {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 8, weight: .bold))
-                            Text(t(title, lang: seciliDil))
-                                .font(.system(size: 10, weight: .semibold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                        }
-                        .foregroundColor(.primary.opacity(0.68))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            Capsule()
-                                .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.045))
-                        )
-                    }
-                }
+                Text(t("Plan & Access", lang: seciliDil))
+                    .font(.system(size: 10, weight: .semibold))
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(studioWarningOrange.opacity(colorScheme == .dark ? 0.08 : 0.045))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(studioWarningOrange.opacity(colorScheme == .dark ? 0.26 : 0.18), lineWidth: 1)
-            )
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.primary.opacity(colorScheme == .dark ? 0.05 : 0.035))
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(t("Plan & Access", lang: seciliDil))

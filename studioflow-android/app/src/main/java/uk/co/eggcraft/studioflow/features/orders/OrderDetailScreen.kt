@@ -5930,13 +5930,22 @@ private fun FinancialCard(
                         valueColor = StudioGreen,
                         muted = false
                     )
-                    Text(
-                        "Basic finance includes Received and Base Cost only. Upgrade to Pro for VAT, shipping, platform fees, custom expenses and detailed profit.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(40.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                            Text(t("Advanced finance"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text("Pro", color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+                        }
+                    }
                     HorizontalRule()
                 }
                 if (advancedEnabled) {
