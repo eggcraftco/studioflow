@@ -252,7 +252,9 @@ fun StudioFlowMainScreen(
         StudioSection.Settings
     )
     val availableSections = preferredSectionOrder.filter { item ->
-        state.workspace?.memberAccess?.allows(item.accessKey) ?: true
+        val planAllowsSection = item != StudioSection.Messages ||
+            state.workspace?.billingPlan == StudioBillingPlan.TeamMonthly
+        planAllowsSection && (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
     }
     val activeSection = section.takeIf { it in availableSections } ?: availableSections.firstOrNull()
 

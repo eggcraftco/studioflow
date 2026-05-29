@@ -1797,6 +1797,8 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: false,
     teamAccessEnabled: false,
     messagesEnabled: false,
+    chatgptAppEnabled: true,
+    advancedFinanceEnabled: false,
     auditLogEnabled: false,
     multiDeviceCloudSyncEnabled: false,
     advancedDashboardEnabled: false,
@@ -1824,6 +1826,8 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: false,
     teamAccessEnabled: false,
     messagesEnabled: false,
+    chatgptAppEnabled: true,
+    advancedFinanceEnabled: false,
     auditLogEnabled: false,
     multiDeviceCloudSyncEnabled: false,
     advancedDashboardEnabled: false,
@@ -1850,6 +1854,9 @@ const PLAN_ENTITLEMENTS = {
     clientFilesEnabled: true,
     shareSheetEnabled: true,
     teamAccessEnabled: false,
+    messagesEnabled: false,
+    chatgptAppEnabled: true,
+    advancedFinanceEnabled: true,
     auditLogEnabled: true,
     multiDeviceCloudSyncEnabled: true,
     advancedDashboardEnabled: true,
@@ -1881,6 +1888,8 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: true,
     teamAccessEnabled: true,
     messagesEnabled: true,
+    chatgptAppEnabled: true,
+    advancedFinanceEnabled: true,
     auditLogEnabled: true,
     multiDeviceCloudSyncEnabled: true,
     advancedDashboardEnabled: true,
@@ -5311,6 +5320,9 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
     throw new HttpsError("permission-denied", "Your workspace role cannot edit Financial Settings.");
   }
   requireWorkspaceAreaAccess(companyData, uid, "financialInfo", "Financial Info is not enabled for your workspace account.");
+  if (billingEntitlementsForCompany(companyData).advancedFinanceEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Advanced Financial Settings are available on NivaDesk Pro and Team.");
+  }
 
   const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
   const updates = {
@@ -5390,6 +5402,9 @@ exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" 
     throw new HttpsError("permission-denied", "Your workspace role cannot recalculate Financial Settings.");
   }
   requireWorkspaceAreaAccess(companyData, uid, "financialInfo", "Financial Info is not enabled for your workspace account.");
+  if (billingEntitlementsForCompany(companyData).advancedFinanceEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Advanced Financial Settings are available on NivaDesk Pro and Team.");
+  }
 
   const db = admin.firestore();
   const settingsSnapshot = await companySettingsDocRef(companyId).get();
@@ -6787,7 +6802,7 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   ]);
   const changedFields = Object.keys(patch).filter((field) => knownFields.has(field));
   if (changedFields.length === 0) return false;
-  const shouldRecalculateTax = changedFields.some((field) => [
+  const shouldRecalculateTax = entitlements?.advancedFinanceEnabled === true && changedFields.some((field) => [
     "orderValue",
     "paidAmount",
     "remainingAmount",
@@ -6805,9 +6820,9 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   }
 
   const basicFields = new Set(["paidAmount", "watchPurchasePrice"]);
-  const isBasicFinanceOnly = entitlements?.plan === "demo";
+  const isBasicFinanceOnly = entitlements?.advancedFinanceEnabled !== true;
   if (isBasicFinanceOnly && changedFields.some((field) => !basicFields.has(field))) {
-    throw new HttpsError("failed-precondition", "Advanced financial fields are available from NivaDesk Lite.");
+    throw new HttpsError("failed-precondition", "Advanced financial fields are available on NivaDesk Pro and Team.");
   }
 
   const previousPaidAmount = roundMoneyValue(orderData.paidAmount);
@@ -6865,7 +6880,7 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   if (hasOwnField(patch, "taxType")) taxType = cleanTaxType(patch.taxType, taxType);
   if (hasOwnField(patch, "paymentMethod")) paymentMethod = cleanOrderText(patch.paymentMethod, paymentMethod, 80) || "Card";
 
-  if (!hasOwnField(patch, "paymentFee") && ["orderValue", "paidAmount", "remainingAmount", "fullPaymentReceived"].some((field) => hasOwnField(patch, field))) {
+  if (entitlements?.advancedFinanceEnabled === true && !hasOwnField(patch, "paymentFee") && ["orderValue", "paidAmount", "remainingAmount", "fullPaymentReceived"].some((field) => hasOwnField(patch, field))) {
     paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings?.feePercentage, 3)) / 100);
   }
 
@@ -6899,11 +6914,11 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     setMoneyUpdate("taxAmount", "VAT amount recalculated", orderData.taxAmount, taxAmount);
   }
 
-  if (cleanTaxRate(orderData.taxRate) !== taxRate) {
+  if (entitlements?.advancedFinanceEnabled === true && cleanTaxRate(orderData.taxRate) !== taxRate) {
     updates.taxRate = taxRate;
     pushHistoryChange(historyEntries, "VAT rate changed", `${cleanTaxRate(orderData.taxRate)}%`, `${taxRate}%`, uid, email);
   }
-  if (cleanTaxType(orderData.taxType) !== taxType) {
+  if (entitlements?.advancedFinanceEnabled === true && cleanTaxType(orderData.taxType) !== taxType) {
     updates.taxType = taxType;
     pushHistoryChange(historyEntries, "VAT rule changed", cleanTaxType(orderData.taxType) || "-", taxType || "-", uid, email);
   }
@@ -8453,10 +8468,11 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const designStatus = cleanOrderStatus(requestData.designStatus, "Not Yet");
   const settingsSnapshot = await companySettingsDocRef(companyId).get();
   const financialSettings = financialSettingsFromData(settingsSnapshot.exists ? settingsSnapshot.data() || {} : {});
-  const paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100);
-  const taxType = financialTaxTypeForPaymentDate(financialSettings, paymentDate);
-  const taxRate = cleanPercentageNumber(financialSettings.defaultTaxRate, 20);
-  const taxAmount = webFinanceTaxAmount({
+  const advancedFinanceEnabled = entitlements.advancedFinanceEnabled === true;
+  const paymentFee = advancedFinanceEnabled ? roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100) : 0;
+  const taxType = advancedFinanceEnabled ? financialTaxTypeForPaymentDate(financialSettings, paymentDate) : "";
+  const taxRate = advancedFinanceEnabled ? cleanPercentageNumber(financialSettings.defaultTaxRate, 20) : 0;
+  const taxAmount = advancedFinanceEnabled ? webFinanceTaxAmount({
     paidAmount,
     remainingAmount,
     watchPurchasePrice: 0,
@@ -8464,7 +8480,7 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     deliveryCost: 0,
     taxRate,
     taxType
-  });
+  }) : 0;
 
   const orderPayload = {
     companyId,
@@ -8642,6 +8658,20 @@ const SWIFT_ORDER_FIELDS = [
   "workSessions"
 ];
 
+const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount"]);
+
+function preserveBasicPlanCustomFinancialFields(incoming = {}, existing = {}) {
+  const next = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? { ...incoming } : {};
+  const current = existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+  for (const key of Object.keys(next)) {
+    if (String(key).startsWith("financialExpense::") || String(key).startsWith("financialRemaining::")) delete next[key];
+  }
+  for (const [key, value] of Object.entries(current)) {
+    if (String(key).startsWith("financialExpense::") || String(key).startsWith("financialRemaining::")) next[key] = value;
+  }
+  return next;
+}
+
 const SWIFT_FINANCE_ORDER_FIELDS = new Set([
   "paymentMethod",
   "paidAmount",
@@ -8687,6 +8717,7 @@ exports.saveSwiftOrder = onCall({ region: "europe-west2" }, async (request) => {
   }
   requireWorkspaceAreaAccess(companyData, uid, "orders", "Orders are not enabled for your workspace account.");
   const canEditFinanceFields = uidCanAccessWorkspaceArea(companyData, uid, "financialInfo");
+  const advancedFinanceEnabled = billingEntitlementsForCompany(companyData).advancedFinanceEnabled === true;
 
   const orderId = String(request.data?.orderId || "").trim();
   if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
@@ -8724,7 +8755,10 @@ exports.saveSwiftOrder = onCall({ region: "europe-west2" }, async (request) => {
       if (!Object.prototype.hasOwnProperty.call(decodedOrder, field)) continue;
       if (canWorkflowEdit && !canEditFullOrder && SWIFT_FINANCE_ORDER_FIELDS.has(field)) continue;
       if (!canEditFinanceFields && SWIFT_FINANCE_ORDER_FIELDS.has(field)) continue;
-      updates[field] = decodedOrder[field];
+      if (!advancedFinanceEnabled && SWIFT_ADVANCED_FINANCE_FIELDS.has(field)) continue;
+      updates[field] = field === "customFields" && !advancedFinanceEnabled
+        ? preserveBasicPlanCustomFinancialFields(decodedOrder[field], orderData.customFields)
+        : decodedOrder[field];
       changedFields.push(field);
     }
 
@@ -8787,7 +8821,10 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
 
   for (const field of SWIFT_ORDER_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(decodedOrder, field)) continue;
-    orderPayload[field] = decodedOrder[field];
+    if (entitlements.advancedFinanceEnabled !== true && SWIFT_ADVANCED_FINANCE_FIELDS.has(field)) continue;
+    orderPayload[field] = field === "customFields" && entitlements.advancedFinanceEnabled !== true
+      ? preserveBasicPlanCustomFinancialFields(decodedOrder[field], {})
+      : decodedOrder[field];
     createdFields.push(field);
   }
 
@@ -13125,6 +13162,33 @@ function nvChatGPTOrderFinancialsFromData(data = {}, orderId = "") {
   };
 }
 
+function nvChatGPTHasAdvancedFinance(context = {}) {
+  return billingEntitlementsForCompany(context.companyData || {}).advancedFinanceEnabled === true;
+}
+
+function nvChatGPTBasicFinanceLimitation() {
+  return "This plan includes Received totals, Base Cost and Basic Balance only. VAT, shipping, platform fees, custom expenses and detailed profit are available on NivaDesk Pro and Team.";
+}
+
+function nvChatGPTBasicOrderFinancialsFromData(data = {}, id = "") {
+  const paidAmount = nvMoneyNumber(data.paidAmount);
+  const baseCost = nvMoneyNumber(data.watchPurchasePrice);
+  return {
+    id,
+    customerName: String(data.customerName || ""),
+    designName: String(data.designName || ""),
+    status: String(data.status || ""),
+    currency: String(data.currency || data.paraBirimi || "£"),
+    paidAmount,
+    receivedAmount: paidAmount,
+    baseCost,
+    watchPurchasePrice: baseCost,
+    basicBalance: nvRoundMoney(paidAmount - baseCost),
+    accessLevel: "basic",
+    limitation: nvChatGPTBasicFinanceLimitation()
+  };
+}
+
 async function nvChatGPTGetOrderFinancials(context, args = {}) {
   nvRequireFinancialAccess(context);
 
@@ -13196,7 +13260,9 @@ async function nvChatGPTGetOrderFinancials(context, args = {}) {
     action: "get_order_financials",
     orderId,
     resolvedBy: query && !(args.orderId || args.id) ? "query" : "orderId",
-    financials: nvChatGPTOrderFinancialsFromData(data, orderId)
+    financials: nvChatGPTHasAdvancedFinance(context)
+      ? nvChatGPTOrderFinancialsFromData(data, orderId)
+      : nvChatGPTBasicOrderFinancialsFromData(data, orderId)
   };
 }
 
@@ -13224,6 +13290,19 @@ function nvChatGPTDashboardBuckets(orders = []) {
   }
 
   return { total: orders.length, active, completed, cancelled, overdue, dueSoon };
+}
+
+function nvChatGPTBasicDashboardFinancialSummary(orders = []) {
+  const summary = { receivedAmount: 0, baseCost: 0, basicBalance: 0 };
+  for (const order of orders) {
+    if (nvIsCancelledStatus(order.status)) continue;
+    summary.receivedAmount += nvMoneyNumber(order.paidAmount);
+    summary.baseCost += nvMoneyNumber(order.watchPurchasePrice);
+  }
+  summary.receivedAmount = nvRoundMoney(summary.receivedAmount);
+  summary.baseCost = nvRoundMoney(summary.baseCost);
+  summary.basicBalance = nvRoundMoney(summary.receivedAmount - summary.baseCost);
+  return { ...summary, accessLevel: "basic", limitation: nvChatGPTBasicFinanceLimitation() };
 }
 
 function nvChatGPTDashboardFinancialSummary(orders = []) {
@@ -13352,9 +13431,11 @@ function nvChatGPTExtraSpendingEntriesForOrder(order = {}, options = {}) {
     pushEntry("VAT / Tax", order.taxAmount, "tax");
   }
 
-  const customExpenses = nvChatGPTCustomFinancialItems(order, "financialExpense::");
-  for (const item of customExpenses) {
-    pushEntry(item.title, item.amount, "customSpending");
+  if (options.includeCustomExpenses !== false) {
+    const customExpenses = nvChatGPTCustomFinancialItems(order, "financialExpense::");
+    for (const item of customExpenses) {
+      pushEntry(item.title, item.amount, "customSpending");
+    }
   }
 
   return entries;
@@ -13407,11 +13488,19 @@ async function nvChatGPTGetExtraSpendingOverview(context, args = {}) {
   const page = Math.max(Number(args.page || 1), 1);
   const orders = await nvChatGPTLoadWorkspaceOrders(context, args.scanLimit || 1000);
 
-  const includeOptions = {
+  const advancedFinance = nvChatGPTHasAdvancedFinance(context);
+  const includeOptions = advancedFinance ? {
     includeBaseCost: args.includeBaseCost !== false,
     includeShipping: args.includeShipping === true,
     includePlatformFee: args.includePlatformFee === true,
-    includeTax: args.includeTax === true
+    includeTax: args.includeTax === true,
+    includeCustomExpenses: true
+  } : {
+    includeBaseCost: true,
+    includeShipping: false,
+    includePlatformFee: false,
+    includeTax: false,
+    includeCustomExpenses: false
   };
 
   let entries = [];
@@ -13445,6 +13534,8 @@ async function nvChatGPTGetExtraSpendingOverview(context, args = {}) {
     fromDate: range ? new Date(range.startMs).toISOString().slice(0, 10) : "",
     toDate: range ? new Date(range.endMs).toISOString().slice(0, 10) : "",
     includeOptions,
+    accessLevel: advancedFinance ? "advanced" : "basic",
+    limitation: advancedFinance ? "" : nvChatGPTBasicFinanceLimitation(),
     totalAmount,
     totalEntries: entries.length,
     page: safePage,
@@ -13510,7 +13601,9 @@ async function nvChatGPTGetDashboardSummary(context, args = {}) {
   };
 
   if (hasFinancialAccess) {
-    result.financialSummary = nvChatGPTDashboardFinancialSummary(orders);
+    result.financialSummary = nvChatGPTHasAdvancedFinance(context)
+      ? nvChatGPTDashboardFinancialSummary(orders)
+      : nvChatGPTBasicDashboardFinancialSummary(orders);
     result.highestRemainingOrders = orders
       .filter((order) => !nvIsCancelledStatus(order.status) && nvMoneyNumber(order.remainingAmount) > 0)
       .sort((a, b) => nvMoneyNumber(b.remainingAmount) - nvMoneyNumber(a.remainingAmount))
@@ -13526,11 +13619,23 @@ async function nvChatGPTGetDashboardSummary(context, args = {}) {
 async function nvChatGPTGetFinancialOverview(context, args = {}) {
   nvRequireFinancialAccess(context);
   const orders = await nvChatGPTLoadWorkspaceOrders(context, args.limit || 1000);
+  if (!nvChatGPTHasAdvancedFinance(context)) {
+    return {
+      ok: true,
+      action: "get_financial_overview",
+      companyId: context.companyId,
+      counts: nvChatGPTDashboardBuckets(orders),
+      advancedFinanceAvailable: false,
+      financialSummary: nvChatGPTBasicDashboardFinancialSummary(orders)
+    };
+  }
+
   return {
     ok: true,
     action: "get_financial_overview",
     companyId: context.companyId,
     counts: nvChatGPTDashboardBuckets(orders),
+    advancedFinanceAvailable: true,
     financialSummary: nvChatGPTDashboardFinancialSummary(orders),
     highestRemainingOrders: orders
       .filter((order) => !nvIsCancelledStatus(order.status) && nvMoneyNumber(order.remainingAmount) > 0)
@@ -13587,6 +13692,7 @@ function nvOrderDefaults(args = {}, context = {}) {
     deliveryDays = 45;
   }
 
+  const advancedFinanceEnabled = billingEntitlementsForCompany(context.companyData || {}).advancedFinanceEnabled === true;
   const paidAmount = nvCleanNumber(args.paidAmount ?? args.depositPaid ?? 0);
   const totalPrice = nvCleanNumber(args.totalPrice ?? args.price ?? 0);
   const remainingAmount = nvCleanNumber(args.remainingAmount ?? Math.max(0, totalPrice - paidAmount));
@@ -13623,17 +13729,17 @@ function nvOrderDefaults(args = {}, context = {}) {
     trackingNumber: nvCleanString(args.trackingNumber || "", 160),
     courier: nvCleanString(args.courier || "Auto Detect", 120) || "Auto Detect",
     isDelivered: Boolean(args.isDelivered),
-    paymentFee: nvCleanNumber(args.paymentFee || 0),
-    deliveryCost: nvCleanNumber(args.deliveryCost || 0),
-    taxType: nvCleanString(args.taxType || "", 80),
+    paymentFee: advancedFinanceEnabled ? nvCleanNumber(args.paymentFee || 0) : 0,
+    deliveryCost: advancedFinanceEnabled ? nvCleanNumber(args.deliveryCost || 0) : 0,
+    taxType: advancedFinanceEnabled ? nvCleanString(args.taxType || "", 80) : "",
     extraStatuses: args.extraStatuses && typeof args.extraStatuses === "object" && !Array.isArray(args.extraStatuses) ? args.extraStatuses : {},
-    taxRate: nvCleanNumber(args.taxRate || 0),
+    taxRate: advancedFinanceEnabled ? nvCleanNumber(args.taxRate || 0) : 0,
     invBool1: Boolean(args.invBool1),
     invBool2: Boolean(args.invBool2),
     invBool3: Boolean(args.invBool3),
     invBool4: Boolean(args.invBool4),
     invNotes: nvCleanString(args.invNotes || "", 1000),
-    taxAmount: nvCleanNumber(args.taxAmount || 0),
+    taxAmount: advancedFinanceEnabled ? nvCleanNumber(args.taxAmount || 0) : 0,
     priority: nvCleanString(args.priority || "Normal", 80) || "Normal",
     risk: nvCleanString(args.risk || "None", 80) || "None",
     riskReason: nvCleanString(args.riskReason || "-", 500) || "-",
@@ -15162,7 +15268,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "get_dashboard_summary",
       title: "Get dashboard summary",
-      description: "Read the connected workspace dashboard summary. Basic dashboard counts are returned when the user has dashboard access. Financial totals are included only when the user's role has financial access.",
+      description: "Read the connected workspace dashboard summary. ChatGPT App is available on every plan. Free Demo and Lite return permitted basic finance totals (Received, Base Cost and Basic Balance); Pro and Team can return advanced finance when the user role allows it.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -15188,7 +15294,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "get_extra_spending_overview",
       title: "Get extra spending overview",
-      description: "Read the Extra Spending Summary for the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. Requires financial access. Supports thisMonth, thisYear, allTime and customRange, pagination, Base Cost, Shipping, Platform Fee and VAT / Tax options.",
+      description: "Read permitted spending summary data for the connected workspace. Free Demo and Lite return Base Cost only. Pro and Team may include Shipping, Platform Fee, VAT / Tax and custom expenses when the user role allows financial access. Supports thisMonth, thisYear, allTime and customRange.",
       inputSchema: {
         type: "object",
         additionalProperties: false,

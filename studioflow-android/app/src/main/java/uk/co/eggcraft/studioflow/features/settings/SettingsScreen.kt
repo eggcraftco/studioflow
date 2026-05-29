@@ -170,7 +170,8 @@ fun SettingsScreen(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
-    val sections = rememberSettingsSections()
+    val currentPlan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
+    val sections = rememberSettingsSections(currentPlan)
     val settingsRepository = remember { StudioFlowRepository() }
     var supportUnreadCount by remember { mutableStateOf(0) }
 
@@ -207,7 +208,7 @@ fun SettingsScreen(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    SectionHeader(title = "Settings", subtitle = "Choose a section to edit.")
+                    SectionHeader(title = t("Settings"), subtitle = "Choose a section to edit.")
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                         items(sections, key = { it.key }) { section ->
                             SettingsRow(
@@ -293,7 +294,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            SectionHeader(title = "Settings", subtitle = "Choose a section to edit.")
+            SectionHeader(title = t("Settings"), subtitle = "Choose a section to edit.")
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
                 items(sections, key = { it.key }) { section ->
                     SettingsRow(
@@ -309,7 +310,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun rememberSettingsSections(): List<SettingsSection> = remember {
+private fun rememberSettingsSections(plan: StudioBillingPlan): List<SettingsSection> = remember(plan) {
     listOf(
         SettingsSection("general", "General", "Appearance, language, profile and workspace identity.", Icons.Filled.Settings),
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline),
@@ -324,7 +325,13 @@ private fun rememberSettingsSections(): List<SettingsSection> = remember {
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People)
-    )
+    ).filter { section ->
+        when (section.key) {
+            "team", "messages" -> plan.hasTeamAccess
+            "financial" -> plan.hasAdvancedFinance
+            else -> true
+        }
+    }
 }
 
 @Composable
@@ -503,7 +510,7 @@ private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, A
             MenuField(
                 label = t("Theme"),
                 value = settings.appTheme,
-                options = listOf(t("System"), t("Light"), "Dark"),
+                options = listOf(t("System"), t("Light"), t("Dark")),
                 onSelect = { onSave(mapOf("appTheme" to it), t("Theme saved.")) }
             )
         }
@@ -528,9 +535,9 @@ private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, 
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailColumn {
-        DetailCard(title = "Language & Labels", icon = Icons.Filled.Language) {
+        DetailCard(title = t("Language & Labels"), icon = Icons.Filled.Language) {
             MenuField(
-                label = "Select Language",
+                label = t("Select Language"),
                 value = state.workspaceSettings.selectedLanguage,
                 options = listOf("English", "Turkce", "Deutsch", "Francais", "Italiano", "Espanol", "Portugues"),
                 onSelect = { onSave(mapOf("seciliDil" to it), "Language saved.") }
@@ -557,10 +564,10 @@ private fun GeneralSettingsDetail(
     val settings = state.workspaceSettings
     val title = when (selected) {
         "appearance" -> "Appearance"
-        "language" -> "Language & Region"
+        "language" -> t("Language & Region")
         "profile" -> "Profile & Workspace"
         "logo" -> "Workspace Logo"
-        "about" -> "About"
+        "about" -> t("About")
         else -> "General"
     }
 
@@ -634,10 +641,10 @@ private fun GeneralSettingsDetail(
             )
             "about" -> AboutDetail()
             else -> {
-                DetailCard(title = "General", icon = Icons.Filled.Settings) {
+                DetailCard(title = t("General"), icon = Icons.Filled.Settings) {
                     GeneralMenuRow(
                         icon = Icons.Filled.Palette,
-                        title = "Appearance",
+                        title = t("Appearance"),
                         subtitle = settings.appTheme.ifBlank { t("System") },
                         tint = StudioPurple,
                         onClick = { selected = "appearance" }
@@ -645,7 +652,7 @@ private fun GeneralSettingsDetail(
                     GeneralDivider()
                     GeneralMenuRow(
                         icon = Icons.Filled.Language,
-                        title = "Language & Region",
+                        title = t("Language & Region"),
                         subtitle = settings.selectedLanguage.ifBlank { "English" },
                         tint = StudioBlue,
                         onClick = { selected = "language" }
@@ -653,24 +660,24 @@ private fun GeneralSettingsDetail(
                     GeneralDivider()
                     GeneralMenuRow(
                         icon = Icons.Filled.Business,
-                        title = "Profile & Workspace",
-                        subtitle = workspace?.name ?: "Workspace details",
+                        title = t("Profile & Workspace"),
+                        subtitle = workspace?.name ?: t("Workspace details"),
                         tint = StudioOrange,
                         onClick = { selected = "profile" }
                     )
                     GeneralDivider()
                     GeneralMenuRow(
                         icon = Icons.Filled.PhotoLibrary,
-                        title = "Workspace Logo",
-                        subtitle = if (settings.appLogoUrl.isNotBlank()) "Logo uploaded" else "No logo uploaded",
+                        title = t("Workspace Logo"),
+                        subtitle = if (settings.appLogoUrl.isNotBlank()) t("Logo uploaded") else t("No logo uploaded"),
                         tint = StudioGreen,
                         onClick = { selected = "logo" }
                     )
                     GeneralDivider()
                     GeneralMenuRow(
                         icon = Icons.Filled.Info,
-                        title = "About",
-                        subtitle = "NivaDesk 1.0.0",
+                        title = t("About"),
+                        subtitle = t("NivaDesk 1.0.0"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = { selected = "about" }
                     )
@@ -730,7 +737,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
     DetailColumn {
         DetailCard(title = t("Business Type"), icon = Icons.Filled.Business) {
             MenuField(
-                label = "Select Industry",
+                label = t("Select Industry"),
                 value = settings.businessType,
                 options = listOf(
                     "Custom Art Studio",
@@ -785,7 +792,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                 Text(t("Apply Standard Template"), fontWeight = FontWeight.ExtraBold)
             }
         }
-        DetailCard(title = "Status Menu Options", icon = Icons.Filled.CheckCircle) {
+        DetailCard(title = t("Status Menu Options"), icon = Icons.Filled.CheckCircle) {
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { statusExpanded = !statusExpanded }) {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue)
@@ -813,14 +820,14 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
         }
         DetailCard(title = "Production Steps", icon = Icons.Filled.Timeline) {
             EditableNameList(
-                title = "Custom Status Menus",
+                title = t("Custom Status Menus"),
                 addLabel = "Add Step",
                 values = settings.customSteps,
                 onChange = { onSave(mapOf("customStepsJSON" to titleArrayJson(it)), "Production steps saved.") }
             )
             HorizontalDivider()
             EditableNameList(
-                title = "Production Toggles (Yes/No)",
+                title = t("Production Toggles (Yes/No)"),
                 addLabel = "Add Toggle",
                 values = settings.customToggles,
                 onChange = { onSave(mapOf("customTogglesJSON" to titleArrayJson(it)), "Production toggles saved.") }
@@ -857,7 +864,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     SwitchSpec("Priority / Risk", settings.showCardPriority, "showCardPriority"),
                     SwitchSpec("Materials & Inventory", settings.showCardMaterials, "showCardMaterials"),
                     SwitchSpec("Communication", settings.showCardCommunication, "showCardCommunication"),
-                    SwitchSpec("Special Notes", settings.showCardNotes, "showCardNotes"),
+                    SwitchSpec(t("Special Notes"), settings.showCardNotes, "showCardNotes"),
                     SwitchSpec("Client Files", settings.showCardClientFiles, "showCardClientFiles"),
                     SwitchSpec("To Do", settings.showCardTodo, "showCardTodo"),
                     SwitchSpec("Work Time", settings.showCardWorkTime, "showCardWorkTime"),
@@ -879,7 +886,7 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     DetailColumn {
-        DetailCard(title = "PDF Export Settings", icon = Icons.Filled.Description) {
+        DetailCard(title = t("PDF Export Settings"), icon = Icons.Filled.Description) {
             TwoColumnSwitches(
                 listOf(
                     SwitchSpec("Customer & Design", settings.pdfShowCustomer, "pdfShowCustomer"),
@@ -1016,7 +1023,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                 if (wide) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                         QuickReplyTemplateEditor(
-                            title = "Products / Services",
+                            title = t("Products / Services"),
                             subtitle = "Reusable products, packages, services and price notes.",
                             addLabel = "Add Product",
                             items = products,
@@ -1024,7 +1031,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                             modifier = Modifier.weight(1f)
                         )
                         QuickReplyTemplateEditor(
-                            title = "Custom Rules / FAQs",
+                            title = t("Custom Rules / FAQs"),
                             subtitle = "Delivery, payment, revision, refund or support rules.",
                             addLabel = "Add Rule",
                             items = rules,
@@ -1035,14 +1042,14 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         QuickReplyTemplateEditor(
-                            title = "Products / Services",
+                            title = t("Products / Services"),
                             subtitle = "Reusable products, packages, services and price notes.",
                             addLabel = "Add Product",
                             items = products,
                             onItemsChange = { products = it }
                         )
                         QuickReplyTemplateEditor(
-                            title = "Custom Rules / FAQs",
+                            title = t("Custom Rules / FAQs"),
                             subtitle = "Delivery, payment, revision, refund or support rules.",
                             addLabel = "Add Rule",
                             items = rules,
@@ -1200,10 +1207,10 @@ private fun FinancialSettingsDetail(
     }
 
     DetailColumn {
-        DetailCard(title = "Financial Settings", icon = Icons.Filled.Percent) {
-            SettingsSectionTitle("General")
+        DetailCard(title = t("Financial Settings"), icon = Icons.Filled.Percent) {
+            SettingsSectionTitle(t("General"))
             MenuField(
-                label = "Currency Symbol",
+                label = t("Currency Symbol"),
                 value = selectedCurrency.ifBlank { "£" },
                 options = listOf("£", "$", "€", "₺", "AED", "CAD", "AUD", "CHF", "¥"),
                 onSelect = { selectedCurrency = it }
@@ -1214,7 +1221,7 @@ private fun FinancialSettingsDetail(
                     modifier = Modifier.fillMaxWidth(),
                     options = listOf("Dot (.)", "Comma (,)"),
                     selected = if (selectedDecimalSeparator == ",") "Comma (,)" else "Dot (.)",
-                    onSelect = { selectedDecimalSeparator = if (it.startsWith("Comma")) "," else "." }
+                    onSelect = { selectedDecimalSeparator = if (it.startsWith(t("Comma"))) "," else "." }
                 )
             }
             PercentTextField(
@@ -1280,7 +1287,7 @@ private fun FinancialSettingsDetail(
                 singleLine = true
             )
             EditableHeadingItemList(
-                title = "Extra Remaining / Pending Rows",
+                title = t("Extra Remaining / Pending Rows"),
                 addLabel = "Add Pending",
                 values = financialRemainingItems,
                 normalizeValues = ::normalizeHeadingItems,
@@ -1288,7 +1295,7 @@ private fun FinancialSettingsDetail(
                 onChange = { financialRemainingItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, t("Pending")) } }
             )
             EditableHeadingItemList(
-                title = "Extra Cost Rows",
+                title = t("Extra Cost Rows"),
                 addLabel = "Add Cost",
                 values = financialExpenseItems,
                 normalizeValues = ::normalizeHeadingItems,
@@ -1390,11 +1397,11 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
     val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
     val deliveryUrl = "https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook?companyId=$companyId"
     DetailColumn {
-        DetailCard(title = "Connect WooCommerce", icon = Icons.Filled.ShoppingCart) {
+        DetailCard(title = t("Connect WooCommerce"), icon = Icons.Filled.ShoppingCart) {
             Text("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("This setup only needs to be done once in WooCommerce."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DetailCard(title = "Copy Setup Details", icon = Icons.Filled.ContentCopy) {
+        DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
             CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
             CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
         }
@@ -1417,7 +1424,7 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
     val settings = state.workspaceSettings
     var deviceAccepted by rememberSaveable { mutableStateOf(true) }
     DetailColumn {
-        DetailCard(title = "Safety & Uploads", icon = Icons.Filled.Shield) {
+        DetailCard(title = t("Safety & Uploads"), icon = Icons.Filled.Shield) {
             Text("Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in your company workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             SettingSwitch("Require upload policy acceptance before upload", settings.uploadSafetyRequirePolicyAcceptance) {
                 onSave(
@@ -1427,7 +1434,7 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
             }
             SettingSwitch(t("This device has accepted the upload policy"), deviceAccepted) { deviceAccepted = it }
             StepperRow(
-                label = "Maximum upload size",
+                label = t("Maximum upload size"),
                 value = settings.uploadSafetyMaxFileSizeMB,
                 suffix = "MB",
                 onMinus = {
@@ -1473,7 +1480,7 @@ private fun DataManagementDetail(
         scope.launch {
             val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
             if (text.isNullOrBlank()) {
-                Toast.makeText(context, "Backup file could not be read.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, t("Backup file could not be read."), Toast.LENGTH_SHORT).show()
             } else {
                 onImportBackup(text)
             }
@@ -1481,7 +1488,7 @@ private fun DataManagementDetail(
     }
 
     DetailColumn {
-        DetailCard(title = "Data Management", icon = Icons.Filled.Storage) {
+        DetailCard(title = t("Data Management"), icon = Icons.Filled.Storage) {
             Text(t("Create a backup before importing or deleting data."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             ActionButton("Export Backup", Icons.Filled.Backup, StudioBlue) {
                 shareText(context, "StudioManager_Backup.json", backupJson(state.orders, state.workspaceSettings))
@@ -1552,7 +1559,7 @@ private fun AccountDetail(
         scope.launch {
             val upload = readPickedUpload(context, uri)
             if (upload == null) {
-                Toast.makeText(context, "Selected image could not be read.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, t("Selected image could not be read."), Toast.LENGTH_SHORT).show()
             } else {
                 onUploadAccountAvatar(upload.bytes, upload.contentType)
             }
@@ -1563,7 +1570,7 @@ private fun AccountDetail(
         scope.launch {
             val upload = readPickedUpload(context, uri)
             if (upload == null) {
-                Toast.makeText(context, "Selected logo could not be read.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, t("Selected logo could not be read."), Toast.LENGTH_SHORT).show()
             } else if (settings.uploadSafetyRequirePolicyAcceptance && !logoPolicyAccepted) {
                 pendingLogo = upload
             } else {
@@ -1587,7 +1594,7 @@ private fun AccountDetail(
                     Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 64)
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
-                        Text(if (includeProfile || includeLogo) "Account" else "Sign-in & Security", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(if (includeProfile || includeLogo) "Account" else t("Sign-in & Security"), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                         Text(
                             if (includeProfile || includeLogo) {
                                 "Manage your NivaDesk profile, company details and sign-in security."
@@ -1600,7 +1607,7 @@ private fun AccountDetail(
                 }
             }
         }
-        if (includeProfile) DetailCard(title = "Profile & Company", icon = Icons.Filled.Business) {
+        if (includeProfile) DetailCard(title = t("Profile & Company"), icon = Icons.Filled.Business) {
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 86)
@@ -1610,7 +1617,7 @@ private fun AccountDetail(
                         Button(onClick = { avatarLauncher.launch("image/*") }, enabled = !state.settingsSaving) {
                             Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (accountPhotoSet) "Change Avatar" else t("Upload Avatar"))
+                            Text(if (accountPhotoSet) t("Change Avatar") else t("Upload Avatar"))
                         }
                         if (accountPhotoSet) {
                             TextButton(onClick = onRemoveAccountAvatar, enabled = !state.settingsSaving) {
@@ -1651,7 +1658,7 @@ private fun AccountDetail(
                 }) { Text(t("Reset")) }
             }
         }
-        if (includeLogo) DetailCard(title = "Workspace Logo", icon = Icons.Filled.PhotoLibrary) {
+        if (includeLogo) DetailCard(title = t("Workspace Logo"), icon = Icons.Filled.PhotoLibrary) {
             Text("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 WorkspaceLogoPreview(
@@ -1669,7 +1676,7 @@ private fun AccountDetail(
                 Button(onClick = { logoLauncher.launch("image/*") }, enabled = !state.settingsSaving && canEditLogo) {
                     Icon(Icons.Filled.Upload, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (logoSet) "Replace Logo" else t("Upload Logo"))
+                    Text(if (logoSet) t("Replace Logo") else t("Upload Logo"))
                 }
                 if (logoSet) {
                     TextButton(onClick = onRemoveWorkspaceLogo, enabled = !state.settingsSaving && canEditLogo) {
@@ -1684,7 +1691,7 @@ private fun AccountDetail(
             }
             Text("Logo uploads use the same upload safety rules and plan checks as the web and Apple apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (includeSecurity) DetailCard(title = "Security", icon = Icons.Filled.Lock) {
+        if (includeSecurity) DetailCard(title = t("Security"), icon = Icons.Filled.Lock) {
             SecurityStatusPanel(requireDeviceUnlock)
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1754,7 +1761,7 @@ private fun PlanAccessDetail(
     val workspace = state.workspace
     val plan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
     DetailColumn {
-        DetailCard(title = "Plan & Access", icon = Icons.Filled.CreditCard) {
+        DetailCard(title = t("Plan & Access"), icon = Icons.Filled.CreditCard) {
             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconBubble(icon = Icons.Filled.People, tint = StudioPurple, container = StudioPurple.copy(alpha = 0.12f), size = 58.dp)
@@ -1770,15 +1777,15 @@ private fun PlanAccessDetail(
                     }
                 }
             }
-            StoreProductCard("NivaDesk Lite", "uk.co.eggcraft.studioflow.lite.lifetime", t("Buy once"))
-            StoreProductCard("NivaDesk Pro", "uk.co.eggcraft.studioflow.pro.monthly", "Subscribe")
-            StoreProductCard("NivaDesk Team", "uk.co.eggcraft.studioflow.team.monthly", "Subscribe")
+            StoreProductCard(t("NivaDesk Lite"), "uk.co.eggcraft.studioflow.lite.lifetime", t("Buy once"))
+            StoreProductCard(t("NivaDesk Pro"), "uk.co.eggcraft.studioflow.pro.monthly", t("Subscribe"))
+            StoreProductCard("NivaDesk Team", "uk.co.eggcraft.studioflow.team.monthly", t("Subscribe"))
         }
-        DetailCard(title = "Available now", icon = Icons.Filled.CheckCircle) {
+        DetailCard(title = t("Available now"), icon = Icons.Filled.CheckCircle) {
             Text(t("Current plan access"), fontWeight = FontWeight.ExtraBold)
             PlanFeatureGrid(plan = plan)
         }
-        DetailCard(title = "Plan Matrix", icon = Icons.Filled.TableChart) {
+        DetailCard(title = t("Plan Matrix"), icon = Icons.Filled.TableChart) {
             Text(t("Shared app and web plan keys"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val columns = if (maxWidth >= 760.dp) 2 else 1
@@ -1797,7 +1804,7 @@ private fun PlanAccessDetail(
                 }
             }
         }
-        DetailCard(title = "Owner testing controls", icon = Icons.Filled.Security) {
+        DetailCard(title = t("Owner testing controls"), icon = Icons.Filled.Security) {
             if (workspace?.isOwner == true) {
                 Text(t("Temporary manual plan switch"), fontWeight = FontWeight.ExtraBold)
                 Text("Plan comparison is shown for testing now. StoreKit and Google Play purchases will replace manual switching later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1874,7 +1881,7 @@ private fun TeamAccessDetail(
             if (useTwoColumns) {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        DetailCard(title = "Current Workspace", icon = Icons.Filled.People) {
+                        DetailCard(title = t("Current Workspace"), icon = Icons.Filled.People) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioOrange)
                                 Spacer(modifier = Modifier.width(10.dp))
@@ -1888,7 +1895,7 @@ private fun TeamAccessDetail(
                             }
                             CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                         }
-                        DetailCard(title = "Request Access", icon = Icons.AutoMirrored.Filled.Send) {
+                        DetailCard(title = t("Request Access"), icon = Icons.AutoMirrored.Filled.Send) {
                             Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedTextField(
@@ -1910,7 +1917,7 @@ private fun TeamAccessDetail(
                         }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        DetailCard(title = "Workspaces", icon = Icons.Filled.People) {
+                        DetailCard(title = t("Workspaces"), icon = Icons.Filled.People) {
                             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
@@ -1930,7 +1937,7 @@ private fun TeamAccessDetail(
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                             }
                         }
-                        DetailCard(title = "Invite People", icon = Icons.Filled.ContentCopy) {
+                        DetailCard(title = t("Invite People"), icon = Icons.Filled.ContentCopy) {
                             Text("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                         }
@@ -1938,7 +1945,7 @@ private fun TeamAccessDetail(
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-                    DetailCard(title = "Current Workspace", icon = Icons.Filled.People) {
+                    DetailCard(title = t("Current Workspace"), icon = Icons.Filled.People) {
                         Text(workspace?.name ?: "NivaDesk", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Pill(workspace?.roleLabel ?: t("Owner"), StudioOrange)
@@ -1946,7 +1953,7 @@ private fun TeamAccessDetail(
                         }
                         CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                     }
-                    DetailCard(title = "Workspaces", icon = Icons.Filled.People) {
+                    DetailCard(title = t("Workspaces"), icon = Icons.Filled.People) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
                             Spacer(modifier = Modifier.width(10.dp))
@@ -1958,7 +1965,7 @@ private fun TeamAccessDetail(
                         }
                         Text(t("Advanced: connect with Company ID"), color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                     }
-                    DetailCard(title = "Request Access", icon = Icons.AutoMirrored.Filled.Send) {
+                    DetailCard(title = t("Request Access"), icon = Icons.AutoMirrored.Filled.Send) {
                         Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedTextField(
@@ -1978,7 +1985,7 @@ private fun TeamAccessDetail(
                             }
                         }
                     }
-                    DetailCard(title = "Invite People", icon = Icons.Filled.ContentCopy) {
+                    DetailCard(title = t("Invite People"), icon = Icons.Filled.ContentCopy) {
                         Text("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                     }
@@ -1986,7 +1993,7 @@ private fun TeamAccessDetail(
             }
         }
         if (ownerCanManage) {
-            DetailCard(title = "Join Requests", icon = Icons.Filled.Person) {
+            DetailCard(title = t("Join Requests"), icon = Icons.Filled.Person) {
                 if (state.joinRequests.isEmpty()) {
                     Text(t("No pending join requests."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
@@ -2004,7 +2011,7 @@ private fun TeamAccessDetail(
                                 }
                                 val selectedRole = requestRoles[request.id] ?: "member"
                                 RoleDropdown(
-                                    label = "Approve as",
+                                    label = t("Approve as"),
                                     selectedRole = selectedRole,
                                     options = roleOptions.filter { it.value != "owner" },
                                     onSelect = { role -> requestRoles = requestRoles + (request.id to role) }
@@ -2029,7 +2036,7 @@ private fun TeamAccessDetail(
                     }
                 }
             }
-            DetailCard(title = "Role Profiles", icon = Icons.Filled.Security) {
+            DetailCard(title = t("Role Profiles"), icon = Icons.Filled.Security) {
                 Text(t("Custom Access Roles"), fontWeight = FontWeight.ExtraBold)
                 Text("Create role presets that use the same permission keys as Mac and web.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -2042,9 +2049,9 @@ private fun TeamAccessDetail(
                             modifier = Modifier.fillMaxWidth()
                         )
                         RoleDropdown(
-                            label = "Base role",
+                            label = t("Base role"),
                             selectedRole = customRoleBase,
-                            options = listOf(RoleOption("member", "Member"), RoleOption("viewer", t("View Only")), RoleOption("workflow", t("Workflow Only"))),
+                            options = listOf(RoleOption("member", t("Member")), RoleOption("viewer", t("View Only")), RoleOption("workflow", t("Workflow Only"))),
                             onSelect = { customRoleBase = it }
                         )
                         AccessEditor(access = customRoleAccess, onChange = { customRoleAccess = it })
@@ -2120,7 +2127,7 @@ private fun TeamAccessDetail(
                             }
                             if (ownerCanManage && !member.isOwner) {
                                 RoleDropdown(
-                                    label = "Role",
+                                    label = t("Role"),
                                     selectedRole = member.role,
                                     options = roleOptions.filter { it.value != "owner" },
                                     onSelect = { onUpdateTeamMemberRole(member, it) }
@@ -2148,7 +2155,7 @@ private fun TeamAccessDetail(
                 }
             }
         }
-        DetailCard(title = "Current role mix", icon = Icons.Filled.People) {
+        DetailCard(title = t("Current role mix"), icon = Icons.Filled.People) {
             Text(t("Role counts"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             RoleMix(state)
         }
@@ -2217,7 +2224,7 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AccessSectionBlock(
-            title = "Navigation & Menus",
+            title = t("Navigation & Menus"),
             note = "Controls main app areas shown in sidebar and settings.",
             options = listOf(
                 AccessOption("dashboard", "Dashboard"),
@@ -2237,7 +2244,7 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
         )
         HorizontalDivider()
         AccessSectionBlock(
-            title = "Project Assignment",
+            title = t("Project Assignment"),
             note = "Controls assigned-project scope and reassignment power.",
             options = listOf(
                 AccessOption("assignedProjectsOnly", "Assigned Projects Only"),
@@ -2249,7 +2256,7 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
         )
         HorizontalDivider()
         AccessSectionBlock(
-            title = "Order Detail Cards",
+            title = t("Order Detail Cards"),
             note = "Controls which cards are visible inside each project.",
             options = listOf(
                 AccessOption("cardPreview", "Preview"),
@@ -2392,7 +2399,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
     val workspace = state.workspace
     if (workspace == null) {
         DetailColumn {
-            DetailCard("Support / Tickets", Icons.Filled.Email) {
+            DetailCard(t("Support / Tickets"), Icons.Filled.Email) {
                 Text(t("Sign in and select a workspace to use support tickets."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -2502,24 +2509,24 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
         }
     }
 
-    LaunchedEffect(workspace?.id, selectedType, refreshKey) {
+    LaunchedEffect(workspace.id, selectedType, refreshKey) {
         loadTickets()
     }
 
     DetailColumn {
-        DetailCard("Support / Tickets", Icons.Filled.Email) {
+        DetailCard(t("Support / Tickets"), Icons.Filled.Email) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val narrow = maxWidth < 560.dp
                 if (narrow) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         SupportTicketTypeCard(
-                            title = "Contact Workspace Owner",
+                            title = t("Contact Workspace Owner"),
                             subtitle = "Internal project, task, approval or customer questions.",
                             selected = isWorkspaceMode,
                             onClick = { selectedType = "workspace" }
                         )
                         SupportTicketTypeCard(
-                            title = "Contact NivaDesk Support",
+                            title = t("Contact NivaDesk Support"),
                             subtitle = "App bugs, sync, billing, account or feature requests.",
                             selected = !isWorkspaceMode,
                             onClick = { selectedType = "appSupport" }
@@ -2528,14 +2535,14 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         SupportTicketTypeCard(
-                            title = "Contact Workspace Owner",
+                            title = t("Contact Workspace Owner"),
                             subtitle = "Internal project, task, approval or customer questions.",
                             selected = isWorkspaceMode,
                             onClick = { selectedType = "workspace" },
                             modifier = Modifier.weight(1f)
                         )
                         SupportTicketTypeCard(
-                            title = "Contact NivaDesk Support",
+                            title = t("Contact NivaDesk Support"),
                             subtitle = "App bugs, sync, billing, account or feature requests.",
                             selected = !isWorkspaceMode,
                             onClick = { selectedType = "appSupport" },
@@ -2606,7 +2613,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (sending) "Sending..." else "Send Ticket", fontWeight = FontWeight.ExtraBold)
+                    Text(if (sending) t("Sending...") else t("Send Ticket"), fontWeight = FontWeight.ExtraBold)
                 }
                 OutlinedButton(onClick = { refreshKey += 1 }, shape = RoundedCornerShape(10.dp)) {
                     Text(t(t("Refresh")))
@@ -2626,7 +2633,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
             icon = Icons.Filled.Info
         ) {
             if (loading) {
-                Pill("Loading tickets...", StudioBlue)
+                Pill(t("Loading tickets..."), StudioBlue)
             }
             if (tickets.isEmpty() && !loading) {
                 Text(t("No tickets yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2754,12 +2761,12 @@ private fun SupportFormFieldMenus(
         val narrow = maxWidth < 560.dp
         if (narrow) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SupportMenuField("Category", supportCategoryLabel(category), categories, onCategory)
+                SupportMenuField(t("Category"), supportCategoryLabel(category), categories, onCategory)
                 SupportMenuField("Priority", supportPriorityLabel(priority), priorities, onPriority)
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                SupportMenuField("Category", supportCategoryLabel(category), categories, onCategory, Modifier.weight(1f))
+                SupportMenuField(t("Category"), supportCategoryLabel(category), categories, onCategory, Modifier.weight(1f))
                 SupportMenuField("Priority", supportPriorityLabel(priority), priorities, onPriority, Modifier.weight(1f))
             }
         }
@@ -2853,7 +2860,7 @@ private fun SupportTicketCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = onToggleOpen, shape = RoundedCornerShape(999.dp)) {
-                    Text(if (isOpen) "Hide Conversation" else "Open Conversation", fontWeight = FontWeight.Bold)
+                    Text(if (isOpen) t("Hide Conversation") else t("Open Conversation"), fontWeight = FontWeight.Bold)
                 }
                 if (canManage) {
                     MenuChip(
@@ -3017,7 +3024,7 @@ private fun AboutDetail() {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailColumn {
-        DetailCard(title = "About", icon = Icons.Filled.Info) {
+        DetailCard(title = t("About"), icon = Icons.Filled.Info) {
             NivaDeskLogoLockup(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3629,6 +3636,7 @@ private fun PlanFeatureGrid(plan: StudioBillingPlan) {
         "Financial Cards" to true,
         "Advanced Finance" to plan.hasAdvancedFinance,
         "Workspace Logo" to plan.hasWorkspaceLogoUpload,
+        "Messages" to plan.hasTeamAccess,
         "Team Access" to plan.hasTeamAccess,
         "Storage Add-ons" to plan.hasStorageAddOns
     )
@@ -3708,6 +3716,7 @@ private fun PlanComparisonCard(plan: StudioBillingPlan, current: Boolean) {
             PlanComparisonRow(planStorageLimitText(plan), plan.hasClientFiles)
             PlanComparisonRow("Client Files", plan.hasClientFiles)
             PlanComparisonRow("Card Customise", plan.hasCardCustomization)
+            PlanComparisonRow("Messages", plan.hasTeamAccess)
             PlanComparisonRow("Team Access", plan.hasTeamAccess)
         }
     }
@@ -3786,7 +3795,7 @@ private val StudioBillingPlan.hasCardCustomization: Boolean
     get() = this != StudioBillingPlan.Demo
 
 private val StudioBillingPlan.hasAdvancedFinance: Boolean
-    get() = this != StudioBillingPlan.Demo
+    get() = this == StudioBillingPlan.ProMonthly || this == StudioBillingPlan.TeamMonthly
 
 private val StudioBillingPlan.hasWorkspaceLogoUpload: Boolean
     get() = this == StudioBillingPlan.ProMonthly || this == StudioBillingPlan.TeamMonthly
@@ -4494,21 +4503,21 @@ private fun MessageSettingsDetail(
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)
             ) {
                 MessageSettingsToggle(
-                    title = "Allow Direct Messages",
+                    title = t("Allow Direct Messages"),
                     description = t("Team members can start one-to-one conversations."),
                     checked = direct,
                     enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
                     onChange = { direct = it }
                 )
                 MessageSettingsToggle(
-                    title = "Allow Group Conversations",
+                    title = t("Allow Group Conversations"),
                     description = t("Team members can add people and create group chats."),
                     checked = group,
                     enabled = canEdit && !state.isSavingMessageWorkspaceSettings,
                     onChange = { group = it }
                 )
                 MessageSettingsToggle(
-                    title = "Allow File & Image Sending",
+                    title = t("Allow File & Image Sending"),
                     description = t("Team members can send images and files in Messages."),
                     checked = attachments,
                     enabled = canEdit && !state.isSavingMessageWorkspaceSettings,

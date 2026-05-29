@@ -503,19 +503,19 @@ struct StudioActivityCenterView: View {
             return "Messages"
         }
         if !item.ticketId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || route.contains("support") || type.contains("ticket") || type.contains("support") {
-            return "Support"
+            return t("Support", lang: seciliDil)
         }
         if !item.orderId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || route.contains("order") || type.contains("order") {
             return "Orders"
         }
         if type.contains("task") || route.contains("task") || type.contains("reminder") {
-            return "Tasks"
+            return t("Tasks", lang: seciliDil)
         }
         if type.contains("file") || type.contains("attachment") || route.contains("file") {
             return "Files"
         }
         if type.contains("system") || type.contains("plan") || type.contains("workspace") {
-            return "System"
+            return t("System", lang: seciliDil)
         }
         return "Activity"
     }
@@ -584,7 +584,7 @@ struct StudioActivityCenterView: View {
                 sections.append(
                     StudioActivityNotificationSection(
                         id: "earlierWeek",
-                        title: "Earlier this week",
+                        title: t("Earlier this week", lang: seciliDil),
                         groups: makeActivityNotificationGroups(from: recentEarlier, dateKey: "earlierWeek")
                     )
                 )
@@ -594,7 +594,7 @@ struct StudioActivityCenterView: View {
                 sections.append(
                     StudioActivityNotificationSection(
                         id: "older",
-                        title: "Older",
+                        title: t("Older", lang: seciliDil),
                         groups: makeActivityNotificationGroups(from: older, dateKey: "older")
                     )
                 )
@@ -767,7 +767,7 @@ struct StudioActivityCenterView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
 
-            TextField("Search notifications", text: $searchText)
+            TextField(t("Search notifications", lang: seciliDil), text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
 
@@ -802,15 +802,15 @@ struct StudioActivityCenterView: View {
 
     private var activeActivityFilterSummary: String {
         var parts: [String] = []
-        if filter == "unread" { parts.append("Unread") }
+        if filter == "unread" { parts.append(t("Unread", lang: seciliDil)) }
         if typeFilter != "all" {
             switch typeFilter {
             case "messages": parts.append("Messages")
-            case "support": parts.append("Support")
+            case "support": parts.append(t("Support", lang: seciliDil))
             case "orders": parts.append("Orders")
-            case "tasks": parts.append("Tasks")
+            case "tasks": parts.append(t("Tasks", lang: seciliDil))
             case "files": parts.append("Files")
-            case "system": parts.append("System")
+            case "system": parts.append(t("System", lang: seciliDil))
             default: break
             }
         }
@@ -881,19 +881,19 @@ struct StudioActivityCenterView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
                         filterButton(title: "All", key: "all", count: firebaseManager.activityNotifications.count)
-                        filterButton(title: "Unread", key: "unread", count: unreadCount)
+                        filterButton(title: t("Unread", lang: seciliDil), key: "unread", count: unreadCount)
                         Spacer()
                     }
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            typeFilterButton(title: "All types", key: "all")
+                            typeFilterButton(title: t("All types", lang: seciliDil), key: "all")
                             typeFilterButton(title: "Messages", key: "messages")
-                            typeFilterButton(title: "Support", key: "support")
+                            typeFilterButton(title: t("Support", lang: seciliDil), key: "support")
                             typeFilterButton(title: "Orders", key: "orders")
-                            typeFilterButton(title: "Tasks", key: "tasks")
+                            typeFilterButton(title: t("Tasks", lang: seciliDil), key: "tasks")
                             typeFilterButton(title: "Files", key: "files")
-                            typeFilterButton(title: "System", key: "system")
+                            typeFilterButton(title: t("System", lang: seciliDil), key: "system")
                         }
                         .padding(.vertical, 1)
                     }
@@ -951,7 +951,7 @@ struct StudioActivityCenterView: View {
             Image(systemName: filter == "unread" ? "bell.slash" : "bell")
                 .font(.system(size: 38, weight: .semibold))
                 .foregroundColor(.secondary)
-            Text(filter == "unread" ? "No unread notifications" : "No notifications yet")
+            Text(filter == "unread" ? t("No unread notifications", lang: seciliDil) : t("No notifications yet", lang: seciliDil))
                 .font(.system(size: 17, weight: .bold))
             Text(!searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No notifications match your search." : (typeFilter == "all" ? "Important updates from messages, support tickets, orders and workflow will appear here." : "No notifications match the selected type filter."))
                 .font(.system(size: 13))
@@ -1268,7 +1268,7 @@ struct StudioActivityCenterView: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(item.title.isEmpty ? "Notification" : item.title)
+                        Text(item.title.isEmpty ? t("Notification", lang: seciliDil) : item.title)
                             .font(.system(size: 14.5, weight: unread ? .bold : .semibold))
                             .foregroundColor(.primary)
                             .lineLimit(2)
@@ -2090,7 +2090,7 @@ struct StudioKeepNotesView: View {
             loadKeepCollaborationInvites()
             startKeepInviteLiveRefresh()
         }
-        .onChange(of: selectedSection) { _ in
+        .onChange(of: selectedSection) { _, _ in
             saveKeepSelectedSectionState()
             if selectedSection == "notes" {
                 loadKeepCollaborationInvites()
@@ -2099,7 +2099,7 @@ struct StudioKeepNotesView: View {
                 stopKeepInviteLiveRefresh()
             }
         }
-        .onChange(of: gridMode) { _ in
+        .onChange(of: gridMode) { _, _ in
             saveKeepGridModeState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .studioOpenNotesFromActivityNotification)) { _ in
@@ -2449,44 +2449,44 @@ struct StudioKeepNotesView: View {
         if seciliDil == "Türkçe" {
             switch key {
             case "Select": return "Seç"
-            case "Deselect": return "Seçimi kaldır"
-            case "Pin note": return "Notu sabitle"
-            case "Unpin note": return "Sabitlemeyi kaldır"
-            case "Duplicate note": return "Notu çoğalt"
-            case "Copy note": return "Notu kopyala"
-            case "Change colour": return "Rengi değiştir"
+            case t("Deselect", lang: seciliDil): return "Seçimi kaldır"
+            case t("Pin note", lang: seciliDil): return "Notu sabitle"
+            case t("Unpin note", lang: seciliDil): return "Sabitlemeyi kaldır"
+            case t("Duplicate note", lang: seciliDil): return "Notu çoğalt"
+            case t("Copy note", lang: seciliDil): return "Notu kopyala"
+            case t("Change colour", lang: seciliDil): return "Rengi değiştir"
             case "Reminder": return "Hatırlatma"
             case "Labels": return "Etiketler"
             case "Collaborators": return "Ortak çalışanlar"
-            case "Collaboration invitations": return "Ortak çalışma davetleri"
+            case t("Collaboration invitations", lang: seciliDil): return "Ortak çalışma davetleri"
             case "Accept": return "Kabul et"
             case "Decline": return "Reddet"
             case "invited you to collaborate on this note.": return "seni bu notta ortak çalışmaya davet etti."
-            case "Workspace members": return "Workspace üyeleri"
+            case t("Workspace members", lang: seciliDil): return "Workspace üyeleri"
             case "Added": return "Eklendi"
             case "collaborator": return "ortak çalışan"
             case "collaborators": return "ortak çalışan"
-            case "Archive note": return "Arşivle"
-            case "Unarchive note": return "Arşivden çıkar"
+            case t("Archive note", lang: seciliDil): return "Arşivle"
+            case t("Unarchive note", lang: seciliDil): return "Arşivden çıkar"
             case "Unarchive": return "Arşivden çıkar"
             case "Move to trash": return "Çöpe taşı"
-            case "Restore note": return "Geri yükle"
+            case t("Restore note", lang: seciliDil): return "Geri yükle"
             case "Delete forever": return "Kalıcı sil"
-            case "Open project": return "Projeyi aç"
-            case "Edit": return "Düzenle"
-            case "Edit project note": return "Proje notunu düzenle"
+            case t("Open project", lang: seciliDil): return "Projeyi aç"
+            case t("Edit", lang: seciliDil): return "Düzenle"
+            case t("Edit project note", lang: seciliDil): return "Proje notunu düzenle"
             case "Cancel": return "İptal"
             case "Save": return "Kaydet"
-            case "Save as personal note": return "Kişisel nota kaydet"
-            case "Copy project note": return "Proje notunu kopyala"
-            case "Checklist": return "Checklist"
+            case t("Save as personal note", lang: seciliDil): return "Kişisel nota kaydet"
+            case t("Copy project note", lang: seciliDil): return "Proje notunu kopyala"
+            case t("Checklist", lang: seciliDil): return t("Checklist", lang: seciliDil)
             case "Image": return "Görsel"
-            case "Text options": return "Yazı seçenekleri"
-            case "More": return "Daha fazla"
+            case t("Text options", lang: seciliDil): return "Yazı seçenekleri"
+            case t("More", lang: seciliDil): return "Daha fazla"
             case "Grid view": return "Grid görünümü"
             case "List view": return "Liste görünümü"
             case "Close": return "Kapat"
-            case "Add note": return "Notu ekle"
+            case t("Add note", lang: seciliDil): return "Notu ekle"
             case "Undo": return "Geri al"
             case "is editing": return "düzenliyor"
             case "This note is being edited by another collaborator.": return "Bu not şu anda başka bir ortak çalışan tarafından düzenleniyor."
@@ -3714,8 +3714,8 @@ struct StudioKeepNotesView: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help(t(isExpanded ? "Show less" : "Show more", lang: seciliDil))
-                .accessibilityLabel(t(isExpanded ? "Show less" : "Show more", lang: seciliDil))
+                .help(t(isExpanded ? t("Show less", lang: seciliDil) : "Show more", lang: seciliDil))
+                .accessibilityLabel(t(isExpanded ? t("Show less", lang: seciliDil) : "Show more", lang: seciliDil))
             }
 
             if isExpanded {
@@ -4519,8 +4519,8 @@ struct StudioKeepNotesView: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .help(keepShortcutText(composerPinned ? "Unpin note" : "Pin note"))
-                    .accessibilityLabel(keepShortcutText(composerPinned ? "Unpin note" : "Pin note"))
+                    .help(keepShortcutText(composerPinned ? t("Unpin note", lang: seciliDil) : t("Pin note", lang: seciliDil)))
+                    .accessibilityLabel(keepShortcutText(composerPinned ? t("Unpin note", lang: seciliDil) : t("Pin note", lang: seciliDil)))
                     .zIndex(20)
                 }
                 .padding(.horizontal, composerHorizontalPadding)
@@ -4539,7 +4539,7 @@ struct StudioKeepNotesView: View {
                         .onSubmit {
                             saveComposerIfNeeded()
                         }
-                        .onChange(of: isComposerTextFocused) { focused in
+                        .onChange(of: isComposerTextFocused) { _, focused in
                             if focused {
                                 expandQuickComposer()
                             }
@@ -4724,7 +4724,7 @@ struct StudioKeepNotesView: View {
                         Button {
                             closeOrAddComposerNote()
                         } label: {
-                            Text(t(composerHasContent ? "Add note" : "Close", lang: seciliDil))
+                            Text(t(composerHasContent ? t("Add note", lang: seciliDil) : "Close", lang: seciliDil))
                                 .font(.system(size: 14, weight: .bold))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 9)
@@ -4753,7 +4753,7 @@ struct StudioKeepNotesView: View {
         .onTapGesture {
             expandQuickComposer()
         }
-        .onChange(of: isComposerTextFocused) { focused in
+        .onChange(of: isComposerTextFocused) { _, focused in
             if focused {
                 expandQuickComposer()
             }
@@ -5260,7 +5260,7 @@ struct StudioKeepNotesView: View {
     }
 
     private func notePinHelpKey(_ note: StudioKeepNote) -> String {
-        note.isPinned ? "Unpin note" : "Pin note"
+        note.isPinned ? t("Unpin note", lang: seciliDil) : t("Pin note", lang: seciliDil)
     }
 
     private func noteTopPinButton(_ note: StudioKeepNote) -> some View {
@@ -5302,9 +5302,9 @@ struct StudioKeepNotesView: View {
 
     @ViewBuilder
     private func noteCardFullActions(_ note: StudioKeepNote) -> some View {
-        keepCardIconButton("plus.square.on.square", helpKey: "Duplicate note") { duplicateNote(note) }
-        keepCardIconButton("doc.on.doc", helpKey: "Copy note") { copyNoteToClipboard(note) }
-        keepCardIconMenu("paintpalette", helpKey: "Change colour") {
+        keepCardIconButton("plus.square.on.square", helpKey: t("Duplicate note", lang: seciliDil)) { duplicateNote(note) }
+        keepCardIconButton("doc.on.doc", helpKey: t("Copy note", lang: seciliDil)) { copyNoteToClipboard(note) }
+        keepCardIconMenu("paintpalette", helpKey: t("Change colour", lang: seciliDil)) {
             ForEach(noteColors, id: \.self) { color in
                 Button(t(color.capitalized, lang: seciliDil)) {
                     var updated = note; updated.colorName = color; saveNote(updated)
@@ -5330,9 +5330,9 @@ struct StudioKeepNotesView: View {
             Button(t("Add label", lang: seciliDil)) { addDefaultLabel(to: note) }
         }
         keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") { openCollaboratorSheet(note) }
-        keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") { toggleArchive(note) }
+        keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? t("Unarchive note", lang: seciliDil) : t("Archive note", lang: seciliDil)) { toggleArchive(note) }
         if selectedSection == "trash" {
-            keepCardIconButton("arrow.uturn.backward", helpKey: "Restore note") { restoreNote(note) }
+            keepCardIconButton("arrow.uturn.backward", helpKey: t("Restore note", lang: seciliDil)) { restoreNote(note) }
             keepCardIconButton("trash.fill", helpKey: "Delete forever", role: .destructive) { permanentlyDelete(note) }
         } else {
             keepCardIconButton("trash", helpKey: "Move to trash", role: .destructive) { moveToTrash(note) }
@@ -5342,7 +5342,7 @@ struct StudioKeepNotesView: View {
     private func noteCardActionRow(_ note: StudioKeepNote, showActions: Bool) -> some View {
         HStack(spacing: 7) {
             // Curated inline icons: palette, bell, person+, archive
-            keepCardIconMenu("paintpalette", helpKey: "Change colour") {
+            keepCardIconMenu("paintpalette", helpKey: t("Change colour", lang: seciliDil)) {
                 ForEach(noteColors, id: \.self) { color in
                     Button(t(color.capitalized, lang: seciliDil)) {
                         var updated = note; updated.colorName = color; saveNote(updated)
@@ -5362,7 +5362,7 @@ struct StudioKeepNotesView: View {
                 }
             }
             keepCardIconButton("person.crop.circle.badge.plus", helpKey: "Collaborators") { openCollaboratorSheet(note) }
-            keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? "Unarchive note" : "Archive note") { toggleArchive(note) }
+            keepCardIconButton(note.isArchived ? "archivebox.fill" : "archivebox", helpKey: note.isArchived ? t("Unarchive note", lang: seciliDil) : t("Archive note", lang: seciliDil)) { toggleArchive(note) }
 
             Spacer(minLength: 4)
 
@@ -5421,8 +5421,8 @@ struct StudioKeepNotesView: View {
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
-        .help(keepShortcutText(isSelected ? "Deselect" : "Select"))
-        .accessibilityLabel(keepShortcutText(isSelected ? "Deselect" : "Select"))
+        .help(keepShortcutText(isSelected ? t("Deselect", lang: seciliDil) : "Select"))
+        .accessibilityLabel(keepShortcutText(isSelected ? t("Deselect", lang: seciliDil) : "Select"))
     }
 
     private func noteTextContent(_ note: StudioKeepNote) -> some View {
@@ -5585,7 +5585,7 @@ struct StudioKeepNotesView: View {
             Image(systemName: selectedSection == "trash" ? "trash" : selectedSection == "archive" ? "archivebox" : selectedSection == "reminders" ? "bell" : selectedSection == "projectnotes" ? "doc.text.magnifyingglass" : "lightbulb")
                 .font(.system(size: 46))
                 .foregroundColor(.secondary.opacity(0.65))
-            Text(t(selectedSection == "trash" ? "Trash is empty" : selectedSection == "archive" ? "No archived notes" : selectedSection == "reminders" ? "No reminders" : selectedSection == "projectnotes" ? "No project notes found" : "Notes you add appear here", lang: seciliDil))
+            Text(t(selectedSection == "trash" ? t("Trash is empty", lang: seciliDil) : selectedSection == "archive" ? t("No archived notes", lang: seciliDil) : selectedSection == "reminders" ? t("No reminders", lang: seciliDil) : selectedSection == "projectnotes" ? t("No project notes found", lang: seciliDil) : "Notes you add appear here", lang: seciliDil))
                 .font(.system(size: 17, weight: .bold))
                 .foregroundColor(.secondary)
         }
@@ -6611,7 +6611,7 @@ struct ContentView: View {
     @AppStorage("showCardToDo") private var showCardToDo = true
     @AppStorage("showCardWorkTime") private var showCardWorkTime = true
 
-    var aktifTema: ColorScheme? { if appTheme == "Light" { return .light }; if appTheme == "Dark" { return .dark }; return nil }
+    var aktifTema: ColorScheme? { if appTheme == t("Light", lang: seciliDil) { return .light }; if appTheme == t("Dark", lang: seciliDil) { return .dark }; return nil }
     var colorScheme: ColorScheme { aktifTema ?? systemColorScheme }
     var bgHeader: Color { colorScheme == .dark ? Color(white: 0.1) : Color.white }
     var bgSidebar: Color { colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.97) }
@@ -6646,6 +6646,7 @@ struct ContentView: View {
     private var canAccessSchedule: Bool { workspaceAccessAllows("schedule") }
     private var canAccessCustomers: Bool { workspaceAccessAllows("customers") }
     private var canAccessQuickReply: Bool { workspaceAccessAllows("quickReply") }
+    private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
 
     private var canEditCurrentWorkspace: Bool {
@@ -7345,11 +7346,13 @@ struct ContentView: View {
                 }
             }
 
-            Button {
-                aktifSekme = "Messages"
-                phoneShowsOrderDetail = false
-            } label: {
-                Label(phoneMessagesMenuTitle, systemImage: "message.fill")
+            if canAccessMessages {
+                Button {
+                    aktifSekme = "Messages"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(phoneMessagesMenuTitle, systemImage: "message.fill")
+                }
             }
 
             Button {
@@ -7657,7 +7660,9 @@ struct ContentView: View {
             if canAccessQuickReply {
                 UstMenuButonu(title: t("Quick Reply", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
             }
-            messagesTopNavigationButton
+            if canAccessMessages {
+                messagesTopNavigationButton
+            }
             UstMenuButonu(title: t("Notes", lang: seciliDil), icon: "note.text", isSelected: aktifSekme == "Notes") { aktifSekme = "Notes" }
             if canAccessSettings {
                 UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
@@ -7716,7 +7721,7 @@ struct ContentView: View {
 
                 if !canOpenTab(aktifSekme) {
                     restrictedAccessView(
-                        title: "Workspace area hidden",
+                        title: t("Workspace area hidden", lang: seciliDil),
                         message: "Your current role does not include access to this part of the workspace."
                     )
                 } else if aktifSekme == "Orders" {
@@ -8017,10 +8022,17 @@ struct ContentView: View {
                     restrictedAccessView(title: t("Customers hidden", lang: seciliDil), message: t("Your current workspace role does not include customer access.", lang: seciliDil))
                 }
             } else if aktifSekme == "Messages" {
-                StudioMessagesView()
-                    .environmentObject(authVM)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(bgMain)
+                if canAccessMessages {
+                    StudioMessagesView()
+                        .environmentObject(authVM)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(bgMain)
+                } else {
+                    restrictedAccessView(
+                        title: t("Messages locked", lang: seciliDil),
+                        message: t("Messages is available on NivaDesk Team for collaborative workspaces.", lang: seciliDil)
+                    )
+                }
             } else if aktifSekme == "Notes" {
                 StudioKeepNotesView(onOpenProject: { orderKey in
                     if let order = firebaseManager.siparisler.first(where: { orderSelectionKey($0) == orderKey }) {
@@ -8096,7 +8108,7 @@ struct ContentView: View {
         .alert(planAccessAlertTitle.isEmpty ? t("Plan limit", lang: seciliDil) : planAccessAlertTitle, isPresented: $showPlanAccessAlert) {
             Button(t("OK", lang: seciliDil), role: .cancel) { }
             Button(t("Plan & Access", lang: seciliDil)) {
-                settingsStartSection = "Plan & Access"
+                settingsStartSection = t("Plan & Access", lang: seciliDil)
                 aktifSekme = "Settings"
             }
         } message: {
@@ -8978,7 +8990,7 @@ struct ContentView: View {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let finalLabels = cleanedLabels.isEmpty ? ["Material Check 1"] : cleanedLabels
-        let padded = finalLabels + ["Item", "Item", "Item", "Item"]
+        let padded = finalLabels + [t("Item", lang: seciliDil), t("Item", lang: seciliDil), t("Item", lang: seciliDil), t("Item", lang: seciliDil)]
         invLabel1 = padded[0]
         invLabel2 = padded[1]
         invLabel3 = padded[2]
@@ -9236,12 +9248,12 @@ struct ContentView: View {
 
         return BusinessOnboardingPreset(
             customFields: ["Design Theme", "Size / Model", "Special Request"],
-            customSteps: ["Enquiry", "Concept", "Mockup", "Client Approval", "Production", "Final Review", "Delivery"],
+            customSteps: ["Enquiry", "Concept", "Mockup", "Client Approval", t("Production", lang: seciliDil), "Final Review", "Delivery"],
             customToggles: ["Deposit Paid?", "Reference Received?", "Mockup Approved?", "Production Completed?", "Final Photos Sent?", "Ready to Ship?"],
             inventoryLabels: ["Materials Ready", "Item Received", "Packaging Ready", "Final Checked"],
             activeStatuses: ["New", "Not Yet", "In Progress", "Review", "Done", "Cancelled"],
             summaryStep1: "Concept",
-            summaryStep2: "Production",
+            summaryStep2: t("Production", lang: seciliDil),
             baseCostLabel: "Cost (Base)",
             expenseItems: ["Material Cost", "Supplier Cost", "Packaging Cost"],
             remainingItems: ["Remaining Balance"],
@@ -9569,6 +9581,7 @@ struct ContentView: View {
             return
         }
         if route == "messagethread" || !notification.threadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard canAccessMessages else { return }
             UserDefaults.standard.set(notification.threadId, forKey: "pendingMessageThreadId")
             UserDefaults.standard.set(notification.messageId, forKey: "pendingMessageId")
             UserDefaults.standard.set("Messages", forKey: "studioRequestedStartTab")
@@ -9577,7 +9590,7 @@ struct ContentView: View {
         }
 
         if route == "supportticket" || !notification.ticketId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            settingsStartSection = "Support"
+            settingsStartSection = t("Support", lang: seciliDil)
             UserDefaults.standard.set(notification.ticketId, forKey: "pendingSupportTicketId")
             UserDefaults.standard.set(notification.ticketType.isEmpty ? "workspace" : notification.ticketType, forKey: "pendingSupportTicketType")
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "pendingSupportTicketOpenRequestedAt")
@@ -9597,7 +9610,7 @@ struct ContentView: View {
         case "Schedule": return canAccessSchedule
         case "Customers": return canAccessCustomers
         case "QuickReply": return canAccessQuickReply
-        case "Messages": return true
+        case "Messages": return canAccessMessages
         case "Notes": return true
         case "Settings": return canAccessSettings
         default: return false
@@ -9637,7 +9650,7 @@ struct ContentView: View {
         let ticketId = (defaults.string(forKey: "pendingSupportTicketId") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !ticketId.isEmpty else { return }
 
-        settingsStartSection = "Support"
+        settingsStartSection = t("Support", lang: seciliDil)
         if canAccessSettings {
             aktifSekme = "Settings"
         }
@@ -9648,6 +9661,12 @@ struct ContentView: View {
         let defaults = UserDefaults.standard
         let threadId = (defaults.string(forKey: "pendingMessageThreadId") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !threadId.isEmpty else { return }
+        guard canAccessMessages else {
+            defaults.removeObject(forKey: "pendingMessageThreadId")
+            defaults.removeObject(forKey: "pendingMessageId")
+            defaults.removeObject(forKey: "studioRequestedStartTab")
+            return
+        }
         aktifSekme = "Messages"
         defaults.removeObject(forKey: "studioRequestedStartTab")
     }
@@ -11144,7 +11163,7 @@ struct ViewOnlyOrderDetailView: View {
     private var statusRows: [(String, String)] {
         var rows: [(String, String)] = [
             (summaryStep1.isEmpty ? "Design" : summaryStep1, siparis.designStatus),
-            (summaryStep2.isEmpty ? "Production" : summaryStep2, siparis.status)
+            (summaryStep2.isEmpty ? t("Production", lang: seciliDil) : summaryStep2, siparis.status)
         ]
 
         if let extras = siparis.extraStatuses {
@@ -11198,27 +11217,27 @@ struct ViewOnlyOrderDetailView: View {
                 .background(Color.primary.opacity(0.045))
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                readOnlyCard(title: "Order", icon: "doc.text.fill") {
-                    readOnlyRow("Customer", siparis.customerName.isEmpty ? "-" : siparis.customerName)
+                readOnlyCard(title: t("Order", lang: seciliDil), icon: "doc.text.fill") {
+                    readOnlyRow(t("Customer", lang: seciliDil), siparis.customerName.isEmpty ? "-" : siparis.customerName)
                     readOnlyRow("Design", siparis.designName.isEmpty ? "-" : siparis.designName)
                     readOnlyRow("Date", dateText)
                     readOnlyRow("Priority", siparis.priority.isEmpty ? "Normal" : siparis.priority)
                     readOnlyRow("Risk", siparis.risk.isEmpty ? "None" : siparis.risk)
                 }
 
-                readOnlyCard(title: "Contact", icon: "person.crop.circle.fill") {
+                readOnlyCard(title: t("Contact", lang: seciliDil), icon: "person.crop.circle.fill") {
                     readOnlyRow("Email", siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress)
                     readOnlyRow("WhatsApp", siparis.whatsappNumber.isEmpty ? "-" : siparis.whatsappNumber)
                     readOnlyRow("Instagram", siparis.instagramUsername.isEmpty ? "-" : siparis.instagramUsername)
                 }
 
-                readOnlyCard(title: "Progress", icon: "checklist") {
+                readOnlyCard(title: t("Progress", lang: seciliDil), icon: "checklist") {
                     ForEach(statusRows, id: \.0) { row in
                         readOnlyStatusRow(row.0, row.1.isEmpty ? "-" : row.1)
                     }
                 }
 
-                readOnlyCard(title: "Financial", icon: "sterlingsign.circle.fill") {
+                readOnlyCard(title: t("Financial", lang: seciliDil), icon: "sterlingsign.circle.fill") {
                     readOnlyRow("Order value", money(totalOrderValue))
                     readOnlyRow("Paid", money(siparis.paidAmount))
                     readOnlyRow("Remaining", money(siparis.remainingAmount))
@@ -11232,9 +11251,9 @@ struct ViewOnlyOrderDetailView: View {
                 readOnlyCard(title: "Delivery", icon: "shippingbox.fill") {
                     readOnlyRow("Delivery time", "\(siparis.deliveryTime) days")
                     readOnlyRow("Courier", siparis.courier.isEmpty ? "Auto Detect" : siparis.courier)
-                    readOnlyRow("Tracking", siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber)
-                    readOnlyRow("Dispatched", siparis.isDispatched ? "Yes" : "No")
-                    readOnlyRow("Delivered", siparis.isDelivered ? "Yes" : "No")
+                    readOnlyRow(t("Tracking", lang: seciliDil), siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber)
+                    readOnlyRow("Dispatched", siparis.isDispatched ? t("Yes", lang: seciliDil) : "No")
+                    readOnlyRow("Delivered", siparis.isDelivered ? t("Yes", lang: seciliDil) : "No")
                 }
 
                 if !siparis.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -11347,7 +11366,7 @@ struct WorkflowOnlyOrderDetailView: View {
            !decoded.isEmpty {
             return decoded
         }
-        return [CustomStepDTOList(title: summaryStep1.isEmpty ? "Design" : summaryStep1), CustomStepDTOList(title: summaryStep2.isEmpty ? "Production" : summaryStep2)]
+        return [CustomStepDTOList(title: summaryStep1.isEmpty ? "Design" : summaryStep1), CustomStepDTOList(title: summaryStep2.isEmpty ? t("Production", lang: seciliDil) : summaryStep2)]
     }
 
     private var customTogglesList: [CustomStepDTOList] {
@@ -11390,8 +11409,8 @@ struct WorkflowOnlyOrderDetailView: View {
                 .background(Color.primary.opacity(0.045))
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                workflowCard(title: "Order", icon: "doc.text.fill") {
-                    workflowTextValue(label: "Customer", value: siparis.customerName) { value in
+                workflowCard(title: t("Order", lang: seciliDil), icon: "doc.text.fill") {
+                    workflowTextValue(label: t("Customer", lang: seciliDil), value: siparis.customerName) { value in
                         siparis.customerName = value.isEmpty ? "New Project" : value
                         saveWorkflowOrder()
                     }
@@ -11399,7 +11418,7 @@ struct WorkflowOnlyOrderDetailView: View {
                         siparis.designName = value
                         saveWorkflowOrder()
                     }
-                    workflowTextValue(label: "Reference", value: siparis.watchRef) { value in
+                    workflowTextValue(label: t("Reference", lang: seciliDil), value: siparis.watchRef) { value in
                         siparis.watchRef = value
                         saveWorkflowOrder()
                     }
@@ -11413,8 +11432,8 @@ struct WorkflowOnlyOrderDetailView: View {
                     }
                 }
 
-                workflowCard(title: "Customer & Communication", icon: "person.crop.circle") {
-                    workflowTextValue(label: "Telephone", value: siparis.whatsappNumber) { value in
+                workflowCard(title: t("Customer & Communication", lang: seciliDil), icon: "person.crop.circle") {
+                    workflowTextValue(label: t("Telephone", lang: seciliDil), value: siparis.whatsappNumber) { value in
                         siparis.whatsappNumber = value
                         saveWorkflowOrder()
                     }
@@ -11427,10 +11446,10 @@ struct WorkflowOnlyOrderDetailView: View {
                         siparis.instagramUsername = value
                         saveWorkflowOrder()
                     }
-                    workflowCustomField(label: "TikTok", key: "communicationChannel::TikTok")
+                    workflowCustomField(label: t("TikTok", lang: seciliDil), key: "communicationChannel::TikTok")
                 }
 
-                workflowCard(title: "Progress", icon: "checklist") {
+                workflowCard(title: t("Progress", lang: seciliDil), icon: "checklist") {
                     ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in
                         let label = step.title.trimmingCharacters(in: .whitespacesAndNewlines)
                         if index == 0 {
@@ -11442,7 +11461,7 @@ struct WorkflowOnlyOrderDetailView: View {
                                 saveWorkflowOrder()
                             }
                         } else if index == 1 {
-                            workflowStatusMenu(label: label.isEmpty ? "Production" : label, value: siparis.status.isEmpty ? "Not Yet" : siparis.status, options: userStatuses) { value in
+                            workflowStatusMenu(label: label.isEmpty ? t("Production", lang: seciliDil) : label, value: siparis.status.isEmpty ? "Not Yet" : siparis.status, options: userStatuses) { value in
                                 siparis.status = value
                                 if value == "In Progress" || value == "Done" {
                                     siparis.designStatus = "Done"
@@ -11496,7 +11515,7 @@ struct WorkflowOnlyOrderDetailView: View {
                         siparis.courier = value
                         saveWorkflowOrder()
                     }
-                    workflowTextValue(label: "Tracking", value: siparis.trackingNumber) { value in
+                    workflowTextValue(label: t("Tracking", lang: seciliDil), value: siparis.trackingNumber) { value in
                         siparis.trackingNumber = value
                         saveWorkflowOrder()
                     }
@@ -12007,13 +12026,13 @@ struct AccountProfileView: View {
         case .account:
             return "Account"
         case .profileWorkspace:
-            return "Profile & Workspace"
+            return t("Profile & Workspace", lang: seciliDil)
         case .workspaceLogo:
             return "Workspace Logo"
         case .signInSecurity:
             return "Sign-in & Security"
         case .planAccess:
-            return "Plan & Access"
+            return t("Plan & Access", lang: seciliDil)
         case .teamAccess:
             return "Team Access"
         }
@@ -12290,16 +12309,16 @@ struct AccountProfileView: View {
                     planFeaturePill(title: planStorageLimitText(entitlements), icon: "externaldrive.fill", enabled: entitlements.clientFilesEnabled)
                     planFeaturePill(title: planTeamLimitText(entitlements), icon: "person.2.fill", enabled: entitlements.teamAccessEnabled)
                     planFeaturePill(title: "Client Files", icon: "folder.fill", enabled: entitlements.clientFilesEnabled)
-                    planFeaturePill(title: "Share Sheet", icon: "square.and.arrow.down.on.square.fill", enabled: entitlements.shareSheetEnabled)
-                    planFeaturePill(title: "Audit Log", icon: "list.bullet.clipboard.fill", enabled: entitlements.auditLogEnabled)
-                    planFeaturePill(title: "Card Profile Sync", icon: "rectangle.3.group.fill", enabled: entitlements.cardProfileSyncEnabled)
+                    planFeaturePill(title: t("Share Sheet", lang: seciliDil), icon: "square.and.arrow.down.on.square.fill", enabled: entitlements.shareSheetEnabled)
+                    planFeaturePill(title: t("Audit Log", lang: seciliDil), icon: "list.bullet.clipboard.fill", enabled: entitlements.auditLogEnabled)
+                    planFeaturePill(title: t("Card Profile Sync", lang: seciliDil), icon: "rectangle.3.group.fill", enabled: entitlements.cardProfileSyncEnabled)
                     planFeaturePill(title: planTaskLimitText(entitlements), icon: "checklist", enabled: entitlements.taskLimitPerOrder == nil)
-                    planFeaturePill(title: "Financial Cards", icon: "sterlingsign.circle.fill", enabled: entitlements.financialCardsEnabled)
-                    planFeaturePill(title: "Materials Cards", icon: "shippingbox.circle.fill", enabled: entitlements.materialsInventoryCardsEnabled)
+                    planFeaturePill(title: t("Financial Cards", lang: seciliDil), icon: "sterlingsign.circle.fill", enabled: entitlements.financialCardsEnabled)
+                    planFeaturePill(title: t("Materials Cards", lang: seciliDil), icon: "shippingbox.circle.fill", enabled: entitlements.materialsInventoryCardsEnabled)
                     planFeaturePill(title: "History / Log", icon: "clock.arrow.circlepath", enabled: entitlements.historyLogEnabled)
-                    planFeaturePill(title: "Card Customise", icon: "rectangle.3.group.bubble.left.fill", enabled: entitlements.cardCustomizationEnabled)
-                    planFeaturePill(title: "Schedule Filters", icon: "line.3.horizontal.decrease.circle.fill", enabled: entitlements.scheduleAdvancedFiltersEnabled)
-                    planFeaturePill(title: "Long Range Schedule", icon: "calendar.badge.clock", enabled: entitlements.scheduleLongRangeEnabled)
+                    planFeaturePill(title: t("Card Customise", lang: seciliDil), icon: "rectangle.3.group.bubble.left.fill", enabled: entitlements.cardCustomizationEnabled)
+                    planFeaturePill(title: t("Schedule Filters", lang: seciliDil), icon: "line.3.horizontal.decrease.circle.fill", enabled: entitlements.scheduleAdvancedFiltersEnabled)
+                    planFeaturePill(title: t("Long Range Schedule", lang: seciliDil), icon: "calendar.badge.clock", enabled: entitlements.scheduleLongRangeEnabled)
                 }
             }
 
@@ -12472,7 +12491,7 @@ struct AccountProfileView: View {
             Button {
                 Task { await purchaseStoreKitPlan(plan) }
             } label: {
-                Text(t(isCurrent ? "Current plan" : storeKitButtonTitle(for: plan), lang: seciliDil))
+                Text(t(isCurrent ? t("Current plan", lang: seciliDil) : storeKitButtonTitle(for: plan), lang: seciliDil))
                     .font(.system(size: 10, weight: .bold))
                     .frame(maxWidth: .infinity)
             }
@@ -12497,7 +12516,7 @@ struct AccountProfileView: View {
         case .proMonthly, .teamMonthly:
             return "Subscribe"
         case .demo:
-            return "Current plan"
+            return t("Current plan", lang: seciliDil)
         }
     }
 
@@ -12660,10 +12679,10 @@ struct AccountProfileView: View {
                 planComparisonRow(title: planCustomerLimitText(entitlements), enabled: true)
                 planComparisonRow(title: planStorageLimitText(entitlements), enabled: entitlements.clientFilesEnabled)
                 planComparisonRow(title: "Client Files", enabled: entitlements.clientFilesEnabled)
-                planComparisonRow(title: "Share Sheet", enabled: entitlements.shareSheetEnabled)
+                planComparisonRow(title: t("Share Sheet", lang: seciliDil), enabled: entitlements.shareSheetEnabled)
                 planComparisonRow(title: "Team Access", enabled: entitlements.teamAccessEnabled)
-                planComparisonRow(title: "Advanced Dashboard", enabled: entitlements.advancedDashboardEnabled)
-                planComparisonRow(title: "Card Profile Sync", enabled: entitlements.cardProfileSyncEnabled)
+                planComparisonRow(title: t("Advanced Dashboard", lang: seciliDil), enabled: entitlements.advancedDashboardEnabled)
+                planComparisonRow(title: t("Card Profile Sync", lang: seciliDil), enabled: entitlements.cardProfileSyncEnabled)
             }
 
             if authVM.isCompanyOwner && !isCurrent {
@@ -13011,7 +13030,7 @@ struct AccountProfileView: View {
                 roleMixSection
             } else {
                 planLockedNotice(
-                    title: "Team access is locked",
+                    title: t("Team access is locked", lang: seciliDil),
                     message: "Team members, roles and shared workspace access are available on the NivaDesk Team monthly plan.",
                     icon: "person.2.slash.fill"
                 )
@@ -13434,13 +13453,13 @@ struct AccountProfileView: View {
 
             DisclosureGroup(isExpanded: $newCustomRoleExpanded) {
                 VStack(alignment: .leading, spacing: 10) {
-                    TextField("Role name", text: $newCustomRoleName)
+                    TextField(t("Role name", lang: seciliDil), text: $newCustomRoleName)
                         .textFieldStyle(.plain)
                         .padding(10)
                         .background(fieldBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                    StudioStandardRolePicker(title: "Base behavior", role: $newCustomRoleBaseRole)
+                    StudioStandardRolePicker(title: t("Base behavior", lang: seciliDil), role: $newCustomRoleBaseRole)
 
                     StudioRoleAccessEditor(access: $newCustomRoleAccess)
 
@@ -13453,12 +13472,12 @@ struct AccountProfileView: View {
                             newCustomRoleExpanded = false
                         }
                     } label: {
-                        Label("Create role", systemImage: "plus.circle.fill")
+                        Label(t("Create role", lang: seciliDil), systemImage: "plus.circle.fill")
                     }
                     .buttonStyle(.plain)
                     .disabled(authVM.isProfileLoading || newCustomRoleName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newRoleNameConflict)
 
-                    Text(newRoleNameConflict ? "A role with this name already exists." : "Assign this role to members after creating it.")
+                    Text(newRoleNameConflict ? t("A role with this name already exists.", lang: seciliDil) : t("Assign this role to members after creating it.", lang: seciliDil))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(newRoleNameConflict ? .red : .secondary)
                 }
@@ -13468,7 +13487,7 @@ struct AccountProfileView: View {
                     Text("Create role profile")
                         .font(.system(size: 12, weight: .bold))
                     Spacer()
-                    Text(newCustomRoleExpanded ? "Hide" : "Show")
+                    Text(newCustomRoleExpanded ? t("Hide", lang: seciliDil) : t("Show", lang: seciliDil))
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.accentColor)
                 }
@@ -14451,7 +14470,7 @@ final class AppleReminderManager {
             }
         } else {
             switch status {
-            case .authorized:
+            case .authorized, .fullAccess, .writeOnly:
                 completion(true, nil)
             case .notDetermined:
                 eventStore.requestAccess(to: .reminder) { granted, error in
@@ -14619,7 +14638,7 @@ final class AppleCalendarManager {
             }
         } else {
             switch status {
-            case .authorized:
+            case .authorized, .fullAccess, .writeOnly:
                 completion(true, nil)
             case .notDetermined:
                 eventStore.requestAccess(to: .event) { granted, error in

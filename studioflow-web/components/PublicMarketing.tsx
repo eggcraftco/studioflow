@@ -395,7 +395,7 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
   {
     titleKey: "planBridge.chatgptApp.title",
     bodyKey: "planBridge.chatgptApp.body",
-    planKeys: ["pro_monthly", "team_monthly"]
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
     titleKey: "planBridge.teamAccess.title",

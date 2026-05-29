@@ -323,7 +323,7 @@ fun OrderDetailScreen(
         (it.isOwner || it.role in setOf("admin", "member")) && it.memberAccess.financialInfo
     } == true
     val canAssignTasks = workspace?.billingPlan == StudioBillingPlan.TeamMonthly && teamMembers.isNotEmpty()
-    val financeAdvancedEnabled = workspace?.billingPlan != StudioBillingPlan.Demo
+    val financeAdvancedEnabled = workspace?.billingPlan == StudioBillingPlan.ProMonthly || workspace?.billingPlan == StudioBillingPlan.TeamMonthly
     val canManageCardLayout = workspace?.let {
         it.isOwner || (it.role in setOf("admin", "member", "workflow") && it.memberAccess.orders)
     } == true
@@ -693,7 +693,7 @@ private fun DetailTopBar(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MoreHoriz,
-                            contentDescription = "Actions",
+                            contentDescription = t("Actions"),
                             tint = androidx.compose.ui.graphics.Color.White,
                             modifier = Modifier.size(20.dp)
                         )
@@ -1576,7 +1576,7 @@ private fun HeaderActionsMenuButton(onClick: () -> Unit) {
                 modifier = Modifier.size(18.dp)
             )
             Text(
-                text = "Actions",
+                text = t("Actions"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
@@ -1977,12 +1977,12 @@ private fun CardLayoutProfilesDialog(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Layout Profiles",
+                                t("Layout Profiles"),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 17.sp
                             )
                             Text(
-                                "Save and load different card layout presets for this order area.",
+                                t("Save and load different card layout presets for this order area."),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp
                             )
@@ -2228,7 +2228,7 @@ private fun CardLayoutProfilesDialog(
                 }
                 HorizontalDivider()
                 Text(
-                    "Workspace Blocks",
+                    t("Workspace Blocks"),
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp
                 )
@@ -2735,7 +2735,7 @@ private fun ColumnDropZone(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
-                if (isDropTarget) "Drop card here" else if (hasCards) "" else "Empty column",
+                if (isDropTarget) t("Drop card here") else if (hasCards) "" else "Empty column",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
@@ -3020,7 +3020,7 @@ private fun DesktopPreviewCard(
                     )
                     Text(
                         text = when {
-                            displayPreviewUrl.isBlank() -> "No preview image provided."
+                            displayPreviewUrl.isBlank() -> t("No preview image provided.")
                             imageFailed -> "Preview link is not an image."
                             else -> "Loading preview..."
                         },
@@ -3052,7 +3052,7 @@ private fun DesktopPreviewCard(
                 }
                 DropdownMenu(expanded = actionMenuOpen, onDismissRequest = { actionMenuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text(if (previewUrl.isBlank()) "Upload Image" else "Replace Image") },
+                        text = { Text(if (previewUrl.isBlank()) t("Upload Image") else "Replace Image") },
                         leadingIcon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
                         enabled = canEditPreview,
                         onClick = {
@@ -4017,7 +4017,7 @@ private fun WorkTimeTotalPanel(totalSeconds: Int) {
     ) {
         Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                "Total Work Time",
+                t("Total Work Time"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold
@@ -4063,7 +4063,7 @@ private fun WorkTimeActivePanel(session: StudioWorkSession, nowMillis: Long) {
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    session.title.ifBlank { "Work session" },
+                    session.title.ifBlank { t("Work session") },
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -4130,7 +4130,7 @@ private fun WorkTimeComposerRow(
                 if (activeSession == null) {
                     onUpdateOrderFields(
                         order,
-                        mapOf("workTime" to mapOf("action" to "start", "title" to workTitle.trim().ifBlank { "Work session" }))
+                        mapOf("workTime" to mapOf("action" to "start", "title" to workTitle.trim().ifBlank { t("Work session") }))
                     )
                 } else {
                     onUpdateOrderFields(order, mapOf("workTime" to mapOf("action" to "stop", "sessionId" to activeSession.id)))
@@ -4254,7 +4254,7 @@ private fun WorkTimeSessionRow(
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    session.title.ifBlank { "Work session" },
+                    session.title.ifBlank { t("Work session") },
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -5924,8 +5924,14 @@ private fun FinancialCard(
                     )
                     HorizontalRule()
                 } else {
+                    FinanceDisplayInlineRow(
+                        label = "Basic Balance",
+                        value = money(parseDecimal(paidAmount, order.paidAmount) - parseDecimal(baseCost, order.watchPurchasePrice)),
+                        valueColor = StudioGreen,
+                        muted = false
+                    )
                     Text(
-                        "Free/Demo keeps advanced finance locked; Paid and Base Cost remain editable.",
+                        "Basic finance includes Received and Base Cost only. Upgrade to Pro for VAT, shipping, platform fees, custom expenses and detailed profit.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
@@ -5933,7 +5939,9 @@ private fun FinancialCard(
                     )
                     HorizontalRule()
                 }
-                FinanceFinalProfitRow(finalProfit = finalProfit)
+                if (advancedEnabled) {
+                    FinanceFinalProfitRow(finalProfit = finalProfit)
+                }
             }
         }
     }
@@ -6496,7 +6504,7 @@ private fun NotesCard(order: StudioOrder) {
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailCard(title = "Notes") {
         Text(
-            text = order.notes.ifBlank { "No special notes provided." },
+            text = order.notes.ifBlank { t("No special notes provided.") },
             color = if (order.notes.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
             fontSize = 13.sp,
@@ -7045,8 +7053,8 @@ private fun DetailCard(
                     }
                     DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                         val actions = cardActions
-                        val selectedColorName = actions?.layout?.cardColors?.get(actions.cardId) ?: "Default"
-                        listOf("Default", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink").forEach { colorName ->
+                        val selectedColorName = actions?.layout?.cardColors?.get(actions.cardId) ?: t("Default")
+                        listOf(t("Default"), t("Red"), t("Orange"), t("Yellow"), t("Green"), t("Blue"), t("Purple"), "Pink").forEach { colorName ->
                             DropdownMenuItem(
                                 text = { Text(colorName) },
                                 leadingIcon = { CardColorSwatch(colorName, selectedColorName == colorName) },
@@ -7477,7 +7485,7 @@ private fun OrderHeadingEditorGroupView(
             }
             TextButton(
                 onClick = {
-                    val title = group.addLabel.removePrefix("Add ").ifBlank { "Heading" }
+                    val title = group.addLabel.removePrefix("Add ").ifBlank { t("Heading") }
                     onItemsChange(
                         items + StudioHeadingItem(
                             id = newOrderHeadingId(title, items.size),

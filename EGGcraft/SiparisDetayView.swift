@@ -1857,8 +1857,8 @@ struct SiparisDetayView: View {
         .onChange(of: authVM.currentBillingPlan) { _, _ in enforceCardLayoutLockForCurrentPlan() }
         .onChange(of: siparis.customFields?[orderWorkspaceLayoutKey]) { _, _ in loadWorkspaceForCurrentOrderIfNeeded() }
         .onChange(of: siparis.paymentDate) { _, yeniTarih in if taxMilestoneEnabled { let milat = Date(timeIntervalSince1970: taxMilestoneDate); let yeniTip = yeniTarih >= milat ? "Revenue" : "Profit"; if siparis.taxType != yeniTip { siparis.taxType = yeniTip; otomatikKesintiHesapla() } } }
-        .onChange(of: siparis.status) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Order Status", oldValue: oldValue, newValue: newValue) }
-        .onChange(of: siparis.designStatus) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Design Status", oldValue: oldValue, newValue: newValue) }
+        .onChange(of: siparis.status) { oldValue, newValue in recordOrderChangeAndUpdate(title: t("Order Status", lang: seciliDil), oldValue: oldValue, newValue: newValue) }
+        .onChange(of: siparis.designStatus) { oldValue, newValue in recordOrderChangeAndUpdate(title: t("Design Status", lang: seciliDil), oldValue: oldValue, newValue: newValue) }
         .onChange(of: siparis.priority) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Priority", oldValue: oldValue, newValue: newValue) }
         .onChange(of: siparis.risk) { oldValue, newValue in recordOrderChangeAndUpdate(title: "Risk", oldValue: oldValue, newValue: newValue) }
         .onChange(of: siparis.riskReason) { _, _ in firebaseManager.updateSiparis(siparis) }
@@ -3050,7 +3050,7 @@ struct SiparisDetayView: View {
         setCardVisible(kart, visible)
 
         firebaseManager.registerUIChange(
-            title: visible ? "Show Block" : "Hide Block",
+            title: visible ? t("Show Block", lang: seciliDil) : "Hide Block",
             undo: { setCardVisible(kart, oldValue) },
             redo: { setCardVisible(kart, visible) }
         )
@@ -4378,7 +4378,7 @@ struct SiparisDetayView: View {
     }
 
     private func getKartColor(kart: KartTipi) -> String {
-        return kartRenkleri[kart.rawValue] ?? "Default"
+        return kartRenkleri[kart.rawValue] ?? t("Default", lang: seciliDil)
     }
 
     private func kaydetKartYerlesimi() {
@@ -5099,7 +5099,7 @@ struct SiparisDetayView: View {
             items.insert(movedItem, at: targetIndex)
         }
 
-        saveToDoItems(items, historyTitle: "Task order updated", historyValue: item.title)
+        saveToDoItems(items, historyTitle: t("Task order updated", lang: seciliDil), historyValue: item.title)
     }
 
     private func moveToDoItemToTop(_ item: OrderToDoItem) {
@@ -5112,7 +5112,7 @@ struct SiparisDetayView: View {
             items.insert(movedItem, at: 0)
         }
 
-        saveToDoItems(items, historyTitle: "Task order updated", historyValue: item.title)
+        saveToDoItems(items, historyTitle: t("Task order updated", lang: seciliDil), historyValue: item.title)
     }
 
     private func moveToDoItemToBottom(_ item: OrderToDoItem) {
@@ -5125,7 +5125,7 @@ struct SiparisDetayView: View {
             items.append(movedItem)
         }
 
-        saveToDoItems(items, historyTitle: "Task order updated", historyValue: item.title)
+        saveToDoItems(items, historyTitle: t("Task order updated", lang: seciliDil), historyValue: item.title)
     }
 
     private func reorderToDoItem(draggedID: UUID, targetID: UUID) {
@@ -5144,7 +5144,7 @@ struct SiparisDetayView: View {
     private func finishToDoDrag(_ draggedID: UUID?) {
         guard canEditToDoItems else { return }
         let title = (siparis.todoItems ?? []).first(where: { $0.id == draggedID })?.title ?? ""
-        recordOrderHistoryEvent(title: "Task order updated", value: title)
+        recordOrderHistoryEvent(title: t("Task order updated", lang: seciliDil), value: title)
         firebaseManager.updateSiparis(siparis)
         #if os(macOS)
         NSCursor.openHand.set()
@@ -5185,7 +5185,7 @@ struct SiparisDetayView: View {
             switch result {
             case .success:
                 self.toDoMessage = t("Apple Reminder added.", lang: self.seciliDil)
-                self.recordOrderHistoryEvent(title: "Task reminder added", value: item.title)
+                self.recordOrderHistoryEvent(title: t("Task reminder added", lang: seciliDil), value: item.title)
                 self.firebaseManager.updateSiparis(self.siparis)
             case .failure(let error):
                 let baseMessage: String
@@ -7078,13 +7078,13 @@ struct SiparisDetayView: View {
                         Button {
                             isImagePickerPresented = true
                         } label: {
-                            Label(t(siparis.designLink.isEmpty ? "Upload Image" : "Replace Image", lang: seciliDil), systemImage: "square.and.arrow.up")
+                            Label(t(siparis.designLink.isEmpty ? t("Upload Image", lang: seciliDil) : "Replace Image", lang: seciliDil), systemImage: "square.and.arrow.up")
                         }
 
                         Button {
                             startPreviewLinkEditing()
                         } label: {
-                            Label(t(siparis.designLink.isEmpty ? "Paste photo link..." : "Edit photo link", lang: seciliDil), systemImage: "link")
+                            Label(t(siparis.designLink.isEmpty ? t("Paste photo link...", lang: seciliDil) : "Edit photo link", lang: seciliDil), systemImage: "link")
                         }
 
                         if let url = URL(string: siparis.designLink), !siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -7145,12 +7145,12 @@ struct SiparisDetayView: View {
         guard oldLink != newLink else { return }
 
         if oldLink.isEmpty && !newLink.isEmpty {
-            recordOrderHistoryEvent(title: "Design mockup sent", value: "Image link added")
+            recordOrderHistoryEvent(title: "Design mockup sent", value: t("Image link added", lang: seciliDil))
         } else {
             recordOrderHistoryChange(
                 title: "Preview Image",
                 oldValue: oldLink.isEmpty ? "No image" : "Previous image",
-                newValue: newLink.isEmpty ? "Removed" : "Updated image"
+                newValue: newLink.isEmpty ? t("Removed", lang: seciliDil) : "Updated image"
             )
         }
         firebaseManager.updateSiparis(siparis)
@@ -7164,7 +7164,7 @@ struct SiparisDetayView: View {
             siparis.designLink = ""
             isLinkEditing = false
         }
-        recordOrderHistoryChange(title: "Preview Image", oldValue: "Image", newValue: "Removed")
+        recordOrderHistoryChange(title: "Preview Image", oldValue: "Image", newValue: t("Removed", lang: seciliDil))
         firebaseManager.updateSiparis(siparis)
     }
 
@@ -7227,7 +7227,7 @@ struct SiparisDetayView: View {
             isImportingSharedClientFiles = false
             refreshSharedClientFilesInbox()
             if importedCount > 0 {
-                recordOrderHistoryEvent(title: "Shared client files imported", value: "\(importedCount) file(s)")
+                recordOrderHistoryEvent(title: t("Shared client files imported", lang: seciliDil), value: "\(importedCount) file(s)")
                 firebaseManager.updateSiparis(siparis)
                 clientFileMessage = String(format: t("%d shared file(s) added to this order.", lang: seciliDil), importedCount)
             } else {
@@ -7391,7 +7391,7 @@ struct SiparisDetayView: View {
                     let historyEntry = OrderHistoryLogItem(
                         id: UUID(),
                         createdAt: Date(),
-                        title: item.isPendingUpload ? "Client file queued" : "Client file uploaded",
+                        title: item.isPendingUpload ? t("Client file queued", lang: seciliDil) : "Client file uploaded",
                         oldValue: "-",
                         newValue: cleanHistoryValue(item.fileName)
                     )
@@ -8896,13 +8896,15 @@ struct SiparisDetayView: View {
         return salesTotal - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee - siparis.taxAmount
     }
 
-    private var isDemoFinancialLimited: Bool {
-        authVM.currentBillingPlan == .demo
+    private var isBasicFinancialLimited: Bool {
+        !authVM.currentPlanEntitlements.advancedDashboardEnabled
     }
 
-    private var financialLitePlanLabel: String {
-        t(StudioBillingPlan.lifetimeLite.displayName, lang: seciliDil)
+    private var financialAdvancedPlanLabel: String {
+        t(StudioBillingPlan.proMonthly.displayName, lang: seciliDil)
     }
+
+    private var financialBasicBalance: Double { siparis.paidAmount - siparis.watchPurchasePrice }
 
     private var demoFinancialLockedFieldTitles: [String] {
         var titles = [
@@ -8945,7 +8947,7 @@ struct SiparisDetayView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(t("Available from", lang: seciliDil) + " " + financialLitePlanLabel)
+                        Text(t("Available from", lang: seciliDil) + " " + financialAdvancedPlanLabel)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(studioWarningOrange)
                         Text(t("Financial Info", lang: seciliDil))
@@ -9024,7 +9026,7 @@ struct SiparisDetayView: View {
             CurrencyField(label: t("Paid", lang: seciliDil), value: $siparis.paidAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik)
                 .onChange(of: siparis.paidAmount) { _, _ in otomatikKesintiHesapla() }
 
-            if !isDemoFinancialLimited {
+            if !isBasicFinancialLimited {
                 CurrencyField(label: t("Remaining", lang: seciliDil), value: $siparis.remainingAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik)
                     .onChange(of: siparis.remainingAmount) { _, _ in otomatikKesintiHesapla() }
 
@@ -9053,12 +9055,20 @@ struct SiparisDetayView: View {
 
             Divider().background(Color.primary.opacity(0.1))
 
-            if financialShowBaseCost || isDemoFinancialLimited {
+            if financialShowBaseCost || isBasicFinancialLimited {
                 CurrencyField(label: t(financialBaseCostLabel, lang: seciliDil), value: $siparis.watchPurchasePrice, isCost: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
                     .onChange(of: siparis.watchPurchasePrice) { _, _ in otomatikKesintiHesapla() }
             }
 
-            if isDemoFinancialLimited {
+            if isBasicFinancialLimited {
+                HStack {
+                    Text(t("Basic Balance", lang: seciliDil))
+                        .font(.system(size: 14, weight: .bold))
+                    Spacer()
+                    Text("\(seciliParaBirimi)\(formatFiyat(financialBasicBalance, ondalik: seciliOndalik))")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.green)
+                }
                 demoFinancialLockedSummary(demoFinancialLockedFieldTitles)
             } else {
                 if !financialExpenseItems.isEmpty {
@@ -10860,20 +10870,20 @@ struct DetayKarti<Content: View>: View {
     // daha temiz/fuşya bir tona çekildiği için koyu kırmızı gibi görünmez.
     private func temaRengi(_ renkAdi: String) -> Color {
         switch renkAdi {
-        case "Red": return Color(red: 1.00, green: 0.24, blue: 0.24)
-        case "Orange": return studioWarningOrange
-        case "Yellow": return Color(red: 1.00, green: 0.82, blue: 0.12)
-        case "Green": return Color(red: 0.18, green: 0.78, blue: 0.38)
-        case "Blue": return Color(red: 0.20, green: 0.52, blue: 1.00)
-        case "Purple": return Color(red: 0.62, green: 0.38, blue: 1.00)
-        case "Pink": return Color(red: 1.00, green: 0.24, blue: 0.62)
+        case t("Red", lang: seciliDil): return Color(red: 1.00, green: 0.24, blue: 0.24)
+        case t("Orange", lang: seciliDil): return studioWarningOrange
+        case t("Yellow", lang: seciliDil): return Color(red: 1.00, green: 0.82, blue: 0.12)
+        case t("Green", lang: seciliDil): return Color(red: 0.18, green: 0.78, blue: 0.38)
+        case t("Blue", lang: seciliDil): return Color(red: 0.20, green: 0.52, blue: 1.00)
+        case t("Purple", lang: seciliDil): return Color(red: 0.62, green: 0.38, blue: 1.00)
+        case t("Pink", lang: seciliDil): return Color(red: 1.00, green: 0.24, blue: 0.62)
         default: return Color.clear
         }
     }
     
     // 🌟 KARTIN DİNAMİK ARKA PLAN RENGİ 🌟
     private var bgColor: Color {
-        if kartRengi == "Default" {
+        if kartRengi == t("Default", lang: seciliDil) {
             return colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
         }
         return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.18 : 0.14)
@@ -10881,7 +10891,7 @@ struct DetayKarti<Content: View>: View {
     
     // 🌟 KARTIN DİNAMİK ÇİZGİ (BORDER) RENGİ 🌟
     private var borderColor: Color {
-        if kartRengi == "Default" { return Color.clear }
+        if kartRengi == t("Default", lang: seciliDil) { return Color.clear }
         return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.62 : 0.50)
     }
 
@@ -10889,14 +10899,14 @@ struct DetayKarti<Content: View>: View {
     // Rengi kısmadan, içeriğin arkasına hafif nötr bir panel veriyoruz.
     // Böylece blok rengi görünür kalıyor ama yazılar ve alanlar daha net ayrışıyor.
     private var contentPanelFill: Color {
-        if kartRengi == "Default" {
+        if kartRengi == t("Default", lang: seciliDil) {
             return colorScheme == .dark ? Color.white.opacity(0.025) : Color.black.opacity(0.018)
         }
         return colorScheme == .dark ? Color.black.opacity(0.18) : Color.white.opacity(0.58)
     }
 
     private var contentPanelBorder: Color {
-        if kartRengi == "Default" {
+        if kartRengi == t("Default", lang: seciliDil) {
             return Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06)
         }
         return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.30 : 0.22)
@@ -11058,55 +11068,55 @@ struct DetayKarti<Content: View>: View {
         if canCustomizeThisCard {
             #if os(macOS)
             Button {
-                onColorChange("Default")
+                onColorChange(t("Default", lang: seciliDil))
             } label: {
                 Label(t("Default", lang: seciliDil), systemImage: "circle")
             }
             Button {
-                onColorChange("Red")
+                onColorChange(t("Red", lang: seciliDil))
             } label: {
                 Label(t("Red", lang: seciliDil), systemImage: "circle.fill")
             }
             Button {
-                onColorChange("Orange")
+                onColorChange(t("Orange", lang: seciliDil))
             } label: {
                 Label(t("Orange", lang: seciliDil), systemImage: "circle.fill")
             }
             Button {
-                onColorChange("Yellow")
+                onColorChange(t("Yellow", lang: seciliDil))
             } label: {
                 Label(t("Yellow", lang: seciliDil), systemImage: "circle.fill")
             }
             Button {
-                onColorChange("Green")
+                onColorChange(t("Green", lang: seciliDil))
             } label: {
                 Label(t("Green", lang: seciliDil), systemImage: "circle.fill")
             }
             Button {
-                onColorChange("Blue")
+                onColorChange(t("Blue", lang: seciliDil))
             } label: {
                 Label(t("Blue", lang: seciliDil), systemImage: "circle.fill")
             }
             Button {
-                onColorChange("Purple")
+                onColorChange(t("Purple", lang: seciliDil))
             } label: {
                 Label(t("Purple", lang: seciliDil), systemImage: "circle.fill")
             }
             Button {
-                onColorChange("Pink")
+                onColorChange(t("Pink", lang: seciliDil))
             } label: {
                 Label(t("Pink", lang: seciliDil), systemImage: "circle.fill")
             }
             #else
             Menu("🎨 " + t("Color", lang: seciliDil)) {
-                Button("⚪️ " + t("Default", lang: seciliDil)) { onColorChange("Default") }
-                Button("🔴 " + t("Red", lang: seciliDil)) { onColorChange("Red") }
-                Button("🟠 " + t("Orange", lang: seciliDil)) { onColorChange("Orange") }
-                Button("🟡 " + t("Yellow", lang: seciliDil)) { onColorChange("Yellow") }
-                Button("🟢 " + t("Green", lang: seciliDil)) { onColorChange("Green") }
-                Button("🔵 " + t("Blue", lang: seciliDil)) { onColorChange("Blue") }
-                Button("🟣 " + t("Purple", lang: seciliDil)) { onColorChange("Purple") }
-                Button("🩷 " + t("Pink", lang: seciliDil)) { onColorChange("Pink") }
+                Button("⚪️ " + t("Default", lang: seciliDil)) { onColorChange(t("Default", lang: seciliDil)) }
+                Button("🔴 " + t("Red", lang: seciliDil)) { onColorChange(t("Red", lang: seciliDil)) }
+                Button("🟠 " + t("Orange", lang: seciliDil)) { onColorChange(t("Orange", lang: seciliDil)) }
+                Button("🟡 " + t("Yellow", lang: seciliDil)) { onColorChange(t("Yellow", lang: seciliDil)) }
+                Button("🟢 " + t("Green", lang: seciliDil)) { onColorChange(t("Green", lang: seciliDil)) }
+                Button("🔵 " + t("Blue", lang: seciliDil)) { onColorChange(t("Blue", lang: seciliDil)) }
+                Button("🟣 " + t("Purple", lang: seciliDil)) { onColorChange(t("Purple", lang: seciliDil)) }
+                Button("🩷 " + t("Pink", lang: seciliDil)) { onColorChange(t("Pink", lang: seciliDil)) }
             }
             #endif
         } else {
@@ -12673,7 +12683,7 @@ struct BlockHeadingsEditorSheet: View {
                     canDelete: materialLabels.count > 1,
                     delete: {
                         if materialLabels.indices.contains(index) {
-                            withAnimation(.snappy) {
+                            _ = withAnimation(.snappy) {
                                 materialLabels.remove(at: index)
                             }
                         }

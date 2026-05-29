@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
@@ -109,6 +110,18 @@ export default function TeamPage() {
       setError("");
       try {
         const workspaceContext = await loadWorkspaceContext(user.uid);
+        if (!cancelled) setWorkspace(workspaceContext);
+
+        if (!workspaceContext.entitlements.features.team_access) {
+          if (!cancelled) {
+            setMembers([]);
+            setJoinRequests([]);
+            setCustomRoles([]);
+            setRequestRoles({});
+          }
+          return;
+        }
+
         if (workspaceContext.role.toLowerCase() === "owner") {
           try {
             await syncAcceptedJoinRequests(workspaceContext);
@@ -118,7 +131,6 @@ export default function TeamPage() {
         }
         const teamData = await loadTeamAccessData(workspaceContext);
         if (!cancelled) {
-          setWorkspace(workspaceContext);
           setMembers(teamData.members);
           setJoinRequests(teamData.joinRequests);
           setCustomRoles(teamData.customRoles);
@@ -186,6 +198,26 @@ export default function TeamPage() {
   }
 
   if (loading || !user) return <LoadingScreen />;
+
+  if (!loadingTeam && workspace && !workspace.entitlements.features.team_access) {
+    return (
+      <AppShell>
+        <section className="card" style={{ padding: 28, maxWidth: 760 }}>
+          <div className="pill">Available on Team</div>
+          <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 10px" }}>
+            Team Access is not included in {workspace.billingPlanName}.
+          </h1>
+          <p style={{ color: "var(--muted)", margin: "0 0 18px" }}>
+            Roles, join requests and shared workspace member management are available on NivaDesk Team. Team includes 5 seats, with additional seats available up to 10 users through self-service.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link className="button" href="/plan">View Team plan</Link>
+            <Link className="button secondary" href="/settings?section=plan-access">Back to Plan &amp; Access</Link>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

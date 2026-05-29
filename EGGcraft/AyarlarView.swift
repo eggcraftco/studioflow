@@ -286,16 +286,22 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settings") && workspaceAccessAllows("exportData")
         case "Quick Reply":
             return workspaceAccessAllows("settings") && workspaceAccessAllows("quickReply")
-        case "Financial", "Plan & Access":
+        case "Financial":
+            return authVM.currentPlanEntitlements.advancedDashboardEnabled &&
+                workspaceAccessAllows("settings") && workspaceAccessAllows("financialInfo")
+        case "Plan & Access":
             return workspaceAccessAllows("settings") && workspaceAccessAllows("financialInfo")
         case "WooCommerce":
             return workspaceAccessAllows("settings")
         case "Upload Safety":
             return workspaceAccessAllows("settings") && workspaceAccessAllows("clientFiles")
         case "Team Access":
-            return workspaceAccessAllows("settings") && workspaceAccessAllows("teamAccess")
+            return authVM.currentPlanEntitlements.teamAccessEnabled &&
+                workspaceAccessAllows("settings") &&
+                workspaceAccessAllows("teamAccess")
         case "Message Settings":
-            return workspaceAccessAllows("settings")
+            return authVM.currentPlanEntitlements.teamAccessEnabled &&
+                workspaceAccessAllows("settings")
         case "Sign-in & Security", "Support":
             return true
         default:
@@ -618,7 +624,7 @@ struct AyarlarView: View {
                         GeneralSettingsDivider()
                         GeneralSettingsMenuRow(
                             title: t("About", lang: seciliDil),
-                            subtitle: "NivaDesk 1.0.0",
+                            subtitle: t("NivaDesk 1.0.0", lang: seciliDil),
                             icon: "info.circle.fill",
                             tint: .secondary
                         ) { selectedGeneralSection = "about" }
@@ -3310,7 +3316,7 @@ struct AyarlarView: View {
     }
 
     private var temaAyari: some View {
-        SettingsCard(title: "Theme", iconName: "moon.circle.fill") {
+        SettingsCard(title: t("Theme", lang: seciliDil), iconName: "moon.circle.fill") {
             HStack {
                 Text("Theme")
                     .font(.system(size: 13))
@@ -3420,7 +3426,7 @@ struct AyarlarView: View {
                                 .foregroundColor(.gray)
                         }
                         Spacer()
-                        Button(action: { withAnimation { companyNumbers.append(CompanyNumberSettingDTO(title: "New Number", value: "")) } }) {
+                        Button(action: { withAnimation { companyNumbers.append(CompanyNumberSettingDTO(title: t("New Number", lang: seciliDil), value: "")) } }) {
                             HStack(spacing: 6) { Image(systemName: "plus.circle.fill"); Text("Add") }
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(.blue)
@@ -3446,7 +3452,7 @@ struct AyarlarView: View {
                                     .background(Color.primary.opacity(0.05))
                                     .cornerRadius(6)
                                     .frame(width: 210)
-                                TextField("Number / value", text: $item.value)
+                                TextField(t("Number / value", lang: seciliDil), text: $item.value)
                                     .textFieldStyle(.plain)
                                     .font(.system(size: 13))
                                     .padding(9)
@@ -3639,7 +3645,7 @@ struct AyarlarView: View {
                     }
                 }
                 .alert(t("Warning: This will overwrite your current workflow steps, fields, status menu options and inventory labels. Are you sure?", lang: seciliDil), isPresented: $showTemplateAlert) {
-                    Button("Apply", role: .destructive) {
+                    Button(t("Apply", lang: seciliDil), role: .destructive) {
                         if pendingSmartTemplateApply {
                             smartSablonuUygula()
                         } else {
@@ -3654,7 +3660,7 @@ struct AyarlarView: View {
                 }
             }
             
-            SettingsCard(title: t("Status Menu Options", lang: seciliDil), iconName: "checklist", footerText: "Select which statuses should appear in the dropdown menus of an order.") {
+            SettingsCard(title: t("Status Menu Options", lang: seciliDil), iconName: "checklist", footerText: t("Select which statuses should appear in the dropdown menus of an order.", lang: seciliDil)) {
                 VStack(alignment: .leading, spacing: 12) {
                     Button {
                         withAnimation(.snappy) {
@@ -3751,18 +3757,18 @@ struct AyarlarView: View {
                 }
             }
 
-            SettingsCard(title: "Production Steps", iconName: "arrow.triangle.branch") {
+            SettingsCard(title: t("Production Steps", lang: seciliDil), iconName: "arrow.triangle.branch") {
                 VStack(alignment: .leading, spacing: 15) {
                     HStack {
                         Text("Custom Status Menus").font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                         Spacer()
-                        Button(action: { withAnimation { customSteps.append(CustomStep(title: "New Step")) } }) {
+                        Button(action: { withAnimation { customSteps.append(CustomStep(title: t("New Step", lang: seciliDil))) } }) {
                             HStack { Image(systemName: "plus.circle.fill"); Text("Add Step") }.font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
                         }.buttonStyle(.plain)
                     }
                     ForEach($customSteps) { $step in
                         HStack(spacing: 10) {
-                            TextField("Step Name", text: $step.title).textFieldStyle(.plain).font(.system(size: 13, weight: .bold)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6)
+                            TextField(t("Step Name", lang: seciliDil), text: $step.title).textFieldStyle(.plain).font(.system(size: 13, weight: .bold)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6)
                             Button(action: { withAnimation { customSteps.removeAll { $0.id == step.id } } }) {
                                 Image(systemName: "trash.fill").foregroundColor(.red.opacity(0.8)).padding(8)
                             }.buttonStyle(.plain)
@@ -3772,7 +3778,7 @@ struct AyarlarView: View {
                     HStack {
                         Text(t("Production Toggles (Yes/No)", lang: seciliDil)).font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                         Spacer()
-                        Button(action: { withAnimation { customToggles.append(CustomStep(title: "New Toggle")) } }) {
+                        Button(action: { withAnimation { customToggles.append(CustomStep(title: t("New Toggle", lang: seciliDil))) } }) {
                             HStack { Image(systemName: "plus.circle.fill"); Text(t("Add Toggle", lang: seciliDil)) }.font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
                         }.buttonStyle(.plain)
                     }
@@ -4047,7 +4053,7 @@ struct AyarlarView: View {
             "Project Type": "Projekttyp", "Brand / Company": "Marke / Firma", "Deliverables": "Lieferobjekte", "Deadline": "Frist",
             "Event / Order Type": "Event- / Auftragstyp", "Event Date": "Eventdatum", "Servings / Quantity": "Portionen / Menge", "Allergies": "Allergien",
             "Service Type": "Serviceart", "Appointment Date": "Termin", "Practitioner": "Behandler", "Client Notes": "Kundennotizen",
-            "Item Name": "Artikelname", "Variant": "Variante", "Quantity": "Menge", "Personalisation": "Personalisierung",
+            t("Item Name", lang: seciliDil): "Artikelname", "Variant": "Variante", "Quantity": "Menge", "Personalisation": "Personalisierung",
             "Customer Request": "Kundenanfrage", "Project / Item Type": "Projekt- / Artikeltyp", "Reference / Notes": "Referenz / Notizen", "Delivery Address": "Lieferadresse",
 
             "Enquiry": "Anfrage", "Concept": "Konzept", "Mockup": "Entwurf", "Client Approval": "Kundenfreigabe", "Painting": "Malen", "Curing": "Aushärten", "Final Review": "Finale Prüfung",
@@ -4075,7 +4081,7 @@ struct AyarlarView: View {
             "Fabric Sourced": "Stoff beschafft", "Thread Ready": "Garn bereit", "Accessories Ready": "Zubehör bereit", "Machine Setup": "Maschine eingerichtet",
             "Metal Sourced": "Metall beschafft", "Mould Ready": "Form bereit", "Stones Arrived": "Steine eingetroffen", "Box Ready": "Box bereit",
             "Equipment Ready": "Ausrüstung bereit", "Memory Cards Ready": "Speicherkarten bereit", "Backup Drive Ready": "Backup-Laufwerk bereit", "Delivery Folder Ready": "Lieferordner bereit",
-            "Assets Ready": "Assets bereit", "Checklist Ready": "Checkliste bereit", "Delivery Ready": "Lieferung bereit", "Main Material": "Hauptmaterial", "Tools Ready": "Werkzeuge bereit"
+            "Assets Ready": "Assets bereit", "Checklist Ready": "Checkliste bereit", "Delivery Ready": "Lieferung bereit", t("Main Material", lang: seciliDil): "Hauptmaterial", "Tools Ready": "Werkzeuge bereit"
         ]
     }
 
@@ -4363,7 +4369,7 @@ struct AyarlarView: View {
             "Consent Form Ready": "Onay Formu Hazır",
             "Aftercare Ready": "Bakım Bilgisi Hazır",
 
-            "Item Name": "Ürün Adı",
+            t("Item Name", lang: seciliDil): "Ürün Adı",
             "Variant": "Varyant",
             "Quantity": "Adet",
             "Personalisation": "Kişiselleştirme",
@@ -4378,7 +4384,7 @@ struct AyarlarView: View {
             "Personalisation Checked?": "Kişiselleştirme Kontrol Edildi mi?",
             "Packed?": "Paketlendi mi?",
             "Tracking Sent?": "Takip Bilgisi Gönderildi mi?",
-            "Main Material": "Ana Malzeme",
+            t("Main Material", lang: seciliDil): "Ana Malzeme",
             "Components Ready": "Parçalar Hazır",
             "Label Ready": "Etiket Hazır",
 
@@ -4389,7 +4395,7 @@ struct AyarlarView: View {
             "Delivery Address": "Teslimat Adresi",
             "Customer Details Confirmed?": "Müşteri Bilgileri Onaylandı mı?",
             "Client Approved?": "Müşteri Onayladı mı?",
-            "Information Received": "Bilgiler Alındı",
+            t("Information Received", lang: seciliDil): "Bilgiler Alındı",
             "Assets Ready": "Dosyalar Hazır",
             "Checklist Ready": "Kontrol Listesi Hazır",
             "Delivery Ready": "Teslimat Hazır",
@@ -4710,11 +4716,11 @@ struct AyarlarView: View {
 
         if containsAny(text, ["handmade", "product", "craft", "maker", "etsy", "shop", "ecommerce", "stock", "packaging", "el yapımı", "el yapimi", "ürün", "urun", "zanaat", "üretici", "uretici", "mağaza", "magaza", "e-ticaret", "stok", "paketleme"]) {
             return SmartWorkflowPreset(
-                customFields: ["Item Name", "Variant", "Quantity", "Personalisation"],
+                customFields: [t("Item Name", lang: seciliDil), "Variant", "Quantity", "Personalisation"],
                 customSteps: ["Order Received", "Sourcing", "Making", "Quality Check", "Packing", "Shipped"],
                 customToggles: ["Payment Cleared?", "Materials Ready?", "Personalisation Checked?", "Packed?", "Tracking Sent?"],
                 activeStatuses: ["New", "Waiting for Deposit", "Deposit Paid", "Waiting for Material", "In Progress", "Ready to Ship", "Shipped", "Delivered", "Done", "Cancelled"],
-                inventoryLabels: ["Main Material", "Components Ready", "Packaging Ready", "Label Ready"],
+                inventoryLabels: [t("Main Material", lang: seciliDil), "Components Ready", "Packaging Ready", "Label Ready"],
                 summaryStep1: "Making",
                 summaryStep2: "Packing",
                 showMaterials: true,
@@ -4746,7 +4752,7 @@ struct AyarlarView: View {
             customSteps: steps,
             customToggles: toggles,
             activeStatuses: baseStatuses.removingDuplicates(),
-            inventoryLabels: hasMaterials ? ["Main Material", "Supplier Confirmed", "Tools Ready", "Packaging Ready"] : ["Information Received", "Assets Ready", "Checklist Ready", "Delivery Ready"],
+            inventoryLabels: hasMaterials ? [t("Main Material", lang: seciliDil), "Supplier Confirmed", "Tools Ready", "Packaging Ready"] : [t("Information Received", lang: seciliDil), "Assets Ready", "Checklist Ready", "Delivery Ready"],
             summaryStep1: steps.count > 2 ? steps[2] : steps[0],
             summaryStep2: steps.contains("In Progress") ? "In Progress" : steps.last ?? "Completion",
             showMaterials: hasMaterials,
@@ -4818,7 +4824,7 @@ struct AyarlarView: View {
             summaryStep1 = "Shooting"; summaryStep2 = "Editing"
         default: // Handmade / General
             showCardMaterials = true; showCardShipping = true; showCardPriority = true
-            customFields = [CustomStep(title: "Item Name")]
+            customFields = [CustomStep(title: t("Item Name", lang: seciliDil))]
             customSteps = [CustomStep(title: "Sourcing"), CustomStep(title: "Crafting")]
             customToggles = [CustomStep(title: "Quality Checked?")]
             applyInventoryLabels(["Material 1", "Material 2", "Prep Done", "Ready to Use"])
@@ -4895,10 +4901,10 @@ struct AyarlarView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
-                Picker("Mode", selection: $replyMode) {
-                    Label("Apple On-Device", systemImage: "apple.logo").tag("Apple")
-                    Label("OpenAI Online", systemImage: "sparkles").tag("AI")
-                    Label("Offline Template", systemImage: "doc.text").tag("Offline")
+                Picker(t("Mode", lang: seciliDil), selection: $replyMode) {
+                    Label(t("Apple On-Device", lang: seciliDil), systemImage: "apple.logo").tag("Apple")
+                    Label(t("OpenAI Online", lang: seciliDil), systemImage: "sparkles").tag("AI")
+                    Label(t("Offline Template", lang: seciliDil), systemImage: "doc.text").tag("Offline")
                 }
                 .pickerStyle(.segmented)
                 .tint(.blue)
@@ -4970,7 +4976,7 @@ struct AyarlarView: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.blue.opacity(0.10), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            knowledgeBaseEditor(title: "Company Knowledge Base (For Apple On-Device AI)")
+            knowledgeBaseEditor(title: t("Company Knowledge Base (For Apple On-Device AI)", lang: seciliDil))
         }
     }
 
@@ -5012,7 +5018,7 @@ struct AyarlarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
 
-            knowledgeBaseEditor(title: "Company Knowledge Base (For OpenAI)")
+            knowledgeBaseEditor(title: t("Company Knowledge Base (For OpenAI)", lang: seciliDil))
         }
     }
 
@@ -5074,7 +5080,7 @@ struct AyarlarView: View {
 
             ForEach($customProducts) { $product in
                 HStack(spacing: 10) {
-                    TemplateRow(title: $product.title, desc: $product.desc, titlePlaceholder: "Product Name", descPlaceholder: "Product Detail / Price")
+                    TemplateRow(title: $product.title, desc: $product.desc, titlePlaceholder: t("Product Name", lang: seciliDil), descPlaceholder: t("Product Detail / Price", lang: seciliDil))
                     Button(action: { withAnimation { customProducts.removeAll { $0.id == product.id } } }) {
                         Image(systemName: "trash.fill").foregroundColor(.red.opacity(0.8)).padding(8)
                     }
@@ -5097,7 +5103,7 @@ struct AyarlarView: View {
 
             ForEach($customRules) { $rule in
                 HStack(spacing: 10) {
-                    TemplateRow(title: $rule.title, desc: $rule.desc, titlePlaceholder: "Rule Title", descPlaceholder: "Rule Description")
+                    TemplateRow(title: $rule.title, desc: $rule.desc, titlePlaceholder: t("Rule Title", lang: seciliDil), descPlaceholder: t("Rule Description", lang: seciliDil))
                     Button(action: { withAnimation { customRules.removeAll { $0.id == rule.id } } }) {
                         Image(systemName: "trash.fill").foregroundColor(.red.opacity(0.8)).padding(8)
                     }
@@ -5603,13 +5609,13 @@ struct AyarlarView: View {
 
     private func yukleCustomData() {
         if let data = activeStatusesJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([String].self, from: data) { activeStatuses = decoded }
-        if let data = customRulesJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomRule].self, from: data) { customRules = decoded }; if customRules.isEmpty { customRules.append(CustomRule(title: "Delivery Rule", desc: "We usually deliver within 3-5 business days.")) }
+        if let data = customRulesJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomRule].self, from: data) { customRules = decoded }; if customRules.isEmpty { customRules.append(CustomRule(title: "Delivery Rule", desc: t("We usually deliver within 3-5 business days.", lang: seciliDil))) }
         if let data = customProductsJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomProduct].self, from: data) { customProducts = decoded }; if customProducts.isEmpty { customProducts.append(CustomProduct(title: "Service / Product 1", desc: "Price starts at $100.")) }
         if let data = customStepsJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomStep].self, from: data) { customSteps = decoded }; if customSteps.isEmpty { customSteps = [CustomStep(title: "Design"), CustomStep(title: "Painting")] }
         if let data = customFieldsJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomStep].self, from: data) { customFields = decoded }; if customFields.isEmpty { customFields = [] }
         if let data = customTogglesJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CustomStep].self, from: data) { customToggles = decoded }
         if let data = companyNumbersJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: data) { companyNumbers = decoded }
-        if companyNumbers.isEmpty { companyNumbers = [CompanyNumberSettingDTO(title: "VAT Number", value: ""), CompanyNumberSettingDTO(title: "EORI Number", value: ""), CompanyNumberSettingDTO(title: "Company No.", value: "")] }
+        if companyNumbers.isEmpty { companyNumbers = [CompanyNumberSettingDTO(title: t("VAT Number", lang: seciliDil), value: ""), CompanyNumberSettingDTO(title: t("EORI Number", lang: seciliDil), value: ""), CompanyNumberSettingDTO(title: t("Company No.", lang: seciliDil), value: "")] }
     }
     
     private func kaydetCustomData() {

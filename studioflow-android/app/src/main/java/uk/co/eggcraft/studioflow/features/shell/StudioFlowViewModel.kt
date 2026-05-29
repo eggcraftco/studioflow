@@ -1444,8 +1444,9 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 messageError = ""
             )
         }
-        messageThreadsJob = viewModelScope.launch {
-            repository.messageThreadsFlow(workspace, user.uid)
+        if (workspace.billingPlan == StudioBillingPlan.TeamMonthly) {
+            messageThreadsJob = viewModelScope.launch {
+                repository.messageThreadsFlow(workspace, user.uid)
                 .catch { error ->
                     mutableState.update { it.copy(messageError = error.message ?: "Could not load messages.") }
                 }
@@ -1474,11 +1475,12 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(messageTeamMembers = members) }
                 }
         }
-        viewModelScope.launch {
-            runCatching { repository.getMessageWorkspaceSettings(workspace) }
-                .onSuccess { settings ->
-                    mutableState.update { it.copy(messageWorkspaceSettings = settings) }
-                }
+            viewModelScope.launch {
+                runCatching { repository.getMessageWorkspaceSettings(workspace) }
+                    .onSuccess { settings ->
+                        mutableState.update { it.copy(messageWorkspaceSettings = settings) }
+                    }
+            }
         }
         activityNotificationsJob = viewModelScope.launch {
             repository.activityNotificationsFlow(workspace, user.uid, user.email.orEmpty())
