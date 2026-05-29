@@ -19,7 +19,11 @@ import {
   type DashboardCounts,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
-import { createStripeCustomerPortalSession } from "@/lib/studioflow/billingActions";
+import {
+  createStripeCheckoutSession,
+  createStripeCustomerPortalSession,
+  type StripeBillingItemKey
+} from "@/lib/studioflow/billingActions";
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
   orders_read: "View existing orders",
@@ -55,6 +59,24 @@ const ADD_ONS = [
   }
 ];
 
+const PLAN_CHECKOUT_OPTIONS: Partial<Record<string, {
+  monthly: { itemKey: StripeBillingItemKey; label: string };
+  yearly: { itemKey: StripeBillingItemKey; label: string };
+}>> = {
+  lifetime_lite: {
+    monthly: { itemKey: "lite_monthly", label: "£9 monthly" },
+    yearly: { itemKey: "lite_yearly", label: "£90 yearly" }
+  },
+  pro_monthly: {
+    monthly: { itemKey: "pro_monthly", label: "£19 monthly" },
+    yearly: { itemKey: "pro_yearly", label: "£190 yearly" }
+  },
+  team_monthly: {
+    monthly: { itemKey: "team_monthly", label: "£49 monthly" },
+    yearly: { itemKey: "team_yearly", label: "£490 yearly" }
+  }
+};
+
 function formatStorageFromMB(valueMB: number) {
   if (!Number.isFinite(valueMB) || valueMB <= 0) return "0 MB";
   if (valueMB >= 1024) return Math.round((valueMB / 1024) * 10) / 10 + " GB";
@@ -74,6 +96,7 @@ export default function PlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [checkoutLoadingKey, setCheckoutLoadingKey] = useState<StripeBillingItemKey | null>(null);
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
 
   useEffect(() => {
@@ -133,6 +156,24 @@ export default function PlanPage() {
     }
   }
 
+  async function handleTestCheckout(itemKey: StripeBillingItemKey) {
+    if (!workspace || checkoutLoadingKey) return;
+    setCheckoutLoadingKey(itemKey);
+    setBillingMessage(null);
+    try {
+      const result = await createStripeCheckoutSession({ itemKey, companyId: workspace.id });
+      if (result.configured && result.url) {
+        window.location.assign(result.url);
+        return;
+      }
+      setBillingMessage(result.message || "Stripe test checkout is not configured yet.");
+    } catch (checkoutError) {
+      setBillingMessage(checkoutError instanceof Error ? checkoutError.message : "Could not create checkout session.");
+    } finally {
+      setCheckoutLoadingKey(null);
+    }
+  }
+
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -143,7 +184,7 @@ export default function PlanPage() {
         <div className="pill">Plan & Billing</div>
         <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "14px 0 8px" }}>Membership, storage and access</h1>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          This web page reads the same workspace plan model used by the app. Stripe test-mode infrastructure is prepared, but live payments are not enabled.
+          Test-mode subscription checkout for Lite, Pro and Team can be configured here. No live charges are enabled until the live billing switch is deliberately activated.
         </p>
       </section>
 
@@ -206,7 +247,7 @@ export default function PlanPage() {
                 <div className="pill">Important rule</div>
                 <h2 style={{ margin: "12px 0 6px" }}>Expired subscriptions fall back to Free/Demo</h2>
                 <p style={{ color: "var(--muted)", margin: 0, maxWidth: 760 }}>
-                  If a Pro or Team subscription expires, the workspace should fall back to Free/Demo access. Existing orders and customers should still remain viewable and exportable, so users are never locked out of their own data.
+                  If a Lite, Pro or Team subscription expires, the workspace falls back to Free Demo access. Existing orders and customers remain viewable and exportable, so users are never locked out of their own data.
                 </p>
               </div>
               <Link className="button secondary" href="/export">Open Export</Link>
@@ -215,7 +256,14 @@ export default function PlanPage() {
 
           <section className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", marginBottom: 18 }}>
             {Object.values(PLAN_ENTITLEMENTS).map(plan => (
-              <PlanCard key={plan.plan} plan={plan} active={plan.plan === workspace.billingPlan} />
+              <PlanCard
+                key={plan.plan}
+                plan={plan}
+                active={plan.plan === workspace.billingPlan}
+                canManage={isOwnerLike(workspace.role)}
+                checkoutLoadingKey={checkoutLoadingKey}
+                onCheckout={handleTestCheckout}
+              />
             ))}
           </section>
 
@@ -287,7 +335,21 @@ function MiniMetric({ title, value, note }: { title: string; value: string; note
   );
 }
 
-function PlanCard({ plan, active }: { plan: PlanEntitlements; active: boolean }) {
+function PlanCard({
+  plan,
+  active,
+  canManage,
+  checkoutLoadingKey,
+  onCheckout
+}: {
+  plan: PlanEntitlements;
+  active: boolean;
+  canManage: boolean;
+  checkoutLoadingKey: StripeBillingItemKey | null;
+  onCheckout: (itemKey: StripeBillingItemKey) => void;
+}) {
+  const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
+
   return (
     <article className="card" style={{ padding: 20, background: active ? "var(--accent-soft)" : "rgba(255,255,255,0.62)" }}>
       <div className="pill">{active ? "Current plan" : plan.purchaseModel}</div>
@@ -295,7 +357,7 @@ function PlanCard({ plan, active }: { plan: PlanEntitlements; active: boolean })
       <p style={{ color: "var(--muted)", marginTop: 0 }}>
         Orders: {plan.orderLimit ?? "Unlimited"}<br />
         Customers: {plan.customerLimit ?? "Unlimited"}<br />
-        Storage: {storageLimitLabel(plan)}<br />
+        Client Files storage: {plan.features.client_files ? storageLimitLabel(plan) : "Not included"}<br />
         Team members: {plan.teamMemberLimit}
       </p>
       <div className="grid" style={{ gap: 8 }}>
@@ -303,6 +365,27 @@ function PlanCard({ plan, active }: { plan: PlanEntitlements; active: boolean })
           <span key={key} className="pill">{FEATURE_LABELS[key as FeatureKey]}</span>
         ))}
       </div>
+      {checkout ? (
+        <div style={{ marginTop: 18, display: "grid", gap: 8 }}>
+          <div className="pill">Stripe test mode</div>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!canManage || checkoutLoadingKey !== null}
+            onClick={() => onCheckout(checkout.monthly.itemKey)}
+          >
+            {checkoutLoadingKey === checkout.monthly.itemKey ? "Opening checkout..." : `Test ${checkout.monthly.label}`}
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!canManage || checkoutLoadingKey !== null}
+            onClick={() => onCheckout(checkout.yearly.itemKey)}
+          >
+            {checkoutLoadingKey === checkout.yearly.itemKey ? "Opening checkout..." : `Test ${checkout.yearly.label}`}
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
