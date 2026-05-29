@@ -2878,6 +2878,7 @@ private fun OrderDetailCardContent(
         )
         OrderDetailCardId.ClientFiles -> DesktopClientFilesCard(
             order = order,
+            clientFilesEnabled = financeAdvancedEnabled,
             onUpdateOrderFields = onUpdateOrderFields,
             onUploadClientFile = onUploadClientFile,
             onRenameClientFile = onRenameClientFile,
@@ -3357,6 +3358,7 @@ private fun SpecialNoteSectionEditor(
 @Composable
 private fun DesktopClientFilesCard(
     order: StudioOrder,
+    clientFilesEnabled: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit,
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
@@ -3369,7 +3371,7 @@ private fun DesktopClientFilesCard(
     var renameFileId by remember(order.id) { mutableStateOf("") }
     var renameText by remember(order.id) { mutableStateOf("") }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
+        if (uri != null && clientFilesEnabled) {
             val fileName = displayNameForUri(context, uri)
             val contentType = context.contentResolver.getType(uri).orEmpty()
             val bytes = readBytesForUri(context, uri)
@@ -3380,6 +3382,7 @@ private fun DesktopClientFilesCard(
     DetailCard(title = "Client Files") {
         ClientFileDropUploadArea(
             order = order,
+            enabled = clientFilesEnabled,
             onUploadClientFile = onUploadClientFile
         ) {
             Text(
@@ -3389,12 +3392,43 @@ private fun DesktopClientFilesCard(
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
-            Button(
-                onClick = { filePicker.launch(arrayOf("*/*")) },
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(t("Upload File"), fontWeight = FontWeight.ExtraBold)
+
+            if (clientFilesEnabled) {
+                Button(
+                    onClick = { filePicker.launch(arrayOf("*/*")) },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(t("Upload File"), fontWeight = FontWeight.ExtraBold)
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(40.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            t("Client Files available on Pro"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text("Pro", color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+                    }
+                }
             }
+
             if (order.clientFiles.isEmpty()) {
                 DetailListRow("No client files yet.", "Upload PDFs, images, PSD or PSB files that belong to this client order.", MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
@@ -3405,62 +3439,64 @@ private fun DesktopClientFilesCard(
                         subtitle = listOf(fileSizeLabel(file.fileSize), shortDateOrDash(file.uploadedAt)).filter { it.isNotBlank() }.joinToString(" · "),
                         tone = StudioBlue
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                        TextButton(
-                            onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
-                            enabled = file.downloadUrl.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(t("Open"), fontWeight = FontWeight.ExtraBold)
-                        }
-                        TextButton(
-                            onClick = {
-                                if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
-                                    onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
-                                }
-                            },
-                            enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(t("Preview"), fontWeight = FontWeight.ExtraBold)
-                        }
-                        TextButton(
-                            onClick = {
-                                renameFileId = file.id
-                                renameText = file.fileName
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(t("Rename"), fontWeight = FontWeight.ExtraBold)
-                        }
-                    }
-                    if (renameFileId == file.id) {
-                        OutlinedTextField(
-                            value = renameText,
-                            onValueChange = { renameText = it },
-                            label = { Text(t("File name")) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            Button(
-                                onClick = {
-                                    onRenameClientFile(order, file.id, renameText.trim())
-                                    renameFileId = ""
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
+                    if (clientFilesEnabled) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                            TextButton(
+                                onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
+                                enabled = file.downloadUrl.isNotBlank(),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Text(t("Save"), fontWeight = FontWeight.ExtraBold)
+                                Text(t("Open"), fontWeight = FontWeight.ExtraBold)
                             }
                             TextButton(
                                 onClick = {
-                                    onDeleteClientFile(order, file.id)
-                                    renameFileId = ""
+                                    if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
+                                        onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
+                                    }
+                                },
+                                enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(t("Preview"), fontWeight = FontWeight.ExtraBold)
+                            }
+                            TextButton(
+                                onClick = {
+                                    renameFileId = file.id
+                                    renameText = file.fileName
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                                Text(t("Rename"), fontWeight = FontWeight.ExtraBold)
+                            }
+                        }
+                        if (renameFileId == file.id) {
+                            OutlinedTextField(
+                                value = renameText,
+                                onValueChange = { renameText = it },
+                                label = { Text(t("File name")) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                Button(
+                                    onClick = {
+                                        onRenameClientFile(order, file.id, renameText.trim())
+                                        renameFileId = ""
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(t("Save"), fontWeight = FontWeight.ExtraBold)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        onDeleteClientFile(order, file.id)
+                                        renameFileId = ""
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                                }
                             }
                         }
                     }
@@ -3472,6 +3508,7 @@ private fun DesktopClientFilesCard(
         }
     }
 }
+
 
 @Composable
 private fun ClientFileDropUploadArea(

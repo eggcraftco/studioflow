@@ -5523,14 +5523,7 @@ export function OrderDetailContent({
                   </>
                 ) : null}
               </div>
-              {!canUseClientFiles ? (
-                <div className="mini-panel locked-panel compact-mini-panel">
-                  <CardTitle icon="lock" eyebrow="Locked" title="Client Files cloud access is locked" />
-                  <p className="muted-copy">
-                    Metadata stays visible, but previews and downloads are available in Pro and Team plans.
-                  </p>
-                </div>
-              ) : null}
+              {!canUseClientFiles ? <ClientFilesUpgradeHint /> : null}
               {fileActionStatus ? <p className="file-action-status">{fileActionStatus}</p> : null}
               {fileActionError ? <p className="file-action-error">{fileActionError}</p> : null}
               {clientFileItems.length === 0 ? (
@@ -7871,6 +7864,34 @@ function ClientFilePreviewModal({
         </footer>
       </section>
     </div>
+  );
+}
+
+function ClientFilesUpgradeHint() {
+  return (
+    <Link
+      href="/plan"
+      aria-label="Client Files available on Pro"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        width: "fit-content",
+        padding: "6px 10px",
+        borderRadius: 999,
+        background: "var(--surface-soft, rgba(36, 42, 48, 0.045))",
+        color: "var(--muted)",
+        fontSize: 12,
+        fontWeight: 700,
+        textDecoration: "none"
+      }}
+    >
+      <span aria-hidden="true" style={{ display: "inline-flex", width: 12, height: 12 }}>
+        <CardIconGlyph icon="lock" />
+      </span>
+      <span>Client Files available on Pro</span>
+      <span aria-hidden="true">›</span>
+    </Link>
   );
 }
 

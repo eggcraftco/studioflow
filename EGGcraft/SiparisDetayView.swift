@@ -7673,14 +7673,33 @@ struct SiparisDetayView: View {
 
 
     private func clientFilesPlanLockedNotice() -> some View {
-        lockedFeatureUpsellCard(
-            title: t("Client Files are locked", lang: seciliDil),
-            requiredPlan: t(StudioBillingPlan.proMonthly.displayName, lang: seciliDil),
-            message: t("Cloud file upload, Share Sheet import and offline file queue are available on Monthly Pro and Team plans.", lang: seciliDil),
-            footer: t("Existing files remain visible, but new uploads are disabled for this plan.", lang: seciliDil),
-            iconName: "folder.badge.plus",
-            compact: true
-        )
+        Button {
+            openPlanAccessFromLockedFeature()
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .bold))
+
+                Text(t("Client Files available on Pro", lang: seciliDil))
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                Text(t("Plan & Access", lang: seciliDil))
+                    .font(.system(size: 10, weight: .semibold))
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.primary.opacity(colorScheme == .dark ? 0.05 : 0.035))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("Client Files available on Pro", lang: seciliDil))
     }
 
     private func clientFileDateText(_ date: Date) -> String {
