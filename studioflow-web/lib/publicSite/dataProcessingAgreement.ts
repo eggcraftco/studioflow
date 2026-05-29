@@ -17,7 +17,7 @@ export const DATA_PROCESSING_AGREEMENT_SECTIONS: PrivacyPolicySection[] = [
       "This Data Processing Agreement (\"DPA\") is entered into between:",
       "Customer: the individual, company, organisation, workspace owner, or other legal entity using NivaDesk (\"Customer\", \"you\", or \"your\").",
       "Processor: EGGCRAFT LIMITED, a company registered in England and Wales, operating NivaDesk (\"NivaDesk\", \"we\", \"us\", or \"our\").",
-      "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom\nEmail: nivadesk@gmail.com"
+      "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom\nEmail: contact@nivadesk.co.uk"
     ]
   },
   {
@@ -296,7 +296,7 @@ export const DATA_PROCESSING_AGREEMENT_SECTIONS: PrivacyPolicySection[] = [
       "London",
       "W9 1DN",
       "United Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -358,7 +358,7 @@ const DATA_PROCESSING_AGREEMENT_DRAFTS: Partial<Record<StudioLanguage, Localized
       "İletişim"
     ],
     sectionSummaries: [
-      "Müşteri, NivaDesk'i kullanan kişi veya kurumdur. İşleyici EGGCRAFT LIMITED'dir: 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-posta: nivadesk@gmail.com.",
+      "Müşteri, NivaDesk'i kullanan kişi veya kurumdur. İşleyici EGGCRAFT LIMITED'dir: 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-posta: contact@nivadesk.co.uk.",
       "Bu DPA, NivaDesk Terms of Service'e dahildir. Customer Personal Data işlenmesi konusunda çelişki olursa bu DPA geçerli olur.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor ve Services kavramları bu anlaşma için tanımlanır.",
       "Customer Personal Data için müşteri controller, NivaDesk processor olarak hareket eder. NivaDesk veriyi müşterinin belgelenmiş talimatlarına göre işler.",
@@ -382,7 +382,7 @@ const DATA_PROCESSING_AGREEMENT_DRAFTS: Partial<Record<StudioLanguage, Localized
       "Bu DPA, veri koruma yasaları aksini gerektirmedikçe Agreement ile aynı hukuk ve yargı düzenine tabidir.",
       "İşleme detayları; NivaDesk'in sipariş, müşteri, görev, dosya, workflow, timeline ve ekip erişimi için sağlanmasını, süresini, amacını, veri kategorilerini ve özel kategori veri sınırlamasını açıklar.",
       "Teknik ve organizasyonel önlemler; hesap güvenliği, workspace ayrımı, rol bazlı erişim, güvenli bulut altyapısı, dosya limitleri, loglar, güvenli aktarım, sınırlı admin erişimi, olay yanıtı ve yedekleri kapsar.",
-      "DPA soruları için: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-posta: nivadesk@gmail.com."
+      "DPA soruları için: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-posta: contact@nivadesk.co.uk."
     ]
   },
   Deutsch: {
@@ -420,7 +420,7 @@ const DATA_PROCESSING_AGREEMENT_DRAFTS: Partial<Record<StudioLanguage, Localized
       "Kontakt"
     ],
     sectionSummaries: [
-      "Kunde ist die Person oder Organisation, die NivaDesk nutzt. Verarbeiter ist EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-Mail: nivadesk@gmail.com.",
+      "Kunde ist die Person oder Organisation, die NivaDesk nutzt. Verarbeiter ist EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-Mail: contact@nivadesk.co.uk.",
       "Diese DPA ist in die NivaDesk Terms of Service einbezogen. Bei Konflikten zur Verarbeitung von Customer Personal Data gilt diese DPA.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor und Services werden für diese Vereinbarung definiert.",
       "Für Customer Personal Data ist der Kunde Controller und NivaDesk Processor, sofern nichts anderes schriftlich vereinbart wurde.",
@@ -444,7 +444,7 @@ const DATA_PROCESSING_AGREEMENT_DRAFTS: Partial<Record<StudioLanguage, Localized
       "Diese DPA unterliegt demselben Recht und Gerichtsstand wie das Agreement, sofern Datenschutzrecht nichts anderes verlangt.",
       "Die Verarbeitungsdetails beschreiben Gegenstand, Dauer, Zweck, Art der Verarbeitung, betroffene Personen, Datenkategorien und Grenzen für besondere Kategorien.",
       "Die Maßnahmen umfassen Kontosicherheit, Workspace-Trennung, rollenbasierten Zugriff, Cloud-Sicherheit, Datei-Limits, Logs, verschlüsselte Übertragung, beschränkten Admin-Zugriff, Incident Response und Backups.",
-      "Fragen zur DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-Mail: nivadesk@gmail.com."
+      "Fragen zur DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-Mail: contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -482,7 +482,7 @@ const DATA_PROCESSING_AGREEMENT_DRAFTS: Partial<Record<StudioLanguage, Localized
       "Contact"
     ],
     sectionSummaries: [
-      "Le client est la personne ou l'organisation utilisant NivaDesk. Le sous-traitant est EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-mail: nivadesk@gmail.com.",
+      "Le client est la personne ou l'organisation utilisant NivaDesk. Le sous-traitant est EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-mail: contact@nivadesk.co.uk.",
       "Ce DPA est intégré aux Terms of Service de NivaDesk. En cas de conflit sur le traitement des Customer Personal Data, ce DPA prévaut.",
       "Les notions Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor et Services sont définies pour cet accord.",
       "Pour les Customer Personal Data, le client est controller et NivaDesk est processor, sauf accord écrit contraire.",
@@ -506,7 +506,7 @@ const DATA_PROCESSING_AGREEMENT_DRAFTS: Partial<Record<StudioLanguage, Localized
       "Ce DPA suit le même droit applicable et la même juridiction que l'Agreement, sauf exigence contraire des lois de protection des données.",
       "Les détails du traitement couvrent l'objet, la durée, le but, la nature, les personnes concernées, les catégories de données et les limites pour données sensibles.",
       "Les mesures couvrent sécurité de compte, séparation workspace, accès par rôle, sécurité cloud, limites de fichiers, journaux, transport sécurisé, accès admin limité, réponse aux incidents et sauvegardes.",
-      "Questions DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-mail: nivadesk@gmail.com."
+      "Questions DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. E-mail: contact@nivadesk.co.uk."
     ]
   }
 };
@@ -562,7 +562,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Contatto"
     ],
     sectionSummaries: [
-      "Il cliente è la persona o organizzazione che usa NivaDesk. Il responsabile del trattamento è EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com.",
+      "Il cliente è la persona o organizzazione che usa NivaDesk. Il responsabile del trattamento è EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk.",
       "Questo DPA è incorporato nei Terms of Service di NivaDesk. In caso di conflitto sul trattamento dei Customer Personal Data, prevale questo DPA.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor e Services sono definiti per questo accordo.",
       "Per i Customer Personal Data il cliente è controller e NivaDesk è processor, salvo diverso accordo scritto.",
@@ -586,7 +586,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Questo DPA segue la stessa legge e giurisdizione dell'Agreement salvo diversa richiesta delle leggi sulla protezione dati.",
       "I dettagli del trattamento descrivono oggetto, durata, finalità, natura, interessati, categorie di dati e limiti sulle categorie speciali.",
       "Le misure includono sicurezza account, separazione workspace, accesso per ruolo, sicurezza cloud, limiti file, log, trasporto sicuro, accesso admin limitato, risposta incidenti e backup.",
-      "Domande sul DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com."
+      "Domande sul DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -624,7 +624,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Contacto"
     ],
     sectionSummaries: [
-      "El cliente es la persona u organización que usa NivaDesk. El procesador es EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com.",
+      "El cliente es la persona u organización que usa NivaDesk. El procesador es EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk.",
       "Este DPA se incorpora a los Terms of Service de NivaDesk. Si hay conflicto sobre Customer Personal Data, este DPA prevalece.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor y Services se definen para este acuerdo.",
       "Para Customer Personal Data, el cliente es controller y NivaDesk es processor, salvo acuerdo escrito diferente.",
@@ -648,7 +648,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Este DPA se rige por la misma ley y jurisdicción que el Agreement, salvo exigencia distinta de las leyes de protección de datos.",
       "Los detalles del tratamiento explican objeto, duración, finalidad, naturaleza, interesados, categorías de datos y límites sobre categorías especiales.",
       "Las medidas incluyen seguridad de cuenta, separación workspace, acceso por rol, seguridad cloud, límites de archivos, registros, transporte seguro, acceso admin limitado, respuesta a incidentes y backups.",
-      "Preguntas sobre DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com."
+      "Preguntas sobre DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -686,7 +686,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Contacto"
     ],
     sectionSummaries: [
-      "O cliente é a pessoa ou organização que usa o NivaDesk. O processador é a EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com.",
+      "O cliente é a pessoa ou organização que usa o NivaDesk. O processador é a EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk.",
       "Este DPA integra os Terms of Service do NivaDesk. Se houver conflito sobre Customer Personal Data, este DPA prevalece.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor e Services são definidos para este acordo.",
       "Para Customer Personal Data, o cliente é controller e o NivaDesk é processor, salvo acordo escrito diferente.",
@@ -710,7 +710,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Este DPA rege-se pela mesma lei e jurisdição do Agreement, salvo exigência diferente da lei de proteção de dados.",
       "Os detalhes do tratamento explicam objeto, duração, finalidade, natureza, titulares, categorias de dados e limites para categorias especiais.",
       "As medidas incluem segurança de conta, separação workspace, acesso por função, segurança cloud, limites de ficheiros, logs, transporte seguro, acesso admin limitado, resposta a incidentes e backups.",
-      "Perguntas sobre DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com."
+      "Perguntas sobre DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -748,7 +748,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Контакт"
     ],
     sectionSummaries: [
-      "Клиентом является лицо или организация, использующая NivaDesk. Обработчик: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com.",
+      "Клиентом является лицо или организация, использующая NivaDesk. Обработчик: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk.",
       "Этот DPA включен в Terms of Service NivaDesk. При конфликте по обработке Customer Personal Data применяется этот DPA.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor и Services определяются для целей этого соглашения.",
       "Для Customer Personal Data клиент является controller, а NivaDesk - processor, если письменно не согласовано иное.",
@@ -772,7 +772,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Этот DPA регулируется тем же правом и юрисдикцией, что и Agreement, если законы о защите данных не требуют иного.",
       "Детали обработки описывают предмет, срок, цель, характер обработки, субъектов данных, категории данных и ограничения для специальных категорий.",
       "Меры включают безопасность аккаунта, разделение workspace, доступ по ролям, cloud security, file limits, logs, secure transport, ограниченный admin access, incident response и backups.",
-      "Вопросы по DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com."
+      "Вопросы по DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -810,7 +810,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "連絡先"
     ],
     sectionSummaries: [
-      "お客様は NivaDesk を利用する個人または組織です。処理者は EGGCRAFT LIMITED です: 141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: nivadesk@gmail.com。",
+      "お客様は NivaDesk を利用する個人または組織です。処理者は EGGCRAFT LIMITED です: 141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: contact@nivadesk.co.uk。",
       "この DPA は NivaDesk の Terms of Service に組み込まれます。Customer Personal Data の処理について矛盾がある場合、この DPA が優先します。",
       "Applicable Data Protection Laws、Customer Personal Data、Controller、Processor、Subprocessor、Services をこの契約のために定義します。",
       "Customer Personal Data について、お客様は controller、NivaDesk は processor です。ただし書面で別段の合意がある場合を除きます。",
@@ -834,7 +834,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "この DPA は、データ保護法が別途要求しない限り、Agreement と同じ準拠法および管轄に従います。",
       "処理の詳細は、対象、期間、目的、処理の性質、データ主体、データカテゴリ、特別カテゴリの制限を説明します。",
       "対策は account security、workspace separation、role access、cloud security、file limits、logs、secure transport、limited admin access、incident response、backups を含みます。",
-      "DPA に関する質問: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: nivadesk@gmail.com。"
+      "DPA に関する質問: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: contact@nivadesk.co.uk。"
     ]
   },
   "中文 (Chinese)": {
@@ -872,7 +872,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "联系方式"
     ],
     sectionSummaries: [
-      "客户是使用 NivaDesk 的个人或组织。处理方是 EGGCRAFT LIMITED：141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: nivadesk@gmail.com。",
+      "客户是使用 NivaDesk 的个人或组织。处理方是 EGGCRAFT LIMITED：141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: contact@nivadesk.co.uk。",
       "本 DPA 纳入 NivaDesk Terms of Service。若 Customer Personal Data 的处理条款发生冲突，本 DPA 优先适用。",
       "本协议定义 Applicable Data Protection Laws、Customer Personal Data、Controller、Processor、Subprocessor 和 Services。",
       "对于 Customer Personal Data，客户为 controller，NivaDesk 为 processor，除非双方另有书面约定。",
@@ -896,7 +896,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "本 DPA 适用与 Agreement 相同的法律和管辖，除非数据保护法另有要求。",
       "处理详情说明主题、期限、目的、处理性质、数据主体、数据类别以及特殊类别数据限制。",
       "措施包括账户安全、workspace 隔离、角色访问、云安全、文件限制、日志、安全传输、受限管理员访问、事件响应和备份。",
-      "DPA 问题请联系：EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: nivadesk@gmail.com。"
+      "DPA 问题请联系：EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom。Email: contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -934,7 +934,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "التواصل"
     ],
     sectionSummaries: [
-      "العميل هو الشخص أو المؤسسة التي تستخدم NivaDesk. المعالج هو EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. البريد: nivadesk@gmail.com.",
+      "العميل هو الشخص أو المؤسسة التي تستخدم NivaDesk. المعالج هو EGGCRAFT LIMITED: 141 Randolph Avenue, London, W9 1DN, United Kingdom. البريد: contact@nivadesk.co.uk.",
       "تندمج هذه الاتفاقية مع Terms of Service الخاصة بـ NivaDesk. عند وجود تعارض بشأن Customer Personal Data، تسري هذه الاتفاقية.",
       "توضح هذه الاتفاقية معاني Applicable Data Protection Laws و Customer Personal Data و Controller و Processor و Subprocessor و Services.",
       "بالنسبة إلى Customer Personal Data، يكون العميل controller وتكون NivaDesk processor ما لم يتم الاتفاق كتابياً على خلاف ذلك.",
@@ -958,7 +958,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "تخضع هذه الاتفاقية لنفس القانون والاختصاص في Agreement ما لم تتطلب قوانين حماية البيانات غير ذلك.",
       "تفاصيل المعالجة تشرح الموضوع والمدة والغرض وطبيعة المعالجة وأصحاب البيانات وفئات البيانات وحدود البيانات الخاصة.",
       "تشمل التدابير أمان الحساب، فصل workspace، الوصول حسب الدور، أمان cloud، حدود الملفات، السجلات، النقل الآمن، وصول الإدارة المحدود، الاستجابة للحوادث والنسخ الاحتياطي.",
-      "لأسئلة DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. البريد: nivadesk@gmail.com."
+      "لأسئلة DPA: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. البريد: contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -996,7 +996,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "Contact"
     ],
     sectionSummaries: [
-      "ग्राहक वह व्यक्ति या संस्था है जो NivaDesk इस्तेमाल करती है. Processor EGGCRAFT LIMITED है: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com.",
+      "ग्राहक वह व्यक्ति या संस्था है जो NivaDesk इस्तेमाल करती है. Processor EGGCRAFT LIMITED है: 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk.",
       "यह DPA NivaDesk Terms of Service में शामिल है. Customer Personal Data processing पर conflict होने पर यह DPA लागू होगा.",
       "Applicable Data Protection Laws, Customer Personal Data, Controller, Processor, Subprocessor और Services को इस agreement के लिए define किया गया है.",
       "Customer Personal Data के लिए ग्राहक controller और NivaDesk processor है, जब तक अलग written agreement न हो.",
@@ -1020,7 +1020,7 @@ const DATA_PROCESSING_AGREEMENT_TRANSLATION_BASE: Record<Exclude<StudioLanguage,
       "यह DPA Agreement जैसी governing law और jurisdiction follow करता है, unless data protection laws require otherwise.",
       "Processing details subject matter, duration, purpose, nature, data subjects, data categories और special category limits समझाते हैं.",
       "Measures में account security, workspace separation, role access, cloud security, file limits, logs, secure transport, limited admin access, incident response और backups शामिल हैं.",
-      "DPA questions के लिए: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: nivadesk@gmail.com."
+      "DPA questions के लिए: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Email: contact@nivadesk.co.uk."
     ]
   }
 };

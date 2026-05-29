@@ -26,6 +26,10 @@ export type PlanEntitlements = {
   customerLimit: number | null;
   storageLimitMB: number;
   teamMemberLimit: number;
+  includedTeamSeats?: number;
+  selfServiceMaxTeamSeats?: number;
+  additionalSeatMonthlyPriceGBP?: number;
+  additionalSeatYearlyPriceGBP?: number;
   features: Record<FeatureKey, boolean>;
 };
 
@@ -60,7 +64,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   lifetime_lite: {
     plan: "lifetime_lite",
     title: "NivaDesk Lite",
-    purchaseModel: "One-Time Purchase",
+    purchaseModel: "Monthly or Annual Subscription",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 250,
@@ -70,7 +74,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       orders_create: true,
       export_data: true,
       financial_basic: true,
-      financial_advanced: true,
+      financial_advanced: false,
       client_files: false,
       card_customization: true,
       team_access: false,
@@ -118,7 +122,11 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 51200,
-    teamMemberLimit: 10,
+    teamMemberLimit: 5,
+    includedTeamSeats: 5,
+    selfServiceMaxTeamSeats: 10,
+    additionalSeatMonthlyPriceGBP: 5,
+    additionalSeatYearlyPriceGBP: 50,
     features: {
       orders_read: true,
       orders_create: true,

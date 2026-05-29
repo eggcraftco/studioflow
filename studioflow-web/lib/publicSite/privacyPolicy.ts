@@ -21,7 +21,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "NivaDesk is operated by:",
       "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-      "Email: nivadesk@gmail.com",
+      "Email: contact@nivadesk.co.uk",
       "For privacy-related questions, data requests, or account deletion requests, please contact us by email."
     ]
   },
@@ -417,7 +417,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
         title: "",
         paragraphs: [
           "If you are in the UK, you can contact the Information Commissioner's Office at ico.org.uk.",
-          "To exercise your rights, contact us at: nivadesk@gmail.com",
+          "To exercise your rights, contact us at: contact@nivadesk.co.uk",
           "We may ask for information to verify your identity before responding to a request."
         ]
       }
@@ -450,7 +450,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "If you have questions about this Privacy Policy, your personal data, or your rights, please contact:",
       "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -464,7 +464,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "NivaDesk управляется компанией:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "По вопросам конфиденциальности, запросам данных или удалению аккаунта свяжитесь с нами по email."
         ]
       },
@@ -534,7 +534,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
       },
       {
         title: "18. Ваши права",
-        paragraphs: ["В зависимости от места проживания у вас могут быть права на доступ, исправление, удаление, возражение, ограничение, переносимость, отзыв согласия, отказ от маркетинга и жалобу в орган по защите данных. В UK можно обратиться в ICO на ico.org.uk. Для реализации прав пишите на nivadesk@gmail.com."]
+        paragraphs: ["В зависимости от места проживания у вас могут быть права на доступ, исправление, удаление, возражение, ограничение, переносимость, отзыв согласия, отказ от маркетинга и жалобу в орган по защите данных. В UK можно обратиться в ICO на ico.org.uk. Для реализации прав пишите на contact@nivadesk.co.uk."]
       },
       {
         title: "19. Дети",
@@ -553,7 +553,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "Если у вас есть вопросы об этой Политике, ваших данных или правах, свяжитесь с нами:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -566,7 +566,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "NivaDesk は以下により運営されています。",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "プライバシーに関する質問、データ請求、アカウント削除請求はメールでお問い合わせください。"
         ]
       },
@@ -636,7 +636,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
       },
       {
         title: "18. あなたの権利",
-        paragraphs: ["居住地により、アクセス、訂正、削除、異議、制限、ポータビリティ、同意撤回、マーケティング停止、監督機関への苦情の権利があります。英国では ico.org.uk の ICO に連絡できます。権利行使は nivadesk@gmail.com へご連絡ください。"]
+        paragraphs: ["居住地により、アクセス、訂正、削除、異議、制限、ポータビリティ、同意撤回、マーケティング停止、監督機関への苦情の権利があります。英国では ico.org.uk の ICO に連絡できます。権利行使は contact@nivadesk.co.uk へご連絡ください。"]
       },
       {
         title: "19. 子ども",
@@ -655,7 +655,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "本ポリシー、個人データ、権利について質問がある場合はお問い合わせください。",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -668,7 +668,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "NivaDesk 由以下公司运营：",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "如有隐私问题、数据请求或账户删除请求，请通过电子邮件联系我们。"
         ]
       },
@@ -738,7 +738,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
       },
       {
         title: "18. 您的权利",
-        paragraphs: ["根据居住地，您可能拥有访问、更正、删除、反对、限制、数据可携带、撤回同意、退出营销以及向数据保护机构投诉的权利。在英国可通过 ico.org.uk 联系 ICO。行使权利请写信至 nivadesk@gmail.com。"]
+        paragraphs: ["根据居住地，您可能拥有访问、更正、删除、反对、限制、数据可携带、撤回同意、退出营销以及向数据保护机构投诉的权利。在英国可通过 ico.org.uk 联系 ICO。行使权利请写信至 contact@nivadesk.co.uk。"]
       },
       {
         title: "19. 儿童",
@@ -757,7 +757,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "如果您对本政策、个人数据或您的权利有疑问，请联系：",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -770,7 +770,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "يتم تشغيل NivaDesk بواسطة:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "البريد الإلكتروني: nivadesk@gmail.com",
+          "البريد الإلكتروني: contact@nivadesk.co.uk",
           "لأسئلة الخصوصية أو طلبات البيانات أو حذف الحساب، يرجى التواصل معنا عبر البريد الإلكتروني."
         ]
       },
@@ -840,7 +840,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
       },
       {
         title: "18. حقوقك",
-        paragraphs: ["بحسب مكان إقامتك، قد تكون لديك حقوق الوصول والتصحيح والحذف والاعتراض والتقييد ونقل البيانات وسحب الموافقة وإلغاء التسويق وتقديم شكوى لسلطة حماية البيانات. في المملكة المتحدة يمكنك التواصل مع ICO عبر ico.org.uk. لممارسة الحقوق راسل nivadesk@gmail.com."]
+        paragraphs: ["بحسب مكان إقامتك، قد تكون لديك حقوق الوصول والتصحيح والحذف والاعتراض والتقييد ونقل البيانات وسحب الموافقة وإلغاء التسويق وتقديم شكوى لسلطة حماية البيانات. في المملكة المتحدة يمكنك التواصل مع ICO عبر ico.org.uk. لممارسة الحقوق راسل contact@nivadesk.co.uk."]
       },
       {
         title: "19. الأطفال",
@@ -859,7 +859,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "إذا كانت لديك أسئلة حول هذه السياسة أو بياناتك أو حقوقك، يرجى التواصل مع:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -872,7 +872,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "NivaDesk का संचालन इस कंपनी द्वारा किया जाता है:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "गोपनीयता प्रश्न, डेटा अनुरोध या अकाउंट हटाने के अनुरोध के लिए कृपया हमें ईमेल करें।"
         ]
       },
@@ -942,7 +942,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
       },
       {
         title: "18. आपके अधिकार",
-        paragraphs: ["आपके location के अनुसार आपको access, correction, deletion, objection, restriction, portability, consent withdrawal, marketing opt-out और data protection authority में complaint के अधिकार मिल सकते हैं। UK में ICO से ico.org.uk पर संपर्क कर सकते हैं। Rights exercise करने के लिए nivadesk@gmail.com पर लिखें।"]
+        paragraphs: ["आपके location के अनुसार आपको access, correction, deletion, objection, restriction, portability, consent withdrawal, marketing opt-out और data protection authority में complaint के अधिकार मिल सकते हैं। UK में ICO से ico.org.uk पर संपर्क कर सकते हैं। Rights exercise करने के लिए contact@nivadesk.co.uk पर लिखें।"]
       },
       {
         title: "19. Children",
@@ -961,7 +961,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         paragraphs: [
           "यदि इस Policy, आपके data या rights के बारे में प्रश्न हैं, तो contact करें:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -974,7 +974,7 @@ const PRIVACY_POLICY_SECTIONS_TR: PrivacyPolicySection[] = [
     paragraphs: [
       "NivaDesk şu şirket tarafından işletilir:",
       "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-      "Email: nivadesk@gmail.com",
+      "Email: contact@nivadesk.co.uk",
       "Gizlilikle ilgili sorular, veri talepleri veya hesap silme talepleri için lütfen bizimle e-posta yoluyla iletişime geçin."
     ]
   },
@@ -1360,7 +1360,7 @@ const PRIVACY_POLICY_SECTIONS_TR: PrivacyPolicySection[] = [
         title: "",
         paragraphs: [
           "Birleşik Krallık'taysanız Information Commissioner's Office ile ico.org.uk üzerinden iletişime geçebilirsiniz.",
-          "Haklarınızı kullanmak için bize şu adresten ulaşın: nivadesk@gmail.com",
+          "Haklarınızı kullanmak için bize şu adresten ulaşın: contact@nivadesk.co.uk",
           "Bir talebe yanıt vermeden önce kimliğinizi doğrulamak için bilgi isteyebiliriz."
         ]
       }
@@ -1393,7 +1393,7 @@ const PRIVACY_POLICY_SECTIONS_TR: PrivacyPolicySection[] = [
     paragraphs: [
       "Bu Gizlilik Politikası, kişisel verileriniz veya haklarınız hakkında sorularınız varsa lütfen iletişime geçin:",
       "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -1417,7 +1417,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "NivaDesk wird betrieben von:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "E-Mail: nivadesk@gmail.com",
+          "E-Mail: contact@nivadesk.co.uk",
           "Für Datenschutzfragen, Datenanfragen oder Anfragen zur Kontolöschung kontaktieren Sie uns bitte per E-Mail."
         ]
       },
@@ -1487,7 +1487,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
       },
       {
         title: "18. Ihre Rechte",
-        paragraphs: ["Je nach Wohnort können Sie Rechte auf Auskunft, Berichtigung, Löschung, Widerspruch, Einschränkung, Datenübertragbarkeit, Widerruf der Einwilligung, Abmeldung von Marketing und Beschwerde bei einer Datenschutzbehörde haben. Im UK können Sie das ICO unter ico.org.uk kontaktieren. Zur Ausübung Ihrer Rechte schreiben Sie an nivadesk@gmail.com."]
+        paragraphs: ["Je nach Wohnort können Sie Rechte auf Auskunft, Berichtigung, Löschung, Widerspruch, Einschränkung, Datenübertragbarkeit, Widerruf der Einwilligung, Abmeldung von Marketing und Beschwerde bei einer Datenschutzbehörde haben. Im UK können Sie das ICO unter ico.org.uk kontaktieren. Zur Ausübung Ihrer Rechte schreiben Sie an contact@nivadesk.co.uk."]
       },
       {
         title: "19. Kinder",
@@ -1506,7 +1506,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "Wenn Sie Fragen zu dieser Datenschutzerklärung, Ihren personenbezogenen Daten oder Ihren Rechten haben, kontaktieren Sie uns bitte:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "E-Mail: nivadesk@gmail.com"
+          "E-Mail: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -1519,7 +1519,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "NivaDesk est exploité par :",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "E-mail : nivadesk@gmail.com",
+          "E-mail : contact@nivadesk.co.uk",
           "Pour toute question relative à la confidentialité, demande de données ou demande de suppression de compte, contactez-nous par e-mail."
         ]
       },
@@ -1589,7 +1589,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
       },
       {
         title: "18. Vos droits",
-        paragraphs: ["Selon votre lieu de résidence, vous pouvez avoir des droits d'accès, de rectification, de suppression, d'opposition, de limitation, de portabilité, de retrait du consentement, de désabonnement marketing et de plainte auprès d'une autorité. Au Royaume-Uni, vous pouvez contacter l'ICO à ico.org.uk. Pour exercer vos droits, écrivez à nivadesk@gmail.com."]
+        paragraphs: ["Selon votre lieu de résidence, vous pouvez avoir des droits d'accès, de rectification, de suppression, d'opposition, de limitation, de portabilité, de retrait du consentement, de désabonnement marketing et de plainte auprès d'une autorité. Au Royaume-Uni, vous pouvez contacter l'ICO à ico.org.uk. Pour exercer vos droits, écrivez à contact@nivadesk.co.uk."]
       },
       {
         title: "19. Enfants",
@@ -1608,7 +1608,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "Pour toute question sur cette Politique, vos données ou vos droits, contactez :",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "E-mail : nivadesk@gmail.com"
+          "E-mail : contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -1621,7 +1621,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "NivaDesk è gestito da:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "Per domande sulla privacy, richieste relative ai dati o cancellazione dell'account, contattaci via email."
         ]
       },
@@ -1691,7 +1691,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
       },
       {
         title: "18. I tuoi diritti",
-        paragraphs: ["A seconda del luogo in cui vivi, puoi avere diritti di accesso, rettifica, cancellazione, opposizione, limitazione, portabilità, revoca del consenso, opt-out marketing e reclamo a un'autorità. Nel Regno Unito puoi contattare l'ICO su ico.org.uk. Per esercitare i diritti scrivi a nivadesk@gmail.com."]
+        paragraphs: ["A seconda del luogo in cui vivi, puoi avere diritti di accesso, rettifica, cancellazione, opposizione, limitazione, portabilità, revoca del consenso, opt-out marketing e reclamo a un'autorità. Nel Regno Unito puoi contattare l'ICO su ico.org.uk. Per esercitare i diritti scrivi a contact@nivadesk.co.uk."]
       },
       {
         title: "19. Minori",
@@ -1710,7 +1710,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "Per domande su questa Informativa, sui dati personali o sui tuoi diritti, contatta:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -1723,7 +1723,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "NivaDesk es operado por:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "Para preguntas de privacidad, solicitudes de datos o eliminación de cuenta, contáctanos por email."
         ]
       },
@@ -1793,7 +1793,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
       },
       {
         title: "18. Tus derechos",
-        paragraphs: ["Según dónde vivas, puedes tener derechos de acceso, corrección, eliminación, oposición, restricción, portabilidad, retirada de consentimiento, baja de marketing y reclamación ante una autoridad. En Reino Unido puedes contactar al ICO en ico.org.uk. Para ejercer tus derechos escribe a nivadesk@gmail.com."]
+        paragraphs: ["Según dónde vivas, puedes tener derechos de acceso, corrección, eliminación, oposición, restricción, portabilidad, retirada de consentimiento, baja de marketing y reclamación ante una autoridad. En Reino Unido puedes contactar al ICO en ico.org.uk. Para ejercer tus derechos escribe a contact@nivadesk.co.uk."]
       },
       {
         title: "19. Niños",
@@ -1812,7 +1812,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "Si tienes preguntas sobre esta Política, tus datos personales o tus derechos, contacta:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]
@@ -1825,7 +1825,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "A NivaDesk é operada por:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com",
+          "Email: contact@nivadesk.co.uk",
           "Para perguntas de privacidade, pedidos de dados ou eliminação de conta, contacte-nos por email."
         ]
       },
@@ -1895,7 +1895,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
       },
       {
         title: "18. Os seus direitos",
-        paragraphs: ["Dependendo de onde vive, pode ter direitos de acesso, correção, eliminação, oposição, limitação, portabilidade, retirada de consentimento, opt-out de marketing e reclamação a uma autoridade. No Reino Unido pode contactar o ICO em ico.org.uk. Para exercer direitos escreva para nivadesk@gmail.com."]
+        paragraphs: ["Dependendo de onde vive, pode ter direitos de acesso, correção, eliminação, oposição, limitação, portabilidade, retirada de consentimento, opt-out de marketing e reclamação a uma autoridade. No Reino Unido pode contactar o ICO em ico.org.uk. Para exercer direitos escreva para contact@nivadesk.co.uk."]
       },
       {
         title: "19. Crianças",
@@ -1914,7 +1914,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         paragraphs: [
           "Se tiver perguntas sobre esta Política, os seus dados ou direitos, contacte:",
           "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-          "Email: nivadesk@gmail.com"
+          "Email: contact@nivadesk.co.uk"
         ]
       }
     ]

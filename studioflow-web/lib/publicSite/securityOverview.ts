@@ -8,7 +8,7 @@ export const SECURITY_OVERVIEW_SECTIONS: PrivacyPolicySection[] = [
     title: "NivaDesk Security Overview",
     paragraphs: [
       "A practical overview of how NivaDesk protects accounts, workspaces, files, and business data.",
-      "NivaDesk is operated by EGGCRAFT LIMITED. Contact: nivadesk@gmail.com.",
+      "NivaDesk is operated by EGGCRAFT LIMITED. Contact: contact@nivadesk.co.uk.",
       "This Security Overview explains the security practices we use to help protect NivaDesk, our users, and the business data stored in workspaces. It is intended to provide transparency for customers, team members, and businesses evaluating NivaDesk.",
       "NivaDesk is designed for small businesses, studios, makers, freelancers, and teams that need to manage orders, clients, tasks, files, notes, timelines, and team access in one place. Because this information can include personal data, customer details, files, addresses, workflow records, and business notes, we treat security as an important part of the product.",
       "This document is not a guarantee that any system is completely secure. No online or offline system can be made risk-free. However, we use reasonable technical and organisational measures to reduce risk and protect customer data."
@@ -170,7 +170,7 @@ export const SECURITY_OVERVIEW_SECTIONS: PrivacyPolicySection[] = [
       "We may investigate suspicious activity, abuse, account compromise, or system vulnerability reports.",
       "We may temporarily restrict access, disable features, rotate credentials, or apply fixes where needed.",
       "Where legally required, we will notify affected users, customers, regulators, or authorities.",
-      "Users can report security concerns by contacting nivadesk@gmail.com."
+      "Users can report security concerns by contacting contact@nivadesk.co.uk."
     ]
   },
   {
@@ -230,7 +230,7 @@ export const SECURITY_OVERVIEW_SECTIONS: PrivacyPolicySection[] = [
       "London",
       "W9 1DN",
       "United Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -262,7 +262,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "NivaDesk Güvenlik Özeti",
     introParagraphs: [
       "NivaDesk'in hesapları, workspaceleri, dosyaları ve iş verilerini nasıl koruduğuna dair pratik bir özet.",
-      "NivaDesk, EGGCRAFT LIMITED tarafından işletilir. İletişim: nivadesk@gmail.com. Hiçbir sistem tamamen risksiz değildir; yine de müşteri verilerini korumak için makul teknik ve organizasyonel önlemler kullanırız."
+      "NivaDesk, EGGCRAFT LIMITED tarafından işletilir. İletişim: contact@nivadesk.co.uk. Hiçbir sistem tamamen risksiz değildir; yine de müşteri verilerini korumak için makul teknik ve organizasyonel önlemler kullanırız."
     ],
     sectionTitles: [
       "Güvenlik ilkeleri",
@@ -302,7 +302,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Uygun olduğunda kullanıcılar business data export veya account deletion talep edebilir. Paid plan bittiğinde veya iptal edildiğinde mevcut verilerin export'u teknik ve yasal olarak mümkün olduğu ölçüde desteklenir.",
       "Hiçbir sistem tamamen güvenli garanti edilemez. İnternet aktarımı, cihaz compromise, weak passwords, phishing, shared accounts, malware, user error veya third-party issues güvenlik riski oluşturabilir.",
       "Bu özet Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy ve uygulanabilir olduğunda DPA, Subprocessors ve Acceptable Use Policy ile birlikte okunmalıdır.",
-      "Güvenlik soruları veya concern report için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da nivadesk@gmail.com üzerinden bize ulaşabilirsiniz."
+      "Güvenlik soruları veya concern report için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -310,7 +310,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "NivaDesk Sicherheitsübersicht",
     introParagraphs: [
       "Eine praktische Übersicht darüber, wie NivaDesk Konten, Workspaces, Dateien und Geschäftsdaten schützt.",
-      "NivaDesk wird von EGGCRAFT LIMITED betrieben. Kontakt: nivadesk@gmail.com. Kein System ist vollständig risikofrei, aber wir verwenden angemessene technische und organisatorische Maßnahmen."
+      "NivaDesk wird von EGGCRAFT LIMITED betrieben. Kontakt: contact@nivadesk.co.uk. Kein System ist vollständig risikofrei, aber wir verwenden angemessene technische und organisatorische Maßnahmen."
     ],
     sectionTitles: [
       "Sicherheitsprinzipien",
@@ -350,7 +350,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Datenexport und Kontolöschung können je nach Rolle, Berechtigung, Plan und Technik verfügbar sein. Auch nach Ablauf eines Plans streben wir Export bestehender Geschäftsdaten an, soweit möglich.",
       "Kein System ist garantiert vollständig sicher. Übertragung, kompromittierte Geräte, schwache Passwörter, Phishing, geteilte Konten, Malware, Nutzerfehler oder Drittanbieterprobleme schaffen Risiken.",
       "Diese Übersicht sollte mit Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy und ggf. DPA, Subprocessors und Acceptable Use Policy gelesen werden.",
-      "Für Sicherheitsfragen oder Meldungen kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder nivadesk@gmail.com."
+      "Für Sicherheitsfragen oder Meldungen kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -358,7 +358,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "Aperçu de la sécurité NivaDesk",
     introParagraphs: [
       "Un aperçu pratique de la manière dont NivaDesk protège les comptes, workspaces, fichiers et données professionnelles.",
-      "NivaDesk est exploité par EGGCRAFT LIMITED. Contact: nivadesk@gmail.com. Aucun système n'est sans risque, mais nous utilisons des mesures techniques et organisationnelles raisonnables."
+      "NivaDesk est exploité par EGGCRAFT LIMITED. Contact: contact@nivadesk.co.uk. Aucun système n'est sans risque, mais nous utilisons des mesures techniques et organisationnelles raisonnables."
     ],
     sectionTitles: [
       "Principes de sécurité",
@@ -398,7 +398,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "L'export et la suppression de compte peuvent dépendre du rôle, des permissions, du plan et de la disponibilité technique. Nous visons l'export des données existantes même après expiration quand c'est possible.",
       "Aucun système ne peut être totalement sécurisé. Transmission internet, appareil compromis, mots de passe faibles, phishing, comptes partagés, malware, erreur utilisateur ou tiers peuvent créer des risques.",
       "Cet aperçu doit être lu avec Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy et, le cas échéant, DPA, Subprocessors et Acceptable Use Policy.",
-      "Pour toute question ou signalement sécurité, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Pour toute question ou signalement sécurité, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -406,7 +406,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "Panoramica sulla sicurezza di NivaDesk",
     introParagraphs: [
       "Una panoramica pratica di come NivaDesk protegge account, workspace, file e dati aziendali.",
-      "NivaDesk è gestito da EGGCRAFT LIMITED. Contatto: nivadesk@gmail.com. Nessun sistema è completamente privo di rischi, ma usiamo misure tecniche e organizzative ragionevoli."
+      "NivaDesk è gestito da EGGCRAFT LIMITED. Contatto: contact@nivadesk.co.uk. Nessun sistema è completamente privo di rischi, ma usiamo misure tecniche e organizzative ragionevoli."
     ],
     sectionTitles: [
       "Principi di sicurezza",
@@ -446,7 +446,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Export e account deletion possono dipendere da ruolo, permessi, piano e disponibilità tecnica. Cerchiamo di permettere export dei dati esistenti anche dopo scadenza del piano quando possibile.",
       "Nessun sistema può essere garantito completamente sicuro. Trasmissione internet, device compromise, password deboli, phishing, account condivisi, malware, errore umano o terze parti possono creare rischi.",
       "Questa panoramica va letta con Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy e, se applicabili, DPA, Subprocessors e Acceptable Use Policy.",
-      "Per domande o segnalazioni di sicurezza, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure nivadesk@gmail.com."
+      "Per domande o segnalazioni di sicurezza, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -454,7 +454,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "Resumen de seguridad de NivaDesk",
     introParagraphs: [
       "Un resumen práctico de cómo NivaDesk protege cuentas, workspaces, archivos y datos empresariales.",
-      "NivaDesk es operado por EGGCRAFT LIMITED. Contacto: nivadesk@gmail.com. Ningún sistema está libre de riesgos, pero usamos medidas técnicas y organizativas razonables."
+      "NivaDesk es operado por EGGCRAFT LIMITED. Contacto: contact@nivadesk.co.uk. Ningún sistema está libre de riesgos, pero usamos medidas técnicas y organizativas razonables."
     ],
     sectionTitles: [
       "Principios de seguridad",
@@ -494,7 +494,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "La exportación y eliminación de cuenta pueden depender de rol, permisos, plan y disponibilidad técnica. Buscamos permitir export de datos existentes incluso tras expirar un plan cuando sea posible.",
       "Ningún sistema puede garantizar seguridad total. Transmisión por internet, dispositivos comprometidos, contraseñas débiles, phishing, cuentas compartidas, malware, errores de usuario o terceros pueden crear riesgos.",
       "Este resumen debe leerse junto con Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy y, cuando aplique, DPA, Subprocessors y Acceptable Use Policy.",
-      "Para preguntas o reportes de seguridad, contacta a EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o nivadesk@gmail.com."
+      "Para preguntas o reportes de seguridad, contacta a EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -502,7 +502,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "Resumo de Segurança da NivaDesk",
     introParagraphs: [
       "Um resumo prático de como a NivaDesk protege contas, workspaces, ficheiros e dados empresariais.",
-      "A NivaDesk é operada pela EGGCRAFT LIMITED. Contacto: nivadesk@gmail.com. Nenhum sistema é livre de risco, mas usamos medidas técnicas e organizacionais razoáveis."
+      "A NivaDesk é operada pela EGGCRAFT LIMITED. Contacto: contact@nivadesk.co.uk. Nenhum sistema é livre de risco, mas usamos medidas técnicas e organizacionais razoáveis."
     ],
     sectionTitles: [
       "Princípios de segurança",
@@ -542,7 +542,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Exportação e eliminação de conta podem depender de role, permissões, plano e disponibilidade técnica. Procuramos permitir export de dados existentes mesmo após expiração de plano quando possível.",
       "Nenhum sistema pode garantir segurança total. Transmissão internet, dispositivos comprometidos, passwords fracas, phishing, contas partilhadas, malware, erro humano ou terceiros podem criar riscos.",
       "Este resumo deve ser lido com Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy e, se aplicável, DPA, Subprocessors e Acceptable Use Policy.",
-      "Para questões ou reportes de segurança contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Para questões ou reportes de segurança contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -550,7 +550,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "Обзор безопасности NivaDesk",
     introParagraphs: [
       "Практический обзор того, как NivaDesk защищает аккаунты, workspaces, файлы и бизнес-данные.",
-      "NivaDesk управляется EGGCRAFT LIMITED. Контакт: nivadesk@gmail.com. Ни одна система не является полностью безрисковой, но мы используем разумные технические и организационные меры."
+      "NivaDesk управляется EGGCRAFT LIMITED. Контакт: contact@nivadesk.co.uk. Ни одна система не является полностью безрисковой, но мы используем разумные технические и организационные меры."
     ],
     sectionTitles: [
       "Принципы безопасности",
@@ -590,7 +590,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Data export и account deletion зависят от role, permissions, plan и technical availability. Мы стремимся поддерживать export existing business data даже после окончания paid plan, где возможно.",
       "Ни одна система не гарантирует полную безопасность. Internet transmission, compromised devices, weak passwords, phishing, shared accounts, malware, user error или third-party issues создают риски.",
       "Этот обзор следует читать вместе с Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy и при необходимости DPA, Subprocessors и Acceptable Use Policy.",
-      "Для вопросов или сообщений о безопасности свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или nivadesk@gmail.com."
+      "Для вопросов или сообщений о безопасности свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -598,7 +598,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "NivaDesk セキュリティ概要",
     introParagraphs: [
       "NivaDesk がアカウント、workspace、ファイル、業務データを保護する方法の実用的な概要です。",
-      "NivaDesk は EGGCRAFT LIMITED が運営します。連絡先: nivadesk@gmail.com。完全にリスクのないシステムはありませんが、合理的な技術的・組織的対策を用いています。"
+      "NivaDesk は EGGCRAFT LIMITED が運営します。連絡先: contact@nivadesk.co.uk。完全にリスクのないシステムはありませんが、合理的な技術的・組織的対策を用いています。"
     ],
     sectionTitles: [
       "セキュリティ原則",
@@ -638,7 +638,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "data export と account deletion は role、permissions、plan、technical availability に依存します。paid plan 終了後も可能な範囲で existing business data export を支援します。",
       "完全な安全を保証できるシステムはありません。internet transmission、device compromise、weak passwords、phishing、shared accounts、malware、user error、third-party issues はリスクです。",
       "この概要は Privacy Policy、Terms of Service、Cookie Policy、Account Deletion Policy、Refund & Cancellation Policy、および必要に応じて DPA、Subprocessors、Acceptable Use Policy と併せて読むべきです。",
-      "セキュリティに関する質問や報告は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または nivadesk@gmail.com までご連絡ください。"
+      "セキュリティに関する質問や報告は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -646,7 +646,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "NivaDesk 安全概览",
     introParagraphs: [
       "本页面概述 NivaDesk 如何保护账户、workspaces、文件和业务数据。",
-      "NivaDesk 由 EGGCRAFT LIMITED 运营。联系方式: nivadesk@gmail.com。没有系统可以完全无风险，但我们使用合理的技术和组织措施。"
+      "NivaDesk 由 EGGCRAFT LIMITED 运营。联系方式: contact@nivadesk.co.uk。没有系统可以完全无风险，但我们使用合理的技术和组织措施。"
     ],
     sectionTitles: [
       "安全原则",
@@ -686,7 +686,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "data export 和 account deletion 取决于 role、permissions、plan 和 technical availability。即使 paid plan 到期，我们也尽力允许导出现有业务数据。",
       "没有系统可保证完全安全。internet transmission、device compromise、weak passwords、phishing、shared accounts、malware、user error 或 third-party issues 都可能带来风险。",
       "本概览应与 Privacy Policy、Terms of Service、Cookie Policy、Account Deletion Policy、Refund & Cancellation Policy 以及适用的 DPA、Subprocessors、Acceptable Use Policy 一起阅读。",
-      "如有安全问题或报告，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 nivadesk@gmail.com。"
+      "如有安全问题或报告，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -694,7 +694,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "نظرة عامة على أمان NivaDesk",
     introParagraphs: [
       "نظرة عملية على كيفية حماية NivaDesk للحسابات وworkspaces والملفات وبيانات الأعمال.",
-      "تدير EGGCRAFT LIMITED خدمة NivaDesk. التواصل: nivadesk@gmail.com. لا يوجد نظام بلا مخاطر تماماً، لكننا نستخدم تدابير تقنية وتنظيمية معقولة."
+      "تدير EGGCRAFT LIMITED خدمة NivaDesk. التواصل: contact@nivadesk.co.uk. لا يوجد نظام بلا مخاطر تماماً، لكننا نستخدم تدابير تقنية وتنظيمية معقولة."
     ],
     sectionTitles: [
       "مبادئ الأمان",
@@ -734,7 +734,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "يعتمد data export وaccount deletion على role وpermissions وplan وtechnical availability. نسعى للسماح بتصدير البيانات الحالية حتى بعد انتهاء paid plan حيث يمكن ذلك.",
       "لا يمكن ضمان أمان أي نظام بالكامل. internet transmission وdevice compromise وweak passwords وphishing وshared accounts وmalware وuser error وthird-party issues قد تخلق مخاطر.",
       "يجب قراءة هذا الملخص مع Privacy Policy وTerms of Service وCookie Policy وAccount Deletion Policy وRefund & Cancellation Policy، وعند التطبيق DPA وSubprocessors وAcceptable Use Policy.",
-      "للأسئلة أو تقارير الأمان، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو nivadesk@gmail.com."
+      "للأسئلة أو تقارير الأمان، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -742,7 +742,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
     introTitle: "NivaDesk Security Overview",
     introParagraphs: [
       "NivaDesk accounts, workspaces, files और business data को कैसे protect करता है इसका practical overview.",
-      "NivaDesk EGGCRAFT LIMITED द्वारा संचालित है। Contact: nivadesk@gmail.com. कोई system पूरी तरह risk-free नहीं है, लेकिन हम reasonable technical और organisational measures इस्तेमाल करते हैं।"
+      "NivaDesk EGGCRAFT LIMITED द्वारा संचालित है। Contact: contact@nivadesk.co.uk. कोई system पूरी तरह risk-free नहीं है, लेकिन हम reasonable technical और organisational measures इस्तेमाल करते हैं।"
     ],
     sectionTitles: [
       "Security principles",
@@ -782,7 +782,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Data export और account deletion role, permissions, plan और technical availability पर depend कर सकते हैं। Paid plan expire/cancel होने पर भी technically और legally possible हो तो existing business data export support करने का लक्ष्य है।",
       "कोई system completely secure guarantee नहीं हो सकता। Internet transmission, device compromise, weak passwords, phishing, shared accounts, malware, user error या third-party issues risk बना सकते हैं।",
       "यह overview Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy और जहाँ applicable हो DPA, Subprocessors, Acceptable Use Policy के साथ पढ़ा जाना चाहिए।",
-      "Security questions या concerns के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या nivadesk@gmail.com पर संपर्क करें।"
+      "Security questions या concerns के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
     ]
   }
 };

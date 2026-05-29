@@ -16,7 +16,7 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "1. Who we are",
     paragraphs: [
       "NivaDesk is operated by EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom.",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   },
   {
@@ -394,7 +394,7 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "If you have questions about these Terms, please contact us:",
       "EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -466,7 +466,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "İletişim"
     ],
     sectionSummaries: [
-      "NivaDesk, EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom tarafından işletilir. İletişim: nivadesk@gmail.com.",
+      "NivaDesk, EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom tarafından işletilir. İletişim: contact@nivadesk.co.uk.",
       "NivaDesk; siparişleri, müşteri kayıtlarını, iş akışlarını, görevleri, notları, hatırlatıcıları, dosyaları, ekip rollerini, geçmiş kayıtlarını, çevrimdışı erişimi, senkronizasyonu ve abonelik limitlerini tek çalışma alanında yönetmeye yardımcı olur.",
       "NivaDesk'i kullanmak için en az 18 yaşında veya ülkenizde reşit olmalı, doğru bilgi vermeli, hukuka uygun hareket etmeli ve bir işletme adına kullanıyorsanız o işletmeyi bağlama yetkisine sahip olmalısınız.",
       "Giriş bilgilerinizi güvenli tutmak, güçlü şifre kullanmak, hesap bilgilerinizi güncel tutmak, cihaz erişimini kontrol etmek ve hesabınızdaki tüm etkinliklerden sorumlu olmak sizin yükümlülüğünüzdedir.",
@@ -500,7 +500,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "NivaDesk'i Google Play üzerinden indirir veya abone olursanız, bu şartların sizinle bizim aramızda olduğunu, Google'ın uygulamadan sorumlu olmadığını ve ödeme, yenileme, iptal ve iadelerin Google tarafından yönetilebileceğini kabul edersiniz.",
       "Yürürlükteki ihracat kontrolü, yaptırım veya ticaret yasalarını ihlal edecek şekilde NivaDesk'i kullanamazsınız.",
       "Bu şartlar İngiltere ve Galler hukukuna tabidir; uygulanabilir tüketici koruma hukuku başka bir ülkede dava hakkı vermedikçe uyuşmazlıklarda İngiltere ve Galler mahkemeleri yetkilidir.",
-      "Bu şartlarla ilgili sorular için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom adresinden veya nivadesk@gmail.com üzerinden bize ulaşabilirsiniz."
+      "Bu şartlarla ilgili sorular için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom adresinden veya contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -548,7 +548,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Kontakt"
     ],
     sectionSummaries: [
-      "NivaDesk wird von EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Kontakt: nivadesk@gmail.com.",
+      "NivaDesk wird von EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Kontakt: contact@nivadesk.co.uk.",
       "NivaDesk hilft, Bestellungen, Kundendaten, Workflows, Aufgaben, Notizen, Erinnerungen, Dateien, Teamrollen, Aktivitätsprotokolle, Offlinezugriff, Synchronisierung und Abo-Limits in einem Workspace zu verwalten.",
       "Du musst mindestens 18 Jahre alt oder in deinem Land volljährig sein, korrekte Angaben machen, NivaDesk rechtmäßig nutzen und bei Nutzung für ein Unternehmen befugt sein, diese Bedingungen für dieses Unternehmen anzunehmen.",
       "Du bist verantwortlich dafür, Zugangsdaten sicher zu halten, ein starkes Passwort zu verwenden, Kontodaten aktuell zu halten, Gerätezugriff zu kontrollieren und alle Aktivitäten unter deinem Konto zu verantworten.",
@@ -582,7 +582,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Wenn du NivaDesk über Google Play lädst oder abonnierst, gelten zusätzliche Regeln: diese Bedingungen bestehen zwischen dir und uns, Google ist nicht verantwortlich, und Zahlung, Verlängerung, Kündigung oder Erstattung können von Google abgewickelt werden.",
       "Du darfst NivaDesk nicht nutzen, wenn dies gegen anwendbare Exportkontroll-, Sanktions- oder Handelsgesetze verstößt.",
       "Diese Bedingungen unterliegen dem Recht von England und Wales; soweit Verbraucherschutzrecht nichts anderes erlaubt, sind die Gerichte von England und Wales zuständig.",
-      "Bei Fragen zu diesen Bedingungen erreichst du EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder nivadesk@gmail.com."
+      "Bei Fragen zu diesen Bedingungen erreichst du EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -630,7 +630,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Contact"
     ],
     sectionSummaries: [
-      "NivaDesk est exploité par EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contact : nivadesk@gmail.com.",
+      "NivaDesk est exploité par EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contact : contact@nivadesk.co.uk.",
       "NivaDesk aide à gérer commandes, clients, workflows, tâches, notes, rappels, fichiers, rôles d'équipe, journaux d'activité, accès hors ligne, synchronisation et limites d'abonnement dans un seul workspace.",
       "Vous devez avoir au moins 18 ans ou l'âge de la majorité dans votre pays, fournir des informations exactes, utiliser NivaDesk légalement et avoir l'autorité nécessaire si vous agissez pour une entreprise.",
       "Vous êtes responsable de la sécurité de vos identifiants, de l'utilisation d'un mot de passe fort, de la mise à jour de votre compte, du contrôle de vos appareils et de toute activité effectuée sous votre compte.",
@@ -664,7 +664,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Si vous téléchargez ou souscrivez à NivaDesk via Google Play, des règles supplémentaires s'appliquent: les Conditions sont entre vous et nous, Google n'est pas responsable, et paiement, renouvellement, annulation ou remboursement peuvent être gérés par Google.",
       "Vous ne devez pas utiliser NivaDesk d'une manière qui violerait les lois applicables sur le contrôle des exportations, les sanctions ou le commerce.",
       "Ces Conditions sont régies par le droit d'Angleterre et du Pays de Galles; sauf droit impératif de protection du consommateur, les tribunaux d'Angleterre et du Pays de Galles sont compétents.",
-      "Pour toute question sur ces Conditions, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Pour toute question sur ces Conditions, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -712,7 +712,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Contatti"
     ],
     sectionSummaries: [
-      "NivaDesk è gestito da EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contatto: nivadesk@gmail.com.",
+      "NivaDesk è gestito da EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contatto: contact@nivadesk.co.uk.",
       "NivaDesk aiuta a gestire ordini, clienti, workflow, attività, note, promemoria, file, ruoli del team, registri attività, accesso offline, sincronizzazione e limiti di abbonamento in un unico workspace.",
       "Devi avere almeno 18 anni o la maggiore età nel tuo paese, fornire informazioni corrette, usare NivaDesk legalmente e avere l'autorità necessaria se agisci per un'azienda.",
       "Sei responsabile di proteggere le credenziali, usare una password forte, mantenere aggiornati i dati account, controllare l'accesso ai dispositivi e rispondere di ogni attività sotto il tuo account.",
@@ -746,7 +746,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Se scarichi o sottoscrivi NivaDesk tramite Google Play, possono valere regole aggiuntive: i Termini sono tra te e noi, Google non è responsabile, e pagamento, rinnovo, cancellazione o rimborso possono essere gestiti da Google.",
       "Non puoi usare NivaDesk in modo contrario a leggi applicabili su controllo esportazioni, sanzioni o commercio.",
       "Questi Termini sono regolati dalle leggi di Inghilterra e Galles; salvo diritti inderogabili dei consumatori, i tribunali di Inghilterra e Galles avranno giurisdizione.",
-      "Per domande su questi Termini contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o nivadesk@gmail.com."
+      "Per domande su questi Termini contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -794,7 +794,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Contacto"
     ],
     sectionSummaries: [
-      "NivaDesk es operado por EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contacto: nivadesk@gmail.com.",
+      "NivaDesk es operado por EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contacto: contact@nivadesk.co.uk.",
       "NivaDesk ayuda a gestionar pedidos, clientes, flujos de trabajo, tareas, notas, recordatorios, archivos, roles del equipo, registros de actividad, acceso sin conexión, sincronización y límites de suscripción en un solo workspace.",
       "Debes tener al menos 18 años o la mayoría de edad en tu país, proporcionar información correcta, usar NivaDesk legalmente y tener autoridad si lo usas en nombre de una empresa.",
       "Eres responsable de proteger tus credenciales, usar una contraseña segura, mantener actualizada tu cuenta, controlar el acceso a tus dispositivos y responder por toda actividad realizada bajo tu cuenta.",
@@ -828,7 +828,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Si descargas o te suscribes a NivaDesk mediante Google Play, pueden aplicarse reglas adicionales: los Términos son entre tú y nosotros, Google no es responsable, y pagos, renovaciones, cancelaciones o reembolsos pueden ser gestionados por Google.",
       "No debes usar NivaDesk de forma que infrinja leyes aplicables de control de exportaciones, sanciones o comercio.",
       "Estos Términos se rigen por las leyes de Inglaterra y Gales; salvo derechos obligatorios de consumidores, los tribunales de Inglaterra y Gales tendrán jurisdicción.",
-      "Si tienes preguntas sobre estos Términos, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o nivadesk@gmail.com."
+      "Si tienes preguntas sobre estos Términos, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -876,7 +876,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Contacto"
     ],
     sectionSummaries: [
-      "O NivaDesk é operado pela EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contacto: nivadesk@gmail.com.",
+      "O NivaDesk é operado pela EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Contacto: contact@nivadesk.co.uk.",
       "O NivaDesk ajuda a gerir encomendas, clientes, fluxos de trabalho, tarefas, notas, lembretes, ficheiros, funções da equipa, registos de atividade, acesso offline, sincronização e limites de subscrição num único workspace.",
       "Deve ter pelo menos 18 anos ou a maioridade no seu país, fornecer informações corretas, usar o NivaDesk legalmente e ter autoridade se agir em nome de uma empresa.",
       "É responsável por proteger credenciais, usar uma palavra-passe forte, manter a conta atualizada, controlar o acesso aos dispositivos e responder por toda a atividade na sua conta.",
@@ -910,7 +910,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Se descarregar ou subscrever o NivaDesk pelo Google Play, podem aplicar-se regras adicionais: os Termos são entre si e nós, a Google não é responsável, e pagamentos, renovações, cancelamentos ou reembolsos podem ser geridos pela Google.",
       "Não deve usar o NivaDesk de forma que viole leis aplicáveis de controlo de exportação, sanções ou comércio.",
       "Estes Termos são regidos pelas leis de Inglaterra e País de Gales; salvo direitos obrigatórios de consumidores, os tribunais de Inglaterra e País de Gales terão jurisdição.",
-      "Para perguntas sobre estes Termos, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Para perguntas sobre estes Termos, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -958,7 +958,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Контакт"
     ],
     sectionSummaries: [
-      "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Контакт: nivadesk@gmail.com.",
+      "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Контакт: contact@nivadesk.co.uk.",
       "NivaDesk помогает управлять заказами, клиентами, рабочими процессами, задачами, заметками, напоминаниями, файлами, ролями команды, журналами активности, офлайн-доступом, синхронизацией и лимитами подписки в одном workspace.",
       "Вам должно быть не менее 18 лет или возраст совершеннолетия в вашей стране; вы должны предоставлять точные данные, использовать NivaDesk законно и иметь полномочия, если действуете от имени компании.",
       "Вы отвечаете за безопасность учетных данных, надежный пароль, актуальность информации аккаунта, контроль доступа к устройствам и все действия под вашим аккаунтом.",
@@ -992,7 +992,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Если вы скачиваете или оформляете NivaDesk через Google Play, могут применяться дополнительные правила: Условия действуют между вами и нами, Google не несет ответственности, а платежи, продления, отмены и возвраты могут обрабатываться Google.",
       "Вы не должны использовать NivaDesk способом, который нарушает применимые законы об экспортном контроле, санкциях или торговле.",
       "Эти Условия регулируются правом Англии и Уэльса; если обязательное потребительское право не дает иного права, споры рассматриваются судами Англии и Уэльса.",
-      "По вопросам этих Условий обращайтесь: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или nivadesk@gmail.com."
+      "По вопросам этих Условий обращайтесь: EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -1040,7 +1040,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "お問い合わせ"
     ],
     sectionSummaries: [
-      "NivaDesk は EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom が運営します。連絡先: nivadesk@gmail.com。",
+      "NivaDesk は EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom が運営します。連絡先: contact@nivadesk.co.uk。",
       "NivaDesk は、注文、顧客、ワークフロー、タスク、メモ、リマインダー、ファイル、チーム権限、活動ログ、オフラインアクセス、同期、サブスクリプション制限を 1 つのワークスペースで管理するためのサービスです。",
       "利用者は 18 歳以上、または居住国で成人年齢に達している必要があります。正確な情報を提供し、合法的に利用し、会社を代表する場合はその権限が必要です。",
       "ログイン情報の保護、強力なパスワードの使用、アカウント情報の更新、端末アクセスの管理、およびアカウント上のすべての活動について責任を負います。",
@@ -1074,7 +1074,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "Google Play 経由で NivaDesk をダウンロードまたは購読する場合、規約はあなたと当社の間のものであり、Google は責任を負わず、支払い、更新、解約、返金は Google が処理する場合があります。",
       "適用される輸出管理、制裁、貿易法に違反する方法で NivaDesk を利用してはなりません。",
       "本規約はイングランドおよびウェールズの法律に準拠します。強制的な消費者保護法が別の権利を与える場合を除き、イングランドおよびウェールズの裁判所が管轄します。",
-      "本規約に関する質問は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または nivadesk@gmail.com までご連絡ください。"
+      "本規約に関する質問は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -1122,7 +1122,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "联系"
     ],
     sectionSummaries: [
-      "NivaDesk 由 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 运营。联系方式：nivadesk@gmail.com。",
+      "NivaDesk 由 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 运营。联系方式：contact@nivadesk.co.uk。",
       "NivaDesk 帮助在一个工作区中管理订单、客户、流程、任务、备注、提醒、文件、团队角色、活动记录、离线访问、同步和订阅限制。",
       "你必须年满 18 岁或达到所在国家的法定成年年龄，提供准确资料，合法使用 NivaDesk；代表企业使用时，你必须有相应授权。",
       "你负责保护登录信息、使用强密码、保持账户资料最新、控制设备访问，并对账户下的所有活动负责。",
@@ -1156,7 +1156,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "如果你通过 Google Play 下载或订阅 NivaDesk，可能适用附加规则：本条款在你和我们之间，Google 不负责，付款、续订、取消或退款可由 Google 处理。",
       "你不得以违反适用出口管制、制裁或贸易法律的方式使用 NivaDesk。",
       "本条款受英格兰和威尔士法律管辖；除强制性消费者保护法另有规定外，英格兰和威尔士法院具有管辖权。",
-      "如对本条款有疑问，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 nivadesk@gmail.com。"
+      "如对本条款有疑问，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -1204,7 +1204,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "التواصل"
     ],
     sectionSummaries: [
-      "تدير EGGCRAFT LIMITED خدمة NivaDesk من العنوان 141 Randolph Avenue, London, W9 1DN, United Kingdom. البريد: nivadesk@gmail.com.",
+      "تدير EGGCRAFT LIMITED خدمة NivaDesk من العنوان 141 Randolph Avenue, London, W9 1DN, United Kingdom. البريد: contact@nivadesk.co.uk.",
       "يساعد NivaDesk على إدارة الطلبات والعملاء وسير العمل والمهام والملاحظات والتذكيرات والملفات وأدوار الفريق وسجلات النشاط والوصول دون اتصال والمزامنة وحدود الاشتراك في مساحة عمل واحدة.",
       "يجب أن يكون عمرك 18 عاماً على الأقل أو سن الرشد في بلدك، وأن تقدم معلومات صحيحة، وتستخدم NivaDesk بشكل قانوني، وأن تملك الصلاحية إذا كنت تستخدمه نيابة عن شركة.",
       "أنت مسؤول عن حماية بيانات الدخول، واستخدام كلمة مرور قوية، وتحديث معلومات الحساب، والتحكم في الوصول إلى أجهزتك، وكل نشاط يحدث تحت حسابك.",
@@ -1238,7 +1238,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "إذا حملت NivaDesk أو اشتركت به عبر Google Play، فقد تنطبق قواعد إضافية: الشروط بينك وبيننا، Google ليست مسؤولة، وقد تعالج Google الدفع والتجديد والإلغاء والاسترداد.",
       "لا يجوز استخدام NivaDesk بطريقة تخالف قوانين الرقابة على التصدير أو العقوبات أو التجارة المعمول بها.",
       "تخضع هذه الشروط لقوانين إنجلترا وويلز؛ وما لم تمنحك قوانين حماية المستهلك الإلزامية حقاً آخر، تختص محاكم إنجلترا وويلز بالنزاعات.",
-      "للأسئلة حول هذه الشروط، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو nivadesk@gmail.com."
+      "للأسئلة حول هذه الشروط، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -1286,7 +1286,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "संपर्क"
     ],
     sectionSummaries: [
-      "NivaDesk का संचालन EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom द्वारा किया जाता है। संपर्क: nivadesk@gmail.com.",
+      "NivaDesk का संचालन EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom द्वारा किया जाता है। संपर्क: contact@nivadesk.co.uk.",
       "NivaDesk एक ही workspace में ऑर्डर, ग्राहक, workflow, कार्य, नोट्स, reminders, फाइलें, टीम भूमिकाएं, activity logs, offline access, sync और subscription limits प्रबंधित करने में मदद करता है।",
       "आपकी आयु कम से कम 18 वर्ष या आपके देश में वयस्कता की आयु होनी चाहिए; आपको सही जानकारी देनी होगी, NivaDesk का कानूनी उपयोग करना होगा और यदि आप व्यवसाय की ओर से उपयोग करते हैं तो आपके पास अधिकार होना चाहिए।",
       "आप login details सुरक्षित रखने, मजबूत password इस्तेमाल करने, account जानकारी अपडेट रखने, devices तक पहुंच नियंत्रित करने और अपने account में होने वाली सभी गतिविधियों के लिए जिम्मेदार हैं।",
@@ -1320,7 +1320,7 @@ const TERMS_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedTermsDraft>> 
       "यदि आप NivaDesk को Google Play से download या subscribe करते हैं, तो additional rules लागू हो सकते हैं: Terms आपके और हमारे बीच हैं, Google responsible नहीं है, और payment, renewal, cancellation या refund Google manage कर सकता है।",
       "आप NivaDesk का उपयोग ऐसे तरीके से नहीं कर सकते जो applicable export control, sanctions या trade laws का उल्लंघन करे।",
       "ये Terms England and Wales के laws से governed हैं; mandatory consumer protection law अलग अधिकार न दे तो disputes पर England and Wales courts का jurisdiction होगा।",
-      "इन Terms के बारे में सवालों के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या nivadesk@gmail.com से संपर्क करें।"
+      "इन Terms के बारे में सवालों के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk से संपर्क करें।"
     ]
   }
 };

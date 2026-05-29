@@ -142,7 +142,8 @@ function planCustomerLimitText(plan: { customerLimit: number | null }) {
   return plan.customerLimit == null ? "Unlimited customers" : `${plan.customerLimit} customers`;
 }
 
-function planTeamLimitText(plan: { teamMemberLimit: number }) {
+function planTeamLimitText(plan: { plan?: string; teamMemberLimit: number }) {
+  if (plan.plan === "team_monthly") return "5 seats included · add up to 10";
   return plan.teamMemberLimit <= 1 ? "1 user" : `Up to ${plan.teamMemberLimit} users`;
 }
 
@@ -162,7 +163,7 @@ function planIconMark(plan: string) {
 function planSummaryText(plan: string) {
   switch (plan) {
     case "lifetime_lite":
-      return "One-time access for solo local order management and personal scheduling.";
+      return "Lower-cost subscription for solo order management, timeline tracking and personal scheduling.";
     case "pro_monthly":
       return "Cloud files, Share Sheet, advanced schedule tools and professional dashboard access.";
     case "team_monthly":
@@ -175,7 +176,7 @@ function planSummaryText(plan: string) {
 function planBestForText(plan: string) {
   switch (plan) {
     case "lifetime_lite":
-      return "Best for solo makers who want local order tracking without team tools.";
+      return "Best for solo makers who want unlimited order tracking without files, AI tools or team access.";
     case "pro_monthly":
       return "Best for active studios that need cloud files and advanced workflows.";
     case "team_monthly":
@@ -3100,7 +3101,7 @@ function PlanAccessSection({
         <div className="settings-mini-grid">
           <InfoTile label="Orders" value={`${counts?.orderCount ?? 0}`} />
           <InfoTile label="Customers" value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile label="Team limit" value={`${workspace.billingTeamMemberLimit}`} />
+          <InfoTile label="Current seat allowance" value={`${workspace.billingTeamMemberLimit}`} />
           <InfoTile label="Storage" value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
         </div>
         <div className="progress-track settings-progress">
@@ -3292,7 +3293,9 @@ function TeamAccessSection({
         </div>
         {!hasTeamPlan ? (
           <p className="muted-copy">Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.</p>
-        ) : null}
+        ) : (
+          <p className="muted-copy">Team includes 5 seats. Additional seats will be available for £5/month or £50/year each, up to 10 users. For larger teams, contact contact@nivadesk.co.uk.</p>
+        )}
         {!isOwner ? (
           <p className="muted-copy">Only workspace owners can approve join requests, change roles or remove members.</p>
         ) : null}

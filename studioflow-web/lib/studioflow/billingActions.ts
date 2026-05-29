@@ -2,9 +2,14 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 
 export type StripeBillingItemKey =
-  | "lifetime_lite"
+  | "lite_monthly"
+  | "lite_yearly"
   | "pro_monthly"
+  | "pro_yearly"
   | "team_monthly"
+  | "team_yearly"
+  | "additional_team_seat_monthly"
+  | "additional_team_seat_yearly"
   | "storage_100gb"
   | "storage_200gb";
 

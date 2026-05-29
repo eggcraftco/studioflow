@@ -25,7 +25,7 @@ export const ACCOUNT_DELETION_POLICY_SECTIONS: PrivacyPolicySection[] = [
     bullets: [
       "From inside the NivaDesk app, go to Settings > Account > Delete Account, when this option is available.",
       "From the NivaDesk website, use this account deletion request page.",
-      "By emailing us at nivadesk@gmail.com with the subject line NivaDesk account deletion request."
+      "By emailing us at contact@nivadesk.co.uk with the subject line NivaDesk account deletion request."
     ],
     subsections: [
       {
@@ -147,7 +147,7 @@ export const ACCOUNT_DELETION_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "London",
       "W9 1DN",
       "United Kingdom",
-      "Email: nivadesk@gmail.com"
+      "Email: contact@nivadesk.co.uk"
     ]
   }
 ];
@@ -199,7 +199,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Bu politika web sitesi, web app, mobil uygulama, masaüstü uygulama veya ilgili hizmetler üzerinden oluşturulan NivaDesk hesapları için geçerlidir. Başka bir kişiye veya işletmeye ait workspace üyesiyseniz, bazı paylaşılan kayıtlar workspace sahibinin kontrolünde kalabilir.",
-      "Hesap silme talebini uygulamada Settings > Account > Delete Account yolu mevcut olduğunda kullanarak, bu public web sayfasından veya hesabınıza bağlı e-posta ile nivadesk@gmail.com adresine NivaDesk account deletion request konusu ile yazarak yapabilirsiniz. Kimliğinizi doğrulamamız gerekebilir.",
+      "Hesap silme talebini uygulamada Settings > Account > Delete Account yolu mevcut olduğunda kullanarak, bu public web sayfasından veya hesabınıza bağlı e-posta ile contact@nivadesk.co.uk adresine NivaDesk account deletion request konusu ile yazarak yapabilirsiniz. Kimliğinizi doğrulamamız gerekebilir.",
       "NivaDesk, hesap oluşturma sunan uygulamalar için Apple ve Google Play hesap silme gerekliliklerini destekleyecek şekilde tasarlanır. Bu nedenle hem uygulama içi silme yolu hem de uygulamayı yeniden yüklemeden kullanılabilecek public web sayfası sağlanmalıdır.",
       "Talebinizi aldıktan sonra isteğin gerçek olduğunu ve hesabı silmeye yetkili olduğunuzu doğrulamak için makul kontroller yaparız. Doğrulama sonrası kişisel verileri silmeye veya anonimleştirmeye başlarız; yasal, güvenlik, faturalama, yedek ve workspace istisnaları saklıdır.",
       "Uygun olduğunda kullanıcı profiliniz, adınız, e-posta adresiniz, avatarınız, hesap tercihleriniz, kimlik doğrulama kayıtları, kişisel ayarlar, artık gerekli olmayan cihaz/oturum kayıtları, teknik olarak silinebilen kullanım verileri ve sizi tanımlayan üyelik kayıtları silinebilir veya anonimleştirilebilir.",
@@ -211,7 +211,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "NivaDesk hesabınızı silmek, Apple App Store, Google Play, Stripe veya başka bir ödeme sağlayıcısı tarafından yönetilen abonelikleri otomatik olarak iptal etmeyebilir. Aboneliği satın aldığınız platformdan iptal etmek sizin sorumluluğunuzdedir.",
       "Güvenlik için hesabı silmeden önce yeniden giriş yapmanızı, e-posta ile onay vermenizi veya kimliğinizi doğrulayacak ek bilgi sağlamanızı isteyebiliriz. Yetkiyi doğrulayamazsak talebi reddedebilir veya geciktirebiliriz.",
       "Dolandırıcılık, kötüye kullanım, güvenlik olayı, hukuki talep veya Kullanım Şartları ihlalini tespit etmek, önlemek veya araştırmak için silmeyi geciktirebilir ya da reddedebiliriz. Kanun, mahkeme kararı, vergi, muhasebe, düzenleyici gereklilikler veya meşru iş ihtiyaçları nedeniyle bazı bilgileri saklayabiliriz.",
-      "Hesap silme talepleri veya bu politika hakkında sorular için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da nivadesk@gmail.com üzerinden bize ulaşabilirsiniz."
+      "Hesap silme talepleri veya bu politika hakkında sorular için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -239,7 +239,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Diese Richtlinie gilt für NivaDesk-Konten, die über Website, Web-App, mobile App, Desktop-App oder verbundene Dienste erstellt wurden. Wenn du Mitglied eines fremden Workspaces bist, können geteilte Workspace-Daten weiterhin vom Workspace-Eigentümer kontrolliert werden.",
-      "Du kannst die Löschung über Settings > Account > Delete Account in der App beantragen, wenn verfügbar, über diese öffentliche Website oder per E-Mail von deiner Konto-Adresse an nivadesk@gmail.com mit dem Betreff NivaDesk account deletion request. Wir können Identitätsprüfung verlangen.",
+      "Du kannst die Löschung über Settings > Account > Delete Account in der App beantragen, wenn verfügbar, über diese öffentliche Website oder per E-Mail von deiner Konto-Adresse an contact@nivadesk.co.uk mit dem Betreff NivaDesk account deletion request. Wir können Identitätsprüfung verlangen.",
       "NivaDesk soll Apple- und Google-Play-Anforderungen für Apps mit Kontoerstellung unterstützen. Deshalb sollte es sowohl einen In-App-Löschweg als auch eine öffentliche Web-Seite geben, über die Löschung ohne Neuinstallation der App beantragt werden kann.",
       "Nach Eingang prüfen wir angemessen, ob der Antrag echt ist und du berechtigt bist. Nach Verifizierung beginnen wir mit Löschung oder Anonymisierung personenbezogener Kontodaten, vorbehaltlich rechtlicher, Sicherheits-, Abrechnungs-, Backup- und Workspace-Ausnahmen.",
       "Je nach Fall können Profil, Name, E-Mail, Avatar, Kontopräferenzen, Authentifizierungsdaten, persönliche Einstellungen, nicht mehr benötigte Geräte- oder Sitzungsdaten, technisch löschbare Nutzungsdaten und identifizierende Mitgliedschaftsdaten gelöscht oder anonymisiert werden.",
@@ -251,7 +251,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Kontolöschung kündigt nicht automatisch Abos, die über Apple App Store, Google Play, Stripe oder andere Anbieter verwaltet werden. Du musst dein Abo über die Kaufplattform kündigen.",
       "Zur Sicherheit können wir erneutes Einloggen, E-Mail-Bestätigung oder zusätzliche Informationen verlangen. Wenn wir die Berechtigung nicht verifizieren können, können wir die Löschung verzögern oder ablehnen.",
       "Wir können Löschung verzögern oder verweigern, um Betrug, Missbrauch, Sicherheitsvorfälle, Rechtsansprüche oder Verstöße gegen die Nutzungsbedingungen zu erkennen, zu verhindern oder zu untersuchen, und Informationen aufbewahren, wenn Gesetz, Gericht, Steuern, Buchhaltung oder legitime Geschäftsgründe dies erfordern.",
-      "Für Löschanträge oder Fragen kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder nivadesk@gmail.com."
+      "Für Löschanträge oder Fragen kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -279,7 +279,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Cette politique s'applique aux comptes NivaDesk créés via le site, l'app web, les apps mobiles, les apps de bureau ou les services associés. Si vous êtes membre d'un workspace appartenant à une autre personne ou entreprise, certaines données partagées peuvent rester sous le contrôle du propriétaire du workspace.",
-      "Vous pouvez demander la suppression depuis l'app via Settings > Account > Delete Account lorsque cette option est disponible, depuis cette page publique, ou par e-mail à nivadesk@gmail.com avec l'objet NivaDesk account deletion request. Nous pouvons vous demander de vérifier votre identité.",
+      "Vous pouvez demander la suppression depuis l'app via Settings > Account > Delete Account lorsque cette option est disponible, depuis cette page publique, ou par e-mail à contact@nivadesk.co.uk avec l'objet NivaDesk account deletion request. Nous pouvons vous demander de vérifier votre identité.",
       "NivaDesk est conçu pour prendre en charge les exigences d'Apple et de Google Play pour les apps qui créent des comptes. Nous devons donc proposer à la fois un chemin de suppression dans l'app et une page publique permettant de demander la suppression sans réinstaller l'app.",
       "Après réception de votre demande, nous prenons des mesures raisonnables pour vérifier qu'elle est authentique et que vous êtes autorisé à supprimer le compte. Une fois vérifiée, nous commençons la suppression ou l'anonymisation, sous réserve des exceptions légales, de sécurité, de facturation, de sauvegarde et de workspace.",
       "Selon le cas, nous pouvons supprimer ou anonymiser votre profil, nom, adresse e-mail, avatar, préférences de compte, données d'authentification, paramètres personnels, sessions ou appareils non nécessaires, données d'utilisation techniquement supprimables et enregistrements d'adhésion qui vous identifient.",
@@ -291,7 +291,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Supprimer votre compte NivaDesk n'annule pas automatiquement les abonnements gérés par l'App Store, Google Play, Stripe ou un autre fournisseur. Vous devez annuler l'abonnement sur la plateforme où vous l'avez acheté.",
       "Pour votre sécurité, nous pouvons demander une nouvelle connexion, une confirmation par e-mail ou des informations supplémentaires. Si nous ne pouvons pas vérifier l'autorisation, nous pouvons refuser ou retarder la demande.",
       "Nous pouvons retarder ou refuser la suppression pour détecter, prévenir ou enquêter sur la fraude, les abus, les incidents de sécurité, les réclamations légales ou les violations des Conditions, et conserver certaines informations si la loi, un tribunal, les taxes, la comptabilité, la réglementation ou des intérêts légitimes l'exigent.",
-      "Pour les demandes de suppression ou questions sur cette politique, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Pour les demandes de suppression ou questions sur cette politique, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -319,7 +319,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Questa informativa si applica agli account NivaDesk creati tramite sito, web app, app mobile, app desktop o servizi collegati. Se fai parte di un workspace di un'altra persona o azienda, alcuni dati condivisi possono rimanere sotto il controllo del proprietario del workspace.",
-      "Puoi richiedere la cancellazione dall'app tramite Settings > Account > Delete Account quando disponibile, da questa pagina pubblica, oppure scrivendo a nivadesk@gmail.com con oggetto NivaDesk account deletion request. Potremmo chiederti di verificare la tua identità.",
+      "Puoi richiedere la cancellazione dall'app tramite Settings > Account > Delete Account quando disponibile, da questa pagina pubblica, oppure scrivendo a contact@nivadesk.co.uk con oggetto NivaDesk account deletion request. Potremmo chiederti di verificare la tua identità.",
       "NivaDesk è progettato per supportare i requisiti Apple e Google Play per le app che consentono la creazione di account. Per questo dovrebbero essere disponibili sia un percorso in-app sia una pagina pubblica per richiedere la cancellazione senza reinstallare l'app.",
       "Dopo aver ricevuto la richiesta, verifichiamo ragionevolmente che sia autentica e che tu sia autorizzato. Una volta verificata, iniziamo a cancellare o anonimizzare i dati personali dell'account, salvo eccezioni legali, di sicurezza, fatturazione, backup e workspace.",
       "A seconda dei casi, possiamo cancellare o anonimizzare profilo, nome, email, avatar, preferenze, dati di autenticazione, impostazioni personali, sessioni o dispositivi non più necessari, dati d'uso tecnicamente cancellabili e record di membership che ti identificano.",
@@ -331,7 +331,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "La cancellazione dell'account NivaDesk non annulla automaticamente abbonamenti gestiti da App Store, Google Play, Stripe o altri provider. Devi annullare l'abbonamento sulla piattaforma di acquisto.",
       "Per sicurezza possiamo richiedere un nuovo login, conferma via email o informazioni aggiuntive. Se non possiamo verificare l'autorizzazione, possiamo rifiutare o ritardare la richiesta.",
       "Possiamo ritardare o rifiutare la cancellazione per rilevare, prevenire o indagare frodi, abusi, incidenti di sicurezza, reclami legali o violazioni dei Termini, e conservare dati quando richiesto da legge, tribunali, tasse, contabilità, regolamenti o legittime esigenze aziendali.",
-      "Per richieste di cancellazione o domande su questa informativa, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure nivadesk@gmail.com."
+      "Per richieste di cancellazione o domande su questa informativa, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -359,7 +359,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Esta política se aplica a cuentas de NivaDesk creadas mediante el sitio web, la web app, apps móviles, apps de escritorio o servicios relacionados. Si perteneces a un workspace de otra persona o empresa, algunos datos compartidos pueden seguir bajo control del propietario.",
-      "Puedes solicitar la eliminación desde la app en Settings > Account > Delete Account cuando esté disponible, desde esta página pública, o enviando un email a nivadesk@gmail.com con el asunto NivaDesk account deletion request. Podemos pedirte que verifiques tu identidad.",
+      "Puedes solicitar la eliminación desde la app en Settings > Account > Delete Account cuando esté disponible, desde esta página pública, o enviando un email a contact@nivadesk.co.uk con el asunto NivaDesk account deletion request. Podemos pedirte que verifiques tu identidad.",
       "NivaDesk está diseñado para apoyar los requisitos de Apple y Google Play para apps que permiten crear cuentas. Por eso debe existir tanto una ruta dentro de la app como una página pública para solicitar la eliminación sin reinstalar la app.",
       "Tras recibir tu solicitud, tomaremos medidas razonables para verificar que es auténtica y que estás autorizado. Una vez verificada, comenzaremos a eliminar o anonimizar datos personales de la cuenta, sujeto a excepciones legales, de seguridad, facturación, copias de seguridad y workspace.",
       "Cuando corresponda, podemos eliminar o anonimizar perfil, nombre, email, avatar, preferencias, registros de autenticación, ajustes personales, sesiones o dispositivos ya no necesarios, datos de uso técnicamente eliminables y registros de membresía que te identifiquen.",
@@ -371,7 +371,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Eliminar tu cuenta de NivaDesk no cancela automáticamente suscripciones gestionadas por App Store, Google Play, Stripe u otro proveedor. Debes cancelar la suscripción en la plataforma donde la compraste.",
       "Por seguridad podemos requerir que inicies sesión de nuevo, confirmes por email o proporciones información adicional. Si no podemos verificar la autorización, podemos rechazar o retrasar la solicitud.",
       "Podemos retrasar o rechazar la eliminación para detectar, prevenir o investigar fraude, abuso, incidentes de seguridad, reclamaciones legales o infracciones de los Términos, y conservar información cuando lo exijan la ley, tribunales, impuestos, contabilidad, regulación o intereses empresariales legítimos.",
-      "Para solicitudes de eliminación o preguntas sobre esta política, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o nivadesk@gmail.com."
+      "Para solicitudes de eliminación o preguntas sobre esta política, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -399,7 +399,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Esta política aplica-se a contas NivaDesk criadas através do website, web app, apps móveis, apps desktop ou serviços relacionados. Se fizer parte de um workspace pertencente a outra pessoa ou empresa, alguns dados partilhados podem continuar sob controlo do proprietário do workspace.",
-      "Pode solicitar a eliminação na app por Settings > Account > Delete Account quando disponível, nesta página pública, ou por email para nivadesk@gmail.com com o assunto NivaDesk account deletion request. Poderemos pedir verificação de identidade.",
+      "Pode solicitar a eliminação na app por Settings > Account > Delete Account quando disponível, nesta página pública, ou por email para contact@nivadesk.co.uk com o assunto NivaDesk account deletion request. Poderemos pedir verificação de identidade.",
       "A NivaDesk é concebida para apoiar os requisitos da Apple e do Google Play para apps com criação de conta. Por isso, deve existir um caminho dentro da app e uma página pública para solicitar eliminação sem reinstalar a app.",
       "Após recebermos o pedido, tomaremos medidas razoáveis para verificar que é genuíno e que tem autorização. Depois de verificado, começaremos a eliminar ou anonimizar dados pessoais da conta, sujeitos a exceções legais, de segurança, faturação, cópias de segurança e workspace.",
       "Quando aplicável, podemos eliminar ou anonimizar perfil, nome, email, avatar, preferências, registos de autenticação, definições pessoais, sessões ou dispositivos já não necessários, dados de utilização tecnicamente elimináveis e registos de participação que o identifiquem.",
@@ -411,7 +411,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Eliminar a conta NivaDesk não cancela automaticamente subscrições geridas pela App Store, Google Play, Stripe ou outro fornecedor. Deve cancelar a subscrição na plataforma onde a comprou.",
       "Por segurança, podemos pedir novo login, confirmação por email ou informação adicional. Se não conseguirmos verificar autorização, podemos recusar ou atrasar o pedido.",
       "Podemos atrasar ou recusar a eliminação para detetar, prevenir ou investigar fraude, abuso, incidentes de segurança, reclamações legais ou violações dos Termos, e conservar dados quando exigido por lei, tribunal, impostos, contabilidade, regulação ou interesses legítimos.",
-      "Para pedidos de eliminação ou perguntas sobre esta política, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou nivadesk@gmail.com."
+      "Para pedidos de eliminação ou perguntas sobre esta política, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -439,7 +439,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "Эта политика применяется к аккаунтам NivaDesk, созданным через сайт, web app, мобильные приложения, настольные приложения или связанные сервисы. Если вы участник workspace другого человека или компании, часть общих данных может оставаться под контролем владельца workspace.",
-      "Вы можете запросить удаление в приложении через Settings > Account > Delete Account, когда этот вариант доступен, на этой публичной странице или по email на nivadesk@gmail.com с темой NivaDesk account deletion request. Мы можем запросить подтверждение личности.",
+      "Вы можете запросить удаление в приложении через Settings > Account > Delete Account, когда этот вариант доступен, на этой публичной странице или по email на contact@nivadesk.co.uk с темой NivaDesk account deletion request. Мы можем запросить подтверждение личности.",
       "NivaDesk разработан с учетом требований Apple и Google Play для приложений с созданием аккаунта. Поэтому должен быть как путь удаления внутри приложения, так и публичная страница для запроса удаления без повторной установки приложения.",
       "После получения запроса мы принимаем разумные меры, чтобы проверить его подлинность и ваши полномочия. После проверки мы начинаем удаление или обезличивание персональных данных аккаунта с учетом юридических, security, billing, backup и workspace исключений.",
       "При необходимости мы можем удалить или обезличить профиль, имя, email, аватар, настройки аккаунта, записи аутентификации, личные настройки, ненужные записи устройств или сессий, технически удаляемые данные использования и записи членства, идентифицирующие вас.",
@@ -451,7 +451,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Удаление аккаунта NivaDesk не отменяет автоматически подписки, управляемые App Store, Google Play, Stripe или другим провайдером. Вы должны отменить подписку на платформе покупки.",
       "Для безопасности мы можем потребовать повторный вход, подтверждение по email или дополнительную информацию. Если мы не можем проверить полномочия, запрос может быть отклонен или задержан.",
       "Мы можем задержать или отказать в удалении для выявления, предотвращения или расследования fraud, abuse, security incidents, legal claims или нарушений Terms, а также сохранять данные, если это требуется законом, судом, налогами, бухгалтерией, регуляторами или законными бизнес-интересами.",
-      "По вопросам удаления аккаунта или этой политики свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или nivadesk@gmail.com."
+      "По вопросам удаления аккаунта или этой политики свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -479,7 +479,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "このポリシーは、ウェブサイト、Web アプリ、モバイルアプリ、デスクトップアプリ、関連サービスで作成された NivaDesk アカウントに適用されます。他者または企業が所有する workspace のメンバーである場合、一部の共有データは workspace 所有者の管理下に残ることがあります。",
-      "削除は、利用可能な場合はアプリの Settings > Account > Delete Account、この公開ページ、またはアカウントに紐づくメールから nivadesk@gmail.com 宛に件名 NivaDesk account deletion request で依頼できます。本人確認をお願いする場合があります。",
+      "削除は、利用可能な場合はアプリの Settings > Account > Delete Account、この公開ページ、またはアカウントに紐づくメールから contact@nivadesk.co.uk 宛に件名 NivaDesk account deletion request で依頼できます。本人確認をお願いする場合があります。",
       "NivaDesk は、アカウント作成を提供するアプリに対する Apple と Google Play の要件を支援するよう設計されています。そのため、アプリ内の削除経路と、アプリを再インストールせずに申請できる公開ページの両方を用意する必要があります。",
       "リクエストを受け取った後、当社は申請が真正であり、あなたに削除権限があることを合理的に確認します。確認後、法的、安全性、請求、バックアップ、workspace 関連の例外を除き、個人データの削除または匿名化を開始します。",
       "該当する場合、プロフィール、氏名、メール、アバター、アカウント設定、認証記録、個人設定、不要になったデバイスやセッション記録、技術的に削除可能な利用データ、あなたを識別するメンバー記録を削除または匿名化できます。",
@@ -491,7 +491,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "NivaDesk アカウントを削除しても、App Store、Google Play、Stripe、その他プロバイダーが管理するサブスクリプションは自動的に解約されません。購入したプラットフォームで解約する責任があります。",
       "安全のため、再ログイン、メール確認、追加情報を求める場合があります。権限を確認できない場合、リクエストを拒否または遅延することがあります。",
       "不正、悪用、セキュリティ事故、法的請求、利用規約違反を検知、防止、調査するため、削除を遅延または拒否する場合があります。また、法律、裁判所、税務、会計、規制、正当な事業上の必要性により情報を保持する場合があります。",
-      "アカウント削除の依頼またはこのポリシーに関する質問は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または nivadesk@gmail.com までご連絡ください。"
+      "アカウント削除の依頼またはこのポリシーに関する質問は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -519,7 +519,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "本政策适用于通过网站、Web 应用、移动应用、桌面应用或相关服务创建的 NivaDesk 账户。如果你是其他个人或企业拥有的 workspace 成员，某些共享数据可能仍由 workspace 所有者控制。",
-      "你可以在应用内通过 Settings > Account > Delete Account 请求删除（如可用），也可以使用本公开页面，或从账户关联邮箱发送邮件至 nivadesk@gmail.com，主题为 NivaDesk account deletion request。我们可能要求验证身份。",
+      "你可以在应用内通过 Settings > Account > Delete Account 请求删除（如可用），也可以使用本公开页面，或从账户关联邮箱发送邮件至 contact@nivadesk.co.uk，主题为 NivaDesk account deletion request。我们可能要求验证身份。",
       "NivaDesk 设计为支持 Apple 和 Google Play 对允许创建账户的应用提出的账户删除要求。因此，应同时提供应用内删除路径和无需重新安装应用即可请求删除的公开网页。",
       "收到请求后，我们会采取合理措施确认请求真实且你有权删除账户。验证后，我们将开始删除或匿名化账户相关个人数据，但需遵守法律、安全、计费、备份和 workspace 相关例外。",
       "在适用情况下，我们可删除或匿名化用户资料、姓名、邮箱、头像、账户偏好、认证记录、个人设置、不再需要的设备或会话记录、技术上可删除的使用数据以及可识别你的 workspace 成员记录。",
@@ -531,7 +531,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "删除 NivaDesk 账户不会自动取消由 App Store、Google Play、Stripe 或其他支付提供商管理的订阅。你需要在购买订阅的平台上自行取消。",
       "出于安全考虑，我们可能要求你重新登录、通过邮件确认或提供额外信息。如果无法验证请求人有权删除账户或 workspace，我们可能拒绝或延迟请求。",
       "为检测、防止或调查欺诈、滥用、安全事件、法律主张或违反服务条款的行为，我们可能延迟或拒绝删除；也可能因法律、法院、税务、会计、监管或合法业务需要保留信息。",
-      "如需请求删除账户或咨询本政策，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 nivadesk@gmail.com。"
+      "如需请求删除账户或咨询本政策，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -559,7 +559,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "تنطبق هذه السياسة على حسابات NivaDesk التي يتم إنشاؤها عبر الموقع أو تطبيق الويب أو تطبيقات الهاتف أو تطبيقات سطح المكتب أو الخدمات المرتبطة. إذا كنت عضواً في workspace يملكه شخص أو شركة أخرى، فقد تبقى بعض البيانات المشتركة تحت تحكم مالك workspace.",
-      "يمكنك طلب الحذف من داخل التطبيق عبر Settings > Account > Delete Account عند توفره، أو من هذه الصفحة العامة، أو بإرسال بريد إلى nivadesk@gmail.com بعنوان NivaDesk account deletion request. قد نطلب منك التحقق من هويتك.",
+      "يمكنك طلب الحذف من داخل التطبيق عبر Settings > Account > Delete Account عند توفره، أو من هذه الصفحة العامة، أو بإرسال بريد إلى contact@nivadesk.co.uk بعنوان NivaDesk account deletion request. قد نطلب منك التحقق من هويتك.",
       "تم تصميم NivaDesk لدعم متطلبات Apple و Google Play للتطبيقات التي تسمح بإنشاء الحسابات. لذلك يجب توفير مسار حذف داخل التطبيق وصفحة عامة تتيح طلب الحذف دون إعادة تثبيت التطبيق.",
       "بعد استلام طلبك، سنتخذ خطوات معقولة للتحقق من أن الطلب حقيقي وأنك مخول بحذف الحساب. بعد التحقق، نبدأ حذف أو إخفاء هوية البيانات الشخصية المرتبطة بالحساب، مع مراعاة الاستثناءات القانونية والأمنية والفوترة والنسخ الاحتياطي وworkspace.",
       "عند الاقتضاء، قد نحذف أو نخفي هوية ملفك الشخصي واسمك وبريدك وصورتك وتفضيلات الحساب وسجلات المصادقة والإعدادات الشخصية وسجلات الأجهزة أو الجلسات غير المطلوبة وبيانات الاستخدام القابلة للحذف تقنياً وسجلات العضوية التي تحدد هويتك.",
@@ -571,7 +571,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "حذف حساب NivaDesk لا يلغي تلقائياً الاشتراكات التي تديرها App Store أو Google Play أو Stripe أو مزود آخر. أنت مسؤول عن إلغاء الاشتراك من المنصة التي اشتريته منها.",
       "لأسباب أمنية، قد نطلب تسجيل الدخول مرة أخرى أو تأكيداً عبر البريد أو معلومات إضافية. إذا لم نتمكن من التحقق من التفويض، فقد نرفض الطلب أو نؤخره.",
       "قد نؤخر أو نرفض الحذف لاكتشاف أو منع أو التحقيق في الاحتيال أو إساءة الاستخدام أو الحوادث الأمنية أو المطالبات القانونية أو انتهاكات الشروط، وقد نحتفظ بالمعلومات إذا تطلب القانون أو المحكمة أو الضرائب أو المحاسبة أو التنظيم أو المصالح التجارية المشروعة ذلك.",
-      "لطلبات حذف الحساب أو الأسئلة حول هذه السياسة، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو nivadesk@gmail.com."
+      "لطلبات حذف الحساب أو الأسئلة حول هذه السياسة، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -599,7 +599,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ],
     sectionSummaries: [
       "यह नीति website, web app, mobile app, desktop app या related services से बनाए गए NivaDesk accounts पर लागू होती है। यदि आप किसी दूसरे व्यक्ति या business के workspace member हैं, तो कुछ shared workspace data owner के control में रह सकता है।",
-      "आप app में Settings > Account > Delete Account उपलब्ध होने पर, इस public page से, या अपने account email से nivadesk@gmail.com पर NivaDesk account deletion request subject के साथ request भेजकर deletion मांग सकते हैं। हम identity verification मांग सकते हैं।",
+      "आप app में Settings > Account > Delete Account उपलब्ध होने पर, इस public page से, या अपने account email से contact@nivadesk.co.uk पर NivaDesk account deletion request subject के साथ request भेजकर deletion मांग सकते हैं। हम identity verification मांग सकते हैं।",
       "NivaDesk उन apps के लिए Apple और Google Play account deletion requirements support करने के लिए designed है जिनमें account creation होता है। इसलिए app के अंदर deletion path और app reinstall किए बिना request करने के लिए public web page दोनों होने चाहिए।",
       "Request मिलने के बाद हम reasonable steps लेकर verify करेंगे कि request genuine है और आप account delete करने के लिए authorised हैं। Verification के बाद हम personal data delete या anonymise करना शुरू करेंगे, legal, security, billing, backup और workspace exceptions के अधीन।",
       "जहाँ लागू हो, हम profile, name, email, avatar, account preferences, authentication records, personal settings, अब जरूरी न रहे device/session records, technically deletable usage data और आपको identify करने वाले workspace membership records delete या anonymise कर सकते हैं।",
@@ -611,7 +611,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "NivaDesk account delete करने से Apple App Store, Google Play, Stripe या किसी दूसरे provider द्वारा managed subscriptions automatically cancel नहीं होते। Subscription उस platform पर cancel करना आपकी जिम्मेदारी है जहाँ आपने खरीदा था।",
       "Security के लिए हम दोबारा login, email confirmation या additional information मांग सकते हैं। यदि authorization verify नहीं हो पाती, तो request reject या delay हो सकती है।",
       "Fraud, abuse, security incidents, legal claims या Terms violations detect, prevent या investigate करने के लिए हम deletion delay या refuse कर सकते हैं, और law, court order, tax, accounting, regulatory requirements या legitimate business needs के कारण information retain कर सकते हैं।",
-      "Account deletion requests या इस policy पर questions के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या nivadesk@gmail.com पर संपर्क करें।"
+      "Account deletion requests या इस policy पर questions के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
     ]
   }
 };
