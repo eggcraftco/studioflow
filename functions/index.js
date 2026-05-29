@@ -13888,6 +13888,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
     issuer,
     authorization_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthAuthorize"),
     token_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthToken"),
+    client_id_metadata_document_supported: true,
     registration_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthRegister"),
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
@@ -14114,7 +14115,7 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
     token_endpoint_auth_method: "none",
     grant_types: ["authorization_code"],
     response_types: ["code"],
-    scope: "orders.read orders.write notes.read notes.write tasks.write"
+    scope: "orders.read orders.write notes.read notes.write finance.read tasks.write"
   });
 });
 
