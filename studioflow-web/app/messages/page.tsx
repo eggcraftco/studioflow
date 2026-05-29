@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -116,6 +117,11 @@ export default function MessagesPage() {
       if (cancelled) return;
       setWorkspace(ws);
       setLoadingWorkspace(false);
+
+      if (!ws.entitlements.features.messages) {
+        return;
+      }
+
       try {
         const members = await loadMessageTeamMembers(ws);
         if (!cancelled) setTeamMembers(members);
@@ -479,6 +485,26 @@ export default function MessagesPage() {
   }, [threads, archiveMap]);
 
   if (authLoading || loadingWorkspace || !user) return <LoadingScreen />;
+
+  if (workspace && !workspace.entitlements.features.messages) {
+    return (
+      <AppShell>
+        <section className="card" style={{ padding: 28, maxWidth: 760 }}>
+          <div className="pill">Available on Team</div>
+          <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 10px" }}>
+            Messages is not included in {workspace.billingPlanName}.
+          </h1>
+          <p style={{ color: "var(--muted)", margin: "0 0 18px" }}>
+            Internal team conversations, direct messages and shared message attachments are available on NivaDesk Team. Quick Reply remains separate for solo workflow use.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link className="button" href="/plan">View Team plan</Link>
+            <Link className="button secondary" href="/dashboard">Back to dashboard</Link>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

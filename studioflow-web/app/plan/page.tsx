@@ -41,7 +41,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   order_notes: "Order notes",
   dashboard_summary: "Dashboard summary",
   financial_summary: "Financial summaries",
-  messages: "Messages and quick replies"
+  messages: "Messages"
 };
 
 const ADD_ONS = [
@@ -208,8 +208,16 @@ export default function PlanPage() {
               <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginTop: 18 }}>
                 <MiniMetric title="Status" value={workspace.billingStatus} note={workspace.billingProviderRawStatus || "Workspace billing state"} />
                 <MiniMetric title="Orders" value={String(counts.orderCount)} note="Existing data" />
-                <MiniMetric title="Current seat allowance" value={String(workspace.billingTeamMemberLimit)} note="Team includes 5 seats · up to 10 self-service" />
-                <MiniMetric title="Storage" value={formatStorageFromMB(workspace.billingStorageLimitMB)} note="Base + add-ons" />
+                <MiniMetric
+                  title={workspace.entitlements.features.team_access ? "Current seat allowance" : "Users"}
+                  value={workspace.entitlements.features.team_access ? String(workspace.billingTeamMemberLimit) : "1 included"}
+                  note={workspace.entitlements.features.team_access ? "Team includes 5 seats · up to 10 self-service" : "Solo workspace"}
+                />
+                <MiniMetric
+                  title={workspace.entitlements.features.client_files ? "Client Files storage" : "Client Files"}
+                  value={workspace.entitlements.features.client_files ? formatStorageFromMB(workspace.billingStorageLimitMB) : "Not included"}
+                  note={workspace.entitlements.features.client_files ? "Base storage allowance" : "Available on Pro and Team"}
+                />
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 18 }}>
                 <button className="button secondary" type="button" onClick={handleManageBilling} disabled={!isOwnerLike(workspace.role) || billingLoading}>
@@ -226,19 +234,30 @@ export default function PlanPage() {
               </p>
             </article>
 
-            <article className="card" style={{ padding: 22 }}>
-              <div className="pill">Storage usage</div>
-              <h2 style={{ margin: "12px 0 6px" }}>{storagePercent}% used</h2>
-              <p style={{ color: "var(--muted)", marginTop: 0 }}>
-                {counts.estimatedFileUsageMB} MB used of {formatStorageFromMB(workspace.billingStorageLimitMB)}.
-              </p>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: storagePercent + "%" }} />
-              </div>
-              <p style={{ color: "var(--muted)", marginBottom: 0, fontSize: 13 }}>
-                This estimate uses file metadata from loaded orders. Server-side recalculation can be connected later.
-              </p>
-            </article>
+            {workspace.entitlements.features.client_files ? (
+              <article className="card" style={{ padding: 22 }}>
+                <div className="pill">Client Files storage</div>
+                <h2 style={{ margin: "12px 0 6px" }}>{storagePercent}% used</h2>
+                <p style={{ color: "var(--muted)", marginTop: 0 }}>
+                  {counts.estimatedFileUsageMB} MB used of {formatStorageFromMB(workspace.billingStorageLimitMB)}.
+                </p>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: storagePercent + "%" }} />
+                </div>
+                <p style={{ color: "var(--muted)", marginBottom: 0, fontSize: 13 }}>
+                  This estimate uses file metadata from loaded orders. Server-side recalculation can be connected later.
+                </p>
+              </article>
+            ) : (
+              <article className="card" style={{ padding: 22 }}>
+                <div className="pill">Client Files</div>
+                <h2 style={{ margin: "12px 0 6px" }}>Not included</h2>
+                <p style={{ color: "var(--muted)", marginTop: 0 }}>
+                  Cloud file storage and file management are available on NivaDesk Pro and Team.
+                </p>
+                <Link className="button secondary" href="/pricing">Compare plans</Link>
+              </article>
+            )}
           </section>
 
           <section className="card" style={{ padding: 22, marginBottom: 18 }}>
@@ -286,7 +305,9 @@ export default function PlanPage() {
                     <tr key={featureKey}>
                       <td style={{ fontWeight: 900 }}>{FEATURE_LABELS[featureKey]}</td>
                       {Object.values(PLAN_ENTITLEMENTS).map(plan => (
-                        <td key={plan.plan + "-" + featureKey}>{plan.features[featureKey] ? "Included" : "Locked"}</td>
+                        <td key={plan.plan + "-" + featureKey}>
+                          {featureKey === "storage_addons" ? "Coming soon" : plan.features[featureKey] ? "Included" : "Locked"}
+                        </td>
                       ))}
                     </tr>
                   ))}
