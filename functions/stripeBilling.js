@@ -810,8 +810,11 @@ function createStripeBillingFunctions({
     if (!config.configured) {
       return { ok: true, configured: false, message: config.message };
     }
-    requireBillingEnvironmentAccess(request, config);
 
+    // Refresh only verifies an existing server-owned Stripe customer/subscription
+    // and cannot create checkout sessions or accept a client-provided plan.
+    // Therefore it is safe for any workspace Owner, including review/demo owners,
+    // while test checkout and billing portal actions remain allowlisted below.
     const customerId = String(companyData.billingCustomerId || companyData.billingStripeCustomerId || "").trim();
     if (!customerId) {
       return {
