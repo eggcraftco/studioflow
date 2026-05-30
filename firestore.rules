@@ -50,6 +50,101 @@ service cloud.firestore {
         );
     }
 
+    function hasTeamPlan(companyId) {
+      return companyExists(companyId)
+        && get(companyPath(companyId)).data.billingPlan in [
+          'team_monthly', 'team_yearly', 'teamMonthly', 'teamYearly'
+        ];
+    }
+
+    function hasAdvancedFinancePlan(companyId) {
+      return companyExists(companyId)
+        && get(companyPath(companyId)).data.billingPlan in [
+          'pro_monthly', 'pro_yearly', 'team_monthly', 'team_yearly',
+          'proMonthly', 'proYearly', 'teamMonthly', 'teamYearly'
+        ];
+    }
+
+    function canReadMessages(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer']
+        );
+    }
+
+    function canWriteMessages(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member']
+        );
+    }
+
+    function protectedTeamWorkspaceFields() {
+      return [
+        'members',
+        'memberRoles',
+        'memberCustomRoles',
+        'memberAccess',
+        'memberUids',
+        'removedMemberUids',
+        'customRoles'
+      ];
+    }
+
+    function validTeamWorkspaceUpdate(companyId) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedTeamWorkspaceFields())
+        || hasTeamPlan(companyId);
+    }
+
+    function advancedFinanceFields() {
+      return [
+        'paymentFee',
+        'deliveryCost',
+        'taxType',
+        'taxRate',
+        'taxAmount',
+        'financialRemainingValues',
+        'financialExpenseValues'
+      ];
+    }
+
+    function safeBasicFinanceCreateValues(data) {
+      return (!data.keys().hasAny(['paymentFee']) || data.paymentFee == 0)
+        && (!data.keys().hasAny(['deliveryCost']) || data.deliveryCost == 0)
+        && (!data.keys().hasAny(['taxType']) || data.taxType == '')
+        && (!data.keys().hasAny(['taxRate']) || data.taxRate == 0)
+        && (!data.keys().hasAny(['taxAmount']) || data.taxAmount == 0)
+        && !data.keys().hasAny(['financialRemainingValues', 'financialExpenseValues']);
+    }
+
+    // Dynamic advanced finance values currently live under customFields keys such as
+    // financialExpense::<title> and financialRemaining::<title>. Firestore Rules cannot
+    // safely validate arbitrary map-key prefixes, so basic plans must use the verified
+    // backend callable whenever customFields are written.
+    function safeBasicCustomFieldsCreate(data) {
+      return !data.keys().hasAny(['customFields']);
+    }
+
+    function validBasicCustomFieldsUpdate(companyId) {
+      return hasAdvancedFinancePlan(companyId)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['customFields']);
+    }
+
+    function validOrderFinanceCreate(companyId) {
+      return hasAdvancedFinancePlan(companyId)
+        || (safeBasicFinanceCreateValues(request.resource.data)
+          && safeBasicCustomFieldsCreate(request.resource.data));
+    }
+
+    function validOrderFinanceUpdate(companyId) {
+      return hasAdvancedFinancePlan(companyId)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(advancedFinanceFields());
+    }
+
     function protectedBillingFields() {
       return [
         'billingPlan',
@@ -57,6 +152,27 @@ service cloud.firestore {
         'billingPlanSource',
         'billingStatus',
         'billingProviderRawStatus',
+        'billingEffectivePlan',
+        'billingEffectivePlanTier',
+        'billingEffectiveStatus',
+        'billingEffectiveProvider',
+        'billingEffectiveSubscriptionId',
+        'billingEntitlementUpdatedAt',
+        'billingActivePlanSubscriptionCount',
+        'billingActivePlanProviders',
+        'billingHasMultipleActiveSubscriptions',
+        'billingDuplicateSubscriptionDetectedAt',
+        'billingEntitlementResolutionReason',
+        'billingEntitlementTriggerEvent',
+        'billingEntitlementResolvedAt',
+        'billingLastEntitlementResyncRequestedAt',
+        'billingLastEntitlementResyncRequestedBy',
+        'billingLastEntitlementResyncProvider',
+        'billingLastEntitlementResyncCompletedAt',
+        'billingLastEntitlementResyncCompletedBy',
+        'billingLastEntitlementResyncFoundSubscriptions',
+        'billingLastEntitlementResyncRecognisedSubscriptions',
+        'billingLastEntitlementResyncStaleRecordsDeactivated',
         'billingStorageLimitMB',
         'billingTeamMemberLimit',
         'billingTeamIncludedSeats',
@@ -106,6 +222,27 @@ service cloud.firestore {
           'billingStripeCustomerId',
           'billingSubscriptionId',
           'billingSubscriptionItemKey',
+          'billingEffectivePlan',
+          'billingEffectivePlanTier',
+          'billingEffectiveStatus',
+          'billingEffectiveProvider',
+          'billingEffectiveSubscriptionId',
+          'billingEntitlementUpdatedAt',
+          'billingActivePlanSubscriptionCount',
+          'billingActivePlanProviders',
+          'billingHasMultipleActiveSubscriptions',
+          'billingDuplicateSubscriptionDetectedAt',
+          'billingEntitlementResolutionReason',
+          'billingEntitlementTriggerEvent',
+          'billingEntitlementResolvedAt',
+          'billingLastEntitlementResyncRequestedAt',
+          'billingLastEntitlementResyncRequestedBy',
+          'billingLastEntitlementResyncProvider',
+          'billingLastEntitlementResyncCompletedAt',
+          'billingLastEntitlementResyncCompletedBy',
+          'billingLastEntitlementResyncFoundSubscriptions',
+          'billingLastEntitlementResyncRecognisedSubscriptions',
+          'billingLastEntitlementResyncStaleRecordsDeactivated',
           'billingAdditionalTeamSeatQuantity',
           'billingStorageAddonMB'
         ]);
@@ -175,7 +312,9 @@ service cloud.firestore {
         && validNewCompanyBillingState();
 
       allow read: if canReadCompany(companyId);
-      allow update: if isCompanyOwner(companyId) && validCompanyBillingUpdate();
+      allow update: if isCompanyOwner(companyId)
+        && validCompanyBillingUpdate()
+        && validTeamWorkspaceUpdate(companyId);
       allow delete: if isCompanyOwner(companyId);
     }
 
@@ -184,32 +323,62 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Verified provider subscriptions are server-owned billing records.
+    // Only the owner may read them; clients must never create or change them.
+    match /companies/{companyId}/subscriptions/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
     match /companies/{companyId}/messageUserPreferences/{userId} {
-      allow read: if isOwnMessagePreferenceDoc(userId) && canReadCompany(companyId);
-      allow create, update: if validMessagePreferenceWrite(companyId, userId);
+      allow read: if hasTeamPlan(companyId)
+        && isOwnMessagePreferenceDoc(userId)
+        && canReadMessages(companyId);
+      allow create, update: if hasTeamPlan(companyId)
+        && canReadMessages(companyId)
+        && validMessagePreferenceWrite(companyId, userId);
       allow delete: if false;
+    }
+
+    match /companies/{companyId}/messageSettings/{document=**} {
+      allow read: if hasTeamPlan(companyId) && canReadMessages(companyId);
+      allow write: if hasTeamPlan(companyId) && canWriteMessages(companyId);
+    }
+
+    match /companies/{companyId}/messageThreads/{document=**} {
+      allow read: if hasTeamPlan(companyId) && canReadMessages(companyId);
+      allow write: if hasTeamPlan(companyId) && canWriteMessages(companyId);
     }
 
     match /companies/{companyId}/{collectionId}/{document=**} {
       allow read: if collectionId != 'messageUserPreferences'
+        && collectionId != 'messageSettings'
+        && collectionId != 'messageThreads'
         && collectionId != 'billing'
+        && collectionId != 'subscriptions'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
+        && collectionId != 'messageSettings'
+        && collectionId != 'messageThreads'
         && collectionId != 'billing'
+        && collectionId != 'subscriptions'
         && canWriteCompanyData(companyId);
     }
 
     match /siparisler/{orderId} {
       allow create: if signedIn()
         && request.resource.data.companyId is string
-        && canWriteCompanyData(request.resource.data.companyId);
+        && canWriteCompanyData(request.resource.data.companyId)
+        && validOrderFinanceCreate(request.resource.data.companyId);
 
       allow read: if resource.data.companyId is string
         && canReadCompany(resource.data.companyId);
 
       allow update: if resource.data.companyId is string
         && request.resource.data.companyId == resource.data.companyId
-        && canWriteCompanyData(resource.data.companyId);
+        && canWriteCompanyData(resource.data.companyId)
+        && validOrderFinanceUpdate(resource.data.companyId)
+        && validBasicCustomFieldsUpdate(resource.data.companyId);
 
       allow delete: if resource.data.companyId is string
         && canWriteCompanyData(resource.data.companyId);

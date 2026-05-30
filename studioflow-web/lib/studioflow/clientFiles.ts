@@ -44,7 +44,7 @@ export function isClientFileImage(file: Pick<ClientFileDetail, "contentType" | "
 
 export function canManageClientFilesForRole(role: string) {
   const normalized = normalizeWorkspaceRole(role);
-  return normalized === "owner" || normalized === "admin" || normalized === "member" || normalized === "workflow";
+  return normalized === "owner" || normalized === "admin" || normalized === "member";
 }
 
 type UploadUser = {

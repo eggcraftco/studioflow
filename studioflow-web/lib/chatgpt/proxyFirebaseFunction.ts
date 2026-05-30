@@ -48,6 +48,9 @@ export async function proxyNivaDeskFirebaseFunction(
   responseHeaders.delete("content-length");
   responseHeaders.delete("content-encoding");
   responseHeaders.delete("transfer-encoding");
+  responseHeaders.set("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
+  responseHeaders.set("Pragma", "no-cache");
+  responseHeaders.set("Expires", "0");
 
   const location = rewritePublicLocation(responseHeaders.get("location"));
   if (location) {

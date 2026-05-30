@@ -229,8 +229,8 @@ function createStripeBillingFunctions({
 
   function ownerOrAdminRole(companyData, uid) {
     const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid), "unknown");
-    if (role !== "owner" && role !== "admin") {
-      throw new HttpsError("permission-denied", "Only workspace owners/admins can manage billing.", {
+    if (role !== "owner") {
+      throw new HttpsError("permission-denied", "Only the workspace owner can manage billing.", {
         role,
         roleLabel: workspaceRoleLabel(role)
       });
@@ -283,6 +283,218 @@ function createStripeBillingFunctions({
   function timestampFromUnix(seconds) {
     const value = Number(seconds || 0);
     return Number.isFinite(value) && value > 0 ? admin.firestore.Timestamp.fromMillis(value * 1000) : null;
+  }
+
+  function planTierForItem(item = null) {
+    const key = String(item?.key || "").trim();
+    if (key.startsWith("lite_")) return "lite";
+    if (key.startsWith("pro_")) return "pro";
+    if (key.startsWith("team_")) return "team";
+    return "free_demo";
+  }
+
+  function effectiveProviderForPlanKey(planKey) {
+    return planKey === "demo" ? "none" : "stripe";
+  }
+
+  function stripeSubscriptionLedgerId(subscriptionId) {
+    return `stripe_${String(subscriptionId || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 180)}`;
+  }
+
+  function subscriptionActiveForEntitlement(status, shouldFallback) {
+    return !shouldFallback && ["active", "trialing", "past_due"].includes(String(status || "").toLowerCase());
+  }
+
+  function subscriptionPlanRank(tier) {
+    const ranks = { free_demo: 0, lite: 1, pro: 2, team: 3 };
+    return ranks[String(tier || "").trim().toLowerCase()] || 0;
+  }
+
+  function defaultInternalPlanKeyForTier(tier) {
+    const normalized = String(tier || "").trim().toLowerCase();
+    if (normalized === "team") return "team_monthly";
+    if (normalized === "pro") return "pro_monthly";
+    if (normalized === "lite") return "lifetime_lite";
+    return "demo";
+  }
+
+  function mappedEffectiveStatus(rawStatus) {
+    const status = String(rawStatus || "").trim().toLowerCase();
+    if (status === "trialing") return "trialing";
+    if (status === "past_due") return "past_due";
+    return "active";
+  }
+
+  function firestoreTimestampMillis(value) {
+    if (value && typeof value.toMillis === "function") return value.toMillis();
+    return 0;
+  }
+
+  async function writeStripeSubscriptionLedger({
+    workspace,
+    subscription,
+    item,
+    eventType,
+    status,
+    periodEnd,
+    customerId,
+    shouldFallback
+  }) {
+    const subscriptionId = String(subscription?.id || "").trim();
+    if (!workspace?.ref || !subscriptionId || !item) return;
+
+    const metadata = subscription.metadata || {};
+    const activeForEntitlement = subscriptionActiveForEntitlement(status, shouldFallback);
+    const quantity = Math.max(
+      1,
+      Number(Array.isArray(subscription.items?.data) ? subscription.items.data[0]?.quantity || 1 : 1) || 1
+    );
+
+    await workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId)).set({
+      provider: "stripe",
+      subscriptionType: item.type,
+      planTier: item.type === "plan" ? planTierForItem(item) : "",
+      internalPlanKey: item.plan || "",
+      itemKey: item.key,
+      interval: item.interval || "",
+      externalSubscriptionId: subscriptionId,
+      externalCustomerId: String(customerId || ""),
+      workspaceId: workspace.id,
+      purchasedByUserId: String(metadata.requestedByUid || metadata.ownerUid || ""),
+      providerStatus: String(status || "unknown"),
+      activeForEntitlement,
+      autoRenew: activeForEntitlement && subscription.cancel_at_period_end !== true,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
+      currentPeriodEnd: periodEnd,
+      quantity: item.type === "team_seat_addon" ? Math.min(5, Math.floor(quantity)) : quantity,
+      environment: subscription.livemode === true ? "live" : "test",
+      lastProviderEventType: String(eventType || ""),
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
+    const ledgerSnap = await ledgerRef.get();
+    if (!ledgerSnap.exists || !ledgerSnap.data()?.createdAt) {
+      await ledgerRef.set({ createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+  }
+
+  async function recomputeEffectiveWorkspaceEntitlement(workspace, {
+    triggerEventType = "",
+    triggerProviderStatus = "",
+    triggerCustomerId = ""
+  } = {}) {
+    const subscriptionSnapshot = await workspace.ref.collection("subscriptions").get();
+    const activePlanSubscriptions = subscriptionSnapshot.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+      .filter((entry) => (
+        entry.subscriptionType === "plan"
+        && entry.activeForEntitlement === true
+        && subscriptionPlanRank(entry.planTier) > 0
+      ))
+      .sort((left, right) => {
+        const tierDifference = subscriptionPlanRank(right.planTier) - subscriptionPlanRank(left.planTier);
+        if (tierDifference !== 0) return tierDifference;
+        const expiryDifference = firestoreTimestampMillis(right.currentPeriodEnd) - firestoreTimestampMillis(left.currentPeriodEnd);
+        if (expiryDifference !== 0) return expiryDifference;
+        return String(left.provider || "").localeCompare(String(right.provider || ""));
+      });
+
+    const selected = activePlanSubscriptions[0] || null;
+    const activeProviders = [...new Set(activePlanSubscriptions.map((entry) => String(entry.provider || "").trim()).filter(Boolean))];
+    const hasMultipleActiveSubscriptions = activePlanSubscriptions.length > 1;
+    const resolutionFields = {
+      billingActivePlanSubscriptionCount: activePlanSubscriptions.length,
+      billingActivePlanProviders: activeProviders,
+      billingHasMultipleActiveSubscriptions: hasMultipleActiveSubscriptions,
+      billingDuplicateSubscriptionDetectedAt: hasMultipleActiveSubscriptions
+        ? admin.firestore.FieldValue.serverTimestamp()
+        : admin.firestore.FieldValue.delete(),
+      billingEntitlementResolutionReason: selected
+        ? "highest_active_verified_plan"
+        : "no_active_verified_plan",
+      billingEntitlementTriggerEvent: String(triggerEventType || ""),
+      billingEntitlementResolvedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (!selected) {
+      const normalizedTriggerStatus = String(triggerProviderStatus || "").trim().toLowerCase();
+      const legacyStatus = normalizedTriggerStatus === "unpaid"
+        ? "expired"
+        : (["canceled", "cancelled"].includes(normalizedTriggerStatus) || triggerEventType === "customer.subscription.deleted")
+          ? "cancelled"
+          : "free";
+
+      await workspace.ref.set(planUpdatePayload("demo", legacyStatus, triggerProviderStatus || "free", {
+        billingPlanSource: "entitlement_resolver",
+        billingEffectivePlanTier: "free_demo",
+        billingEffectiveStatus: "free",
+        billingEffectiveProvider: "none",
+        billingEffectiveSubscriptionId: "",
+        billingCustomerId: String(triggerCustomerId || ""),
+        billingSubscriptionId: "",
+        billingSubscriptionItemKey: "",
+        billingInterval: "",
+        billingCurrentPeriodEnd: null,
+        billingStorageAddonMB: 0,
+        billingAdditionalTeamSeatQuantity: 0,
+        billingAdditionalTeamSeatKey: "",
+        billingAdditionalTeamSeatStatus: "cancelled",
+        billingAdditionalTeamSeatSubscriptionId: "",
+        ...resolutionFields
+      }), { merge: true });
+
+      return {
+        plan: "demo",
+        provider: "none",
+        activePlanSubscriptionCount: 0,
+        hasMultipleActiveSubscriptions: false
+      };
+    }
+
+    const effectivePlanKey = String(selected.internalPlanKey || "").trim()
+      || defaultInternalPlanKeyForTier(selected.planTier);
+    const effectiveProvider = String(selected.provider || "").trim() || "unknown";
+    const effectiveSubscriptionId = String(
+      selected.externalSubscriptionId
+      || selected.originalTransactionId
+      || selected.purchaseTokenHash
+      || selected.id
+      || ""
+    );
+    const common = {
+      billingPlanSource: "entitlement_resolver",
+      billingEffectivePlanTier: String(selected.planTier || "").trim(),
+      billingEffectiveProvider: effectiveProvider,
+      billingEffectiveSubscriptionId: effectiveSubscriptionId,
+      billingSubscriptionItemKey: String(selected.itemKey || ""),
+      billingInterval: String(selected.interval || ""),
+      billingCurrentPeriodEnd: selected.currentPeriodEnd || null,
+      ...resolutionFields
+    };
+
+    // Preserve the existing Stripe fields while Stripe is the selected provider.
+    // Future Apple/Google handlers will rely on billingEffective* fields without
+    // erasing Stripe customer references that may still be needed for portal access.
+    if (effectiveProvider === "stripe") {
+      common.billingCustomerId = String(selected.externalCustomerId || triggerCustomerId || "");
+      common.billingSubscriptionId = String(selected.externalSubscriptionId || "");
+    }
+
+    await workspace.ref.set(planUpdatePayload(
+      effectivePlanKey,
+      mappedEffectiveStatus(selected.providerStatus),
+      String(selected.providerStatus || "active"),
+      common
+    ), { merge: true });
+
+    return {
+      plan: effectivePlanKey,
+      provider: effectiveProvider,
+      activePlanSubscriptionCount: activePlanSubscriptions.length,
+      hasMultipleActiveSubscriptions
+    };
   }
 
   function itemByPriceId(priceId) {
@@ -344,11 +556,18 @@ function createStripeBillingFunctions({
   function planUpdatePayload(planKey, status, rawStatus, common = {}) {
     const entitlements = PLAN_ENTITLEMENTS[planKey] || PLAN_ENTITLEMENTS.demo;
     return {
+      // billingPlan remains the app-compatible effective entitlement key during rollout.
       billingPlan: entitlements.plan,
       billingPlanName: entitlements.displayName,
       billingPlanSource: "stripe",
       billingStatus: status,
       billingProviderRawStatus: rawStatus || status,
+      billingEffectivePlan: entitlements.plan,
+      billingEffectivePlanTier: planKey === "demo" ? "free_demo" : planTierForItem({ key: common.billingSubscriptionItemKey || "" }),
+      billingEffectiveStatus: status,
+      billingEffectiveProvider: effectiveProviderForPlanKey(planKey),
+      billingEffectiveSubscriptionId: planKey === "demo" ? "" : String(common.billingSubscriptionId || ""),
+      billingEntitlementUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       billingStorageLimitMB: entitlements.storageLimitMB,
       billingTeamMemberLimit: entitlements.teamMemberLimit,
       billingTeamIncludedSeats: entitlements.plan === "team_monthly" ? 5 : entitlements.teamMemberLimit,
@@ -404,6 +623,20 @@ function createStripeBillingFunctions({
     const isDeleted = eventType === "customer.subscription.deleted";
     const shouldFallback = isDeleted || ["canceled", "unpaid", "incomplete_expired"].includes(status);
 
+    // Every verified Stripe subscription update is persisted in a provider-neutral
+    // ledger. Apple and Google purchase handlers can later write the same schema,
+    // while billingPlan continues to serve existing clients during rollout.
+    await writeStripeSubscriptionLedger({
+      workspace,
+      subscription,
+      item,
+      eventType,
+      status,
+      periodEnd,
+      customerId,
+      shouldFallback
+    });
+
     if (item.type === "storage_addon") {
       const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
       await workspace.ref.set({
@@ -444,34 +677,30 @@ function createStripeBillingFunctions({
       return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive, purchasedSeatQuantity };
     }
 
+    const entitlementResolution = await recomputeEffectiveWorkspaceEntitlement(workspace, {
+      triggerEventType: eventType,
+      triggerProviderStatus: status,
+      triggerCustomerId: customerId
+    });
+
     if (shouldFallback) {
-      await workspace.ref.set(planUpdatePayload("demo", status === "unpaid" ? "expired" : "cancelled", status, {
-        billingCustomerId: customerId,
-        billingSubscriptionId: subscription.id,
+      await workspace.ref.set({
         billingPreviousPaidPlan: item.plan,
         billingPreviousSubscriptionItemKey: item.key,
-        billingPreviousInterval: item.interval || "",
-        billingCurrentPeriodEnd: periodEnd,
-        billingStorageAddonMB: 0,
-        billingAdditionalTeamSeatQuantity: 0,
-        billingAdditionalTeamSeatKey: "",
-        billingAdditionalTeamSeatStatus: "cancelled",
-        billingAdditionalTeamSeatSubscriptionId: ""
-      }), { merge: true });
-
-      return { updated: true, workspaceId: workspace.id, plan: "demo", fallbackFrom: item.plan };
+        billingPreviousInterval: item.interval || ""
+      }, { merge: true });
     }
 
-    const mappedStatus = status === "trialing" ? "trialing" : status === "past_due" ? "past_due" : "active";
-    await workspace.ref.set(planUpdatePayload(item.plan, mappedStatus, status, {
-      billingCustomerId: customerId,
-      billingSubscriptionId: subscription.id,
-      billingSubscriptionItemKey: item.key,
-      billingInterval: item.interval || "",
-      billingCurrentPeriodEnd: periodEnd
-    }), { merge: true });
-
-    return { updated: true, workspaceId: workspace.id, plan: item.plan, status: mappedStatus };
+    return {
+      updated: true,
+      workspaceId: workspace.id,
+      providerPlanEvent: item.plan,
+      providerStatus: status,
+      effectivePlan: entitlementResolution.plan,
+      effectiveProvider: entitlementResolution.provider,
+      activePlanSubscriptionCount: entitlementResolution.activePlanSubscriptionCount,
+      hasMultipleActiveSubscriptions: entitlementResolution.hasMultipleActiveSubscriptions
+    };
   }
 
   async function applyInvoicePaid(stripe, invoice) {
@@ -513,9 +742,12 @@ function createStripeBillingFunctions({
     });
     if (!workspace) return { skipped: true, reason: "workspace_not_found" };
 
+    let resolution = null;
+    if (subscription) {
+      resolution = await applySubscription(subscription, "invoice.payment_failed");
+    }
+
     await workspace.ref.set({
-      billingStatus: "past_due",
-      billingProviderRawStatus: "invoice.payment_failed",
       billingLastInvoiceId: invoice.id || "",
       billingPaymentFailedAt: admin.firestore.FieldValue.serverTimestamp(),
       billingExportAccessPreserved: true,
@@ -523,7 +755,12 @@ function createStripeBillingFunctions({
       billingUpdatedBy: "stripe_webhook"
     }, { merge: true });
 
-    return { updated: true, workspaceId: workspace.id, status: "past_due" };
+    return {
+      updated: true,
+      workspaceId: workspace.id,
+      status: "past_due",
+      entitlementResolutionApplied: Boolean(resolution?.updated)
+    };
   }
 
   async function processStripeEvent(stripe, event) {
@@ -564,6 +801,145 @@ function createStripeBillingFunctions({
 
     return result;
   }
+
+  const resyncStripeWorkspaceEntitlements = onCall({ region: STRIPE_BILLING_REGION, secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+    const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
+    ownerOrAdminRole(companyData, uid);
+
+    const config = configStatus();
+    if (!config.configured) {
+      return { ok: true, configured: false, message: config.message };
+    }
+    requireBillingEnvironmentAccess(request, config);
+
+    const customerId = String(companyData.billingCustomerId || companyData.billingStripeCustomerId || "").trim();
+    if (!customerId) {
+      return {
+        ok: true,
+        configured: true,
+        resynced: false,
+        message: "No verified Stripe customer is connected to this workspace yet."
+      };
+    }
+
+    // Prevent an owner or a duplicated client request from repeatedly causing
+    // provider reads and entitlement writes in a short interval.
+    const nowMs = Date.now();
+    await admin.firestore().runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(companyRef);
+      const lastRequestedAt = snapshot.data()?.billingLastEntitlementResyncRequestedAt;
+      const lastRequestedMs = lastRequestedAt && typeof lastRequestedAt.toMillis === "function"
+        ? lastRequestedAt.toMillis()
+        : 0;
+      if (lastRequestedMs > 0 && nowMs - lastRequestedMs < 60 * 1000) {
+        throw new HttpsError(
+          "resource-exhausted",
+          "Subscription access was recently refreshed. Please wait one minute before trying again."
+        );
+      }
+
+      transaction.set(companyRef, {
+        billingLastEntitlementResyncRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+        billingLastEntitlementResyncRequestedBy: uid,
+        billingLastEntitlementResyncProvider: "stripe"
+      }, { merge: true });
+    });
+
+    const stripe = stripeClient(config.secretKey);
+    const foundSubscriptionIds = new Set();
+    let foundSubscriptionCount = 0;
+    let recognisedSubscriptionCount = 0;
+    let startingAfter = null;
+
+    // Read all subscription states from Stripe. The client cannot provide a plan,
+    // status, subscription ID or entitlement value to this operation.
+    do {
+      const listParams = {
+        customer: customerId,
+        status: "all",
+        limit: 100
+      };
+      if (startingAfter) listParams.starting_after = startingAfter;
+
+      const page = await stripe.subscriptions.list(listParams);
+      for (const subscription of page.data || []) {
+        const subscriptionId = String(subscription?.id || "").trim();
+        if (!subscriptionId) continue;
+
+        foundSubscriptionCount += 1;
+        foundSubscriptionIds.add(subscriptionId);
+
+        const item = itemFromMetadataOrSubscription(subscription.metadata || {}, subscription);
+        if (!item) continue;
+
+        recognisedSubscriptionCount += 1;
+        await applySubscription(subscription, "manual.owner_resync");
+      }
+
+      if (!page.has_more || !(page.data || []).length) {
+        startingAfter = null;
+      } else {
+        startingAfter = page.data[page.data.length - 1].id;
+      }
+    } while (startingAfter);
+
+    // Disable stale Stripe ledger records that are no longer returned by Stripe.
+    // This prevents an old cached entitlement from surviving a provider-side removal.
+    const existingStripeRecords = await companyRef.collection("subscriptions")
+      .where("provider", "==", "stripe")
+      .get();
+
+    const staleBatch = admin.firestore().batch();
+    let staleRecordsDeactivated = 0;
+    existingStripeRecords.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      const externalSubscriptionId = String(data.externalSubscriptionId || "").trim();
+      if (!externalSubscriptionId || foundSubscriptionIds.has(externalSubscriptionId)) return;
+      if (data.activeForEntitlement === true) staleRecordsDeactivated += 1;
+      staleBatch.set(doc.ref, {
+        activeForEntitlement: false,
+        autoRenew: false,
+        providerStatus: "not_found_during_resync",
+        lastProviderEventType: "manual.owner_resync_missing_at_provider",
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    });
+    await staleBatch.commit();
+
+    const resolution = await recomputeEffectiveWorkspaceEntitlement(companyRef && {
+      id: companyId,
+      ref: companyRef
+    }, {
+      triggerEventType: "manual.owner_resync_completed",
+      triggerProviderStatus: "verified",
+      triggerCustomerId: customerId
+    });
+
+    await companyRef.set({
+      billingLastEntitlementResyncCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      billingLastEntitlementResyncCompletedBy: uid,
+      billingLastEntitlementResyncFoundSubscriptions: foundSubscriptionCount,
+      billingLastEntitlementResyncRecognisedSubscriptions: recognisedSubscriptionCount,
+      billingLastEntitlementResyncStaleRecordsDeactivated: staleRecordsDeactivated,
+      billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      billingUpdatedBy: "stripe_owner_resync"
+    }, { merge: true });
+
+    return {
+      ok: true,
+      configured: true,
+      resynced: true,
+      workspaceId: companyId,
+      foundSubscriptionCount,
+      recognisedSubscriptionCount,
+      staleRecordsDeactivated,
+      effectivePlan: resolution.plan,
+      effectiveProvider: resolution.provider,
+      activePlanSubscriptionCount: resolution.activePlanSubscriptionCount,
+      hasMultipleActiveSubscriptions: resolution.hasMultipleActiveSubscriptions
+    };
+  });
 
   const createStripeCheckoutSession = onCall({ region: STRIPE_BILLING_REGION, secrets: [STRIPE_SECRET_KEY] }, async (request) => {
     const item = billingItemFromRequest(request);
@@ -694,6 +1070,7 @@ function createStripeBillingFunctions({
   return {
     createStripeCheckoutSession,
     createStripeCustomerPortalSession,
+    resyncStripeWorkspaceEntitlements,
     stripeWebhook
   };
 }

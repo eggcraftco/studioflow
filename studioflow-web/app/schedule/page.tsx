@@ -31,7 +31,7 @@ import {
   type OrderQuickFilterId,
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
-import { studioT } from "@/lib/studioflow/language";
+import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { canCreateOrdersForRole, canEditOrderStatusForRole, createOrderFromWeb, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 
@@ -124,13 +124,13 @@ function dateRange(start: Date, count: number) {
   return Array.from({ length: count }, (_, index) => addDays(start, index));
 }
 
-function shortDate(date: Date | null) {
+function shortDate(date: Date | null, locale: string = "en-GB") {
   if (!date) return "-";
-  return new Intl.DateTimeFormat("en-GB", { month: "short", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
 }
 
-function dayName(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date);
+function dayName(date: Date, locale: string = "en-GB") {
+  return new Intl.DateTimeFormat(locale, { weekday: "short" }).format(date);
 }
 
 function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
@@ -770,11 +770,12 @@ export default function SchedulePage() {
     }
   }
 
+  const locale = studioLocaleTag(language);
   const rangeText = span === "monthly"
-    ? new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(visibleStart)
+    ? new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" }).format(visibleStart)
     : span === "yearly"
-      ? new Intl.DateTimeFormat("en-GB", { year: "numeric" }).format(visibleStart)
-      : `${shortDate(visibleStart)} - ${shortDate(addDays(visibleEnd, -1))}`;
+      ? new Intl.DateTimeFormat(locale, { year: "numeric" }).format(visibleStart)
+      : `${shortDate(visibleStart, locale)} - ${shortDate(addDays(visibleEnd, -1), locale)}`;
 
   if (loading || !user) return <LoadingScreen />;
 
@@ -997,8 +998,8 @@ export default function SchedulePage() {
                 <div className="schedule-day-header">
                   {visibleDays.map(day => (
                     <div key={day.toISOString()} className={startOfDay(day).getTime() === startOfDay(new Date()).getTime() ? "today" : ""} style={{ width: dayWidth }}>
-                      <span>{dayName(day)}</span>
-                      <strong>{new Intl.DateTimeFormat("en-GB", { day: "numeric" }).format(day)}</strong>
+                      <span>{dayName(day, locale)}</span>
+                      <strong>{new Intl.DateTimeFormat(locale, { day: "numeric" }).format(day)}</strong>
                     </div>
                   ))}
                 </div>

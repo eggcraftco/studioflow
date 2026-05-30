@@ -97,10 +97,66 @@ service firebase.storage {
         );
     }
 
+    function canReadClientFiles(companyId) {
+      let readRoles = [
+        "owner", "Owner",
+        "admin", "Admin",
+        "member", "Member",
+        "viewer", "Viewer",
+        "viewOnly", "ViewOnly", "viewonly",
+        "view_only", "view-only",
+        "View Only", "View only", "view only"
+      ];
+      return canReadWorkspace(companyId)
+        && (
+          isOwner(companyId)
+          || roleIs(memberRole(companyId), readRoles)
+          || roleIs(memberRoleFallback(companyId), readRoles)
+          || roleIs(workspaceAccessRole(companyId), readRoles)
+        );
+    }
+
+    function canWriteClientFiles(companyId) {
+      let writeRoles = [
+        "owner", "Owner",
+        "admin", "Admin",
+        "member", "Member"
+      ];
+      return canReadWorkspace(companyId)
+        && (
+          isOwner(companyId)
+          || roleIs(memberRole(companyId), writeRoles)
+          || roleIs(memberRoleFallback(companyId), writeRoles)
+          || roleIs(workspaceAccessRole(companyId), writeRoles)
+        );
+    }
+
+    function canReadMessageFiles(companyId) {
+      return canReadClientFiles(companyId);
+    }
+
+    function canWriteMessageFiles(companyId) {
+      return canWriteClientFiles(companyId);
+    }
+
     function clientFilesPlanAllowed(companyId) {
       let rawPlan = companyData(companyId).billingPlan;
-      let plan = rawPlan is string ? rawPlan : "team_monthly";
-      return plan in ["pro_monthly", "team_monthly", "proMonthly", "teamMonthly"];
+      let plan = rawPlan is string ? rawPlan : "free_demo";
+      return plan in [
+        "pro_monthly", "pro_yearly",
+        "team_monthly", "team_yearly",
+        "proMonthly", "proYearly",
+        "teamMonthly", "teamYearly"
+      ];
+    }
+
+    function messageFilesPlanAllowed(companyId) {
+      let rawPlan = companyData(companyId).billingPlan;
+      let plan = rawPlan is string ? rawPlan : "free_demo";
+      return plan in [
+        "team_monthly", "team_yearly",
+        "teamMonthly", "teamYearly"
+      ];
     }
 
     function safeUploadSize() {
@@ -108,11 +164,11 @@ service firebase.storage {
     }
 
     match /companies/{companyId}/client_files/{orderId}/{fileName} {
-      allow read: if canEditWorkspaceFiles(companyId) && clientFilesPlanAllowed(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId)
+      allow read: if canReadClientFiles(companyId) && clientFilesPlanAllowed(companyId);
+      allow create, update: if canWriteClientFiles(companyId)
         && clientFilesPlanAllowed(companyId)
         && safeUploadSize();
-      allow delete: if canEditWorkspaceFiles(companyId) && clientFilesPlanAllowed(companyId);
+      allow delete: if canWriteClientFiles(companyId) && clientFilesPlanAllowed(companyId);
     }
 
     match /companies/{companyId}/design_images/{fileName} {
@@ -123,15 +179,19 @@ service firebase.storage {
 
 
     match /companies/{companyId}/message_files/{threadId}/{fileName} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
-      allow delete: if canEditWorkspaceFiles(companyId);
+      allow read: if canReadMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
+      allow create, update: if canWriteMessageFiles(companyId)
+        && messageFilesPlanAllowed(companyId)
+        && safeUploadSize();
+      allow delete: if canWriteMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
     }
 
     match /companies/{companyId}/message_files/{threadId}/{subPath=**} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
-      allow delete: if canEditWorkspaceFiles(companyId);
+      allow read: if canReadMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
+      allow create, update: if canWriteMessageFiles(companyId)
+        && messageFilesPlanAllowed(companyId)
+        && safeUploadSize();
+      allow delete: if canWriteMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
     }
 
 

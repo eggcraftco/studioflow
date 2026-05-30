@@ -1922,26 +1922,49 @@ const BILLING_ACTIONS = {
   schedule_team_view: { requiredFeature: "scheduleTeamViewEnabled", requiredPlan: "team_monthly" }
 };
 
-function normalizeBillingPlan(value, fallback = "team_monthly") {
+function normalizeBillingPlan(value, fallback = "demo") {
   const raw = String(value || "").trim();
   if (PLAN_ENTITLEMENTS[raw]) return raw;
   return fallback;
 }
 
 function billingPlanFromCompanyData(data = {}) {
-  // Existing workspaces created before the billing system should not suddenly lose access.
-  return normalizeBillingPlan(data.billingPlan, "team_monthly");
+  // Fail closed: missing or invalid billing data must never unlock paid/team features.
+  return normalizeBillingPlan(data.billingPlan, "demo");
 }
 
 function billingEntitlementsForCompany(data = {}) {
   const plan = billingPlanFromCompanyData(data);
-  return PLAN_ENTITLEMENTS[plan] || PLAN_ENTITLEMENTS.team_monthly;
+  return PLAN_ENTITLEMENTS[plan] || PLAN_ENTITLEMENTS.demo;
 }
 
 function requireMessagesEntitlement(companyData = {}) {
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.messagesEnabled !== true) {
     throw new HttpsError("failed-precondition", "Messages is available on NivaDesk Team.");
+  }
+  return entitlements;
+}
+
+function messageRoleForUid(companyData = {}, uid = "") {
+  if (uidIsCompanyOwner(companyData, uid)) return "owner";
+  return normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "unknown");
+}
+
+function requireMessagesReadAccess(companyData = {}, uid = "") {
+  const entitlements = requireMessagesEntitlement(companyData);
+  const role = messageRoleForUid(companyData, uid);
+  if (!["owner", "admin", "member", "viewOnly"].includes(role)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot access Messages.");
+  }
+  return entitlements;
+}
+
+function requireMessagesWriteAccess(companyData = {}, uid = "") {
+  const entitlements = requireMessagesEntitlement(companyData);
+  const role = messageRoleForUid(companyData, uid);
+  if (!["owner", "admin", "member"].includes(role)) {
+    throw new HttpsError("permission-denied", "Your workspace role can read Messages but cannot send or change messages.");
   }
   return entitlements;
 }
@@ -6507,8 +6530,8 @@ function uidCanManageClientFiles(companyData = {}, uid = "") {
   if (uidIsCompanyOwner(companyData, normalizedUid)) return true;
   if (!uidCanAccessWorkspaceArea(companyData, normalizedUid, "clientFiles")) return false;
 
-  const role = workspaceMemberRole(companyData, normalizedUid, "member");
-  return canEditOrderStatus(role);
+  const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, normalizedUid, "member"), "unknown");
+  return ["owner", "admin", "member"].includes(role);
 }
 
 function findClientFileIndex(files = [], fileId = "") {
@@ -11832,7 +11855,7 @@ exports.getMessageWorkspaceSettings = onCall({ region: "europe-west2" }, async (
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to read message settings.");
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesReadAccess(companyData, uid);
   const settings = await loadMessageWorkspaceSettings(companyId);
   return {
     ok: true,
@@ -11846,7 +11869,7 @@ exports.setMessageWorkspaceSettings = onCall({ region: "europe-west2" }, async (
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update message settings.");
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   if (!canManageMessageWorkspaceSettings(companyData, uid)) {
     throw new HttpsError("permission-denied", "Only the workspace owner or admins can update message settings.");
   }
@@ -11911,7 +11934,7 @@ exports.createMessageThread = onCall({ region: "europe-west2" }, async (request)
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to create a message thread.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const type = String(request.data?.type || "team").trim() === "direct" ? "direct" : "team";
   const messageSettings = await loadMessageWorkspaceSettings(companyId);
 
@@ -11966,7 +11989,7 @@ exports.listMessageThreads = onCall({ region: "europe-west2" }, async (request) 
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to read messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesReadAccess(companyData, uid);
   await ensureTeamMessageThread(companyId, companyData);
 
   const snap = await messageThreadsRef(companyId)
@@ -11986,7 +12009,7 @@ exports.listThreadMessages = onCall({ region: "europe-west2" }, async (request) 
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to read messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesReadAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
   const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
@@ -12007,7 +12030,7 @@ exports.markMessageThreadRead = onCall({ region: "europe-west2" }, async (reques
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to mark messages read.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesReadAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
   const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
@@ -12068,7 +12091,7 @@ exports.setMessageThreadActive = onCall({ region: "europe-west2" }, async (reque
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update conversation presence.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const isActive = request.data?.isActive === true;
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
@@ -12095,7 +12118,7 @@ exports.setMessageThreadMute = onCall({ region: "europe-west2" }, async (request
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to mute a conversation.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesReadAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const mode = cleanSupportText(request.data?.mode || "oneHour", 40);
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
@@ -12224,7 +12247,7 @@ exports.toggleMessageReaction = onCall({ region: "europe-west2" }, async (reques
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to react to messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const messageId = cleanSupportText(request.data?.messageId, 220);
   const emoji = cleanMessageReactionEmoji(request.data?.emoji || "");
@@ -12283,7 +12306,7 @@ exports.setMessageTypingStatus = onCall({ region: "europe-west2" }, async (reque
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update typing status.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const isTyping = request.data?.isTyping === true;
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
@@ -12318,7 +12341,7 @@ exports.clearMessageTypingStatus = onCall({ region: "europe-west2" }, async (req
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update typing status.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
   const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
@@ -12332,7 +12355,7 @@ exports.deleteMessageForMe = onCall({ region: "europe-west2" }, async (request) 
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to delete messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesReadAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const messageId = cleanSupportText(request.data?.messageId, 220);
   if (!messageId) throw new HttpsError("invalid-argument", "messageId is required.");
@@ -12357,7 +12380,7 @@ exports.deleteMessageForEveryone = onCall({ region: "europe-west2" }, async (req
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to delete messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const messageId = cleanSupportText(request.data?.messageId, 220);
   if (!messageId) throw new HttpsError("invalid-argument", "messageId is required.");
@@ -12408,7 +12431,7 @@ exports.addMembersToMessageThread = onCall({ region: "europe-west2" }, async (re
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to add people to a conversation.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const messageSettings = await loadMessageWorkspaceSettings(companyId);
   if (messageSettings.groupConversationsEnabled !== true) {
     throw new HttpsError("failed-precondition", "Group conversations are disabled for this workspace.");
@@ -12510,7 +12533,7 @@ exports.renameMessageThread = onCall({ region: "europe-west2" }, async (request)
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to rename a group.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220);
   const title = cleanSupportText(request.data?.title, 80);
   if (!threadId || !title) throw new HttpsError("invalid-argument", "threadId and title are required.");
@@ -12564,7 +12587,7 @@ exports.leaveMessageThread = onCall({ region: "europe-west2" }, async (request) 
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to leave a group.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220);
   if (!threadId) throw new HttpsError("invalid-argument", "threadId is required.");
   if (threadId === "team") throw new HttpsError("failed-precondition", "You cannot leave Team Chat.");
@@ -12628,7 +12651,7 @@ exports.removeMemberFromMessageThread = onCall({ region: "europe-west2" }, async
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to remove a group member.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220);
   const memberUid = cleanSupportText(request.data?.memberUid, 160);
   if (!threadId || !memberUid) throw new HttpsError("invalid-argument", "threadId and memberUid are required.");
@@ -12704,7 +12727,7 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to send messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const text = cleanMessageText(request.data?.text || request.data?.message || "", 5000);
   const fileURL = cleanSupportPhotoURL(request.data?.fileURL || "");
@@ -12805,7 +12828,7 @@ exports.editThreadMessage = onCall({ region: "europe-west2" }, async (request) =
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to edit messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesEntitlement(companyData);
+  requireMessagesWriteAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "";
   const messageId = cleanSupportText(request.data?.messageId, 220) || "";
   const text = cleanMessageText(request.data?.text || "", 5000);
