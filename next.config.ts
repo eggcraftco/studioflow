@@ -7,14 +7,6 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: "/.well-known/oauth-protected-resource",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthProtectedResource`
-      },
-      {
-        source: "/.well-known/oauth-authorization-server",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthAuthorizationServer`
-      },
-      {
         source: "/chatgptMcp",
         destination: `${firebaseFunctionsBaseUrl}/chatgptMcp`
       },
@@ -22,26 +14,6 @@ const nextConfig: NextConfig = {
         source: "/chatgptOAuthAuthorizationServer",
         destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthAuthorizationServer`
       },
-      {
-        source: "/chatgptOAuthAuthorize",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthAuthorize`
-      },
-      {
-        source: "/chatgptOAuthToken",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthToken`
-      },
-      {
-        source: "/chatgptOAuthRegister",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthRegister`
-      },
-      {
-        source: "/chatgptOAuthApprove",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthApprove`
-      },
-      {
-        source: "/chatgptOAuthWorkspaces",
-        destination: `${firebaseFunctionsBaseUrl}/chatgptOAuthWorkspaces`
-      }
     ];
   },
   async headers() {

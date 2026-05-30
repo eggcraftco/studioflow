@@ -3302,3 +3302,26 @@ export function studioT(text: string, language: string | null | undefined) {
   if (normalized === "English") return text;
   return TRANSLATIONS[text]?.[normalized] ?? text;
 }
+
+/**
+ * Returns a BCP 47 locale tag best matching the active app language.
+ * Used by Intl.DateTimeFormat/NumberFormat so chart axis labels,
+ * calendar headers and month names render in the user's language.
+ */
+export function studioLocaleTag(language: string | null | undefined): string {
+  const normalized = normalizeStudioLanguage(language);
+  switch (normalized) {
+    case "Türkçe": return "tr";
+    case "Deutsch": return "de";
+    case "Français": return "fr";
+    case "Italiano": return "it";
+    case "Español (Spanish)": return "es";
+    case "Português": return "pt";
+    case "Русский (Russian)": return "ru";
+    case "日本語 (Japanese)": return "ja";
+    case "中文 (Chinese)": return "zh";
+    case "العربية (Arabic)": return "ar";
+    case "हिन्दी (Hindi)": return "hi";
+    default: return "en-GB";
+  }
+}

@@ -28,6 +28,11 @@ export type WorkspaceContext = {
   billingProviderRawStatus: string;
   billingCustomerId: string;
   billingSubscriptionId: string;
+  billingEffectiveProvider: string;
+  billingActivePlanSubscriptionCount: number;
+  billingActivePlanProviders: string[];
+  billingHasMultipleActiveSubscriptions: boolean;
+  billingEntitlementResolutionReason: string;
   billingStorageLimitMB: number;
   billingTeamMemberLimit: number;
   storageAddonMB: number;
@@ -647,7 +652,7 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
 
   const companyData = companySnapshot?.data() ?? {};
   const hasBillingPlan = typeof companyData.billingPlan === "string" && companyData.billingPlan.length > 0;
-  const entitlements = entitlementsForPlan(companyData.billingPlan as string | undefined, hasBillingPlan ? "demo" : "team_monthly");
+  const entitlements = entitlementsForPlan(companyData.billingPlan as string | undefined, "demo");
   const storageAddonMB = numberValue(companyData.billingStorageAddonMB, numberValue(companyData.storageAddonMB, 0));
   const storedStorageLimitMB = numberValue(companyData.billingStorageLimitMB, entitlements.storageLimitMB);
   const ownerUid = stringValue(companyData.ownerUid, companyId);
@@ -675,6 +680,11 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     billingProviderRawStatus: stringValue(companyData.billingProviderRawStatus, ""),
     billingCustomerId: stringValue(companyData.billingCustomerId, stringValue(companyData.billingStripeCustomerId, "")),
     billingSubscriptionId: stringValue(companyData.billingSubscriptionId, ""),
+    billingEffectiveProvider: stringValue(companyData.billingEffectiveProvider, stringValue(companyData.billingPlanSource, "")),
+    billingActivePlanSubscriptionCount: numberValue(companyData.billingActivePlanSubscriptionCount, 0),
+    billingActivePlanProviders: stringArrayValue(companyData.billingActivePlanProviders),
+    billingHasMultipleActiveSubscriptions: booleanValue(companyData.billingHasMultipleActiveSubscriptions, false),
+    billingEntitlementResolutionReason: stringValue(companyData.billingEntitlementResolutionReason, ""),
     billingStorageLimitMB: storedStorageLimitMB + storageAddonMB,
     billingTeamMemberLimit: numberValue(companyData.billingTeamMemberLimit, entitlements.teamMemberLimit),
     storageAddonMB,

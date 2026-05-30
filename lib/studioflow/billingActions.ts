@@ -23,6 +23,21 @@ export type StripeBillingActionResult = {
   message?: string;
 };
 
+export type StripeEntitlementResyncResult = {
+  ok?: boolean;
+  configured?: boolean;
+  resynced?: boolean;
+  message?: string;
+  workspaceId?: string;
+  foundSubscriptionCount?: number;
+  recognisedSubscriptionCount?: number;
+  staleRecordsDeactivated?: number;
+  effectivePlan?: string;
+  effectiveProvider?: string;
+  activePlanSubscriptionCount?: number;
+  hasMultipleActiveSubscriptions?: boolean;
+};
+
 function currentOrigin() {
   if (typeof window === "undefined") return "";
   return window.location.origin;
@@ -63,5 +78,18 @@ export async function createStripeCustomerPortalSession({
     companyId,
     returnUrl: returnUrl || (origin ? origin + "/plan" : undefined)
   });
+  return result.data;
+}
+
+export async function resyncStripeWorkspaceEntitlements({
+  companyId
+}: {
+  companyId?: string;
+}) {
+  const callable = httpsCallable<Record<string, unknown>, StripeEntitlementResyncResult>(
+    functions,
+    "resyncStripeWorkspaceEntitlements"
+  );
+  const result = await callable({ companyId });
   return result.data;
 }

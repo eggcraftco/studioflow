@@ -26,7 +26,7 @@ import {
   customPendingTotal,
   dashboardCostTotal
 } from "@/lib/studioflow/finance";
-import { studioT } from "@/lib/studioflow/language";
+import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
 
@@ -219,11 +219,11 @@ function filterOrdersByWindow(orders: DashboardFinanceOrder[], start: Date, end:
   return orders.filter(order => order.paymentDate && order.paymentDate >= start && order.paymentDate <= end);
 }
 
-function bucketLabel(date: Date, unit: BucketUnit) {
+function bucketLabel(date: Date, unit: BucketUnit, locale: string = "en-GB") {
   if (unit === "month") {
-    return new Intl.DateTimeFormat("en-GB", { month: "short" }).format(date);
+    return new Intl.DateTimeFormat(locale, { month: "short" }).format(date);
   }
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(date);
+  return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short" }).format(date);
 }
 
 function nextBucket(date: Date, unit: BucketUnit) {
@@ -237,7 +237,8 @@ function buildChartSeries(
   end: Date,
   unit: BucketUnit,
   yearsBack = 0,
-  metric: "netProfit" | "basicBalance" = "netProfit"
+  metric: "netProfit" | "basicBalance" = "netProfit",
+  locale: string = "en-GB"
 ): ChartPoint[] {
   const points: ChartPoint[] = [];
   let cursor = unit === "month" ? startOfMonth(start) : startOfDay(start);
@@ -254,7 +255,7 @@ function buildChartSeries(
         : adjustedDashboardNetProfit(order, settings));
     }, 0);
 
-    points.push({ label: bucketLabel(visibleBucketStart, unit), value });
+    points.push({ label: bucketLabel(visibleBucketStart, unit, locale), value });
     cursor = visibleBucketEnd;
   }
 
@@ -369,6 +370,9 @@ export default function DashboardPage() {
     () => totalsForOrders(filteredFinanceOrders, settings, dashboardVisibility),
     [dashboardVisibility, filteredFinanceOrders, settings]
   );
+  const language = settings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, language);
+  const locale = studioLocaleTag(language);
   const currentSeries = useMemo(
     () => buildChartSeries(
       financeOrders,
@@ -377,26 +381,25 @@ export default function DashboardPage() {
       currentWindow.end,
       currentWindow.unit,
       0,
-      canSeeAdvancedFinance ? "netProfit" : "basicBalance"
+      canSeeAdvancedFinance ? "netProfit" : "basicBalance",
+      locale
     ),
-    [canSeeAdvancedFinance, currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings]
+    [canSeeAdvancedFinance, currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
   );
   const previousYearSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 1),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings]
+    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 1, "netProfit", locale),
+    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
   );
   const twoYearsBackSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 2),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings]
+    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 2, "netProfit", locale),
+    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
   );
   const threeYearsBackSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 3),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings]
+    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 3, "netProfit", locale),
+    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
   );
   const yearly = useMemo(() => yearTotals(financeOrders, settings), [financeOrders, settings]);
   const revenueCardTitle = settings?.taxRuleNameRevenue || "Standard VAT (New)";
-  const language = settings?.selectedLanguage ?? "English";
-  const t = (text: string) => studioT(text, language);
 
   async function updateDashboardVisibility(key: keyof DashboardWidgetVisibility, value: boolean) {
     if (!workspace) return;
@@ -893,6 +896,7 @@ function ExtraSpendingSection({
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  const locale = studioLocaleTag(language);
   const [expanded, setExpanded] = useState(false);
   const [scope, setScope] = useState<SpendingScope>("thisMonth");
   const [customStart, setCustomStart] = useState(dateInputValue(startOfMonth(new Date())));
@@ -1132,10 +1136,10 @@ function ExtraSpendingSection({
                   {g.entries.map((e, i) => (
                     <li key={i} className="extra-spending-entry">
                       <div>
-                        <span className="extra-spending-entry-heading">{e.heading}</span>
-                        <span className="muted-copy"> · {e.description}</span>
+                        <span className="extra-spending-entry-heading">{t(e.heading)}</span>
+                        <span className="muted-copy"> · {t(e.description)}</span>
                         {e.paymentDate ? (
-                          <span className="muted-copy"> · {e.paymentDate.toLocaleDateString()}</span>
+                          <span className="muted-copy"> · {e.paymentDate.toLocaleDateString(locale)}</span>
                         ) : null}
                       </div>
                       <span>{money(e.amount, hideNumbers, settings)}</span>

@@ -22,6 +22,7 @@ import {
 import {
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
+  resyncStripeWorkspaceEntitlements,
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
 
@@ -83,9 +84,8 @@ function formatStorageFromMB(valueMB: number) {
   return Math.round(valueMB) + " MB";
 }
 
-function isOwnerLike(role: string) {
-  const normalized = role.toLowerCase();
-  return normalized === "owner" || normalized === "admin";
+function isWorkspaceOwner(role: string) {
+  return role.toLowerCase() === "owner";
 }
 
 function showInternalBillingControls(email: string) {
@@ -105,6 +105,7 @@ export default function PlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [subscriptionRefreshLoading, setSubscriptionRefreshLoading] = useState(false);
   const [checkoutLoadingKey, setCheckoutLoadingKey] = useState<StripeBillingItemKey | null>(null);
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
 
@@ -164,6 +165,34 @@ export default function PlanPage() {
       setBillingMessage(portalError instanceof Error ? portalError.message : "Could not open billing portal.");
     } finally {
       setBillingLoading(false);
+    }
+  }
+
+  async function handleRefreshSubscriptionAccess() {
+    if (!workspace || !user || subscriptionRefreshLoading || !isWorkspaceOwner(workspace.role)) return;
+    setSubscriptionRefreshLoading(true);
+    setBillingMessage(null);
+    try {
+      const result = await resyncStripeWorkspaceEntitlements({ companyId: workspace.id });
+      if (!result.configured || !result.resynced) {
+        setBillingMessage(result.message || "No verified Stripe subscription is connected to this workspace yet.");
+        return;
+      }
+
+      const refreshedWorkspace = await loadWorkspaceContext(user.uid);
+      setWorkspace(refreshedWorkspace);
+
+      if (result.hasMultipleActiveSubscriptions) {
+        setBillingMessage(
+          "Subscription access refreshed. Multiple active plan subscriptions were found. The highest verified plan is active; review your subscriptions to avoid duplicate billing."
+        );
+      } else {
+        setBillingMessage("Subscription access refreshed from the verified Stripe billing record.");
+      }
+    } catch (refreshError) {
+      setBillingMessage(refreshError instanceof Error ? refreshError.message : "Could not refresh subscription access.");
+    } finally {
+      setSubscriptionRefreshLoading(false);
     }
   }
 
@@ -231,18 +260,33 @@ export default function PlanPage() {
                 />
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 18 }}>
-                <button className="button secondary" type="button" onClick={handleManageBilling} disabled={!isOwnerLike(workspace.role) || billingLoading}>
+                <button className="button secondary" type="button" onClick={handleManageBilling} disabled={!isWorkspaceOwner(workspace.role) || billingLoading || subscriptionRefreshLoading}>
                   {billingLoading ? "Opening billing..." : "Manage Billing"}
                 </button>
+                {isWorkspaceOwner(workspace.role) ? (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={handleRefreshSubscriptionAccess}
+                    disabled={billingLoading || subscriptionRefreshLoading}
+                  >
+                    {subscriptionRefreshLoading ? "Refreshing access..." : "Refresh Subscription Access"}
+                  </button>
+                ) : null}
                 <Link className="button secondary" href="/pricing">View Pricing</Link>
-                {!isOwnerLike(workspace.role) ? (
-                  <span className="pill">Owner/admin only</span>
+                {!isWorkspaceOwner(workspace.role) ? (
+                  <span className="pill">Owner only</span>
                 ) : null}
               </div>
               {billingMessage ? <p style={{ color: "var(--muted)", marginBottom: 0 }}>{billingMessage}</p> : null}
               <p style={{ color: "var(--muted)", marginBottom: 0, fontSize: 13 }}>
-                Stripe customer: {workspace.billingCustomerId || "not connected"} · Subscription: {workspace.billingSubscriptionId || "not connected"}
+                Billing provider: {workspace.billingEffectiveProvider || "none"} · Subscription: {workspace.billingSubscriptionId || "not connected"}
               </p>
+              {workspace.billingHasMultipleActiveSubscriptions ? (
+                <p style={{ color: "var(--danger)", marginBottom: 0, fontSize: 13, fontWeight: 700 }}>
+                  Multiple active subscriptions detected across {workspace.billingActivePlanProviders.join(", ") || "billing providers"}. Your highest verified plan is active; manage any duplicate subscriptions to avoid duplicate billing.
+                </p>
+              ) : null}
             </article>
 
             {workspace.entitlements.features.client_files ? (
@@ -277,7 +321,10 @@ export default function PlanPage() {
                 <div className="pill">Important rule</div>
                 <h2 style={{ margin: "12px 0 6px" }}>Expired subscriptions fall back to Free/Demo</h2>
                 <p style={{ color: "var(--muted)", margin: 0, maxWidth: 760 }}>
-                  If a Lite, Pro or Team subscription expires, the workspace falls back to Free Demo access. Existing orders and customers remain viewable and exportable, so users are never locked out of their own data.
+                  If a Lite, Pro or Team subscription expires, the workspace falls back to Free Demo access. Existing orders, customers and permitted basic data remain viewable and exportable.
+                </p>
+                <p style={{ color: "var(--muted)", margin: "10px 0 0", maxWidth: 760, fontSize: 13 }}>
+                  Client Files and message attachment files require an active eligible paid plan. When paid access ends, opening, previewing, downloading, uploading and deleting those cloud files stops at the end of the billing period. Download files you need before your subscription ends. Stored files may be retained for up to 90 days to restore access if you resubscribe.
                 </p>
               </div>
               <Link className="button secondary" href="/export">Open Export</Link>
@@ -290,7 +337,7 @@ export default function PlanPage() {
                 key={plan.plan}
                 plan={plan}
                 active={plan.plan === workspace.billingPlan}
-                canManage={isOwnerLike(workspace.role)}
+                canManage={isWorkspaceOwner(workspace.role)}
                 checkoutLoadingKey={checkoutLoadingKey}
                 onCheckout={handleTestCheckout}
                 allowInternalBillingTests={allowInternalBillingTests}
@@ -346,9 +393,9 @@ export default function PlanPage() {
                 </article>
               ))}
             </div>
-            {!isOwnerLike(workspace.role) ? (
+            {!isWorkspaceOwner(workspace.role) ? (
               <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-                Only workspace owners/admins should be able to manage billing or add-ons.
+                Only the workspace owner can manage billing or add-ons.
               </p>
             ) : null}
           </section>
