@@ -97,7 +97,28 @@ service firebase.storage {
         );
     }
 
-    function canReadClientFiles(companyId) {
+    function isWorkflowOnlyRole(companyId) {
+      let workflowRoles = [
+        "workflow", "Workflow",
+        "workflowOnly", "WorkflowOnly", "workflowonly",
+        "workflow_only", "workflow-only",
+        "Workflow Only", "Workflow only", "workflow only"
+      ];
+      return roleIs(memberRole(companyId), workflowRoles)
+        || roleIs(memberRoleFallback(companyId), workflowRoles)
+        || roleIs(workspaceAccessRole(companyId), workflowRoles);
+    }
+
+    function workflowAssignedOrder(companyId, orderId) {
+      return !isWorkflowOnlyRole(companyId)
+        || (
+          firestore.exists(/databases/(default)/documents/siparisler/$(orderId))
+          && firestore.get(/databases/(default)/documents/siparisler/$(orderId)).data.companyId == companyId
+          && firestore.get(/databases/(default)/documents/siparisler/$(orderId)).data.assignedToUid == request.auth.uid
+        );
+    }
+
+    function canReadClientFiles(companyId, orderId) {
       let readRoles = [
         "owner", "Owner",
         "admin", "Admin",
@@ -105,9 +126,14 @@ service firebase.storage {
         "viewer", "Viewer",
         "viewOnly", "ViewOnly", "viewonly",
         "view_only", "view-only",
-        "View Only", "View only", "view only"
+        "View Only", "View only", "view only",
+        "workflow", "Workflow",
+        "workflowOnly", "WorkflowOnly", "workflowonly",
+        "workflow_only", "workflow-only",
+        "Workflow Only", "Workflow only", "workflow only"
       ];
       return canReadWorkspace(companyId)
+        && workflowAssignedOrder(companyId, orderId)
         && (
           isOwner(companyId)
           || roleIs(memberRole(companyId), readRoles)
@@ -116,13 +142,18 @@ service firebase.storage {
         );
     }
 
-    function canWriteClientFiles(companyId) {
+    function canWriteClientFiles(companyId, orderId) {
       let writeRoles = [
         "owner", "Owner",
         "admin", "Admin",
-        "member", "Member"
+        "member", "Member",
+        "workflow", "Workflow",
+        "workflowOnly", "WorkflowOnly", "workflowonly",
+        "workflow_only", "workflow-only",
+        "Workflow Only", "Workflow only", "workflow only"
       ];
       return canReadWorkspace(companyId)
+        && workflowAssignedOrder(companyId, orderId)
         && (
           isOwner(companyId)
           || roleIs(memberRole(companyId), writeRoles)
@@ -131,12 +162,45 @@ service firebase.storage {
         );
     }
 
-    function canReadMessageFiles(companyId) {
-      return canReadClientFiles(companyId);
+    function messageThreadAccessible(companyId, threadId) {
+      return threadId == "team"
+        || isOwner(companyId)
+        || (
+          firestore.exists(/databases/(default)/documents/companies/$(companyId)/messageThreads/$(threadId))
+          && firestore.get(/databases/(default)/documents/companies/$(companyId)/messageThreads/$(threadId)).data.memberUids is list
+          && request.auth.uid in firestore.get(/databases/(default)/documents/companies/$(companyId)/messageThreads/$(threadId)).data.memberUids
+        );
     }
 
-    function canWriteMessageFiles(companyId) {
-      return canWriteClientFiles(companyId);
+    function canReadMessageFiles(companyId, threadId) {
+      let readRoles = [
+        "owner", "Owner", "admin", "Admin", "member", "Member",
+        "viewer", "Viewer", "viewOnly", "ViewOnly", "viewonly", "view_only", "view-only", "View Only",
+        "workflow", "Workflow", "workflowOnly", "WorkflowOnly", "workflowonly", "workflow_only", "workflow-only", "Workflow Only"
+      ];
+      return canReadWorkspace(companyId)
+        && messageThreadAccessible(companyId, threadId)
+        && (
+          isOwner(companyId)
+          || roleIs(memberRole(companyId), readRoles)
+          || roleIs(memberRoleFallback(companyId), readRoles)
+          || roleIs(workspaceAccessRole(companyId), readRoles)
+        );
+    }
+
+    function canWriteMessageFiles(companyId, threadId) {
+      let writeRoles = [
+        "owner", "Owner", "admin", "Admin", "member", "Member",
+        "workflow", "Workflow", "workflowOnly", "WorkflowOnly", "workflowonly", "workflow_only", "workflow-only", "Workflow Only"
+      ];
+      return canReadWorkspace(companyId)
+        && messageThreadAccessible(companyId, threadId)
+        && (
+          isOwner(companyId)
+          || roleIs(memberRole(companyId), writeRoles)
+          || roleIs(memberRoleFallback(companyId), writeRoles)
+          || roleIs(workspaceAccessRole(companyId), writeRoles)
+        );
     }
 
     function clientFilesPlanAllowed(companyId) {
@@ -164,11 +228,11 @@ service firebase.storage {
     }
 
     match /companies/{companyId}/client_files/{orderId}/{fileName} {
-      allow read: if canReadClientFiles(companyId) && clientFilesPlanAllowed(companyId);
-      allow create, update: if canWriteClientFiles(companyId)
+      allow read: if canReadClientFiles(companyId, orderId) && clientFilesPlanAllowed(companyId);
+      allow create, update: if canWriteClientFiles(companyId, orderId)
         && clientFilesPlanAllowed(companyId)
         && safeUploadSize();
-      allow delete: if canWriteClientFiles(companyId) && clientFilesPlanAllowed(companyId);
+      allow delete: if canWriteClientFiles(companyId, orderId) && clientFilesPlanAllowed(companyId);
     }
 
     match /companies/{companyId}/design_images/{fileName} {
@@ -179,19 +243,19 @@ service firebase.storage {
 
 
     match /companies/{companyId}/message_files/{threadId}/{fileName} {
-      allow read: if canReadMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
-      allow create, update: if canWriteMessageFiles(companyId)
+      allow read: if canReadMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
+      allow create, update: if canWriteMessageFiles(companyId, threadId)
         && messageFilesPlanAllowed(companyId)
         && safeUploadSize();
-      allow delete: if canWriteMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
+      allow delete: if canWriteMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
     }
 
     match /companies/{companyId}/message_files/{threadId}/{subPath=**} {
-      allow read: if canReadMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
-      allow create, update: if canWriteMessageFiles(companyId)
+      allow read: if canReadMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
+      allow create, update: if canWriteMessageFiles(companyId, threadId)
         && messageFilesPlanAllowed(companyId)
         && safeUploadSize();
-      allow delete: if canWriteMessageFiles(companyId) && messageFilesPlanAllowed(companyId);
+      allow delete: if canWriteMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
     }
 
 

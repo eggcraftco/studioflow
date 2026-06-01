@@ -13,7 +13,7 @@ enum class StudioBillingPlan(val raw: String, val title: String, val teamMemberL
     Demo("demo", "Free Demo", 1, 50),
     LifetimeLite("lifetime_lite", "NivaDesk Lite", 1, 250),
     ProMonthly("pro_monthly", "NivaDesk Pro", 1, 10240),
-    TeamMonthly("team_monthly", "NivaDesk Team", 10, 51200);
+    TeamMonthly("team_monthly", "NivaDesk Team", 5, 51200);
 
     companion object {
         fun fromRaw(value: String?): StudioBillingPlan {
@@ -27,12 +27,25 @@ data class WorkspaceMemberAccess(
     val dashboard: Boolean = true,
     val schedule: Boolean = true,
     val customers: Boolean = true,
+    val messages: Boolean = true,
+    val notes: Boolean = true,
     val quickReply: Boolean = true,
     val settings: Boolean = true,
     val teamAccess: Boolean = true,
     val clientFiles: Boolean = true,
     val financialInfo: Boolean = true,
     val exportData: Boolean = true,
+    val settingsGeneral: Boolean = true,
+    val settingsPdf: Boolean = true,
+    val settingsQuickReply: Boolean = true,
+    val settingsMessageSettings: Boolean = true,
+    val settingsWorkflow: Boolean = true,
+    val settingsFinancial: Boolean = true,
+    val settingsSafetyUploads: Boolean = true,
+    val settingsData: Boolean = true,
+    val settingsTeamAccess: Boolean = true,
+    val settingsPlanAccess: Boolean = true,
+    val settingsSupport: Boolean = true,
     val assignedProjectsOnly: Boolean = false,
     val manageProjectAssignments: Boolean = false,
     val cardPreview: Boolean = true,
@@ -59,12 +72,25 @@ data class WorkspaceMemberAccess(
             "dashboard" -> dashboard
             "schedule" -> schedule
             "customers" -> customers
+            "messages" -> messages
+            "notes" -> notes
             "quickReply" -> quickReply
             "settings" -> settings
             "teamAccess" -> teamAccess
             "clientFiles" -> clientFiles
             "financialInfo" -> financialInfo
             "exportData" -> exportData
+            "settingsGeneral" -> settingsGeneral
+            "settingsPdf" -> settingsPdf
+            "settingsQuickReply" -> settingsQuickReply
+            "settingsMessageSettings" -> settingsMessageSettings
+            "settingsWorkflow" -> settingsWorkflow
+            "settingsFinancial" -> settingsFinancial
+            "settingsSafetyUploads" -> settingsSafetyUploads
+            "settingsData" -> settingsData
+            "settingsTeamAccess" -> settingsTeamAccess
+            "settingsPlanAccess" -> settingsPlanAccess
+            "settingsSupport" -> settingsSupport
             "cardPreview" -> cardPreview
             "cardSummary" -> cardSummary
             "cardCustomer" -> cardCustomer
@@ -85,6 +111,14 @@ data class WorkspaceMemberAccess(
     }
 }
 
+data class StudioWorkspaceOption(
+    val id: String,
+    val name: String,
+    val role: String,
+    val roleLabel: String,
+    val isCurrent: Boolean
+)
+
 data class StudioWorkspace(
     val id: String,
     val name: String,
@@ -99,7 +133,8 @@ data class StudioWorkspace(
 ) {
     val isOwner: Boolean get() = role == "owner"
     val canSeeFinancialData: Boolean get() = memberAccess.financialInfo
-    val shouldShowOnlyAssignedProjects: Boolean get() = memberAccess.assignedProjectsOnly
+    val shouldShowOnlyAssignedProjects: Boolean get() =
+        memberAccess.assignedProjectsOnly && !memberAccess.manageProjectAssignments
 }
 
 data class StudioCompanyNumber(
@@ -297,7 +332,7 @@ data class StudioWorkspaceSettings(
     val replyMode: String = "AI",
     val quickReplyPoliteness: String = "Warm",
     val quickReplyLength: String = "Short",
-    val openAIKey: String = "",
+    val hasOpenAIKey: Boolean = false,
     val aiKnowledgeBase: String = "",
     val quickReplyProducts: List<QuickReplyTemplateItem> = listOf(
         QuickReplyTemplateItem("default-product-1", "Service / Product 1", "Price starts at $100.")

@@ -52,17 +52,21 @@ struct AyarlarView: View {
     init(startSection: String = "General", canEditWorkspace: Bool = true) {
         self.canEditWorkspace = canEditWorkspace
         let mappedSection: String
+        var initialGeneralSubsection: String? = nil
         switch startSection {
         case "Theme & Brand", "Language & Labels", "About":
             mappedSection = "General"
-        case "Account":
-            mappedSection = "Sign-in & Security"
+        case "Account", "Sign-in & Security":
+            // Route legacy entries to General → Profile & Security.
+            mappedSection = "General"
+            initialGeneralSubsection = "account"
         default:
             mappedSection = startSection
         }
-        let allowedForReadOnly = ["General", "Sign-in & Security", "Plan & Access", "Team Access", "Support"]
-        let initialSection = canEditWorkspace || allowedForReadOnly.contains(mappedSection) ? mappedSection : "Sign-in & Security"
+        let allowedForReadOnly = ["General", "Plan & Access", "Team Access", "Support"]
+        let initialSection = canEditWorkspace || allowedForReadOnly.contains(mappedSection) ? mappedSection : "General"
         _seciliAyarSekmesi = State(initialValue: initialSection)
+        _selectedGeneralSection = State(initialValue: initialGeneralSubsection)
     }
     
     @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
@@ -147,6 +151,7 @@ struct AyarlarView: View {
     @State private var showRecalcAlert = false
     @AppStorage("replyMode") private var replyMode: String = "AI"
     @AppStorage("openAIKey") private var openAIKey: String = ""
+    @State private var quickReplyHasOpenAIKey: Bool = false
     @AppStorage("localAIURL") private var localAIURL: String = "http://localhost:11434"
     @AppStorage("localAIModel") private var localAIModel: String = "llama3.1:latest"
     @AppStorage("aiKnowledgeBase") private var aiKnowledgeBase: String = ""
@@ -183,6 +188,24 @@ struct AyarlarView: View {
 
     var bgMain: Color { colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.94) }
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
+
+    private var canManageQuickReplyCore: Bool {
+        firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+    }
+
+    private var isWorkflowOnlySettingsRole: Bool {
+        let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return role == "workflow" || role == "workflowonly"
+    }
+
+    private var canUsePersonalQuickReplySettings: Bool {
+        let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "_", with: "").replacingOccurrences(of: " ", with: "")
+        return role == "owner" || role == "admin" || role == "member" || role == "workflow" || role == "workflowonly"
+    }
 
     private var quickReplyCloudSignature: String {
         [
@@ -277,33 +300,38 @@ struct AyarlarView: View {
     }
 
     private func canShowSettingsSection(_ key: String) -> Bool {
+        // Settings sidebar items are gated SOLELY by their own per-section permission
+        // flag so an owner can grant individual screens (e.g. only Quick Reply) without
+        // also having to enable the broader Settings nav access. Mirrors Web / Android.
         switch key {
         case "General":
-            return workspaceAccessAllows("settings")
+            return workspaceAccessAllows("settingsGeneral")
         case "Workflow":
-            return workspaceAccessAllows("settings") && workspaceAccessAllows("orders")
-        case "PDF", "Data":
-            return workspaceAccessAllows("settings") && workspaceAccessAllows("exportData")
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
+        case "PDF":
+            return workspaceAccessAllows("settingsPdf")
+        case "Data":
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsData")
         case "Quick Reply":
-            return workspaceAccessAllows("settings") && workspaceAccessAllows("quickReply")
+            let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return role == "owner" || workspaceAccessAllows("settingsQuickReply")
         case "Financial":
-            return authVM.currentPlanEntitlements.advancedDashboardEnabled &&
-                workspaceAccessAllows("settings") && workspaceAccessAllows("financialInfo")
+            return !isWorkflowOnlySettingsRole && authVM.currentPlanEntitlements.advancedDashboardEnabled && workspaceAccessAllows("settingsFinancial")
         case "Plan & Access":
-            return workspaceAccessAllows("settings") && workspaceAccessAllows("financialInfo")
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsPlanAccess")
         case "WooCommerce":
-            return workspaceAccessAllows("settings")
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
         case "Upload Safety":
-            return workspaceAccessAllows("settings") && workspaceAccessAllows("clientFiles")
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsSafetyUploads")
         case "Team Access":
-            return authVM.currentPlanEntitlements.teamAccessEnabled &&
-                workspaceAccessAllows("settings") &&
-                workspaceAccessAllows("teamAccess")
+            // Owner-only member management remains protected inside the Team Access card.
+            return workspaceAccessAllows("settingsTeamAccess")
         case "Message Settings":
-            return authVM.currentPlanEntitlements.teamAccessEnabled &&
-                workspaceAccessAllows("settings")
-        case "Sign-in & Security", "Support":
-            return true
+            return !isWorkflowOnlySettingsRole && authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("settingsMessageSettings")
+        case "Sign-in & Security":
+            return workspaceAccessAllows("settingsGeneral")
+        case "Support":
+            return workspaceAccessAllows("settingsSupport")
         default:
             return false
         }
@@ -319,7 +347,6 @@ struct AyarlarView: View {
             ("WooCommerce", t("WooCommerce Integration", lang: seciliDil), "cart.badge.plus"),
             ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled"),
             ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill"),
-            ("Sign-in & Security", t("Sign-in & Security", lang: seciliDil), "lock.fill"),
             ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill"),
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
@@ -541,8 +568,15 @@ struct AyarlarView: View {
                 restrictedSettingsSection
             } else if seciliAyarSekmesi == "General" { generalAyari }
             else if seciliAyarSekmesi == "Workflow" { if canEditWorkspace { islemAdimlariAyari } }
-            else if seciliAyarSekmesi == "PDF" { if canEditWorkspace { pdfAyari } }
-            else if seciliAyarSekmesi == "Quick Reply" { if canEditWorkspace { quickReplyAyari } }
+            else if seciliAyarSekmesi == "PDF" {
+                if isWorkflowOnlySettingsRole { workflowOnlyPdfAyari }
+                else if canEditWorkspace { pdfAyari }
+            }
+            else if seciliAyarSekmesi == "Quick Reply" {
+                if canUsePersonalQuickReplySettings {
+                    quickReplyAyari
+                }
+            }
             else if seciliAyarSekmesi == "Financial" { if canEditWorkspace { finansalAyar } }
             else if seciliAyarSekmesi == "WooCommerce" { if canEditWorkspace { wooCommerceIntegrationAyari } }
             else if seciliAyarSekmesi == "Upload Safety" { if canEditWorkspace { uploadSafetyAyari } }
@@ -589,6 +623,8 @@ struct AyarlarView: View {
                 AccountProfileView(sectionMode: .profileWorkspace)
             case "logo":
                 AccountProfileView(sectionMode: .workspaceLogo)
+            case "account":
+                AccountProfileView(sectionMode: .account)
             case "about":
                 aboutAyari
             default:
@@ -609,18 +645,11 @@ struct AyarlarView: View {
                         ) { selectedGeneralSection = "language" }
                         GeneralSettingsDivider()
                         GeneralSettingsMenuRow(
-                            title: t("Profile & Workspace", lang: seciliDil),
-                            subtitle: authVM.companyName.isEmpty ? t("Workspace details", lang: seciliDil) : authVM.companyName,
-                            icon: "building.2.fill",
-                            tint: .orange
-                        ) { selectedGeneralSection = "profile" }
-                        GeneralSettingsDivider()
-                        GeneralSettingsMenuRow(
-                            title: t("Workspace Logo", lang: seciliDil),
-                            subtitle: appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("No logo uploaded", lang: seciliDil) : t("Logo uploaded", lang: seciliDil),
-                            icon: "photo.badge.plus",
-                            tint: .green
-                        ) { selectedGeneralSection = "logo" }
+                            title: t("Profile & Security", lang: seciliDil),
+                            subtitle: isWorkflowOnlySettingsRole ? t("Personal profile and sign-in security.", lang: seciliDil) : t("Profile, workspace identity and sign-in security.", lang: seciliDil),
+                            icon: "person.crop.circle",
+                            tint: .pink
+                        ) { selectedGeneralSection = "account" }
                         GeneralSettingsDivider()
                         GeneralSettingsMenuRow(
                             title: t("About", lang: seciliDil),
@@ -640,6 +669,7 @@ struct AyarlarView: View {
         case "language": return t("Language & Region", lang: seciliDil)
         case "profile": return t("Profile & Workspace", lang: seciliDil)
         case "logo": return t("Workspace Logo", lang: seciliDil)
+        case "account": return t("Profile & Security", lang: seciliDil)
         case "about": return t("About", lang: seciliDil)
         default: return t("General", lang: seciliDil)
         }
@@ -651,6 +681,7 @@ struct AyarlarView: View {
         case "language": return t("Set the workspace language used across NivaDesk.", lang: seciliDil)
         case "profile": return t("Manage your profile and studio identity.", lang: seciliDil)
         case "logo": return t("Upload the logo shown in the app header.", lang: seciliDil)
+        case "account": return isWorkflowOnlySettingsRole ? t("Personal profile and sign-in security.", lang: seciliDil) : t("Profile, workspace identity and sign-in security.", lang: seciliDil)
         case "about": return t("Version and ownership information.", lang: seciliDil)
         default: return t("Keep everyday workspace identity settings in one quiet place.", lang: seciliDil)
         }
@@ -662,6 +693,7 @@ struct AyarlarView: View {
         case "language": return "textformat.size"
         case "profile": return "building.2.fill"
         case "logo": return "photo.badge.plus"
+        case "account": return "person.crop.circle"
         case "about": return "info.circle.fill"
         default: return "gearshape.fill"
         }
@@ -2838,6 +2870,7 @@ struct AyarlarView: View {
 
     private func handleSettingsAppear() {
         yukleCustomData()
+        loadPersonalInterfaceSettings()
         startKnowledgeBaseCloudListener()
         consumeRequestedStartSection()
         consumePendingSupportTicketRoute()
@@ -2899,12 +2932,12 @@ struct AyarlarView: View {
                 .onChange(of: authVM.currentWorkspaceAccess) { _, _ in
                     enforceVisibleSettingsSection()
                 }
-                .onChange(of: seciliDil) { _, _ in
-                    if canEditWorkspace { scheduleKnowledgeBaseCloudSave() }
-                }
-                .onChange(of: appTheme) { _, _ in
-                    if canEditWorkspace { scheduleKnowledgeBaseCloudSave() }
-                }
+                // NOTE: language/theme are saved directly from the picker bindings
+                // (languageSelectionBinding / themeSelectionBinding) so that ONLY a
+                // user-initiated pick writes to Firestore. The live personal listener
+                // writes to UserDefaults directly, which never calls a binding setter,
+                // so it can't trigger a save — this breaks the feedback loop that was
+                // causing language/theme to flip back and forth on shared devices.
                 .onChange(of: appSubtitle) { _, _ in
                     if canEditWorkspace { scheduleKnowledgeBaseCloudSave() }
                 }
@@ -3007,6 +3040,10 @@ struct AyarlarView: View {
 
                 guard let data = snapshot?.data() else { return }
 
+                if let keyReady = data["hasOpenAIKey"] as? Bool {
+                    quickReplyHasOpenAIKey = keyReady
+                }
+
                 var changedFromCloud = false
 
                 func applyString(_ key: String, _ setter: (String) -> Void, _ current: String) {
@@ -3039,22 +3076,23 @@ struct AyarlarView: View {
                     }
                 }
 
-                applyString("replyMode", { replyMode = $0 == "Local" ? "Apple" : $0 }, replyMode)
-                applyString("seciliDil", { seciliDil = $0 }, seciliDil)
-                applyString("appTheme", { appTheme = $0 }, appTheme)
+                if canManageQuickReplyCore {
+                    applyString("replyMode", { replyMode = $0 == "Local" ? "Apple" : $0 }, replyMode)
+                    applyString("aiKnowledgeBase", { aiKnowledgeBase = $0 }, aiKnowledgeBase)
+                    applyString("quickReplyPoliteness", { quickReplyPoliteness = $0 }, quickReplyPoliteness)
+                    applyString("quickReplyLength", { quickReplyLength = $0 }, quickReplyLength)
+                    applyString("customProductsJSON", {
+                        customProductsJSON = $0
+                        if let decoded = try? JSONDecoder().decode([CustomProduct].self, from: Data($0.utf8)) { customProducts = decoded }
+                    }, customProductsJSON)
+                    applyString("customRulesJSON", {
+                        customRulesJSON = $0
+                        if let decoded = try? JSONDecoder().decode([CustomRule].self, from: Data($0.utf8)) { customRules = decoded }
+                    }, customRulesJSON)
+                }
+                // Theme and language are personal interface preferences.
+                // They are loaded from personalInterfaceSettings instead of shared workspace settings.
                 applyString("appSubtitle", { appSubtitle = $0 }, appSubtitle)
-                applyString("aiKnowledgeBase", { aiKnowledgeBase = $0 }, aiKnowledgeBase)
-                applyString("openAIKey", { openAIKey = $0 }, openAIKey)
-                applyString("quickReplyPoliteness", { quickReplyPoliteness = $0 }, quickReplyPoliteness)
-                applyString("quickReplyLength", { quickReplyLength = $0 }, quickReplyLength)
-                applyString("customProductsJSON", {
-                    customProductsJSON = $0
-                    if let decoded = try? JSONDecoder().decode([CustomProduct].self, from: Data($0.utf8)) { customProducts = decoded }
-                }, customProductsJSON)
-                applyString("customRulesJSON", {
-                    customRulesJSON = $0
-                    if let decoded = try? JSONDecoder().decode([CustomRule].self, from: Data($0.utf8)) { customRules = decoded }
-                }, customRulesJSON)
 
                 applyString("seciliParaBirimi", { seciliParaBirimi = $0 }, seciliParaBirimi)
                 applyString("seciliOndalik", { seciliOndalik = $0 }, seciliOndalik)
@@ -3138,6 +3176,33 @@ struct AyarlarView: View {
                     }
                 }
             }
+        loadPersonalQuickReplySettings()
+    }
+
+    private func loadPersonalQuickReplySettings() {
+        guard canUsePersonalQuickReplySettings, !firebaseManager.currentCompanyId.isEmpty else { return }
+        Functions.functions(region: "europe-west2").httpsCallable("getQuickReplyPersonalSettings").call([
+            "companyId": firebaseManager.currentCompanyId
+        ]) { result, _ in
+            guard let payload = result?.data as? [String: Any],
+                  let settings = payload["settings"] as? [String: Any] else { return }
+            DispatchQueue.main.async {
+                isApplyingCloudKnowledgeBase = true
+                if let mode = settings["replyMode"] as? String { replyMode = mode == "Local" ? "Apple" : mode }
+                if let style = settings["quickReplyPoliteness"] as? String { quickReplyPoliteness = style }
+                if let length = settings["quickReplyLength"] as? String { quickReplyLength = length }
+                if let knowledge = settings["onDeviceKnowledgeBase"] as? String, !canManageQuickReplyCore { aiKnowledgeBase = knowledge }
+                if let json = settings["offlineProductsJSON"] as? String {
+                    customProductsJSON = json
+                    if let decoded = try? JSONDecoder().decode([CustomProduct].self, from: Data(json.utf8)) { customProducts = decoded }
+                }
+                if let json = settings["offlineRulesJSON"] as? String {
+                    customRulesJSON = json
+                    if let decoded = try? JSONDecoder().decode([CustomRule].self, from: Data(json.utf8)) { customRules = decoded }
+                }
+                isApplyingCloudKnowledgeBase = false
+            }
+        }
     }
 
     private func stopKnowledgeBaseCloudListener() {
@@ -3153,7 +3218,6 @@ struct AyarlarView: View {
         knowledgeBaseSaveWorkItem?.cancel()
 
         let latestText = aiKnowledgeBase
-        let latestOpenAIKey = openAIKey
         let latestPoliteness = quickReplyPoliteness
         let latestLength = quickReplyLength
         let latestReplyMode = replyMode == "Local" ? "Apple" : replyMode
@@ -3225,20 +3289,44 @@ struct AyarlarView: View {
         let latestShowCardWorkTime = showCardWorkTime
 
         let workItem = DispatchWorkItem {
+            let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if canUsePersonalQuickReplySettings {
+                Functions.functions(region: "europe-west2").httpsCallable("saveQuickReplyPersonalSettings").call([
+                    "companyId": firebaseManager.currentCompanyId,
+                    "settings": [
+                        "replyMode": latestReplyMode,
+                        "quickReplyPoliteness": latestPoliteness,
+                        "quickReplyLength": latestLength,
+                        "onDeviceKnowledgeBase": latestText,
+                        "products": customProducts.map { ["id": $0.id.uuidString, "title": $0.title, "desc": $0.desc] },
+                        "rules": customRules.map { ["id": $0.id.uuidString, "title": $0.title, "desc": $0.desc] }
+                    ]
+                ]) { _, _ in }
+            }
+            if role != "owner" { return }
+            if role == "owner" {
+                Functions.functions(region: "europe-west2").httpsCallable("saveQuickReplySettings").call([
+                    "companyId": firebaseManager.currentCompanyId,
+                    "settings": [
+                        "replyMode": latestReplyMode,
+                        "aiKnowledgeBase": latestText,
+                        "openAIKey": openAIKey,
+                        "quickReplyPoliteness": latestPoliteness,
+                        "quickReplyLength": latestLength,
+                        "products": customProducts.map { ["id": $0.id.uuidString, "title": $0.title, "desc": $0.desc] },
+                        "rules": customRules.map { ["id": $0.id.uuidString, "title": $0.title, "desc": $0.desc] }
+                    ]
+                ]) { _, _ in }
+            }
             Firestore.firestore()
                 .collection("companySettings")
                 .document(firebaseManager.currentCompanyId)
                 .setData([
-                    "aiKnowledgeBase": latestText,
-                    "openAIKey": latestOpenAIKey,
-                    "quickReplyPoliteness": latestPoliteness,
-                    "quickReplyLength": latestLength,
-                    "replyMode": latestReplyMode,
-                    "seciliDil": latestLanguage,
-                    "appTheme": latestAppTheme,
+                    // seciliDil / appTheme intentionally NOT written to the shared
+                    // companySettings doc — they're personal per-user and synced via
+                    // savePersonalInterfaceSettings instead so each member keeps
+                    // their own language/theme even when joined to the same workspace.
                     "appSubtitle": latestAppSubtitle,
-                    "customProductsJSON": latestCustomProductsJSON,
-                    "customRulesJSON": latestCustomRulesJSON,
                     "seciliParaBirimi": latestCurrency,
                     "seciliOndalik": latestDecimalSeparator,
                     "feePercentage": latestFeePercentage,
@@ -3323,7 +3411,7 @@ struct AyarlarView: View {
                     .foregroundColor(.gray)
                     .frame(width: 150, alignment: .leading)
                 Spacer()
-                Picker("", selection: $appTheme) {
+                Picker("", selection: themeSelectionBinding) {
                     Text("System").tag("System")
                     Text("Light").tag("Light")
                     Text("Dark").tag("Dark")
@@ -3354,7 +3442,7 @@ struct AyarlarView: View {
                     .foregroundColor(.gray)
                     .frame(width: 150, alignment: .leading)
                 Spacer()
-                Picker("", selection: $seciliDil) {
+                Picker("", selection: languageSelectionBinding) {
                     ForEach(desteklenenDiller, id: \.self) {
                         Text($0).tag($0)
                     }
@@ -3393,6 +3481,93 @@ struct AyarlarView: View {
         }
     }
     
+    private func loadPersonalInterfaceSettings() {
+        // Language + theme are per-user for EVERY role. The finance-free PDF flags
+        // remain workflow-only personal preferences.
+        guard !firebaseManager.currentCompanyId.isEmpty else { return }
+        Functions.functions(region: "europe-west2").httpsCallable("getPersonalInterfaceSettings").call(["companyId": firebaseManager.currentCompanyId]) { result, _ in
+            guard let payload = result?.data as? [String: Any], let values = payload["settings"] as? [String: Any] else { return }
+            DispatchQueue.main.async {
+                // appTheme + seciliDil are managed SOLELY by ContentView's
+                // startPersonalAppearanceLanguageListener (single source of truth).
+                // This callable only seeds the per-user PDF flags for workflow-only.
+                if isWorkflowOnlySettingsRole {
+                    if let value = values["pdfShowCustomer"] as? Bool { pdfShowCustomer = value }
+                    if let value = values["pdfShowContact"] as? Bool { pdfShowContact = value }
+                    if let value = values["pdfShowPreview"] as? Bool { pdfShowPreview = value }
+                    if let value = values["pdfShowMaterials"] as? Bool { pdfShowMaterials = value }
+                    if let value = values["pdfShowPriority"] as? Bool { pdfShowPriority = value }
+                    if let value = values["pdfShowStatus"] as? Bool { pdfShowStatus = value }
+                    if let value = values["pdfShowShipping"] as? Bool { pdfShowShipping = value }
+                }
+            }
+        }
+    }
+
+    private func savePersonalAppearanceLanguageSettings() {
+        // Always save as personal — language and theme are per-user across every
+        // role (owner, admin, member, workflow, custom). Workspace-wide values are
+        // no longer used for these two fields.
+        guard !firebaseManager.currentCompanyId.isEmpty else { return }
+        Functions.functions(region: "europe-west2").httpsCallable("savePersonalInterfaceSettings").call([
+            "companyId": firebaseManager.currentCompanyId,
+            "settings": ["appTheme": appTheme, "selectedLanguage": seciliDil]
+        ]) { _, _ in }
+    }
+
+    /// Picker binding for theme — saving happens ONLY here (user-initiated). The live
+    /// personal listener writes UserDefaults directly and never calls this setter, so
+    /// remote/cross-device updates never trigger a re-save (no feedback loop).
+    private var themeSelectionBinding: Binding<String> {
+        Binding(
+            get: { appTheme },
+            set: { newValue in
+                guard newValue != appTheme else { return }
+                appTheme = newValue
+                savePersonalAppearanceLanguageSettings()
+            }
+        )
+    }
+
+    /// Picker binding for language — same one-way save rule as theme.
+    private var languageSelectionBinding: Binding<String> {
+        Binding(
+            get: { seciliDil },
+            set: { newValue in
+                guard newValue != seciliDil else { return }
+                seciliDil = newValue
+                savePersonalAppearanceLanguageSettings()
+            }
+        )
+    }
+
+    private func saveWorkflowOnlyPersonalInterfaceSettings() {
+        guard isWorkflowOnlySettingsRole, !firebaseManager.currentCompanyId.isEmpty else { return }
+        Functions.functions(region: "europe-west2").httpsCallable("savePersonalInterfaceSettings").call([
+            "companyId": firebaseManager.currentCompanyId,
+            "settings": ["appTheme": appTheme, "selectedLanguage": seciliDil, "pdfShowCustomer": pdfShowCustomer, "pdfShowContact": pdfShowContact, "pdfShowPreview": pdfShowPreview, "pdfShowMaterials": pdfShowMaterials, "pdfShowPriority": pdfShowPriority, "pdfShowStatus": pdfShowStatus, "pdfShowShipping": pdfShowShipping]
+        ]) { _, _ in }
+    }
+
+    private var workflowOnlyPdfAyari: some View {
+        SettingsCard(title: t("PDF Export Settings", lang: seciliDil), iconName: "doc.richtext") {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Personal finance-free PDF preferences").font(.system(size: 15, weight: .bold))
+                Text("Payment and financial PDF fields remain hidden. These choices apply only to your finance-free export view.").font(.system(size: 12)).foregroundColor(.secondary)
+                Divider()
+                Toggle("Customer & Design", isOn: $pdfShowCustomer)
+                Toggle("Contact & Notes", isOn: $pdfShowContact)
+                Toggle("Preview Image", isOn: $pdfShowPreview)
+                Toggle("Materials & Inventory", isOn: $pdfShowMaterials)
+                Toggle("Priority / Risk", isOn: $pdfShowPriority)
+                Toggle("Production Status", isOn: $pdfShowStatus)
+                Toggle("Shipping & Tracking", isOn: $pdfShowShipping)
+                Button("Save Personal PDF Preferences") { saveWorkflowOnlyPersonalInterfaceSettings() }.buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+
     // 🌟 PDF AYARLARI HİZALAMASI (MÜKEMMEL) 🌟
     private var pdfAyari: some View {
         SettingsCard(title: t("PDF Export Settings", lang: seciliDil), iconName: "doc.richtext") {
@@ -4879,6 +5054,49 @@ struct AyarlarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    @State private var quickReplyContributionText: String = ""
+    @State private var quickReplyContributionStatus: String = ""
+    @State private var isSavingQuickReplyContribution: Bool = false
+
+    private var quickReplyContributionAyari: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Team Contributions")
+                .font(.system(size: 16, weight: .bold))
+            Text("Add supporting information for shared OpenAI replies. The main Company Knowledge Base is managed by the workspace owner.")
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+            TextEditor(text: $quickReplyContributionText)
+                .frame(minHeight: 140)
+                .padding(8)
+                .background(Color.primary.opacity(0.035))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.10), lineWidth: 1))
+            Button(isSavingQuickReplyContribution ? "Adding..." : "Add Contribution") {
+                let text = quickReplyContributionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return }
+                isSavingQuickReplyContribution = true
+                Functions.functions(region: "europe-west2").httpsCallable("saveQuickReplyContribution").call([
+                    "companyId": firebaseManager.currentCompanyId,
+                    "text": text
+                ]) { _, error in
+                    DispatchQueue.main.async {
+                        isSavingQuickReplyContribution = false
+                        if let error {
+                            quickReplyContributionStatus = error.localizedDescription
+                        } else {
+                            quickReplyContributionText = ""
+                            quickReplyContributionStatus = "Contribution added to the workspace Knowledge Base."
+                        }
+                    }
+                }
+            }
+            .disabled(isSavingQuickReplyContribution || quickReplyContributionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if !quickReplyContributionStatus.isEmpty {
+                Text(quickReplyContributionStatus).font(.system(size: 12)).foregroundColor(.secondary)
+            }
+        }
+        .padding(20)
+    }
+
     private var quickReplyAyari: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 16) {
@@ -4976,49 +5194,68 @@ struct AyarlarView: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.blue.opacity(0.10), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            knowledgeBaseEditor(title: t("Company Knowledge Base (For Apple On-Device AI)", lang: seciliDil))
+            knowledgeBaseEditor(title: canManageQuickReplyCore ? t("Company Knowledge Base (For Apple On-Device AI)", lang: seciliDil) : "My On-Device Knowledge")
         }
     }
 
     private var quickReplyOnlineAISettings: some View {
         VStack(spacing: 15) {
-            HStack(alignment: .center, spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.purple.opacity(0.10))
-                    Image(systemName: "key")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.purple)
+            if canManageQuickReplyCore {
+                HStack(alignment: .center, spacing: 16) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.purple.opacity(0.10))
+                        Image(systemName: "key")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.purple)
+                    }
+                    .frame(width: 42, height: 42)
+
+                    Text("OpenAI API Key")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.primary)
+                        .frame(width: 190, alignment: .leading)
+
+                    SecureField(quickReplyHasOpenAIKey ? "Paste a new key to replace" : "sk-proj-...", text: $openAIKey)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .foregroundColor(.primary)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(Color.primary.opacity(0.035))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.primary.opacity(0.10), lineWidth: 1))
+                        .cornerRadius(8)
                 }
-                .frame(width: 42, height: 42)
+                .padding(16)
+                .background(colorScheme == .dark ? Color.white.opacity(0.045) : Color.white.opacity(0.72))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                Text("OpenAI API Key")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-                    .frame(width: 190, alignment: .leading)
+                Text(quickReplyHasOpenAIKey ? "API key configured. Paste a new key only to replace it." : "No API key configured. The key is stored server-side and is never shared with team members.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
 
-                SecureField("sk-proj-...", text: $openAIKey)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundColor(.primary)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 12)
-                    .background(Color.primary.opacity(0.035))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.primary.opacity(0.10), lineWidth: 1))
-                    .cornerRadius(8)
-            }
-            .padding(16)
-            .background(colorScheme == .dark ? Color.white.opacity(0.045) : Color.white.opacity(0.72))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.primary.opacity(0.08), lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-            Text("Your API key is encrypted and stored securely.")
-                .font(.system(size: 11))
-                .foregroundColor(.gray)
+                knowledgeBaseEditor(title: t("Company Knowledge Base (For OpenAI)", lang: seciliDil))
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("OpenAI Online")
+                        .font(.system(size: 16, weight: .bold))
+                    Text(quickReplyHasOpenAIKey ? "Workspace OpenAI key configured" : "Workspace OpenAI key not configured")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(quickReplyHasOpenAIKey ? .green : .orange)
+                    Text("Only the workspace owner can manage the API key and main Company Knowledge Base. You can use shared OpenAI replies once a key is configured.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
+                .padding(16)
+                .background(Color.purple.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            knowledgeBaseEditor(title: t("Company Knowledge Base (For OpenAI)", lang: seciliDil))
+                quickReplyContributionAyari
+            }
         }
     }
 
@@ -5893,16 +6130,20 @@ struct AyarlarView: View {
     private func applyBackupSettings(_ settings: BackupSettings) {
         let defaults = UserDefaults.standard
 
-        for (key, value) in settings.strings { defaults.set(value, forKey: key) }
+        // Language + theme are STRICTLY per-user: never apply the shared workspace
+        // value, otherwise a member would inherit the owner's language/theme. These
+        // two are loaded only from the user's own personalInterfaceSettings doc
+        // (loadPersonalInterfaceSettings + FirebaseManager personal listener).
+        for (key, value) in settings.strings where key != "seciliDil" && key != "appTheme" {
+            defaults.set(value, forKey: key)
+        }
         for (key, value) in settings.bools { defaults.set(value, forKey: key) }
         for (key, value) in settings.doubles { defaults.set(value, forKey: key) }
 
-        seciliDil = settings.strings["seciliDil"] ?? seciliDil
         seciliParaBirimi = settings.strings["seciliParaBirimi"] ?? seciliParaBirimi
         seciliOndalik = settings.strings["seciliOndalik"] ?? seciliOndalik
         businessType = settings.strings["businessType"] ?? businessType
         businessDescriptionPrompt = settings.strings["businessDescriptionPrompt"] ?? businessDescriptionPrompt
-        appTheme = settings.strings["appTheme"] ?? appTheme
         appLogoUrl = settings.strings["appLogoUrl"] ?? appLogoUrl
         appSubtitle = settings.strings["appSubtitle"] ?? appSubtitle
         activeStatusesJSON = settings.strings["activeStatusesJSON"] ?? activeStatusesJSON

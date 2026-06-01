@@ -7,12 +7,23 @@ import {
   limit,
   onSnapshot,
   query,
+  serverTimestamp,
+  setDoc,
   where,
   type DocumentData,
   type DocumentSnapshot
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "@/lib/firebase/client";
 import { entitlementsForPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
+
+export type JoinedWorkspaceOption = {
+  id: string;
+  name: string;
+  role: string;
+  roleLabel: string;
+  isCurrent: boolean;
+};
 
 export type WorkspaceContext = {
   id: string;
@@ -46,12 +57,28 @@ export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
   { key: "dashboard", label: "Dashboard", description: "Dashboard and workspace analytics." },
   { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
   { key: "customers", label: "Customers", description: "Customer list and contact directory." },
+  { key: "messages", label: "Messages", description: "Messages navigation and conversations area." },
+  { key: "notes", label: "Notes", description: "Personal Notes navigation area." },
   { key: "quickReply", label: "Quick Reply", description: "Quick Reply page and AI reply tools." },
   { key: "settings", label: "Settings", description: "Main Settings navigation." },
   { key: "teamAccess", label: "Team Access", description: "Team members and access controls." },
   { key: "clientFiles", label: "Client Files", description: "Client file upload, rename and delete." },
   { key: "financialInfo", label: "Financial Info", description: "Prices, profit, dashboard finance and finance cards." },
   { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." }
+] as const;
+
+export const WORKSPACE_SETTINGS_ACCESS_OPTIONS = [
+  { key: "settingsGeneral", label: "General / Personal Settings", description: "Appearance, language and profile/security settings area." },
+  { key: "settingsPdf", label: "PDF Export Settings", description: "PDF export settings menu." },
+  { key: "settingsQuickReply", label: "Quick Reply Settings", description: "Quick Reply settings menu, subject to OpenAI owner-only controls." },
+  { key: "settingsMessageSettings", label: "Message Settings", description: "Workspace message preferences when the base role permits editing." },
+  { key: "settingsWorkflow", label: "Workflow Steps", description: "Workspace workflow settings menu." },
+  { key: "settingsFinancial", label: "Financial Settings", description: "Finance settings menu when financial access is also enabled." },
+  { key: "settingsSafetyUploads", label: "Safety & Uploads", description: "Upload safety settings menu." },
+  { key: "settingsData", label: "Data Management", description: "Import, export and backup screens inside Settings." },
+  { key: "settingsTeamAccess", label: "Team Access", description: "Workspace viewing and switching area; owner-only member management remains protected." },
+  { key: "settingsPlanAccess", label: "Plan & Access", description: "Plan, limits and billing screens. Owner-only edits remain protected server-side." },
+  { key: "settingsSupport", label: "Support / Tickets", description: "Support and ticket area." }
 ] as const;
 
 export const WORKSPACE_CARD_ACCESS_OPTIONS = [
@@ -79,6 +106,7 @@ export const WORKSPACE_SCOPE_ACCESS_OPTIONS = [
 
 export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
   ...WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
+  ...WORKSPACE_SETTINGS_ACCESS_OPTIONS,
   ...WORKSPACE_CARD_ACCESS_OPTIONS,
   ...WORKSPACE_SCOPE_ACCESS_OPTIONS
 ] as const;
@@ -553,8 +581,16 @@ function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess
   if (normalizeWorkspaceRole(roleValue, "member") === "workflow") {
     access.dashboard = false;
     access.financialInfo = false;
+    access.customers = false;
     access.teamAccess = false;
     access.cardFinancial = false;
+    access.assignedProjectsOnly = true;
+    access.manageProjectAssignments = false;
+    access.orders = true;
+    access.schedule = true;
+    access.quickReply = true;
+    access.clientFiles = true;
+    access.cardClientFiles = true;
   }
   return access;
 }
@@ -604,8 +640,16 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
   if (normalizeWorkspaceRole(roleValue, "member") === "workflow") {
     merged.dashboard = false;
     merged.financialInfo = false;
+    merged.customers = false;
     merged.teamAccess = false;
     merged.cardFinancial = false;
+    merged.assignedProjectsOnly = true;
+    merged.manageProjectAssignments = false;
+    merged.orders = true;
+    merged.schedule = true;
+    merged.quickReply = true;
+    merged.clientFiles = true;
+    merged.cardClientFiles = true;
   }
   return merged;
 }
@@ -698,6 +742,64 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
   };
 }
 
+export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: string): Promise<JoinedWorkspaceOption[]> {
+  const accessSnapshot = await getDocs(collection(db, "users", uid, "workspaceAccess"));
+  const ids = Array.from(new Set([uid, ...accessSnapshot.docs.map(item => item.id)]));
+
+  const options = await Promise.all(ids.map(async companyId => {
+    const companySnapshot = await readWorkspaceDocument(companyId);
+    if (!companySnapshot) return null;
+
+    if (companyId !== uid) {
+      const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", companyId));
+      if (!accessSnapshot.exists()) return null;
+    }
+
+    const companyData = companySnapshot.data();
+    const ownerUid = stringValue(companyData.ownerUid, companyId);
+    const role = uid === ownerUid || uid === companyId
+      ? "owner"
+      : resolveRole(companyData, uid, companyId);
+
+    return {
+      id: companyId,
+      name: stringValue(companyData.name, stringValue(companyData.companyName, "My Studio")),
+      role,
+      roleLabel: roleLabel(role),
+      isCurrent: companyId === currentCompanyId
+    } satisfies JoinedWorkspaceOption;
+  }));
+
+  return options
+    .filter((option): option is JoinedWorkspaceOption => option !== null)
+    .sort((lhs, rhs) => {
+      if (lhs.isCurrent !== rhs.isCurrent) return lhs.isCurrent ? -1 : 1;
+      if (lhs.role === "owner" && rhs.role !== "owner") return -1;
+      if (lhs.role !== "owner" && rhs.role === "owner") return 1;
+      return lhs.name.localeCompare(rhs.name);
+    });
+}
+
+export async function switchActiveWorkspace(uid: string, companyId: string) {
+  const cleanCompanyId = companyId.trim();
+  if (!cleanCompanyId) throw new Error("Workspace could not be selected.");
+
+  if (cleanCompanyId !== uid) {
+    const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", cleanCompanyId));
+    if (!accessSnapshot.exists()) {
+      throw new Error("Your access to this workspace is no longer available.");
+    }
+  }
+
+  const companySnapshot = await readWorkspaceDocument(cleanCompanyId);
+  if (!companySnapshot) throw new Error("This workspace is no longer available.");
+
+  await setDoc(doc(db, "users", uid), {
+    activeCompanyId: cleanCompanyId,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
 export async function loadDashboardCounts(companyId: string): Promise<DashboardCounts> {
   const ordersQuery = query(collection(db, "siparisler"), where("companyId", "==", companyId));
   const customersQuery = query(collection(db, "musteriler"), where("companyId", "==", companyId));
@@ -775,15 +877,24 @@ export async function loadDashboardFinanceOrders(companyId: string): Promise<Das
 }
 
 export async function loadWorkspaceSettingsOverview(companyId: string): Promise<WorkspaceSettingsOverview> {
-  const snapshot = await getDoc(doc(db, "companySettings", companyId));
+  const currentUserId = auth.currentUser?.uid ?? "";
+  const [snapshot, personalSnapshot] = await Promise.all([
+    getDoc(doc(db, "companySettings", companyId)),
+    currentUserId
+      ? getDoc(doc(db, "companies", companyId, "personalInterfaceSettings", currentUserId)).catch(() => null)
+      : Promise.resolve(null)
+  ]);
   const data = snapshot.exists() ? snapshot.data() : {};
+  const personalData = personalSnapshot?.exists() ? personalSnapshot.data() : {};
   const dashboardVisibility = dashboardWidgetVisibilityValue(data);
 
   return {
-    appTheme: stringValue(data.appTheme, "System"),
+    // Theme and language are per-user. Never surface the workspace legacy
+    // values to the signed-in user's UI.
+    appTheme: stringValue(personalData.appTheme, "System"),
     appSubtitle: stringValue(data.appSubtitle, "Bespoke Hand-Painted Dials"),
     appLogoUrl: stringValue(data.appLogoUrl, ""),
-    selectedLanguage: stringValue(data.seciliDil, "English"),
+    selectedLanguage: stringValue(personalData.selectedLanguage, "English"),
     selectedCurrency: stringValue(data.seciliParaBirimi, "£"),
     selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
     feePercentage: numberValue(data.feePercentage, 3),
@@ -882,14 +993,78 @@ export async function loadQuickReplySettings(companyId: string): Promise<QuickRe
     quickReplyPoliteness: stringValue(data.quickReplyPoliteness, "Warm"),
     quickReplyLength: stringValue(data.quickReplyLength, "Short"),
     aiKnowledgeBase: stringValue(data.aiKnowledgeBase, ""),
-    hasOpenAIKey: stringValue(data.openAIKey, "").length > 0,
+    hasOpenAIKey: booleanValue(data.hasOpenAIKey, false),
     products: decodeQuickReplyTemplateItems(data.customProductsJSON),
     rules: decodeQuickReplyTemplateItems(data.customRulesJSON)
   };
 }
 
-export async function loadRecentOrders(companyId: string): Promise<OrderListItem[]> {
-  const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId), limit(100)));
+// Only strict Workflow Only role uses the finance-free /workflowOrders subcollection.
+// Custom-role members with "Assigned Projects Only" toggled ON still query /siparisler
+// directly (filtered to their own assignedToUid) — Firestore rules grant them full
+// member-tier access to their own assigned orders, including financial fields.
+function isWorkflowAssignedView(workspace?: WorkspaceContext | null) {
+  return normalizeWorkspaceRole(workspace?.role) === "workflow";
+}
+
+// Returns true when the user is restricted to seeing only their own assigned orders.
+// Covers both strict workflow and custom-role "Assigned Projects Only" members.
+function requiresAssignedToSelfFilter(workspace?: WorkspaceContext | null) {
+  if (normalizeWorkspaceRole(workspace?.role) === "workflow") return true;
+  return workspace?.memberAccess.assignedProjectsOnly === true
+    && workspace?.memberAccess.manageProjectAssignments !== true;
+}
+
+const workflowViewSyncByWorkspace = new Map<string, Promise<void>>();
+
+async function ensureWorkflowAssignedOrderViews(companyId: string, workspace?: WorkspaceContext | null) {
+  if (!isWorkflowAssignedView(workspace) || !companyId) return;
+  const existing = workflowViewSyncByWorkspace.get(companyId);
+  if (existing) return existing;
+
+  const sync = (async () => {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean }>(functions, "ensureWorkflowAssignedOrderViews");
+    await callable({ companyId });
+  })().catch(error => {
+    workflowViewSyncByWorkspace.delete(companyId);
+    throw error;
+  });
+  workflowViewSyncByWorkspace.set(companyId, sync);
+  return sync;
+}
+
+function workspaceOrderCollection(companyId: string, workspace?: WorkspaceContext | null) {
+  return isWorkflowAssignedView(workspace)
+    ? collection(db, "companies", companyId, "workflowOrders")
+    : collection(db, "siparisler");
+}
+
+function workspaceOrderQuery(companyId: string, workspace?: WorkspaceContext | null, uid = "") {
+  if (isWorkflowAssignedView(workspace) && uid.trim()) {
+    return query(workspaceOrderCollection(companyId, workspace), where("assignedToUid", "==", uid.trim()));
+  }
+  // Custom-role members with "Assigned Projects Only" (but NOT strict workflow) hit
+  // /siparisler with a (companyId, assignedToUid) compound filter so Firestore rules
+  // can validate per-document access without scanning the whole company.
+  if (requiresAssignedToSelfFilter(workspace) && uid.trim()) {
+    return query(
+      workspaceOrderCollection(companyId, workspace),
+      where("companyId", "==", companyId),
+      where("assignedToUid", "==", uid.trim())
+    );
+  }
+  return query(workspaceOrderCollection(companyId, workspace), where("companyId", "==", companyId));
+}
+
+function workspaceOrderDoc(companyId: string, orderId: string, workspace?: WorkspaceContext | null) {
+  return isWorkflowAssignedView(workspace)
+    ? doc(db, "companies", companyId, "workflowOrders", orderId)
+    : doc(db, "siparisler", orderId);
+}
+
+export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderListItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(query(workspaceOrderQuery(companyId, workspace, uid), limit(100)));
   const orders = snapshot.docs.map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
@@ -944,8 +1119,9 @@ export async function loadRecentOrders(companyId: string): Promise<OrderListItem
   });
 }
 
-export async function loadScheduleOrders(companyId: string): Promise<ScheduleOrderItem[]> {
-  const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
   const orders = snapshot.docs.map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
@@ -998,8 +1174,9 @@ export async function loadScheduleOrders(companyId: string): Promise<ScheduleOrd
   });
 }
 
-export async function loadWorkspaceOrderOptions(companyId: string): Promise<OrderOptionItem[]> {
-  const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+export async function loadWorkspaceOrderOptions(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderOptionItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
   const orders = snapshot.docs.map(orderDocument => {
     const data = orderDocument.data();
     return {
@@ -1217,8 +1394,9 @@ function mapClientFiles(value: unknown): ClientFileDetail[] {
   });
 }
 
-export async function loadWorkspaceClientFiles(companyId: string, includeCloudAccess = false): Promise<ClientFileListItem[]> {
-  const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+export async function loadWorkspaceClientFiles(companyId: string, includeCloudAccess = false, workspace?: WorkspaceContext | null, uid = ""): Promise<ClientFileListItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
   const files = snapshot.docs.flatMap(orderDocument => {
     const data = orderDocument.data();
     const orderId = orderDocument.id;
@@ -1382,8 +1560,14 @@ function mapOrderDetailSnapshot(
   };
 }
 
-export async function loadOrderDetail(companyId: string, orderId: string, includeClientFileCloudAccess = true): Promise<OrderDetail> {
-  const snapshot = await getDoc(doc(db, "siparisler", orderId));
+export async function loadOrderDetail(
+  companyId: string,
+  orderId: string,
+  includeClientFileCloudAccess = true,
+  workspace?: WorkspaceContext | null
+): Promise<OrderDetail> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDoc(workspaceOrderDoc(companyId, orderId, workspace));
   return mapOrderDetailSnapshot(snapshot, companyId, includeClientFileCloudAccess);
 }
 
@@ -1392,23 +1576,38 @@ export function subscribeOrderDetail(
   orderId: string,
   includeClientFileCloudAccess: boolean,
   onOrder: (order: OrderDetail) => void,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  workspace?: WorkspaceContext | null
 ) {
   if (!companyId || !orderId) return () => {};
 
-  return onSnapshot(
-    doc(db, "siparisler", orderId),
-    snapshot => {
-      try {
-        onOrder(mapOrderDetailSnapshot(snapshot, companyId, includeClientFileCloudAccess));
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "Could not load this order.");
-      }
-    },
-    error => {
-      onError(error.message || "Could not listen to this order.");
-    }
-  );
+  let cancelled = false;
+  let unsubscribe = () => {};
+  void ensureWorkflowAssignedOrderViews(companyId, workspace)
+    .then(() => {
+      if (cancelled) return;
+      unsubscribe = onSnapshot(
+        workspaceOrderDoc(companyId, orderId, workspace),
+        snapshot => {
+          try {
+            onOrder(mapOrderDetailSnapshot(snapshot, companyId, includeClientFileCloudAccess));
+          } catch (error) {
+            onError(error instanceof Error ? error.message : "Could not load this order.");
+          }
+        },
+        error => {
+          onError(error.message || "Could not listen to this order.");
+        }
+      );
+    })
+    .catch(error => {
+      onError(error instanceof Error ? error.message : "Could not prepare assigned projects.");
+    });
+
+  return () => {
+    cancelled = true;
+    unsubscribe();
+  };
 }
 
 export type TeamMemberDetail = {

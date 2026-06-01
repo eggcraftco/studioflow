@@ -31,6 +31,7 @@ struct StudioMessagesView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var firebaseManager: FirebaseManager
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     @State private var selectedThreadId: String = "team"
     @State private var draftText: String = ""
@@ -42,6 +43,10 @@ struct StudioMessagesView: View {
 #endif
     @State private var hasConsumedPendingRoute: Bool = false
     @State private var isDirectMemberPickerExpanded: Bool = false
+    @State private var isNewConversationSheetPresented: Bool = false
+    @State private var newConversationMode: String = "direct"
+    @State private var selectedNewGroupMemberUids: Set<String> = []
+    @State private var newGroupTitleDraft: String = ""
     @State private var isShowingConversationOnPhone: Bool = false
     @State private var previewAttachmentMessage: StudioMessageItem?
     @State private var locallyHiddenMessageIds: Set<String> = []
@@ -62,6 +67,7 @@ struct StudioMessagesView: View {
     @State private var scrollTargetMessageId: String = ""
     @State private var selectedSearchResultIndex: Int = 0
     @State private var archivedThreadMarkers: [String: TimeInterval] = [:]
+    @State private var deletedThreadMarkers: [String: TimeInterval] = [:]
     @State private var isArchivedConversationsExpanded: Bool = false
     @State private var savedMessageIdsByThreadId: [String: Set<String>] = [:]
     @State private var forwardingMessage: StudioMessageItem?
@@ -89,6 +95,31 @@ struct StudioMessagesView: View {
 
     private var currentUserEmail: String {
         cleanText(authVM.accountEmail).lowercased()
+    }
+
+    private var currentMessageWorkspaceRole: String {
+        let compact = authVM.currentWorkspaceRole
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        if compact == "viewer" || compact == "viewonly" || compact == "readonly" { return "viewer" }
+        if compact == "workflow" || compact == "workflowonly" { return "workflow" }
+        if compact == "owner" || compact == "admin" || compact == "member" { return compact }
+        return "member"
+    }
+
+    private var canManageMessageConversations: Bool {
+        ["owner", "admin", "member"].contains(currentMessageWorkspaceRole)
+    }
+
+    private var canStartMessageConversations: Bool {
+        canManageMessageConversations || currentMessageWorkspaceRole == "workflow"
+    }
+
+    private var canSendMessageAttachments: Bool {
+        canStartMessageConversations
     }
 
     private func cleanText(_ value: String) -> String {
@@ -281,6 +312,7 @@ struct StudioMessagesView: View {
         var seen = Set<String>()
         return visibleMessageThreads
             .filter { $0.type != "team" }
+            .filter { !isThreadDeletedForMe($0) }
             .filter { thread in
                 guard !seen.contains(thread.id) else { return false }
                 seen.insert(thread.id)
@@ -327,6 +359,7 @@ struct StudioMessagesView: View {
         .background(Color.primary.opacity(colorScheme == .dark ? 0.025 : 0.015))
         .onAppear {
             loadArchivedThreadMarkers()
+            loadDeletedThreadMarkers()
             loadSavedMessageMarkers()
             startMessageUserPreferencesSync()
             loadMessageWorkspaceSettings()
@@ -346,14 +379,14 @@ struct StudioMessagesView: View {
             handleImportedFile(result)
         }
 #if os(iOS)
-        .confirmationDialog("Add attachment", isPresented: $isAttachmentOptionsPresented, titleVisibility: .visible) {
+        .confirmationDialog(t("Add attachment", lang: seciliDil), isPresented: $isAttachmentOptionsPresented, titleVisibility: .visible) {
             Button("Photo Library") {
                 isPhotoPickerPresented = true
             }
             Button("Files") {
                 isFileImporterPresented = true
             }
-            Button("Cancel", role: .cancel) { }
+            Button(t("Cancel", lang: seciliDil), role: .cancel) { }
         }
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $selectedPhotoPickerItem, matching: .images)
         .onChange(of: selectedPhotoPickerItem) { item in
@@ -365,6 +398,9 @@ struct StudioMessagesView: View {
 #endif
         .sheet(item: $previewAttachmentMessage) { message in
             attachmentPreviewSheet(message)
+        }
+        .sheet(isPresented: $isNewConversationSheetPresented) {
+            newConversationSheet
         }
         .sheet(item: $forwardingMessage) { message in
             forwardMessageSheet(message)
@@ -427,6 +463,21 @@ struct StudioMessagesView: View {
                         .padding(.vertical, 4)
                         .background(Capsule().fill(Color.red))
                 }
+                if canStartMessageConversations {
+                    Button {
+                        selectedNewGroupMemberUids.removeAll()
+                        newGroupTitleDraft = ""
+                        newConversationMode = "direct"
+                        isNewConversationSheetPresented = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(Color.blue.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("New conversation")
+                }
             }
             .padding(.horizontal, isCompact ? 18 : 16)
             .padding(.top, isCompact ? 18 : 16)
@@ -460,10 +511,6 @@ struct StudioMessagesView: View {
 
             ScrollView {
                 VStack(spacing: 8) {
-                    directMessagePicker
-
-                    Divider().padding(.vertical, 6)
-
                     Text("Conversations")
                         .font(.system(size: isCompact ? 12 : 11, weight: .bold))
                         .foregroundColor(.secondary)
@@ -471,7 +518,7 @@ struct StudioMessagesView: View {
                         .padding(.horizontal, 6)
 
                     if conversationThreads.isEmpty {
-                        Text(archivedConversationThreads.isEmpty ? "No direct conversations yet." : "No active conversations.")
+                        Text(archivedConversationThreads.isEmpty ? t("No direct conversations yet.", lang: seciliDil) : t("No active conversations.", lang: seciliDil))
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -545,80 +592,6 @@ struct StudioMessagesView: View {
         }
     }
 
-    private var directMessagePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isDirectMemberPickerExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                        .foregroundColor(.blue)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(Color.blue.opacity(0.12)))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Direct Messages")
-                            .font(.system(size: 13, weight: .bold))
-                        Text(isDirectMemberPickerExpanded ? "Choose a team member" : "Tap to start a private chat")
-                            .font(.system(size: 10.5))
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: isDirectMemberPickerExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.035)))
-            }
-            .buttonStyle(.plain)
-            .disabled(!messageWorkspaceSettings.directMessagesEnabled)
-
-            if !messageWorkspaceSettings.directMessagesEnabled {
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.fill")
-                    Text("Direct messages are disabled for this workspace.")
-                }
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 2)
-            }
-
-            if isDirectMemberPickerExpanded && messageWorkspaceSettings.directMessagesEnabled {
-                VStack(spacing: 6) {
-                    let members = firebaseManager.messageTeamMembers.filter { $0.id != currentUserId }
-                    if members.isEmpty {
-                        Text("Team members will appear here.")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    } else {
-                        ForEach(members) { member in
-                            Button {
-                                startDirectMessage(with: member)
-                                withAnimation(.easeInOut(duration: 0.18)) {
-                                    isDirectMemberPickerExpanded = false
-                                }
-                            } label: {
-                                directMemberRow(member)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding(8)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.025)))
-            }
-        }
-    }
 
 
     private func canCurrentUserSee(thread: StudioMessageThread) -> Bool {
@@ -631,7 +604,7 @@ struct StudioMessagesView: View {
     }
 
     private func displayTitle(for thread: StudioMessageThread) -> String {
-        if thread.type == "team" { return "Team Chat" }
+        if thread.type == "team" { return t("Team Chat", lang: seciliDil) }
         if isGroupThread(thread) {
             let savedTitle = cleanText(thread.title)
             if !savedTitle.isEmpty && savedTitle != "Group chat" && savedTitle != "Direct message" {
@@ -763,6 +736,12 @@ struct StudioMessagesView: View {
         return "StudioMessagesArchivedThreads_\(company)_\(user)"
     }
 
+    private var deletedThreadsStorageKey: String {
+        let company = cleanText(companyId).isEmpty ? "unknownCompany" : cleanText(companyId)
+        let user = cleanText(currentUserId).isEmpty ? "unknownUser" : cleanText(currentUserId)
+        return "StudioMessagesDeletedThreads_\(company)_\(user)"
+    }
+
     private var savedMessagesStorageKey: String {
         let company = cleanText(companyId).isEmpty ? "unknownCompany" : cleanText(companyId)
         let user = cleanText(currentUserId).isEmpty ? "unknownUser" : cleanText(currentUserId)
@@ -797,6 +776,21 @@ struct StudioMessagesView: View {
     private func saveArchivedThreadMarkers() {
         if let data = try? JSONEncoder().encode(archivedThreadMarkers) {
             UserDefaults.standard.set(data, forKey: archivedThreadsStorageKey)
+        }
+    }
+
+    private func loadDeletedThreadMarkers() {
+        guard let data = UserDefaults.standard.data(forKey: deletedThreadsStorageKey),
+              let decoded = try? JSONDecoder().decode([String: TimeInterval].self, from: data) else {
+            deletedThreadMarkers = [:]
+            return
+        }
+        deletedThreadMarkers = decoded
+    }
+
+    private func saveDeletedThreadMarkers() {
+        if let data = try? JSONEncoder().encode(deletedThreadMarkers) {
+            UserDefaults.standard.set(data, forKey: deletedThreadsStorageKey)
         }
     }
 
@@ -836,6 +830,7 @@ struct StudioMessagesView: View {
 
     private func persistMessageUserPreferences() {
         saveArchivedThreadMarkers()
+        saveDeletedThreadMarkers()
         saveSavedMessageMarkers()
         persistMessageUserPreferencesToCloud()
     }
@@ -854,6 +849,16 @@ struct StudioMessagesView: View {
             saveArchivedThreadMarkers()
         }
 
+        if let deleted = data["deletedThreads"] as? [String: Any] {
+            var decodedDeleted: [String: TimeInterval] = [:]
+            for (threadId, value) in deleted {
+                if let number = value as? NSNumber { decodedDeleted[threadId] = number.doubleValue }
+                else if let doubleValue = value as? Double { decodedDeleted[threadId] = doubleValue }
+            }
+            deletedThreadMarkers = decodedDeleted
+            saveDeletedThreadMarkers()
+        }
+
         if let saved = data["savedMessages"] as? [String: Any] {
             var decodedSaved: [String: Set<String>] = [:]
             for (threadId, value) in saved {
@@ -869,27 +874,35 @@ struct StudioMessagesView: View {
     }
 
     private func loadMessageUserPreferencesFromCloud() {
-        let company = cleanText(companyId)
-        guard !company.isEmpty, !cleanText(currentUserId).isEmpty else { return }
-        Functions.functions(region: "europe-west2").httpsCallable("getMessageUserPreferences").call([
-            "companyId": company
-        ]) { result, _ in
-            guard let payload = result?.data as? [String: Any] else { return }
+        guard let ref = messageUserPreferencesRef() else { return }
+        ref.getDocument { snapshot, _ in
+            guard let data = snapshot?.data() else { return }
             DispatchQueue.main.async {
-                applyMessageUserPreferencesPayload(payload)
+                applyMessageUserPreferencesPayload(data)
             }
         }
     }
 
     private func persistMessageUserPreferencesToCloud() {
+        guard let ref = messageUserPreferencesRef() else { return }
         let company = cleanText(companyId)
-        guard !company.isEmpty, !cleanText(currentUserId).isEmpty else { return }
+        let user = cleanText(currentUserId)
         let saved = savedMessageIdsByThreadId.mapValues { Array($0).sorted() }
-        Functions.functions(region: "europe-west2").httpsCallable("setMessageUserPreferences").call([
+        ref.setData([
             "companyId": company,
+            "userId": user,
             "archivedThreads": archivedThreadMarkers,
-            "savedMessages": saved
-        ]) { _, _ in }
+            "deletedThreads": deletedThreadMarkers,
+            "savedMessages": saved,
+            "updatedAt": FieldValue.serverTimestamp(),
+            "updatedByUid": user
+        ], merge: true) { error in
+            if let error {
+                DispatchQueue.main.async {
+                    firebaseManager.messageError = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func isThreadArchived(_ thread: StudioMessageThread) -> Bool {
@@ -898,6 +911,34 @@ struct StudioMessagesView: View {
         let lastMessageTime = thread.lastMessageAt.timeIntervalSince1970
         if lastMessageTime > archivedAt + 1 { return false }
         return true
+    }
+
+    private func isThreadDeletedForMe(_ thread: StudioMessageThread) -> Bool {
+        let threadId = cleanText(thread.id)
+        guard !threadId.isEmpty, let deletedAt = deletedThreadMarkers[threadId] else { return false }
+        return thread.lastMessageAt.timeIntervalSince1970 <= deletedAt + 1
+    }
+
+    private func restoreThreadToMyConversationList(_ threadIdValue: String) {
+        let threadId = cleanText(threadIdValue)
+        guard !threadId.isEmpty, threadId != "team" else { return }
+        let hadArchiveMarker = archivedThreadMarkers.removeValue(forKey: threadId) != nil
+        let hadDeletedMarker = deletedThreadMarkers.removeValue(forKey: threadId) != nil
+        if hadArchiveMarker || hadDeletedMarker {
+            persistMessageUserPreferences()
+        }
+    }
+
+    private func deleteThreadForMe(_ thread: StudioMessageThread) {
+        let threadId = cleanText(thread.id)
+        guard !threadId.isEmpty, thread.type != "team" else { return }
+        deletedThreadMarkers[threadId] = max(Date().timeIntervalSince1970, thread.lastMessageAt.timeIntervalSince1970)
+        archivedThreadMarkers.removeValue(forKey: threadId)
+        persistMessageUserPreferences()
+        if selectedThreadId == threadId {
+            selectThread("team")
+            isShowingConversationOnPhone = false
+        }
     }
 
     private func archiveThread(_ thread: StudioMessageThread) {
@@ -966,7 +1007,7 @@ struct StudioMessagesView: View {
                                 .frame(width: 8, height: 8)
                         }
                     }
-                    Text(thread.lastMessageText.isEmpty ? "No messages yet" : thread.lastMessageText)
+                    Text(thread.lastMessageText.isEmpty ? t("No messages yet", lang: seciliDil) : thread.lastMessageText)
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -979,13 +1020,19 @@ struct StudioMessagesView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if isThreadArchived(thread) {
-                Button { unarchiveThread(thread) } label: {
-                    Label("Unarchive Conversation", systemImage: "archivebox.fill")
+            if thread.type != "team" {
+                if isThreadArchived(thread) {
+                    Button { unarchiveThread(thread) } label: {
+                        Label(t("Unarchive Conversation", lang: seciliDil), systemImage: "archivebox.fill")
+                    }
+                } else {
+                    Button { archiveThread(thread) } label: {
+                        Label(t("Archive Conversation", lang: seciliDil), systemImage: "archivebox")
+                    }
                 }
-            } else {
-                Button { archiveThread(thread) } label: {
-                    Label("Archive Conversation", systemImage: "archivebox")
+                Divider()
+                Button(role: .destructive) { deleteThreadForMe(thread) } label: {
+                    Label("Delete Conversation", systemImage: "trash")
                 }
             }
         }
@@ -1088,17 +1135,17 @@ struct StudioMessagesView: View {
                     Button {
                         setMuteForSelectedThread("oneHour")
                     } label: {
-                        Label("Mute for 1 hour", systemImage: "bell.slash")
+                        Label(t("Mute for 1 hour", lang: seciliDil), systemImage: "bell.slash")
                     }
                     Button {
                         setMuteForSelectedThread("today")
                     } label: {
-                        Label("Mute for today", systemImage: "bell.slash")
+                        Label(t("Mute for today", lang: seciliDil), systemImage: "bell.slash")
                     }
                     Button {
                         setMuteForSelectedThread("forever")
                     } label: {
-                        Label("Mute until I turn it back on", systemImage: "bell.slash.fill")
+                        Label(t("Mute until I turn it back on", lang: seciliDil), systemImage: "bell.slash.fill")
                     }
                 } label: {
                     Image(systemName: isMutedForDisplay(thread) ? "bell.slash.fill" : "bell")
@@ -1135,7 +1182,7 @@ struct StudioMessagesView: View {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.orange)
-                Text(pinnedMessages.count == 1 ? "Pinned message" : "Pinned messages")
+                Text(pinnedMessages.count == 1 ? t("Pinned message", lang: seciliDil) : t("Pinned messages", lang: seciliDil))
                     .font(.system(size: 12, weight: .bold))
                 Spacer()
                 Text("\(pinnedMessages.count)")
@@ -1181,7 +1228,7 @@ struct StudioMessagesView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button { unpinMessage(message) } label: {
-                Label("Unpin Message", systemImage: "pin.slash")
+                Label(t("Unpin Message", lang: seciliDil), systemImage: "pin.slash")
             }
         }
     }
@@ -1191,7 +1238,7 @@ struct StudioMessagesView: View {
         if !text.isEmpty { return text }
         if !message.fileName.isEmpty { return message.fileName }
         if !message.fileURL.isEmpty { return "Attachment" }
-        return "Pinned message"
+        return t("Pinned message", lang: seciliDil)
     }
 
     private func conversationSearchBar(isCompact: Bool) -> some View {
@@ -1199,7 +1246,7 @@ struct StudioMessagesView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("Search messages or files", text: $messageSearchText)
+                TextField(t("Search messages or files", lang: seciliDil), text: $messageSearchText)
                     .textFieldStyle(.plain)
                     .onChange(of: messageSearchText) { _, _ in
                         selectedSearchResultIndex = 0
@@ -1220,7 +1267,7 @@ struct StudioMessagesView: View {
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.06)))
 
             HStack(spacing: 8) {
-                Picker("Filter", selection: $attachmentFilter) {
+                Picker(t("Filter", lang: seciliDil), selection: $attachmentFilter) {
                     ForEach(StudioMessageAttachmentFilter.allCases) { filter in
                         Text(filter.rawValue).tag(filter)
                     }
@@ -1329,7 +1376,7 @@ struct StudioMessagesView: View {
 
     private var searchEmptyTitle: String {
         if !cleanText(messageSearchText).isEmpty || attachmentFilter != .all { return "No matching messages" }
-        return "No messages yet"
+        return t("No messages yet", lang: seciliDil)
     }
 
     private var searchEmptySubtitle: String {
@@ -1427,7 +1474,7 @@ struct StudioMessagesView: View {
                             .font(.system(size: 12.5, weight: .semibold))
                             .foregroundColor(.primary)
                             .lineLimit(1)
-                        Text(imageLike ? "Tap to preview" : fileMetaText(for: message))
+                        Text(imageLike ? t("Tap to preview", lang: seciliDil) : fileMetaText(for: message))
                             .font(.system(size: 10.5))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
@@ -1650,7 +1697,7 @@ struct StudioMessagesView: View {
     private func systemMessageBubble(_ message: StudioMessageItem, isCompact: Bool) -> some View {
         HStack {
             Spacer(minLength: 12)
-            Text(message.text.isEmpty ? "Conversation updated" : message.text)
+            Text(message.text.isEmpty ? t("Conversation updated", lang: seciliDil) : message.text)
                 .font(.system(size: isCompact ? 12.5 : 11.5, weight: .semibold))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -1665,11 +1712,11 @@ struct StudioMessagesView: View {
     private func messageActionMenu(for message: StudioMessageItem) -> some View {
         if !message.deletedForEveryone {
             Button { startReply(to: message) } label: {
-                Label("Reply", systemImage: "arrowshape.turn.up.left")
+                Label(t("Reply", lang: seciliDil), systemImage: "arrowshape.turn.up.left")
             }
 
             Button { startForwarding(message) } label: {
-                Label("Forward Message", systemImage: "arrowshape.turn.up.right")
+                Label(t("Forward Message", lang: seciliDil), systemImage: "arrowshape.turn.up.right")
             }
 
             Menu {
@@ -1679,40 +1726,40 @@ struct StudioMessagesView: View {
                     }
                 }
             } label: {
-                Label("React", systemImage: "face.smiling")
+                Label(t("React", lang: seciliDil), systemImage: "face.smiling")
             }
 
             if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button { copyMessageText(message) } label: {
-                    Label("Copy Message", systemImage: "doc.on.doc")
+                    Label(t("Copy Message", lang: seciliDil), systemImage: "doc.on.doc")
                 }
             }
 
             if !message.fileURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 if isImageAttachment(message) {
                     Button { previewAttachmentMessage = message } label: {
-                        Label("Preview Attachment", systemImage: "photo")
+                        Label(t("Preview Attachment", lang: seciliDil), systemImage: "photo")
                     }
                 }
                 Button { openAttachment(message) } label: {
-                    Label("Open Attachment", systemImage: "arrow.up.right.square")
+                    Label(t("Open Attachment", lang: seciliDil), systemImage: "arrow.up.right.square")
                 }
                 Button { copyAttachmentLink(message) } label: {
-                    Label("Copy Attachment Link", systemImage: "link")
+                    Label(t("Copy Attachment Link", lang: seciliDil), systemImage: "link")
                 }
             }
 
             Button { toggleSavedMessage(message) } label: {
-                Label(isMessageSaved(message) ? "Unsave Message" : "Save Message", systemImage: isMessageSaved(message) ? "star.fill" : "star")
+                Label(isMessageSaved(message) ? t("Unsave Message", lang: seciliDil) : "Save Message", systemImage: isMessageSaved(message) ? "star.fill" : "star")
             }
 
             if isMessagePinned(message) {
                 Button { unpinMessage(message) } label: {
-                    Label("Unpin Message", systemImage: "pin.slash")
+                    Label(t("Unpin Message", lang: seciliDil), systemImage: "pin.slash")
                 }
             } else {
                 Button { pinMessage(message) } label: {
-                    Label("Pin Message", systemImage: "pin")
+                    Label(t("Pin Message", lang: seciliDil), systemImage: "pin")
                 }
             }
 
@@ -1720,7 +1767,7 @@ struct StudioMessagesView: View {
                 Button(role: .destructive) {
                     deleteMessageForEveryone(message)
                 } label: {
-                    Label("Delete for Everyone", systemImage: "trash.slash")
+                    Label(t("Delete for Everyone", lang: seciliDil), systemImage: "trash.slash")
                 }
             }
         }
@@ -1728,7 +1775,7 @@ struct StudioMessagesView: View {
         Button(role: .destructive) {
             deleteMessageForMe(message)
         } label: {
-            Label("Delete for Me", systemImage: "trash")
+            Label(t("Delete for Me", lang: seciliDil), systemImage: "trash")
         }
     }
 
@@ -1818,7 +1865,7 @@ struct StudioMessagesView: View {
         if !text.isEmpty { return text }
         if !message.fileName.isEmpty { return message.fileName }
         if !message.fileURL.isEmpty { return "Attachment" }
-        return "Message"
+        return t("Message", lang: seciliDil)
     }
 
     private func replySenderText(_ message: StudioMessageItem) -> String {
@@ -2048,35 +2095,37 @@ struct StudioMessagesView: View {
 
     private func composer(isCompact: Bool) -> some View {
         HStack(alignment: .bottom, spacing: 10) {
+            if canSendMessageAttachments {
 #if os(iOS)
-            Menu {
-                Button {
-                    isPhotoPickerPresented = true
+                Menu {
+                    Button {
+                        isPhotoPickerPresented = true
+                    } label: {
+                        Label("Photo Library", systemImage: "photo")
+                    }
+                    Button {
+                        isFileImporterPresented = true
+                    } label: {
+                        Label("Files", systemImage: "folder")
+                    }
                 } label: {
-                    Label("Photo Library", systemImage: "photo")
+                    attachmentPlusLabel(isCompact: isCompact)
                 }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .disabled(firebaseManager.isSendingMessage || !messageWorkspaceSettings.attachmentsEnabled)
+                .help(!messageWorkspaceSettings.attachmentsEnabled ? "File sharing is disabled for this workspace" : (firebaseManager.isSendingMessage ? "Uploading" : t("Add attachment", lang: seciliDil)))
+#else
                 Button {
                     isFileImporterPresented = true
                 } label: {
-                    Label("Files", systemImage: "folder")
+                    attachmentPlusLabel(isCompact: isCompact)
                 }
-            } label: {
-                attachmentPlusLabel(isCompact: isCompact)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .disabled(firebaseManager.isSendingMessage || !messageWorkspaceSettings.attachmentsEnabled)
-            .help(!messageWorkspaceSettings.attachmentsEnabled ? "File sharing is disabled for this workspace" : (firebaseManager.isSendingMessage ? "Uploading" : "Add attachment"))
-#else
-            Button {
-                isFileImporterPresented = true
-            } label: {
-                attachmentPlusLabel(isCompact: isCompact)
-            }
-            .buttonStyle(.plain)
-            .disabled(firebaseManager.isSendingMessage || !messageWorkspaceSettings.attachmentsEnabled)
-            .help(!messageWorkspaceSettings.attachmentsEnabled ? "File sharing is disabled for this workspace" : (firebaseManager.isSendingMessage ? "Uploading" : "Add attachment"))
+                .buttonStyle(.plain)
+                .disabled(firebaseManager.isSendingMessage || !messageWorkspaceSettings.attachmentsEnabled)
+                .help(!messageWorkspaceSettings.attachmentsEnabled ? "File sharing is disabled for this workspace" : (firebaseManager.isSendingMessage ? "Uploading" : t("Add attachment", lang: seciliDil)))
 #endif
+            }
 
 #if os(macOS)
             Button {
@@ -2094,7 +2143,7 @@ struct StudioMessagesView: View {
             }
 #endif
 
-            TextField("Message", text: $draftText, axis: .vertical)
+            TextField(t("Message", lang: seciliDil), text: $draftText, axis: .vertical)
                 .focused($isDraftFieldFocused)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
@@ -2179,7 +2228,7 @@ struct StudioMessagesView: View {
     }
 
     private var canManageSelectedGroup: Bool {
-        guard let thread = selectedThread else { return false }
+        guard canManageMessageConversations, let thread = selectedThread else { return false }
         return thread.id != "team" && thread.type != "team" && isGroupThread(thread)
     }
 
@@ -2210,6 +2259,85 @@ struct StudioMessagesView: View {
             if !email.isEmpty && existingEmails.contains(email) { return false }
             return true
         }
+    }
+
+    private var newConversationSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Conversation Type", selection: $newConversationMode) {
+                    Text("Direct Message").tag("direct")
+                    Text("Private Group").tag("group")
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.top, 8)
+
+                if newConversationMode == "group" {
+                    TextField("Group name", text: $newGroupTitleDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                }
+
+                let members = firebaseManager.messageTeamMembers.filter { $0.id != currentUserId }
+                if members.isEmpty {
+                    Text("Team members will appear here.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                } else {
+                    List(members) { member in
+                        Button {
+                            if newConversationMode == "direct" {
+                                startDirectMessage(with: member)
+                            } else {
+                                if selectedNewGroupMemberUids.contains(member.id) {
+                                    selectedNewGroupMemberUids.remove(member.id)
+                                } else {
+                                    selectedNewGroupMemberUids.insert(member.id)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                StudioMessageAvatar(urlString: member.photoURL, name: member.name.isEmpty ? member.email : member.name, size: 34)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(member.name.isEmpty ? member.email : member.name)
+                                        .font(.system(size: 13, weight: .semibold))
+                                    if !member.email.isEmpty {
+                                        Text(member.email)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if newConversationMode == "group" {
+                                    Image(systemName: selectedNewGroupMemberUids.contains(member.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(selectedNewGroupMemberUids.contains(member.id) ? .blue : .secondary)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .navigationTitle("New Conversation")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(t("Cancel", lang: seciliDil)) {
+                        isNewConversationSheetPresented = false
+                    }
+                }
+                if newConversationMode == "group" {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Create") {
+                            createPrivateGroupConversation()
+                        }
+                        .disabled(selectedNewGroupMemberUids.isEmpty)
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 360, minHeight: 460)
     }
 
     private var addPeopleSheet: some View {
@@ -2257,16 +2385,16 @@ struct StudioMessagesView: View {
                     }
                 }
             }
-            .navigationTitle("Add People")
+            .navigationTitle(t("Add People", lang: seciliDil))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isAddPeopleSheetPresented = false }
+                    Button(t("Cancel", lang: seciliDil)) { isAddPeopleSheetPresented = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { addSelectedPeopleToCurrentThread() }
+                    Button(t("Add", lang: seciliDil)) { addSelectedPeopleToCurrentThread() }
                         .disabled(selectedAddPeopleUids.isEmpty)
                 }
             }
@@ -2388,7 +2516,7 @@ struct StudioMessagesView: View {
                 Image(systemName: "star.fill")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.yellow)
-                Text(savedMessages.count == 1 ? "Saved message" : "Saved messages")
+                Text(savedMessages.count == 1 ? t("Saved message", lang: seciliDil) : t("Saved messages", lang: seciliDil))
                     .font(.system(size: 12, weight: .bold))
                 Spacer()
                 Text("\(savedMessages.count)")
@@ -2434,7 +2562,7 @@ struct StudioMessagesView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button { toggleSavedMessage(message) } label: {
-                Label("Unsave Message", systemImage: "star.slash")
+                Label(t("Unsave Message", lang: seciliDil), systemImage: "star.slash")
             }
         }
     }
@@ -2498,9 +2626,9 @@ struct StudioMessagesView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.secondary)
                         HStack(spacing: 8) {
-                            TextField("Group name", text: $groupTitleDraft)
+                            TextField(t("Group name", lang: seciliDil), text: $groupTitleDraft)
                                 .textFieldStyle(.roundedBorder)
-                            Button("Save") { renameSelectedGroup() }
+                            Button(t("Save", lang: seciliDil)) { renameSelectedGroup() }
                                 .disabled(cleanText(groupTitleDraft).isEmpty || cleanText(groupTitleDraft) == displayTitle(for: thread))
                         }
                     }
@@ -2545,7 +2673,7 @@ struct StudioMessagesView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             } else {
-                                Button("Remove") { removeMemberFromSelectedGroup(member) }
+                                Button(t("Remove", lang: seciliDil)) { removeMemberFromSelectedGroup(member) }
                                     .font(.caption)
                                     .foregroundColor(.red)
                             }
@@ -2556,7 +2684,7 @@ struct StudioMessagesView: View {
                     Button(role: .destructive) {
                         leaveSelectedGroup()
                     } label: {
-                        Label("Leave Group", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label(t("Leave Group", lang: seciliDil), systemImage: "rectangle.portrait.and.arrow.right")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -2564,7 +2692,7 @@ struct StudioMessagesView: View {
                     .padding(.bottom, 10)
                 }
             }
-            .navigationTitle("Group Info")
+            .navigationTitle(t("Group Info", lang: seciliDil))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -2578,7 +2706,7 @@ struct StudioMessagesView: View {
                         isGroupInfoSheetPresented = false
                         isAddPeopleSheetPresented = true
                     } label: {
-                        Label("Add People", systemImage: "person.badge.plus")
+                        Label(t("Add People", lang: seciliDil), systemImage: "person.badge.plus")
                     }
                 }
             }
@@ -2638,7 +2766,7 @@ struct StudioMessagesView: View {
     }
 
     private var previewGalleryMessages: [StudioMessageItem] {
-        let selectedId = cleanText(selectedThreadId)
+        _ = cleanText(selectedThreadId)
         return selectedMessages
             .filter { isImageAttachment($0) && !cleanText($0.fileURL).isEmpty }
             .sorted(by: { (lhs: StudioMessageItem, rhs: StudioMessageItem) in
@@ -2706,7 +2834,7 @@ struct StudioMessagesView: View {
                     .buttonStyle(.bordered)
                 }
 
-                Button("Open") { openAttachment(message) }
+                Button(t("Open", lang: seciliDil)) { openAttachment(message) }
                     .buttonStyle(.borderedProminent)
 
                 Button {
@@ -2764,7 +2892,7 @@ struct StudioMessagesView: View {
                     Text(fileMetaText(for: message))
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Button("Open Attachment") { openAttachment(message) }
+                    Button(t("Open Attachment", lang: seciliDil)) { openAttachment(message) }
                         .buttonStyle(.borderedProminent)
                 }
                 .padding(24)
@@ -2853,7 +2981,7 @@ struct StudioMessagesView: View {
         if !fileName.isEmpty { return fileName }
         if isImageAttachment(message) { return "Image message" }
         if isFileAttachment(message) { return "File message" }
-        return "Message"
+        return t("Message", lang: seciliDil)
     }
 
     private func forwardedTextPayload(for message: StudioMessageItem) -> String {
@@ -2899,7 +3027,7 @@ struct StudioMessagesView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(displayTitle(for: thread))
                                         .font(.system(size: 14, weight: .semibold))
-                                    Text(thread.type == "team" ? "Team Chat" : (isGroupThread(thread) ? "Group conversation" : "Direct message"))
+                                    Text(thread.type == "team" ? t("Team Chat", lang: seciliDil) : (isGroupThread(thread) ? "Group conversation" : "Direct message"))
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -2920,13 +3048,13 @@ struct StudioMessagesView: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Forward")
+            .navigationTitle(t("Forward", lang: seciliDil))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(t("Cancel", lang: seciliDil)) {
                         forwardingMessage = nil
                     }
                 }
@@ -3098,15 +3226,15 @@ struct StudioMessagesView: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("Allow Direct Messages", isOn: Binding(
+                    Toggle(t("Allow Direct Messages", lang: seciliDil), isOn: Binding(
                         get: { messageWorkspaceSettings.directMessagesEnabled },
                         set: { messageWorkspaceSettings.directMessagesEnabled = $0 }
                     ))
-                    Toggle("Allow Group Conversations", isOn: Binding(
+                    Toggle(t("Allow Group Conversations", lang: seciliDil), isOn: Binding(
                         get: { messageWorkspaceSettings.groupConversationsEnabled },
                         set: { messageWorkspaceSettings.groupConversationsEnabled = $0 }
                     ))
-                    Toggle("Allow File & Image Sending", isOn: Binding(
+                    Toggle(t("Allow File & Image Sending", lang: seciliDil), isOn: Binding(
                         get: { messageWorkspaceSettings.attachmentsEnabled },
                         set: { messageWorkspaceSettings.attachmentsEnabled = $0 }
                     ))
@@ -3116,16 +3244,16 @@ struct StudioMessagesView: View {
                     Text("These settings apply to the workspace. Saving is restricted by the backend to the workspace owner or admins.")
                 }
             }
-            .navigationTitle("Message Settings")
+            .navigationTitle(t("Message Settings", lang: seciliDil))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(t("Cancel", lang: seciliDil)) {
                         isMessageWorkspaceSettingsPresented = false
                         loadMessageWorkspaceSettings()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSavingMessageWorkspaceSettings ? "Saving..." : "Save") {
+                    Button(isSavingMessageWorkspaceSettings ? t("Saving...", lang: seciliDil) : t("Save", lang: seciliDil)) {
                         saveMessageWorkspaceSettings()
                     }
                     .disabled(isSavingMessageWorkspaceSettings)
@@ -3160,17 +3288,64 @@ struct StudioMessagesView: View {
     }
 
     private func startDirectMessage(with member: StudioMessageTeamMember) {
+        guard canStartMessageConversations else {
+            firebaseManager.messageError = "View Only members can reply in existing conversations but cannot start new conversations."
+            return
+        }
         guard messageWorkspaceSettings.directMessagesEnabled else {
-            firebaseManager.messageError = "Direct messages are disabled for this workspace."
+            firebaseManager.messageError = t("Direct messages are disabled for this workspace.", lang: seciliDil)
             return
         }
         if let existingThread = existingDirectThread(for: member) {
+            restoreThreadToMyConversationList(existingThread.id)
             selectThread(existingThread.id)
+            isNewConversationSheetPresented = false
             return
         }
 
         firebaseManager.createMessageThread(companyId: companyId, type: "direct", memberUid: member.id) { threadId in
-            if let threadId { selectThread(threadId) }
+            guard let threadId else { return }
+            restoreThreadToMyConversationList(threadId)
+            firebaseManager.loadMessageThreads(companyId: companyId)
+            selectThread(threadId)
+            isNewConversationSheetPresented = false
+
+            // A newly created Firestore thread can reach the listener just after
+            // the callable returns. Refresh once more so the sidebar title appears
+            // even on the first Mac open.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                firebaseManager.loadMessageThreads(companyId: companyId)
+                selectThread(threadId)
+            }
+        }
+    }
+
+    private func createPrivateGroupConversation() {
+        guard canStartMessageConversations else { return }
+        guard messageWorkspaceSettings.groupConversationsEnabled else {
+            firebaseManager.messageError = t("Group conversations are disabled for this workspace.", lang: seciliDil)
+            return
+        }
+        let memberUids = Array(selectedNewGroupMemberUids)
+        guard !memberUids.isEmpty else { return }
+        firebaseManager.createMessageThread(
+            companyId: companyId,
+            type: "group",
+            memberUids: memberUids,
+            title: cleanText(newGroupTitleDraft)
+        ) { threadId in
+            if let threadId {
+                restoreThreadToMyConversationList(threadId)
+                firebaseManager.loadMessageThreads(companyId: companyId)
+                selectThread(threadId)
+                isNewConversationSheetPresented = false
+                selectedNewGroupMemberUids.removeAll()
+                newGroupTitleDraft = ""
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    firebaseManager.loadMessageThreads(companyId: companyId)
+                    selectThread(threadId)
+                }
+            }
         }
     }
 
@@ -3258,6 +3433,10 @@ struct StudioMessagesView: View {
     }
 
     private func handleImportedFile(_ result: Result<[URL], Error>) {
+        guard canSendMessageAttachments else {
+            firebaseManager.messageError = "View Only members can send text messages but cannot upload message attachments."
+            return
+        }
         guard messageWorkspaceSettings.attachmentsEnabled else {
             firebaseManager.messageError = "File sharing is disabled for this workspace."
             return
@@ -3297,6 +3476,10 @@ struct StudioMessagesView: View {
     @MainActor
     private func handleSelectedPhotoPickerItem(_ item: PhotosPickerItem) async {
         defer { selectedPhotoPickerItem = nil }
+        guard canSendMessageAttachments else {
+            firebaseManager.messageError = "View Only members can send text messages but cannot upload message attachments."
+            return
+        }
         guard messageWorkspaceSettings.attachmentsEnabled else {
             firebaseManager.messageError = "File sharing is disabled for this workspace."
             return

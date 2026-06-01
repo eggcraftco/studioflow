@@ -83,8 +83,8 @@ export default function FilesPage() {
         setWorkspace(loadedWorkspace);
 
         const [loadedFiles, loadedOrders, loadedUploadSafetySettings] = await Promise.all([
-          loadWorkspaceClientFiles(loadedWorkspace.id, loadedWorkspace.entitlements.features.client_files),
-          loadWorkspaceOrderOptions(loadedWorkspace.id),
+          loadWorkspaceClientFiles(loadedWorkspace.id, loadedWorkspace.entitlements.features.client_files, loadedWorkspace, uid),
+          loadWorkspaceOrderOptions(loadedWorkspace.id, loadedWorkspace, uid),
           loadWorkspaceSettingsOverview(loadedWorkspace.id)
         ]);
         if (cancelled) return;
@@ -123,9 +123,11 @@ export default function FilesPage() {
   }
 
   async function refreshFiles(currentWorkspace: WorkspaceContext) {
+    if (!user) return;
+    const uid = user.uid;
     const [loadedFiles, loadedOrders] = await Promise.all([
-      loadWorkspaceClientFiles(currentWorkspace.id, currentWorkspace.entitlements.features.client_files),
-      loadWorkspaceOrderOptions(currentWorkspace.id)
+      loadWorkspaceClientFiles(currentWorkspace.id, currentWorkspace.entitlements.features.client_files, currentWorkspace, uid),
+      loadWorkspaceOrderOptions(currentWorkspace.id, currentWorkspace, uid)
     ]);
     setFiles(loadedFiles);
     setOrders(loadedOrders);
@@ -165,7 +167,11 @@ export default function FilesPage() {
         workspace,
         orderId: selectedOrderId,
         file: selectedFile,
-        user
+        user,
+        uploadSafety: {
+          policyAccepted: !requireUploadPolicyAcceptance || browserAcceptedUploadPolicy,
+          maxSizeMB: maxUploadSizeMB
+        }
       });
       setUploadStatus(`Uploaded ${selectedFile.name}.`);
       setSelectedFile(null);

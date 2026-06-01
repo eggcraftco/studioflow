@@ -30,6 +30,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
+import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceOption
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
 
@@ -46,6 +47,7 @@ data class StudioFlowUiState(
     val settingsSaving: Boolean = false,
     val user: FirebaseUser? = null,
     val workspace: StudioWorkspace? = null,
+    val availableWorkspaces: List<StudioWorkspaceOption> = emptyList(),
     val workspaceSettings: StudioWorkspaceSettings = StudioWorkspaceSettings(),
     val orders: List<StudioOrder> = emptyList(),
     val teamMembers: List<StudioTeamMember> = emptyList(),
@@ -206,6 +208,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
     private var lastTypingSentAt: Long = 0L
     private var activityNotificationsJob: Job? = null
     private var keepNotesJob: Job? = null
+    private var activeCompanyJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -223,12 +226,14 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 messageTypingSenderJob?.cancel()
                 activityNotificationsJob?.cancel()
                 keepNotesJob?.cancel()
+                activeCompanyJob?.cancel()
                 if (user == null) {
                     StudioMessageRouteHolder.clearCurrentCompanyId()
                     mutableState.value = StudioFlowUiState(loading = false)
                 } else {
                     mutableState.update { it.copy(loading = true, user = user, errorMessage = "") }
                     loadWorkspace(user)
+                    observeActiveCompanyId(user)
                 }
             }
         }
@@ -307,14 +312,30 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun deleteOrder(order: StudioOrder) {
         val workspace = mutableState.value.workspace ?: return
+        val normalizedRole = workspace.role.lowercase().replace("_", "").replace("-", "").replace(" ", "")
+        val workflowRequest = normalizedRole == "workflow" || normalizedRole == "workflowonly" || workspace.shouldShowOnlyAssignedProjects
         viewModelScope.launch {
             mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
             runCatching { repository.deleteOrder(workspace, order) }
                 .onSuccess {
-                    mutableState.update { it.copy(settingsMessage = "Order deleted.") }
+                    mutableState.update { it.copy(settingsMessage = if (workflowRequest) "Deletion request sent to workspace owner." else "Order deleted.") }
                 }
                 .onFailure { error ->
                     mutableState.update { it.copy(errorMessage = error.message ?: "Could not delete this order.") }
+                }
+        }
+    }
+
+    fun reviewWorkflowOrderDeletion(orderId: String, approve: Boolean) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
+            runCatching { repository.reviewWorkflowOrderDeletion(workspace, orderId, approve) }
+                .onSuccess {
+                    mutableState.update { it.copy(settingsMessage = if (approve) "Deletion approved and order deleted." else "Deletion request rejected.") }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not review deletion request.") }
                 }
         }
     }
@@ -479,15 +500,75 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun updateWorkspaceSettings(updates: Map<String, Any?>, successMessage: String = "Settings saved.") {
         val workspace = mutableState.value.workspace ?: return
+        val isPersonalInterfaceUpdate = updates.keys.any { it.startsWith("personal") }
+        val previousSettings = mutableState.value.workspaceSettings
+
+        if (isPersonalInterfaceUpdate) {
+            mutableState.update { current ->
+                var nextSettings = current.workspaceSettings
+                updates["personalAppTheme"]?.toString()?.let { nextSettings = nextSettings.copy(appTheme = it) }
+                updates["personalSelectedLanguage"]?.toString()?.let { nextSettings = nextSettings.copy(selectedLanguage = it) }
+                updates["personalPdfShowCustomer"]?.let { nextSettings = nextSettings.copy(pdfShowCustomer = it as? Boolean ?: nextSettings.pdfShowCustomer) }
+                updates["personalPdfShowContact"]?.let { nextSettings = nextSettings.copy(pdfShowContact = it as? Boolean ?: nextSettings.pdfShowContact) }
+                updates["personalPdfShowPreview"]?.let { nextSettings = nextSettings.copy(pdfShowPreview = it as? Boolean ?: nextSettings.pdfShowPreview) }
+                updates["personalPdfShowMaterials"]?.let { nextSettings = nextSettings.copy(pdfShowMaterials = it as? Boolean ?: nextSettings.pdfShowMaterials) }
+                updates["personalPdfShowPriority"]?.let { nextSettings = nextSettings.copy(pdfShowPriority = it as? Boolean ?: nextSettings.pdfShowPriority) }
+                updates["personalPdfShowStatus"]?.let { nextSettings = nextSettings.copy(pdfShowStatus = it as? Boolean ?: nextSettings.pdfShowStatus) }
+                updates["personalPdfShowShipping"]?.let { nextSettings = nextSettings.copy(pdfShowShipping = it as? Boolean ?: nextSettings.pdfShowShipping) }
+                current.copy(workspaceSettings = nextSettings, settingsSaving = true, errorMessage = "", settingsMessage = "")
+            }
+        }
+
         viewModelScope.launch {
-            mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
+            if (!isPersonalInterfaceUpdate) {
+                mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
+            }
             runCatching { repository.updateWorkspaceSettings(workspace, updates) }
                 .onSuccess {
-                    mutableState.update { it.copy(settingsSaving = false, settingsMessage = successMessage) }
+                    mutableState.update { current ->
+                        var nextSettings = current.workspaceSettings
+                        updates["personalAppTheme"]?.toString()?.let { nextSettings = nextSettings.copy(appTheme = it) }
+                        updates["personalSelectedLanguage"]?.toString()?.let { nextSettings = nextSettings.copy(selectedLanguage = it) }
+                        updates["personalPdfShowCustomer"]?.let { nextSettings = nextSettings.copy(pdfShowCustomer = it as? Boolean ?: nextSettings.pdfShowCustomer) }
+                        updates["personalPdfShowContact"]?.let { nextSettings = nextSettings.copy(pdfShowContact = it as? Boolean ?: nextSettings.pdfShowContact) }
+                        updates["personalPdfShowPreview"]?.let { nextSettings = nextSettings.copy(pdfShowPreview = it as? Boolean ?: nextSettings.pdfShowPreview) }
+                        updates["personalPdfShowMaterials"]?.let { nextSettings = nextSettings.copy(pdfShowMaterials = it as? Boolean ?: nextSettings.pdfShowMaterials) }
+                        updates["personalPdfShowPriority"]?.let { nextSettings = nextSettings.copy(pdfShowPriority = it as? Boolean ?: nextSettings.pdfShowPriority) }
+                        updates["personalPdfShowStatus"]?.let { nextSettings = nextSettings.copy(pdfShowStatus = it as? Boolean ?: nextSettings.pdfShowStatus) }
+                        updates["personalPdfShowShipping"]?.let { nextSettings = nextSettings.copy(pdfShowShipping = it as? Boolean ?: nextSettings.pdfShowShipping) }
+                        current.copy(workspaceSettings = nextSettings, settingsSaving = false, settingsMessage = successMessage)
+                    }
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not save settings.")
+                        it.copy(
+                            workspaceSettings = if (isPersonalInterfaceUpdate) previousSettings else it.workspaceSettings,
+                            settingsSaving = false,
+                            errorMessage = error.message ?: "Could not save settings."
+                        )
+                    }
+                }
+        }
+    }
+
+    fun refreshPersonalInterfaceSettings() {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.loadPersonalInterfaceSettings(workspace) }
+                .onSuccess { values ->
+                    if (values.isEmpty()) return@onSuccess
+                    mutableState.update { current ->
+                        var nextSettings = current.workspaceSettings
+                        values["appTheme"]?.toString()?.let { nextSettings = nextSettings.copy(appTheme = it) }
+                        values["selectedLanguage"]?.toString()?.let { nextSettings = nextSettings.copy(selectedLanguage = it) }
+                        values["pdfShowCustomer"]?.let { nextSettings = nextSettings.copy(pdfShowCustomer = it as? Boolean ?: nextSettings.pdfShowCustomer) }
+                        values["pdfShowContact"]?.let { nextSettings = nextSettings.copy(pdfShowContact = it as? Boolean ?: nextSettings.pdfShowContact) }
+                        values["pdfShowPreview"]?.let { nextSettings = nextSettings.copy(pdfShowPreview = it as? Boolean ?: nextSettings.pdfShowPreview) }
+                        values["pdfShowMaterials"]?.let { nextSettings = nextSettings.copy(pdfShowMaterials = it as? Boolean ?: nextSettings.pdfShowMaterials) }
+                        values["pdfShowPriority"]?.let { nextSettings = nextSettings.copy(pdfShowPriority = it as? Boolean ?: nextSettings.pdfShowPriority) }
+                        values["pdfShowStatus"]?.let { nextSettings = nextSettings.copy(pdfShowStatus = it as? Boolean ?: nextSettings.pdfShowStatus) }
+                        values["pdfShowShipping"]?.let { nextSettings = nextSettings.copy(pdfShowShipping = it as? Boolean ?: nextSettings.pdfShowShipping) }
+                        current.copy(workspaceSettings = nextSettings)
                     }
                 }
         }
@@ -658,6 +739,30 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    fun switchWorkspace(companyId: String) {
+        val user = mutableState.value.user ?: return
+        if (companyId.isBlank() || companyId == mutableState.value.workspace?.id) return
+        viewModelScope.launch {
+            mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
+            runCatching {
+                repository.switchActiveWorkspace(user, companyId)
+                repository.loadWorkspace(user)
+            }.onSuccess { workspace ->
+                mutableState.update {
+                    it.copy(settingsSaving = false, workspace = workspace, settingsMessage = "Workspace switched.")
+                }
+                val options = runCatching { repository.loadWorkspaceOptions(user, workspace.id) }.getOrDefault(emptyList())
+                mutableState.update { it.copy(availableWorkspaces = options) }
+                StudioMessageRouteHolder.setCurrentCompanyId(getApplication(), workspace.id)
+                observeWorkspace(workspace, user)
+            }.onFailure { error ->
+                mutableState.update {
+                    it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not switch workspace.")
+                }
+            }
+        }
+    }
+
     fun requestWorkspaceAccess(ownerIdentifier: String) {
         if (ownerIdentifier.isBlank()) return
         viewModelScope.launch {
@@ -769,12 +874,31 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    /// Listens for server-side changes to `users/{uid}.activeCompanyId`. When the
+    /// owner approves this user's join request, the Cloud Function points them at
+    /// the newly joined workspace and this listener fires — we reload the workspace
+    /// so the app instantly switches without requiring a manual Team Access pick.
+    private fun observeActiveCompanyId(user: FirebaseUser) {
+        activeCompanyJob = viewModelScope.launch {
+            repository.activeCompanyIdFlow(user.uid).collect { remoteActive ->
+                if (remoteActive.isBlank()) return@collect
+                val current = mutableState.value.workspace?.id.orEmpty()
+                if (remoteActive == current) return@collect
+                loadWorkspace(user)
+            }
+        }
+    }
+
     private fun loadWorkspace(user: FirebaseUser) {
         workspaceJob = viewModelScope.launch {
             runCatching { repository.loadWorkspace(user) }
                 .onSuccess { workspace ->
                     mutableState.update {
                         it.copy(loading = false, workspace = workspace, errorMessage = "")
+                    }
+                    viewModelScope.launch {
+                        runCatching { repository.loadWorkspaceOptions(user, workspace.id) }
+                            .onSuccess { options -> mutableState.update { it.copy(availableWorkspaces = options) } }
                     }
                     StudioMessageRouteHolder.setCurrentCompanyId(getApplication(), workspace.id)
                     observeWorkspace(workspace, user)
@@ -1526,7 +1650,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             }
         }
         settingsJob = viewModelScope.launch {
-            repository.workspaceSettingsFlow(workspace.id, user.uid, workspace.ownerUid)
+            repository.workspaceSettingsFlow(workspace.id, user.uid, workspace.ownerUid, workspace.role)
                 .catch { error ->
                     mutableState.update { it.copy(errorMessage = error.message ?: "Could not load workspace settings.") }
                 }
@@ -1545,23 +1669,31 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(orders = orders, errorMessage = "") }
                 }
         }
-        teamJob = viewModelScope.launch {
-            repository.teamAccessFlow(workspace.id)
-                .catch { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not load team members.") }
-                }
-                .collect { snapshot ->
-                    mutableState.update { it.copy(teamMembers = snapshot.members, customRoles = snapshot.customRoles) }
-                }
-        }
-        joinRequestsJob = viewModelScope.launch {
-            repository.joinRequestsFlow(workspace)
-                .catch { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not load join requests.") }
-                }
-                .collect { requests ->
-                    mutableState.update { it.copy(joinRequests = requests) }
-                }
+        if (workspace.isOwner) {
+            teamJob = viewModelScope.launch {
+                repository.teamAccessFlow(workspace.id)
+                    .catch { error ->
+                        mutableState.update { it.copy(errorMessage = error.message ?: "Could not load team members.") }
+                    }
+                    .collect { snapshot ->
+                        mutableState.update { it.copy(teamMembers = snapshot.members, customRoles = snapshot.customRoles) }
+                    }
+            }
+            joinRequestsJob = viewModelScope.launch {
+                repository.joinRequestsFlow(workspace)
+                    .catch { error ->
+                        mutableState.update { it.copy(errorMessage = error.message ?: "Could not load join requests.") }
+                    }
+                    .collect { requests ->
+                        mutableState.update { it.copy(joinRequests = requests) }
+                    }
+            }
+        } else {
+            // Members can switch workspaces and use their assigned tools, but Owner-only
+            // management collections must not be subscribed to in the background.
+            mutableState.update {
+                it.copy(teamMembers = emptyList(), customRoles = emptyList(), joinRequests = emptyList())
+            }
         }
     }
 }

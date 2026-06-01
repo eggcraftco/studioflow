@@ -17,7 +17,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { studioT } from "@/lib/studioflow/language";
-import { canEditQuickReplySettingsForRole, generateQuickReply, saveQuickReplySettings } from "@/lib/studioflow/quickReply";
+import { canEditPersonalQuickReplySettingsForRole, generateQuickReply, loadQuickReplyPersonalSettings, saveQuickReplyPersonalSettings } from "@/lib/studioflow/quickReply";
 
 function quickReplyTitle(mode: string, language: string | null | undefined) {
   if (mode === "Apple" || mode === "Local") return studioT("Apple On-Device AI Quick Reply", language);
@@ -115,17 +115,26 @@ export default function QuickReplyPage() {
           router.replace("/orders");
           return;
         }
-        const [loadedSettings, loadedWorkspaceSettings] = await Promise.all([
+        const [loadedSettings, loadedPersonalSettings, loadedWorkspaceSettings] = await Promise.all([
           loadQuickReplySettings(loadedWorkspace.id),
+          loadQuickReplyPersonalSettings(loadedWorkspace),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
+        const activeSettings: QuickReplySettings = {
+          ...loadedSettings,
+          replyMode: loadedPersonalSettings.replyMode,
+          quickReplyPoliteness: loadedPersonalSettings.quickReplyPoliteness,
+          quickReplyLength: loadedPersonalSettings.quickReplyLength,
+          products: loadedPersonalSettings.products.length ? loadedPersonalSettings.products : loadedSettings.products,
+          rules: loadedPersonalSettings.rules.length ? loadedPersonalSettings.rules : loadedSettings.rules
+        };
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
-        setSettings(loadedSettings);
+        setSettings(activeSettings);
         setWorkspaceSettings(loadedWorkspaceSettings);
-        setPoliteness(loadedSettings.quickReplyPoliteness);
-        setReplyLength(loadedSettings.quickReplyLength);
-        setSelectedProductId(loadedSettings.products[0]?.id || "");
+        setPoliteness(activeSettings.quickReplyPoliteness);
+        setReplyLength(activeSettings.quickReplyLength);
+        setSelectedProductId(activeSettings.products[0]?.id || "");
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load Quick Reply.");
       } finally {
@@ -153,7 +162,7 @@ export default function QuickReplyPage() {
     () => rules.find(rule => rule.title === selectedTopic) ?? null,
     [rules, selectedTopic]
   );
-  const canSaveReplyStyle = workspace ? canEditQuickReplySettingsForRole(workspace.role) : false;
+  const canSaveReplyStyle = workspace ? canEditPersonalQuickReplySettingsForRole(workspace.role) : false;
 
   async function updateReplyStyle(kind: "politeness" | "length", option: string) {
     const nextPoliteness = kind === "politeness" ? option : politeness;
@@ -167,11 +176,11 @@ export default function QuickReplyPage() {
 
     setStyleSaving(true);
     try {
-      const result = await saveQuickReplySettings(workspace, {
+      await saveQuickReplyPersonalSettings(workspace, {
         quickReplyPoliteness: nextPoliteness,
         quickReplyLength: nextReplyLength
       });
-      if (result.settings) setSettings(result.settings);
+      setSettings(current => current ? { ...current, quickReplyPoliteness: nextPoliteness, quickReplyLength: nextReplyLength } : current);
       setStyleStatus("Reply style saved.");
       window.setTimeout(() => setStyleStatus(""), 1400);
     } catch (saveError) {

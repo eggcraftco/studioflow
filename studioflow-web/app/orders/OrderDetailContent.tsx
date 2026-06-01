@@ -1459,6 +1459,7 @@ export function OrderDetailContent({
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
   const [previewingClientFileId, setPreviewingClientFileId] = useState<string | null>(null);
   const [isClientFileDropTargeted, setIsClientFileDropTargeted] = useState(false);
+  const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -1540,6 +1541,32 @@ export function OrderDetailContent({
       setCardsLocked(false);
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      setBrowserAcceptedUploadPolicy(
+        window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted"
+      );
+    } catch {
+      setBrowserAcceptedUploadPolicy(false);
+    }
+  }, [workspace.id]);
+
+  function updateClientFileUploadPolicyAccepted(accepted: boolean) {
+    setBrowserAcceptedUploadPolicy(accepted);
+    setFileActionError(null);
+    setFileActionStatus(accepted ? "Upload policy accepted. Choose a file to upload." : null);
+    try {
+      const key = uploadSafetyAcceptanceKey(workspace.id);
+      if (accepted) window.localStorage.setItem(key, "accepted");
+      else window.localStorage.removeItem(key);
+    } catch {
+      if (accepted) {
+        setFileActionError("This browser could not save the upload policy acceptance. Please try again.");
+        setBrowserAcceptedUploadPolicy(false);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!orderActionsOpen) return;
@@ -1654,6 +1681,8 @@ export function OrderDetailContent({
   const canAccessOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
   const canUseClientFiles = Boolean(workspace.entitlements.features.client_files);
   const canManageClientFiles = Boolean(canUseClientFiles && workspaceAccessAllows(workspace.memberAccess, "clientFiles") && canManageClientFilesForRole(workspace.role));
+  const clientFileMaxUploadSizeMB = Math.min(Math.max(Math.round(moneySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
+  const clientFileRequiresPolicyAcceptance = moneySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
   const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
@@ -2998,26 +3027,17 @@ export function OrderDetailContent({
       return;
     }
 
-    const maxUploadSizeMB = Math.min(Math.max(Math.round(moneySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
-    const requirePolicyAcceptance = moneySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
+    const maxUploadSizeMB = clientFileMaxUploadSizeMB;
+    const requirePolicyAcceptance = clientFileRequiresPolicyAcceptance;
     if (file.size > maxUploadSizeMB * 1024 * 1024) {
       setFileActionError(`This file is larger than the ${maxUploadSizeMB} MB workspace upload limit.`);
       return;
     }
 
-    let policyAccepted = !requirePolicyAcceptance;
-    if (requirePolicyAcceptance) {
-      const key = uploadSafetyAcceptanceKey(workspace.id);
-      policyAccepted = window.localStorage.getItem(key) === "accepted";
-      if (!policyAccepted) {
-        const acceptedNow = window.confirm("Upload Safety: only upload safe, legal, work-related files that belong to this order. Accept this upload policy for this browser?");
-        if (!acceptedNow) {
-          setFileActionError("Accept the upload policy before uploading a client file.");
-          return;
-        }
-        window.localStorage.setItem(key, "accepted");
-        policyAccepted = true;
-      }
+    const policyAccepted = !requirePolicyAcceptance || browserAcceptedUploadPolicy;
+    if (!policyAccepted) {
+      setFileActionError("Accept the upload policy below before choosing or dropping a client file.");
+      return;
     }
 
     setActioningFileId("upload");
@@ -5515,7 +5535,7 @@ export function OrderDetailContent({
                     <button
                       className="button app-upload-button"
                       type="button"
-                      disabled={actioningFileId === "upload"}
+                      disabled={actioningFileId === "upload" || (clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy)}
                       onClick={() => clientFileInputRef.current?.click()}
                     >
                       {actioningFileId === "upload" ? "Uploading..." : "⇧ Upload File"}
@@ -5523,6 +5543,23 @@ export function OrderDetailContent({
                   </>
                 ) : null}
               </div>
+              {canManageClientFiles && canUseClientFiles ? (
+                <div className="upload-safety-panel" style={{ marginBottom: 14 }}>
+                  <span className="studio-pill">Max {clientFileMaxUploadSizeMB} MB</span>
+                  <span className="studio-pill">Safe work files only</span>
+                  {clientFileRequiresPolicyAcceptance ? (
+                    <label className="upload-safety-check">
+                      <input
+                        type="checkbox"
+                        checked={browserAcceptedUploadPolicy}
+                        onChange={event => updateClientFileUploadPolicyAccepted(event.target.checked)}
+                        disabled={actioningFileId === "upload"}
+                      />
+                      <span>I understand and accept the upload policy for this browser.</span>
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
               {!canUseClientFiles ? <ClientFilesUpgradeHint /> : null}
               {fileActionStatus ? <p className="file-action-status">{fileActionStatus}</p> : null}
               {fileActionError ? <p className="file-action-error">{fileActionError}</p> : null}

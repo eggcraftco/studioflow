@@ -249,6 +249,21 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
   }
 }
 
+export async function requestWorkflowOrderDeletionFromWeb(workspace: WorkspaceContext, orderId: string) {
+  const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
+    || (workspace.memberAccess.assignedProjectsOnly === true
+      && workspace.memberAccess.manageProjectAssignments !== true);
+  if (!requiresOwnerApproval) {
+    throw new Error("This role does not use owner-approved project deletion.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "requestWorkflowOrderDeletion");
+    const response = await callable({ companyId: workspace.id, orderId });
+    if (response.data?.ok === false) throw new Error(response.data?.message || "Could not request deletion.");
+    return response.data;
+  }, "Sending deletion request to owner.");
+}
+
 export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
   if (!canDeleteOrdersForRole(workspace.role)) {
     throw new Error("Your workspace role cannot delete orders.");

@@ -108,12 +108,14 @@ fun ScheduleScreen(
     val visibleOrders = remember(state.orders, statusFilter, sortMode, searchText) {
         scheduleVisibleOrders(state.orders, statusFilter, sortMode, searchText)
     }
-    val range = remember(visibleOrders, rangeOffset, viewMode, anchorToCurrentDate) {
+    val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
+    val range = remember(visibleOrders, rangeOffset, viewMode, anchorToCurrentDate, locale) {
         ScheduleRange.from(
             orders = visibleOrders,
             rangeOffset = rangeOffset,
             viewMode = viewMode,
-            anchorDate = if (anchorToCurrentDate) Date() else null
+            anchorDate = if (anchorToCurrentDate) Date() else null,
+            locale = locale
         )
     }
     val canEditSchedule = state.workspace?.let { workspace ->
@@ -234,7 +236,7 @@ fun ScheduleScreen(
                     trailingIcon = {
                         if (searchText.isNotBlank()) {
                             IconButton(onClick = { searchText = "" }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                                Icon(Icons.Filled.Close, contentDescription = t("Clear search"))
                             }
                         }
                     },
@@ -527,7 +529,7 @@ private fun ScheduleDesktopControls(
     ) {
         Box(modifier = Modifier.width(188.dp)) {
             ScheduleDesktopControl(
-                label = if (statusFilter == ScheduleStatusFilter.All) "Filter by Status" else statusFilter.label,
+                label = if (statusFilter == ScheduleStatusFilter.All) t("Filter by Status") else statusFilter.label,
                 icon = Icons.Outlined.FilterList,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { statusMenuOpen = true }
@@ -877,7 +879,7 @@ private fun ScheduleTimelineRow(
                             Text(scheduleStatusLabel(order), modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp), color = statusTone, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                         }
                         Text(
-                            "${scheduleDateFormatter.format(orderStartDate(order))} → ${scheduleDateFormatter.format(deliveryDueDate(order))}",
+                            "${scheduleDateFormatter(uk.co.eggcraft.studioflow.language.studioLocale(lang)).format(orderStartDate(order))} → ${scheduleDateFormatter(uk.co.eggcraft.studioflow.language.studioLocale(lang)).format(deliveryDueDate(order))}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -971,7 +973,7 @@ private fun ScheduleTimelineThumbnail(order: StudioOrder) {
         if (previewBitmap != null) {
             Image(
                 bitmap = previewBitmap.asImageBitmap(),
-                contentDescription = "Order preview",
+                contentDescription = t("Order preview"),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
@@ -995,7 +997,7 @@ private fun ScheduleTimelineFooter(visibleOrders: List<StudioOrder>, canEditSche
             FooterMetric("${visibleOrders.count { orderIsLate(it) }} Late", Icons.Filled.Warning)
             FooterMetric("${visibleOrders.count { orderIsReadyToShip(it) }} Ready to Ship", Icons.Filled.Inventory2)
             Text(
-                if (canEditSchedule) "Drag blocks to move dates. Pull the edges to resize." else "Read-only schedule view.",
+                if (canEditSchedule) "Drag blocks to move dates. Pull the edges to resize." else t("Read-only schedule view."),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold
             )
@@ -1158,7 +1160,7 @@ private fun DayColumn(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${order.remainingDays}d · ${order.status.ifBlank { "Open" }}",
+                        text = "${order.remainingDays}d · ${order.status.ifBlank { t("Open") }}",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 10.sp,
@@ -1291,7 +1293,7 @@ private fun ScheduleBoardColumn(
             if (column.orders.isEmpty()) {
                 Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)) {
                     Text(
-                        "No orders in this lane",
+                        t("No orders in this lane"),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp),
@@ -1386,7 +1388,7 @@ private fun ScheduleBoardOrderCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    scheduleDateFormatter.format(deliveryDueDate(order)),
+                    scheduleDateFormatter(uk.co.eggcraft.studioflow.language.studioLocale(lang)).format(deliveryDueDate(order)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
@@ -1418,12 +1420,12 @@ private fun ScheduleBoardOrderCard(
             if (canEditSchedule) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ScheduleMiniAction("Earlier", modifier = Modifier.weight(1f)) { onMoveOrder(order, -1) }
-                        ScheduleMiniAction("Later", modifier = Modifier.weight(1f)) { onMoveOrder(order, 1) }
+                        ScheduleMiniAction(t("Earlier"), modifier = Modifier.weight(1f)) { onMoveOrder(order, -1) }
+                        ScheduleMiniAction(t("Later"), modifier = Modifier.weight(1f)) { onMoveOrder(order, 1) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ScheduleMiniAction("Shorter", modifier = Modifier.weight(1f)) { onResizeTrailing(order, -1) }
-                        ScheduleMiniAction("Longer", modifier = Modifier.weight(1f)) { onResizeTrailing(order, 1) }
+                        ScheduleMiniAction(t("Longer"), modifier = Modifier.weight(1f)) { onResizeTrailing(order, 1) }
                     }
                 }
             }
@@ -1472,9 +1474,10 @@ private data class ScheduleRange(
             orders: List<StudioOrder>,
             rangeOffset: Int,
             viewMode: ScheduleViewMode,
-            anchorDate: Date? = null
+            anchorDate: Date? = null,
+            locale: Locale = Locale.UK
         ): ScheduleRange {
-            val calendar = Calendar.getInstance(Locale.UK)
+            val calendar = Calendar.getInstance(locale)
             val anchor = anchorDate
                 ?: orders.filter { !it.isClosed }.minByOrNull { deliveryDueDate(it) }?.let { deliveryDueDate(it) }
                 ?: Date()
@@ -1505,14 +1508,14 @@ private data class ScheduleRange(
                 ScheduleViewMode.Monthly -> calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
                 ScheduleViewMode.ThreeMonths,
                 ScheduleViewMode.SixMonths -> {
-                    val end = Calendar.getInstance(Locale.UK).apply {
+                    val end = Calendar.getInstance(locale).apply {
                         time = start
                         add(Calendar.MONTH, viewMode.monthCount)
                     }
                     scheduleDaysBetween(start, end.time).coerceAtLeast(1)
                 }
                 ScheduleViewMode.Yearly -> {
-                    val end = Calendar.getInstance(Locale.UK).apply {
+                    val end = Calendar.getInstance(locale).apply {
                         time = start
                         add(Calendar.YEAR, 1)
                     }
@@ -1521,7 +1524,7 @@ private data class ScheduleRange(
                 ScheduleViewMode.Weekly -> viewMode.dayCount
             }
             val days = (0 until rangeDayCount).map {
-                val dayCalendar = Calendar.getInstance(Locale.UK)
+                val dayCalendar = Calendar.getInstance(locale)
                 dayCalendar.time = start
                 dayCalendar.add(Calendar.DAY_OF_MONTH, it)
                 val dayStart = dayCalendar.time
@@ -1529,23 +1532,23 @@ private data class ScheduleRange(
                 val dayEnd = dayCalendar.time
                 DayBucket(
                     date = dayStart,
-                    weekday = SimpleDateFormat("EEE", Locale.UK).format(dayStart),
-                    day = SimpleDateFormat("d", Locale.UK).format(dayStart),
+                    weekday = SimpleDateFormat("EEE", locale).format(dayStart),
+                    day = SimpleDateFormat("d", locale).format(dayStart),
                     orders = orders.filter { order ->
                         val due = deliveryDueDate(order)
                         due >= dayStart && due < dayEnd
                     }
                 )
             }
-            val endCalendar = Calendar.getInstance(Locale.UK)
+            val endCalendar = Calendar.getInstance(locale)
             endCalendar.time = start
             endCalendar.add(Calendar.DAY_OF_MONTH, rangeDayCount - 1)
             val title = if (rangeDayCount == 1) {
-                rangeFormatter.format(start)
+                rangeFormatter(locale).format(start)
             } else {
-                "${rangeFormatter.format(start)} - ${rangeFormatter.format(endCalendar.time)}"
+                "${rangeFormatter(locale).format(start)} - ${rangeFormatter(locale).format(endCalendar.time)}"
             }
-            val endExclusiveCalendar = Calendar.getInstance(Locale.UK).apply {
+            val endExclusiveCalendar = Calendar.getInstance(locale).apply {
                 time = start
                 add(Calendar.DAY_OF_MONTH, rangeDayCount)
             }
@@ -1981,6 +1984,6 @@ private fun isScheduleClientImage(contentType: String, fileName: String): Boolea
 }
 
 private const val DAY_MS = 24L * 60L * 60L * 1000L
-private val rangeFormatter = SimpleDateFormat("MMM d", Locale.UK)
-private val scheduleDateFormatter = SimpleDateFormat("dd/MM/yy", Locale.UK)
+private fun rangeFormatter(locale: Locale): SimpleDateFormat = SimpleDateFormat("MMM d", locale)
+private fun scheduleDateFormatter(locale: Locale): SimpleDateFormat = SimpleDateFormat("dd/MM/yy", locale)
 private val schedulePatchDateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)

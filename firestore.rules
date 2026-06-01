@@ -37,7 +37,7 @@ service cloud.firestore {
         || (
           signedIn()
           && companyExists(companyId)
-          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow']
+          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
         );
     }
 
@@ -48,6 +48,45 @@ service cloud.firestore {
           && companyExists(companyId)
           && memberRole(companyId) in ['owner', 'admin', 'member']
         );
+    }
+
+    function isWorkflowOnlyMember(companyId) {
+      return signedIn()
+        && !isCompanyOwner(companyId)
+        && companyExists(companyId)
+        && memberRole(companyId) in ['workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only'];
+    }
+
+    // Custom role with "Assigned Projects Only" toggled ON and "Change Project Assignments"
+    // toggled OFF — base role is still `member`, but the user is restricted to their own
+    // assigned orders. They can create/read/update/delete their OWN orders directly
+    // (full member-tier access including financial fields), but cannot reassign them
+    // to someone else and cannot see other people's orders.
+    function isAssignedOnlyCustomMember(companyId) {
+      return signedIn()
+        && !isCompanyOwner(companyId)
+        && companyExists(companyId)
+        && !isWorkflowOnlyMember(companyId)
+        && get(companyPath(companyId)).data.memberAccess[request.auth.uid].assignedProjectsOnly == true
+        && get(companyPath(companyId)).data.memberAccess[request.auth.uid].manageProjectAssignments != true;
+    }
+
+    // Strict workflow-only members read finance-free order summaries from the
+    // /workflowOrders subcollection and must use callables to write — they never
+    // touch /siparisler directly.
+    function usesWorkflowSafeView(companyId) {
+      return isWorkflowOnlyMember(companyId);
+    }
+
+    // Combined "needs assigned-to-self filter on /siparisler reads".
+    function requiresAssignedToSelfFilter(companyId) {
+      return isAssignedOnlyCustomMember(companyId);
+    }
+
+    function canReadOrderDocument(data) {
+      return data.companyId is string
+        && canReadCompany(data.companyId)
+        && (!requiresAssignedToSelfFilter(data.companyId) || data.assignedToUid == request.auth.uid);
     }
 
     function hasTeamPlan(companyId) {
@@ -70,7 +109,7 @@ service cloud.firestore {
         || (
           signedIn()
           && companyExists(companyId)
-          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer']
+          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
         );
     }
 
@@ -272,6 +311,22 @@ service cloud.firestore {
         && request.resource.data.companyId == companyId;
     }
 
+    function canAccessOwnPersonalNotes(companyId, userId) {
+      return signedIn()
+        && userId == request.auth.uid
+        && canReadCompany(companyId);
+    }
+
+    function validPersonalNoteCreate(companyId, userId) {
+      return canAccessOwnPersonalNotes(companyId, userId)
+        && request.resource.data.ownerUserId == request.auth.uid;
+    }
+
+    function validPersonalNoteUpdate(companyId, userId) {
+      return canAccessOwnPersonalNotes(companyId, userId)
+        && request.resource.data.ownerUserId == resource.data.ownerUserId;
+    }
+
     match /users/{userId} {
       allow read, write: if signedIn() && userId == request.auth.uid;
 
@@ -287,22 +342,15 @@ service cloud.firestore {
     }
 
     match /workspaceJoinRequests/{requestId} {
-      allow create: if signedIn()
-        && request.resource.data.requesterUid == request.auth.uid
-        && request.resource.data.targetCompanyId is string
-        && request.resource.data.status == 'pending';
-
+      // Join requests are created and updated only by verified callable backend actions.
+      // Signed-in requesters and the target owner may still read their relevant request state.
       allow read: if signedIn()
         && (
           resource.data.requesterUid == request.auth.uid
           || resource.data.targetCompanyId == request.auth.uid
         );
 
-      allow update, delete: if signedIn()
-        && (
-          resource.data.requesterUid == request.auth.uid
-          || resource.data.targetCompanyId == request.auth.uid
-        );
+      allow create, update, delete: if false;
     }
 
     match /companies/{companyId} {
@@ -345,9 +393,87 @@ service cloud.firestore {
       allow write: if hasTeamPlan(companyId) && canWriteMessages(companyId);
     }
 
-    match /companies/{companyId}/messageThreads/{document=**} {
-      allow read: if hasTeamPlan(companyId) && canReadMessages(companyId);
-      allow write: if hasTeamPlan(companyId) && canWriteMessages(companyId);
+    // Personal Notes are available to every workspace role, including View Only
+    // and Workflow Only, but they remain private to the signed-in user's mirror.
+    // Collaborative note mirrors are distributed and synchronised by verified
+    // callable functions using Admin SDK permissions.
+    match /companies/{companyId}/personal_notes/{userId}/notes/{noteId} {
+      allow read: if canAccessOwnPersonalNotes(companyId, userId);
+      allow create: if validPersonalNoteCreate(companyId, userId);
+      allow update: if validPersonalNoteUpdate(companyId, userId);
+      allow delete: if canAccessOwnPersonalNotes(companyId, userId);
+    }
+
+    match /companies/{companyId}/personal_note_collaboration_invites/{document=**} {
+      // Invitations are created/read/responded to only through verified callables.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/quickReplyContributions/{document=**} {
+      // Contributions are filtered and written through verified callables.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/quickReplyUserSettings/{document=**} {
+      // Each user's On-Device and Offline Template settings are accessed
+      // through role-validated callable functions only.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/orderDeletionRequests/{document=**} {
+      // Workflow deletion approval is validated by callable functions only.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/personalInterfaceSettings/{userId} {
+      // Per-user appearance, language and finance-free PDF preferences.
+      // READ: allow the signed-in user to live-subscribe to their OWN doc so
+      // theme/language changes made on another device (Mac, iPhone, Android, Web)
+      // sync instantly via Firestore snapshot listeners. Other members of the
+      // workspace cannot read each other's personal preferences.
+      // WRITE: still routed through the `savePersonalInterfaceSettings` callable
+      // so the Cloud Function validates role + workspace membership server-side.
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    function canReadMessageThread(companyId, threadId) {
+      return hasTeamPlan(companyId)
+        && canReadMessages(companyId)
+        && (
+          threadId == 'team'
+          || isCompanyOwner(companyId)
+          || (
+            exists(/databases/$(database)/documents/companies/$(companyId)/messageThreads/$(threadId))
+            && get(/databases/$(database)/documents/companies/$(companyId)/messageThreads/$(threadId)).data.memberUids is list
+            && request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)/messageThreads/$(threadId)).data.memberUids
+          )
+        );
+    }
+
+    match /companies/{companyId}/messageThreads/{threadId} {
+      allow read: if hasTeamPlan(companyId)
+        && canReadMessages(companyId)
+        && (
+          isCompanyOwner(companyId)
+          || (resource.data.memberUids is list && request.auth.uid in resource.data.memberUids)
+        );
+      // Message writes are server-owned through callable functions, which validate
+      // thread participants and role-specific actions.
+      allow write: if false;
+
+      match /{messagePath=**} {
+        allow read: if canReadMessageThread(companyId, threadId);
+        allow write: if false;
+      }
+    }
+
+    match /companies/{companyId}/workflowOrders/{orderId} {
+      // Finance-free order summary view used only by strict workflow-only members.
+      // Custom-role assigned-only members read the full /siparisler doc directly.
+      allow read: if usesWorkflowSafeView(companyId)
+        && resource.data.assignedToUid == request.auth.uid;
+      allow write: if false;
     }
 
     match /companies/{companyId}/{collectionId}/{document=**} {
@@ -356,32 +482,72 @@ service cloud.firestore {
         && collectionId != 'messageThreads'
         && collectionId != 'billing'
         && collectionId != 'subscriptions'
+        && collectionId != 'workflowOrders'
+        && collectionId != 'personal_notes'
+        && collectionId != 'personal_note_collaboration_invites'
+        && collectionId != 'quickReplyContributions'
+        && collectionId != 'quickReplyUserSettings'
+        && collectionId != 'orderDeletionRequests'
+        && collectionId != 'personalInterfaceSettings'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
         && collectionId != 'messageThreads'
         && collectionId != 'billing'
         && collectionId != 'subscriptions'
+        && collectionId != 'workflowOrders'
+        && collectionId != 'personal_notes'
+        && collectionId != 'personal_note_collaboration_invites'
+        && collectionId != 'quickReplyContributions'
+        && collectionId != 'quickReplyUserSettings'
+        && collectionId != 'orderDeletionRequests'
+        && collectionId != 'personalInterfaceSettings'
         && canWriteCompanyData(companyId);
     }
 
     match /siparisler/{orderId} {
+      // Workflow Only order creation and updates must use verified callables so
+      // assignment cannot be removed or redirected client-side. Custom roles with
+      // "Assigned Projects Only" CAN write directly here, as long as the order's
+      // assignedToUid stays equal to their own uid (they cannot reassign).
       allow create: if signedIn()
         && request.resource.data.companyId is string
         && canWriteCompanyData(request.resource.data.companyId)
+        && !usesWorkflowSafeView(request.resource.data.companyId)
+        && (
+          !isAssignedOnlyCustomMember(request.resource.data.companyId)
+          || request.resource.data.assignedToUid == request.auth.uid
+        )
         && validOrderFinanceCreate(request.resource.data.companyId);
 
-      allow read: if resource.data.companyId is string
-        && canReadCompany(resource.data.companyId);
+      // Workflow Only reads finance-free assigned views under the workspace,
+      // never the full order document that also contains financial fields.
+      // Assigned-only custom-role members get the full document IF the order
+      // is assigned to them.
+      allow read: if canReadOrderDocument(resource.data)
+        && !usesWorkflowSafeView(resource.data.companyId);
 
       allow update: if resource.data.companyId is string
         && request.resource.data.companyId == resource.data.companyId
         && canWriteCompanyData(resource.data.companyId)
+        && !usesWorkflowSafeView(resource.data.companyId)
+        && (
+          !isAssignedOnlyCustomMember(resource.data.companyId)
+          || (
+            resource.data.assignedToUid == request.auth.uid
+            && request.resource.data.assignedToUid == request.auth.uid
+          )
+        )
         && validOrderFinanceUpdate(resource.data.companyId)
         && validBasicCustomFieldsUpdate(resource.data.companyId);
 
       allow delete: if resource.data.companyId is string
-        && canWriteCompanyData(resource.data.companyId);
+        && canWriteCompanyData(resource.data.companyId)
+        && !usesWorkflowSafeView(resource.data.companyId)
+        && (
+          !isAssignedOnlyCustomMember(resource.data.companyId)
+          || resource.data.assignedToUid == request.auth.uid
+        );
     }
 
     match /musteriler/{customerId} {
@@ -402,7 +568,17 @@ service cloud.firestore {
 
     match /companySettings/{companyId} {
       allow read: if canReadCompany(companyId);
-      allow write: if canWriteCompanyData(companyId);
+      // API credentials and owner-controlled Knowledge Base fields must be
+      // changed only through saveQuickReplySettings callable validation.
+      allow write: if canWriteCompanyData(companyId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
+          'customProductsJSON', 'customRulesJSON'
+        ]);
+    }
+
+    match /quickReplySecrets/{companyId} {
+      allow read, write: if false;
     }
 
     match /{document=**} {

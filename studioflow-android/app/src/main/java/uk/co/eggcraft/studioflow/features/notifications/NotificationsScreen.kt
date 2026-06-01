@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Task
 import androidx.compose.material.icons.filled.Update
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -89,6 +91,7 @@ fun NotificationsScreen(
     onMarkRead: (String) -> Unit,
     onMarkAllRead: () -> Unit,
     onDismiss: (List<String>) -> Unit,
+    onReviewOrderDeletion: (String, Boolean) -> Unit,
     onOpen: (StudioActivityNotification) -> Unit,
     onClose: (() -> Unit)? = null
 ) {
@@ -174,7 +177,8 @@ fun NotificationsScreen(
                                         onMarkRead(latest.id)
                                         onOpen(latest)
                                     },
-                                    onDismiss = { onDismiss(listOf(latest.id)) }
+                                    onDismiss = { onDismiss(listOf(latest.id)) },
+                                    onReviewOrderDeletion = onReviewOrderDeletion
                                 )
                             }
                         } else {
@@ -204,7 +208,8 @@ fun NotificationsScreen(
                                             onMarkRead(child.id)
                                             onOpen(child)
                                         },
-                                        onDismiss = { onDismiss(listOf(child.id)) }
+                                        onDismiss = { onDismiss(listOf(child.id)) },
+                                        onReviewOrderDeletion = onReviewOrderDeletion
                                     )
                                 }
                             }
@@ -422,7 +427,8 @@ private fun SingleNotificationCard(
     sectionId: String,
     indent: Boolean = false,
     onClick: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onReviewOrderDeletion: (String, Boolean) -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -470,6 +476,13 @@ private fun SingleNotificationCard(
                     }
                     Spacer(Modifier.height(6.dp))
                     TypePill(typeKeyFor(item))
+                    if (item.type == "order_deletion_request" && item.status == "pending") {
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onReviewOrderDeletion(item.orderId, true) }) { Text("Approve Delete") }
+                            OutlinedButton(onClick = { onReviewOrderDeletion(item.orderId, false) }) { Text("Reject") }
+                        }
+                    }
                 }
             }
         }

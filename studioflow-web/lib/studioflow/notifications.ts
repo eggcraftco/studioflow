@@ -185,6 +185,17 @@ export async function dismissActivityNotifications(workspace: WorkspaceContext, 
   });
 }
 
+
+export async function approveWorkflowOrderDeletion(workspace: WorkspaceContext, orderId: string): Promise<void> {
+  if (!workspace.id || !orderId.trim()) return;
+  await call("approveWorkflowOrderDeletion", { companyId: workspace.id, orderId });
+}
+
+export async function rejectWorkflowOrderDeletion(workspace: WorkspaceContext, orderId: string): Promise<void> {
+  if (!workspace.id || !orderId.trim()) return;
+  await call("rejectWorkflowOrderDeletion", { companyId: workspace.id, orderId });
+}
+
 // ----- helpers for UI -----
 
 export type NotificationTypeKey = "messages" | "support" | "orders" | "tasks" | "files" | "system" | "update";

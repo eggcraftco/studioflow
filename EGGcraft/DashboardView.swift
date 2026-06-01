@@ -1465,7 +1465,7 @@ struct DashboardView: View {
             }
 
             if let first = summary.entries.first {
-                Text("\(first.orderTitle) · \(first.descriptionText)")
+                Text("\(t(first.orderTitle, lang: seciliDil)) · \(t(first.descriptionText, lang: seciliDil))")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -1486,7 +1486,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(group.orderTitle)
+                    Text(t(group.orderTitle, lang: seciliDil))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -1533,7 +1533,7 @@ struct DashboardView: View {
                             .font(.system(size: 11, weight: .regular))
                             .foregroundColor(.secondary)
 
-                        Text(entry.descriptionText)
+                        Text(t(entry.descriptionText, lang: seciliDil))
                             .font(.system(size: 11, weight: .regular))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
@@ -1701,6 +1701,7 @@ struct DashboardView: View {
             }
         }
         .chartXAxis { AxisMarks() { _ in AxisGridLine().foregroundStyle(Color.primary.opacity(0.1)); AxisValueLabel().foregroundStyle(Color.gray) } }
+        .environment(\.locale, studioLocale(seciliDil))
         .chartOverlay { proxy in
             GeometryReader { geo in
                 ZStack(alignment: .topLeading) {
@@ -1740,7 +1741,7 @@ struct DashboardView: View {
         let match = veriMevcut.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }); let xPos = proxy.position(forX: hDate) ?? 0; let yPos = proxy.position(forY: match?.kar ?? 0) ?? plotFrame.midY; let yatayKaydirma: CGFloat = xPos > (plotFrame.width - 120) ? -90 : 90
         VStack(alignment: .leading, spacing: 6) {
             Text(hDate, format: bilesen == .month ? .dateTime.month().year() : .dateTime.day().month()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
-            if let d = match { HStack(spacing: 5) { Circle().fill(.green).frame(width:8,height:8); Text("\(canSeeAdvancedFinance ? "Net" : "Basic Balance"): \(seciliParaBirimi)\(d.kar.toCurrencyString())").font(.system(size:13, weight: .bold)).foregroundColor(.primary) } }
+            if let d = match { HStack(spacing: 5) { Circle().fill(.green).frame(width:8,height:8); Text("\(t(canSeeAdvancedFinance ? "Net" : "Basic Balance", lang: seciliDil)): \(seciliParaBirimi)\(d.kar.toCurrencyString())").font(.system(size:13, weight: .bold)).foregroundColor(.primary) } }
             if canSeeAdvancedFinance && (karsilastir1Yil || karsilastir3Yil), let d1 = veriEksi1.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(studioWarningOrange.opacity(0.8)).frame(width:6,height:6); Text("-1 Yr: \(seciliParaBirimi)\(d1.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
             if canSeeAdvancedFinance && karsilastir3Yil, let d2 = veriEksi2.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(.purple.opacity(0.6)).frame(width:6,height:6); Text("-2 Yrs: \(seciliParaBirimi)\(d2.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }
             if canSeeAdvancedFinance && karsilastir3Yil, let d3 = veriEksi3.first(where: { Calendar.current.isDate($0.tarih, equalTo: hDate, toGranularity: bilesen) }) { HStack(spacing: 5) { Circle().fill(.gray.opacity(0.6)).frame(width:6,height:6); Text("-3 Yrs: \(seciliParaBirimi)\(d3.kar.toCurrencyString())").font(.system(size:11, weight: .bold)).foregroundColor(.primary) } }

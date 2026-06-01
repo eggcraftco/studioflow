@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 
 admin.initializeApp();
@@ -1954,7 +1955,7 @@ function messageRoleForUid(companyData = {}, uid = "") {
 function requireMessagesReadAccess(companyData = {}, uid = "") {
   const entitlements = requireMessagesEntitlement(companyData);
   const role = messageRoleForUid(companyData, uid);
-  if (!["owner", "admin", "member", "viewOnly"].includes(role)) {
+  if (!["owner", "admin", "member", "viewOnly", "workflowOnly"].includes(role)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot access Messages.");
   }
   return entitlements;
@@ -1964,9 +1965,27 @@ function requireMessagesWriteAccess(companyData = {}, uid = "") {
   const entitlements = requireMessagesEntitlement(companyData);
   const role = messageRoleForUid(companyData, uid);
   if (!["owner", "admin", "member"].includes(role)) {
-    throw new HttpsError("permission-denied", "Your workspace role can read Messages but cannot send or change messages.");
+    throw new HttpsError("permission-denied", "Your workspace role can read Messages but cannot change conversations or messages.");
   }
-  return entitlements;
+  return { entitlements, role };
+}
+
+function requireMessagesSendAccess(companyData = {}, uid = "") {
+  const entitlements = requireMessagesEntitlement(companyData);
+  const role = messageRoleForUid(companyData, uid);
+  if (!["owner", "admin", "member", "viewOnly", "workflowOnly"].includes(role)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot send messages.");
+  }
+  return { entitlements, role };
+}
+
+function requireMessagesConversationCreateAccess(companyData = {}, uid = "") {
+  const entitlements = requireMessagesEntitlement(companyData);
+  const role = messageRoleForUid(companyData, uid);
+  if (!["owner", "admin", "member", "workflowOnly"].includes(role)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot start or manage private conversations.");
+  }
+  return { entitlements, role };
 }
 
 function numericLimit(value) {
@@ -2135,12 +2154,25 @@ const WORKSPACE_MEMBER_ACCESS_DEFAULTS = Object.freeze({
   dashboard: true,
   schedule: true,
   customers: true,
+  messages: true,
+  notes: true,
   quickReply: true,
   settings: true,
   teamAccess: true,
   clientFiles: true,
   financialInfo: true,
   exportData: true,
+  settingsGeneral: true,
+  settingsPdf: true,
+  settingsQuickReply: true,
+  settingsMessageSettings: true,
+  settingsWorkflow: true,
+  settingsFinancial: true,
+  settingsSafetyUploads: true,
+  settingsData: true,
+  settingsTeamAccess: true,
+  settingsPlanAccess: true,
+  settingsSupport: true,
   cardPreview: true,
   cardSummary: true,
   cardCustomer: true,
@@ -2177,8 +2209,16 @@ function defaultWorkspaceAccessForRole(roleValue = "member") {
   if (role === "workflowOnly") {
     access.dashboard = false;
     access.financialInfo = false;
+    access.customers = false;
     access.teamAccess = false;
     access.cardFinancial = false;
+    access.assignedProjectsOnly = true;
+    access.manageProjectAssignments = false;
+    access.orders = true;
+    access.schedule = true;
+    access.quickReply = true;
+    access.clientFiles = true;
+    access.cardClientFiles = true;
   }
   return access;
 }
@@ -2211,8 +2251,16 @@ function workspaceMemberAccess(companyData = {}, uid = "") {
   if (normalizeWorkspaceRole(roleValue, "member") === "workflowOnly") {
     merged.dashboard = false;
     merged.financialInfo = false;
+    merged.customers = false;
     merged.teamAccess = false;
     merged.cardFinancial = false;
+    merged.assignedProjectsOnly = true;
+    merged.manageProjectAssignments = false;
+    merged.orders = true;
+    merged.schedule = true;
+    merged.quickReply = true;
+    merged.clientFiles = true;
+    merged.cardClientFiles = true;
   }
   return merged;
 }
@@ -2225,8 +2273,16 @@ function accessForRoleValue(companyData = {}, roleValue = "", fallbackAccess = {
   if (normalizeWorkspaceRole(roleValue, "member") === "workflowOnly") {
     access.dashboard = false;
     access.financialInfo = false;
+    access.customers = false;
     access.teamAccess = false;
     access.cardFinancial = false;
+    access.assignedProjectsOnly = true;
+    access.manageProjectAssignments = false;
+    access.orders = true;
+    access.schedule = true;
+    access.quickReply = true;
+    access.clientFiles = true;
+    access.cardClientFiles = true;
   }
   return access;
 }
@@ -4934,13 +4990,117 @@ function decodeQuickReplyTemplateItems(value) {
   }
 }
 
+function quickReplySecretDocRef(companyId) {
+  return admin.firestore().collection("quickReplySecrets").doc(companyId);
+}
+
+function quickReplyContributionCollectionRef(companyId) {
+  return admin.firestore().collection("companies").doc(companyId).collection("quickReplyContributions");
+}
+
+function quickReplyUserSettingsDocRef(companyId, uid) {
+  return admin.firestore().collection("companies").doc(companyId).collection("quickReplyUserSettings").doc(uid);
+}
+
+function personalInterfaceSettingsDocRef(companyId, uid) {
+  return admin.firestore().collection("companies").doc(companyId).collection("personalInterfaceSettings").doc(uid);
+}
+
+function cleanPersonalTheme(value, fallback = "System") {
+  const normalized = String(value || "").trim();
+  return ["System", "Light", "Dark"].includes(normalized) ? normalized : fallback;
+}
+
+function personalInterfaceSettingsFromData(data = {}, fallbackData = {}) {
+  const booleanSetting = (key, fallback = true) =>
+    Object.prototype.hasOwnProperty.call(data, key) ? data[key] !== false :
+    Object.prototype.hasOwnProperty.call(fallbackData, key) ? fallbackData[key] !== false : fallback;
+  return {
+    // Appearance and language are strictly personal and must never fall back
+    // to another workspace member's shared/legacy preference.
+    appTheme: cleanPersonalTheme(data.appTheme, "System"),
+    selectedLanguage: cleanQuickReplyText(data.selectedLanguage || "English", 80) || "English",
+    pdfShowCustomer: booleanSetting("pdfShowCustomer"),
+    pdfShowContact: booleanSetting("pdfShowContact"),
+    pdfShowPreview: booleanSetting("pdfShowPreview"),
+    pdfShowMaterials: booleanSetting("pdfShowMaterials"),
+    pdfShowPriority: booleanSetting("pdfShowPriority"),
+    pdfShowStatus: booleanSetting("pdfShowStatus"),
+    pdfShowShipping: booleanSetting("pdfShowShipping")
+  };
+}
+
+function canManagePersonalQuickReplySettings(companyData = {}, uid = "") {
+  const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  return isQuickReplyOwner(companyData, uid) || ["admin", "member", "workflowOnly"].includes(role);
+}
+
+function personalQuickReplySettingsFromData(data = {}, companySettings = {}) {
+  return {
+    replyMode: cleanQuickReplyMode(data.replyMode, cleanQuickReplyMode(companySettings.replyMode, "AI")),
+    quickReplyPoliteness: cleanQuickReplyOption(data.quickReplyPoliteness, QUICK_REPLY_POLITENESS, cleanQuickReplyOption(companySettings.quickReplyPoliteness, QUICK_REPLY_POLITENESS, "Warm")),
+    quickReplyLength: cleanQuickReplyOption(data.quickReplyLength, QUICK_REPLY_LENGTHS, cleanQuickReplyOption(companySettings.quickReplyLength, QUICK_REPLY_LENGTHS, "Short")),
+    onDeviceKnowledgeBase: cleanQuickReplyText(data.onDeviceKnowledgeBase, 50000),
+    offlineProductsJSON: JSON.stringify(cleanQuickReplyTemplateItems(decodeQuickReplyTemplateItems(data.offlineProductsJSON).length ? decodeQuickReplyTemplateItems(data.offlineProductsJSON) : decodeQuickReplyTemplateItems(companySettings.customProductsJSON))),
+    offlineRulesJSON: JSON.stringify(cleanQuickReplyTemplateItems(decodeQuickReplyTemplateItems(data.offlineRulesJSON).length ? decodeQuickReplyTemplateItems(data.offlineRulesJSON) : decodeQuickReplyTemplateItems(companySettings.customRulesJSON)))
+  };
+}
+
+function isQuickReplyOwner(companyData = {}, uid = "") {
+  return uidIsCompanyOwner(companyData, uid) || normalizeWorkspaceRole(workspaceOrderRole(companyData, uid)) === "owner";
+}
+
+function canContributeQuickReplyKnowledge(companyData = {}, uid = "") {
+  const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  return isQuickReplyOwner(companyData, uid) || ["admin", "member", "workflowOnly"].includes(role);
+}
+
+async function secureQuickReplyOpenAIKey(companyId, settingsData = {}) {
+  const secretRef = quickReplySecretDocRef(companyId);
+  const secretSnap = await secretRef.get();
+  let key = secretSnap.exists ? String(secretSnap.data()?.openAIKey || "").trim() : "";
+  const legacyKey = String(settingsData.openAIKey || "").trim();
+
+  if (!key && legacyKey) {
+    key = legacyKey;
+    await secretRef.set({
+      openAIKey: key,
+      companyId,
+      migratedFromLegacySettingsAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+
+  if (legacyKey || settingsData.hasOpenAIKey !== Boolean(key)) {
+    await companySettingsDocRef(companyId).set({
+      openAIKey: admin.firestore.FieldValue.delete(),
+      hasOpenAIKey: Boolean(key),
+      quickReplySecretMigratedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  return key;
+}
+
+async function quickReplyKnowledgeWithContributions(companyId, mainKnowledge) {
+  const snapshot = await quickReplyContributionCollectionRef(companyId).limit(100).get();
+  const additions = snapshot.docs.map((document) => {
+    const data = document.data() || {};
+    const text = cleanQuickReplyText(data.text, 4000);
+    const author = cleanQuickReplyText(data.authorName || data.authorEmail || "Team member", 120);
+    return text ? `- ${author}: ${text}` : "";
+  }).filter(Boolean);
+  const core = cleanQuickReplyText(mainKnowledge, 50000);
+  if (additions.length === 0) return core;
+  return `${core}\n\n--- TEAM CONTRIBUTIONS ---\n${additions.join("\n")}`.trim();
+}
+
 function quickReplySettingsFromData(data = {}) {
   return {
     replyMode: cleanQuickReplyMode(data.replyMode, "AI"),
     quickReplyPoliteness: cleanQuickReplyOption(data.quickReplyPoliteness, QUICK_REPLY_POLITENESS, "Warm"),
     quickReplyLength: cleanQuickReplyOption(data.quickReplyLength, QUICK_REPLY_LENGTHS, "Short"),
     aiKnowledgeBase: String(data.aiKnowledgeBase || ""),
-    hasOpenAIKey: String(data.openAIKey || "").trim().length > 0,
+    hasOpenAIKey: data.hasOpenAIKey === true || String(data.openAIKey || "").trim().length > 0,
     products: decodeQuickReplyTemplateItems(data.customProductsJSON),
     rules: decodeQuickReplyTemplateItems(data.customRulesJSON)
   };
@@ -5043,16 +5203,17 @@ function uidCanEditWorkspaceSettings(companyData = {}, uid = "") {
 
 exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  if (!uidCanEditWorkspaceSettings(companyData, uid)) {
-    throw new HttpsError("permission-denied", "Your workspace role cannot edit Quick Reply settings.");
-  }
   requireWorkspaceAreaAccess(companyData, uid, "quickReply", "Quick Reply is not enabled for your workspace account.");
+  requireWorkspaceAreaAccess(companyData, uid, "settingsQuickReply", "Quick Reply Settings are not enabled for your role.");
 
   const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
-  const updates = {
-    quickReplySettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-  };
+  const ownerOnlyFields = ["replyMode", "aiKnowledgeBase", "openAIKey", "products", "rules"];
+  const changesOwnerOnlySettings = ownerOnlyFields.some((field) => Object.prototype.hasOwnProperty.call(incoming, field));
+  if (changesOwnerOnlySettings && !isQuickReplyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can manage the OpenAI key and Company Knowledge Base.");
+  }
 
+  const updates = { quickReplySettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp() };
   if (Object.prototype.hasOwnProperty.call(incoming, "replyMode")) {
     updates.replyMode = cleanQuickReplyMode(incoming.replyMode, "AI");
   }
@@ -5065,9 +5226,6 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
   if (Object.prototype.hasOwnProperty.call(incoming, "aiKnowledgeBase")) {
     updates.aiKnowledgeBase = cleanQuickReplyText(incoming.aiKnowledgeBase, 50000);
   }
-  if (Object.prototype.hasOwnProperty.call(incoming, "openAIKey")) {
-    updates.openAIKey = cleanQuickReplyText(incoming.openAIKey, 500);
-  }
   if (Object.prototype.hasOwnProperty.call(incoming, "products")) {
     updates.customProductsJSON = JSON.stringify(cleanQuickReplyTemplateItems(incoming.products));
   }
@@ -5076,6 +5234,23 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
   }
 
   const settingsRef = companySettingsDocRef(companyId);
+  if (Object.prototype.hasOwnProperty.call(incoming, "openAIKey")) {
+    const cleanKey = cleanQuickReplyText(incoming.openAIKey, 500);
+    if (cleanKey) {
+      await quickReplySecretDocRef(companyId).set({
+        companyId,
+        openAIKey: cleanKey,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedByUid: uid
+      }, { merge: true });
+    } else {
+      await quickReplySecretDocRef(companyId).delete().catch(() => undefined);
+    }
+    updates.hasOpenAIKey = Boolean(cleanKey);
+  }
+
+  // Always strip a legacy client-readable key after an owner settings save.
+  updates.openAIKey = admin.firestore.FieldValue.delete();
   await settingsRef.set(updates, { merge: true });
   const settingsSnapshot = await settingsRef.get();
 
@@ -5083,8 +5258,180 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
     ok: true,
     companyId,
     settings: quickReplySettingsFromData(settingsSnapshot.exists ? settingsSnapshot.data() || {} : {}),
-    message: "Quick Reply settings saved."
+    message: "Quick Reply settings saved securely."
   };
+});
+
+exports.getPersonalInterfaceSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  // Personal language + theme (and finance-free PDF flags) are available to EVERY
+  // workspace member regardless of role — owner, admin, member, workflow and custom
+  // roles each keep their own per-user language/theme across all their devices.
+  if (!uidHasCompanyAccess(companyData, uid)) throw new HttpsError("permission-denied", "You do not have access to this workspace.");
+  const [personalSnapshot, sharedSnapshot] = await Promise.all([
+    personalInterfaceSettingsDocRef(companyId, uid).get(),
+    companySettingsDocRef(companyId).get()
+  ]);
+  return {
+    ok: true,
+    settings: personalInterfaceSettingsFromData(
+      personalSnapshot.exists ? personalSnapshot.data() || {} : {},
+      sharedSnapshot.exists ? sharedSnapshot.data() || {} : {}
+    )
+  };
+});
+
+exports.savePersonalInterfaceSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  // Personal language + theme (and finance-free PDF flags) are available to EVERY
+  // workspace member regardless of role. Each user keeps their own per-user
+  // language/theme across all their devices; this never touches workspace-wide data.
+  if (!uidHasCompanyAccess(companyData, uid)) throw new HttpsError("permission-denied", "You do not have access to this workspace.");
+  const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
+  const updates = { companyId, userId: uid, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: uid };
+  if (Object.prototype.hasOwnProperty.call(incoming, "appTheme")) updates.appTheme = cleanPersonalTheme(incoming.appTheme, "System");
+  if (Object.prototype.hasOwnProperty.call(incoming, "selectedLanguage")) updates.selectedLanguage = cleanQuickReplyText(incoming.selectedLanguage, 80) || "English";
+  const pdfKeys = ["pdfShowCustomer", "pdfShowContact", "pdfShowPreview", "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"];
+  if (pdfKeys.some((key) => Object.prototype.hasOwnProperty.call(incoming, key))) {
+    requireWorkspaceAreaAccess(companyData, uid, "exportData", "PDF Export is not enabled for your workspace account.");
+    for (const key of pdfKeys) if (Object.prototype.hasOwnProperty.call(incoming, key)) updates[key] = incoming[key] !== false;
+  }
+  await personalInterfaceSettingsDocRef(companyId, uid).set(updates, { merge: true });
+  const [saved, sharedSnapshot] = await Promise.all([
+    personalInterfaceSettingsDocRef(companyId, uid).get(),
+    companySettingsDocRef(companyId).get()
+  ]);
+  return {
+    ok: true,
+    settings: personalInterfaceSettingsFromData(
+      saved.data() || {},
+      sharedSnapshot.exists ? sharedSnapshot.data() || {} : {}
+    ),
+    message: "Personal settings saved."
+  };
+});
+
+exports.getQuickReplyPersonalSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(companyData, uid, "quickReply", "Quick Reply is not enabled for your workspace account.");
+  if (!canManagePersonalQuickReplySettings(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot manage personal Quick Reply settings.");
+  }
+  const [userSnapshot, companySnapshot] = await Promise.all([
+    quickReplyUserSettingsDocRef(companyId, uid).get(),
+    companySettingsDocRef(companyId).get()
+  ]);
+  return {
+    ok: true,
+    settings: personalQuickReplySettingsFromData(
+      userSnapshot.exists ? userSnapshot.data() || {} : {},
+      companySnapshot.exists ? companySnapshot.data() || {} : {}
+    )
+  };
+});
+
+exports.saveQuickReplyPersonalSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(companyData, uid, "quickReply", "Quick Reply is not enabled for your workspace account.");
+  if (!canManagePersonalQuickReplySettings(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot manage personal Quick Reply settings.");
+  }
+
+  const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
+  const updates = {
+    companyId,
+    userId: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid
+  };
+  if (Object.prototype.hasOwnProperty.call(incoming, "replyMode")) {
+    updates.replyMode = cleanQuickReplyMode(incoming.replyMode, "AI");
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, "quickReplyPoliteness")) {
+    updates.quickReplyPoliteness = cleanQuickReplyOption(incoming.quickReplyPoliteness, QUICK_REPLY_POLITENESS, "Warm");
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, "quickReplyLength")) {
+    updates.quickReplyLength = cleanQuickReplyOption(incoming.quickReplyLength, QUICK_REPLY_LENGTHS, "Short");
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, "onDeviceKnowledgeBase")) {
+    updates.onDeviceKnowledgeBase = cleanQuickReplyText(incoming.onDeviceKnowledgeBase, 50000);
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, "products")) {
+    updates.offlineProductsJSON = JSON.stringify(cleanQuickReplyTemplateItems(incoming.products));
+  } else if (Object.prototype.hasOwnProperty.call(incoming, "customProductsJSON")) {
+    updates.offlineProductsJSON = JSON.stringify(decodeQuickReplyTemplateItems(String(incoming.customProductsJSON || "")));
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, "rules")) {
+    updates.offlineRulesJSON = JSON.stringify(cleanQuickReplyTemplateItems(incoming.rules));
+  } else if (Object.prototype.hasOwnProperty.call(incoming, "customRulesJSON")) {
+    updates.offlineRulesJSON = JSON.stringify(decodeQuickReplyTemplateItems(String(incoming.customRulesJSON || "")));
+  }
+
+  const ref = quickReplyUserSettingsDocRef(companyId, uid);
+  await ref.set(updates, { merge: true });
+  const [savedSnapshot, companySnapshot] = await Promise.all([ref.get(), companySettingsDocRef(companyId).get()]);
+  return {
+    ok: true,
+    message: "Your Quick Reply settings were saved.",
+    settings: personalQuickReplySettingsFromData(
+      savedSnapshot.data() || {},
+      companySnapshot.exists ? companySnapshot.data() || {} : {}
+    )
+  };
+});
+
+exports.listQuickReplyContributions = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(companyData, uid, "quickReply", "Quick Reply is not enabled for your workspace account.");
+  const snapshot = await quickReplyContributionCollectionRef(companyId).limit(100).get();
+  const items = snapshot.docs.map((document) => {
+    const data = document.data() || {};
+    return {
+      id: document.id,
+      text: cleanQuickReplyText(data.text, 4000),
+      authorUid: String(data.authorUid || ""),
+      authorName: cleanQuickReplyText(data.authorName || data.authorEmail || "Team member", 120),
+      canDelete: isQuickReplyOwner(companyData, uid) || String(data.authorUid || "") === uid
+    };
+  }).filter((item) => item.text);
+  return { ok: true, items };
+});
+
+exports.saveQuickReplyContribution = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, email, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(companyData, uid, "quickReply", "Quick Reply is not enabled for your workspace account.");
+  if (!canContributeQuickReplyKnowledge(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot add Knowledge Base contributions.");
+  }
+  const text = cleanQuickReplyText(request.data?.text, 4000);
+  if (!text) throw new HttpsError("invalid-argument", "Contribution text is empty.");
+  const member = (companyData.members || {})[uid] || {};
+  const ref = quickReplyContributionCollectionRef(companyId).doc();
+  await ref.set({
+    id: ref.id,
+    text,
+    authorUid: uid,
+    authorEmail: String(email || "").toLowerCase(),
+    authorName: cleanQuickReplyText(member.displayName || member.name || email || "Team member", 120),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return { ok: true, message: "Contribution added to the workspace Knowledge Base." };
+});
+
+exports.deleteQuickReplyContribution = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const contributionId = cleanQuickReplyText(request.data?.contributionId, 160);
+  if (!contributionId) throw new HttpsError("invalid-argument", "Contribution is missing.");
+  const ref = quickReplyContributionCollectionRef(companyId).doc(contributionId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: true };
+  const authorUid = String(snap.data()?.authorUid || "");
+  if (!isQuickReplyOwner(companyData, uid) && authorUid !== uid) {
+    throw new HttpsError("permission-denied", "Only the owner or the author can delete this contribution.");
+  }
+  await ref.delete();
+  return { ok: true, message: "Contribution removed." };
 });
 
 exports.generateQuickReply = onCall({ region: "europe-west2" }, async (request) => {
@@ -5116,9 +5463,9 @@ exports.generateQuickReply = onCall({ region: "europe-west2" }, async (request) 
     throw new HttpsError("failed-precondition", "Apple On-Device AI replies are only available in the Swift app on Apple Intelligence-capable devices. Use OpenAI Online or Offline Template on web.");
   }
 
-  const apiKey = String(settingsData.openAIKey || "").trim();
+  const apiKey = await secureQuickReplyOpenAIKey(companyId, settingsData);
   const customerMessage = cleanQuickReplyText(request.data?.customerMessage, 12000);
-  const knowledge = cleanQuickReplyText(settingsData.aiKnowledgeBase, 50000);
+  const knowledge = await quickReplyKnowledgeWithContributions(companyId, settingsData.aiKnowledgeBase);
 
   if (!apiKey) {
     throw new HttpsError("failed-precondition", "OpenAI API Key is missing. Add it in Settings > Quick Reply Settings.");
@@ -5309,6 +5656,7 @@ exports.savePdfExportSettings = onCall({ region: "europe-west2" }, async (reques
     throw new HttpsError("permission-denied", "Your workspace role cannot edit PDF Export settings.");
   }
   requireWorkspaceAreaAccess(companyData, uid, "exportData", "Export settings are not enabled for your workspace account.");
+  requireWorkspaceAreaAccess(companyData, uid, "settingsPdf", "PDF Export Settings are not enabled for your role.");
 
   const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
   const settingsRef = companySettingsDocRef(companyId);
@@ -5343,6 +5691,7 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
     throw new HttpsError("permission-denied", "Your workspace role cannot edit Financial Settings.");
   }
   requireWorkspaceAreaAccess(companyData, uid, "financialInfo", "Financial Info is not enabled for your workspace account.");
+  requireWorkspaceAreaAccess(companyData, uid, "settingsFinancial", "Financial Settings are not enabled for your role.");
   if (billingEntitlementsForCompany(companyData).advancedFinanceEnabled !== true) {
     throw new HttpsError("failed-precondition", "Advanced Financial Settings are available on NivaDesk Pro and Team.");
   }
@@ -5377,20 +5726,25 @@ exports.saveLanguageSettings = onCall({ region: "europe-west2" }, async (request
   if (!uidCanEditWorkspaceSettings(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot edit Language & Labels.");
   }
+  requireWorkspaceAreaAccess(companyData, uid, "settingsGeneral", "General settings are not enabled for your role.");
 
+  // Language is STRICTLY per-user now. We never write `seciliDil` to the shared
+  // companySettings doc anymore (that would make every workspace member inherit the
+  // same language). Persist it to the caller's personal interface settings instead
+  // so each user keeps their own language across their devices.
   const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
-  const updates = {
-    seciliDil: cleanStudioLanguage(incoming.selectedLanguage, "English"),
-    languageSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-  };
-
-  const settingsRef = companySettingsDocRef(companyId);
-  await settingsRef.set(updates, { merge: true });
-  const settingsSnapshot = await settingsRef.get();
+  const language = cleanStudioLanguage(incoming.selectedLanguage, "English");
+  await personalInterfaceSettingsDocRef(companyId, uid).set({
+    companyId,
+    userId: uid,
+    selectedLanguage: language,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid
+  }, { merge: true });
   return {
     ok: true,
     companyId,
-    settings: languageSettingsFromData(settingsSnapshot.exists ? settingsSnapshot.data() || {} : {}),
+    settings: { selectedLanguage: language },
     message: "Language settings saved."
   };
 });
@@ -5400,13 +5754,28 @@ exports.saveThemeBrandingSettings = onCall({ region: "europe-west2" }, async (re
   if (!uidCanEditWorkspaceSettings(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot edit Theme & Branding.");
   }
+  requireWorkspaceAreaAccess(companyData, uid, "settingsGeneral", "General settings are not enabled for your role.");
 
   const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
   const updates = {
-    appTheme: cleanAppTheme(incoming.appTheme, "System"),
-    appSubtitle: cleanQuickReplyText(incoming.appSubtitle || "Bespoke Hand-Painted Dials", 120),
     themeBrandingSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
+  // appSubtitle remains a shared workspace branding field.
+  if (Object.prototype.hasOwnProperty.call(incoming, "appSubtitle")) {
+    updates.appSubtitle = cleanQuickReplyText(incoming.appSubtitle || "Bespoke Hand-Painted Dials", 120);
+  }
+  // Theme is STRICTLY per-user — if an appTheme arrives here it's persisted to the
+  // caller's personal interface settings, NEVER to the shared companySettings doc,
+  // so members no longer inherit the owner's theme.
+  if (Object.prototype.hasOwnProperty.call(incoming, "appTheme")) {
+    await personalInterfaceSettingsDocRef(companyId, uid).set({
+      companyId,
+      userId: uid,
+      appTheme: cleanAppTheme(incoming.appTheme, "System"),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: uid
+    }, { merge: true });
+  }
 
   const settingsRef = companySettingsDocRef(companyId);
   await settingsRef.set(updates, { merge: true });
@@ -5502,6 +5871,7 @@ exports.saveUploadSafetySettings = onCall({ region: "europe-west2" }, async (req
   if (!uidCanEditWorkspaceSettings(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot edit Upload Safety settings.");
   }
+  requireWorkspaceAreaAccess(companyData, uid, "settingsSafetyUploads", "Safety & Uploads settings are not enabled for your role.");
 
   const incoming = request.data?.settings && typeof request.data.settings === "object" ? request.data.settings : {};
   const requirePolicy = typeof incoming.uploadSafetyRequirePolicyAcceptance === "boolean"
@@ -6531,7 +6901,7 @@ function uidCanManageClientFiles(companyData = {}, uid = "") {
   if (!uidCanAccessWorkspaceArea(companyData, normalizedUid, "clientFiles")) return false;
 
   const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, normalizedUid, "member"), "unknown");
-  return ["owner", "admin", "member"].includes(role);
+  return ["owner", "admin", "member", "workflowOnly"].includes(role);
 }
 
 function findClientFileIndex(files = [], fileId = "") {
@@ -6546,6 +6916,97 @@ function findClientFileIndex(files = [], fileId = "") {
 function orderCompanyId(orderData = {}) {
   return String(orderData.companyId || "").trim();
 }
+
+function requireAssignedProjectAccess(companyData = {}, orderData = {}, uid = "", roleValue = "") {
+  if (!usesRestrictedAssignedProjectScope(companyData, uid, roleValue)) return;
+  const assignedToUid = String(orderData.assignedToUid || "").trim();
+  if (!assignedToUid || assignedToUid !== String(uid || "").trim()) {
+    throw new HttpsError("permission-denied", "This role can access only projects assigned to the current member.");
+  }
+}
+
+const WORKFLOW_ORDER_VIEW_FIELDS = [
+  "companyId", "assignedToUid", "assignedToEmail", "createdByUid", "createdByEmail",
+  "createdByWorkflowOnly", "createdAt", "updatedAt", "customerName", "designName",
+  "designLink", "watchRef", "status", "designStatus", "priority", "risk", "riskReason",
+  "paymentDate", "deliveryTime", "deliveryDueDate", "communication", "emailAddress",
+  "instagramUsername", "whatsappNumber", "tiktokUsername", "address", "customerNotes",
+  "notes", "specialNotes", "invBool1", "invBool2", "invBool3", "invBool4", "invNotes",
+  "materialsDefaultToggles", "materialsToggles", "statusNotesSupplier", "customToggles",
+  "extraStatuses", "trackingNumber", "courier", "isDispatched", "isDelivered",
+  "clientFiles", "todoItems", "workSessions", "historyLog"
+];
+
+function workflowOrderViewRef(companyId = "", orderId = "") {
+  return admin.firestore().collection("companies").doc(String(companyId || "").trim())
+    .collection("workflowOrders").doc(String(orderId || "").trim());
+}
+
+function workflowSafeOrderViewData(orderId = "", data = {}) {
+  const output = { id: String(orderId || "").trim() };
+  for (const field of WORKFLOW_ORDER_VIEW_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) output[field] = data[field];
+  }
+  return output;
+}
+
+async function writeWorkflowSafeOrderView(orderId = "", data = {}) {
+  const companyId = orderCompanyId(data);
+  const assignedToUid = String(data.assignedToUid || "").trim();
+  if (!companyId || !orderId) return;
+  const viewRef = workflowOrderViewRef(companyId, orderId);
+  if (!assignedToUid) {
+    await viewRef.delete().catch(() => undefined);
+    return;
+  }
+  await viewRef.set(workflowSafeOrderViewData(orderId, data), { merge: false });
+}
+
+exports.ensureWorkflowAssignedOrderViews = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = workspaceOrderRole(companyData, uid);
+  if (!usesRestrictedAssignedProjectScope(companyData, uid, role)) {
+    throw new HttpsError("permission-denied", "This account does not use assigned project views.");
+  }
+
+  const snapshot = await admin.firestore().collection("siparisler")
+    .where("companyId", "==", companyId)
+    .where("assignedToUid", "==", uid)
+    .limit(250)
+    .get();
+
+  const batch = admin.firestore().batch();
+  snapshot.docs.forEach((document) => {
+    batch.set(workflowOrderViewRef(companyId, document.id), workflowSafeOrderViewData(document.id, document.data()), { merge: false });
+  });
+  await batch.commit();
+
+  return { ok: true, companyId, count: snapshot.size };
+});
+
+exports.syncWorkflowSafeOrderView = onDocumentWritten(
+  { document: "siparisler/{orderId}", region: "europe-west2" },
+  async (event) => {
+    const orderId = String(event.params.orderId || "").trim();
+    const before = event.data?.before;
+    const after = event.data?.after;
+    const beforeData = before?.exists ? before.data() || {} : {};
+    const afterData = after?.exists ? after.data() || {} : {};
+    const beforeCompanyId = orderCompanyId(beforeData);
+    const afterCompanyId = orderCompanyId(afterData);
+
+    if (beforeCompanyId && beforeCompanyId !== afterCompanyId) {
+      await workflowOrderViewRef(beforeCompanyId, orderId).delete().catch(() => undefined);
+    }
+    if (!after?.exists) {
+      if (beforeCompanyId) {
+        await workflowOrderViewRef(beforeCompanyId, orderId).delete().catch(() => undefined);
+      }
+      return;
+    }
+    await writeWorkflowSafeOrderView(orderId, afterData);
+  }
+);
 
 function historyLogWithEntry(orderData = {}, title, oldValue, newValue) {
   const existing = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
@@ -6582,7 +7043,7 @@ function uidCanEditWorkspaceOrderStatus(companyData = {}, uid = "") {
 }
 
 function canFullyEditOrder(role) {
-  return ["owner", "admin", "member", "workflowOnly"].includes(normalizeWorkspaceRole(role));
+  return ["owner", "admin", "member"].includes(normalizeWorkspaceRole(role));
 }
 
 function canDeleteOrder(role) {
@@ -6594,6 +7055,18 @@ function canManageProjectAssignments(companyData = {}, uid = "", role = "") {
   if (normalizedRole === "owner" || uidIsCompanyOwner(companyData, uid)) return true;
   return ["admin", "member"].includes(normalizedRole)
     && workspaceMemberAccess(companyData, uid).manageProjectAssignments === true;
+}
+
+function usesRestrictedAssignedProjectScope(companyData = {}, uid = "", roleValue = "") {
+  const normalizedRole = normalizeWorkspaceRole(roleValue || workspaceOrderRole(companyData, uid));
+  if (normalizedRole === "workflowOnly") return true;
+  const access = workspaceMemberAccess(companyData, uid);
+  return access.assignedProjectsOnly === true && access.manageProjectAssignments !== true;
+}
+
+function canRequestApprovedOrderDeletion(companyData = {}, uid = "", roleValue = "") {
+  return usesRestrictedAssignedProjectScope(companyData, uid, roleValue)
+    && uidCanAccessWorkspaceArea(companyData, uid, "orders");
 }
 
 function canEditWorkflowOnly(role) {
@@ -8474,12 +8947,15 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   }
 
   const requestData = request.data || {};
+  const creatorRole = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  const workflowOnlyCreator = creatorRole === "workflowOnly";
+  const assignedScopeCreator = usesRestrictedAssignedProjectScope(companyData, uid, creatorRole);
   const customerName = cleanOrderText(requestData.customerName, "New Project", 180) || "New Project";
   const designName = cleanOrderText(requestData.designName, "", 180);
 
-  const orderValue = cleanOrderNumber(requestData.orderValue);
-  const paidAmount = Math.min(cleanOrderNumber(requestData.paidAmount), orderValue);
-  const remainingAmount = Math.max(orderValue - paidAmount, 0);
+  const orderValue = workflowOnlyCreator ? 0 : cleanOrderNumber(requestData.orderValue);
+  const paidAmount = workflowOnlyCreator ? 0 : Math.min(cleanOrderNumber(requestData.paidAmount), orderValue);
+  const remainingAmount = workflowOnlyCreator ? 0 : Math.max(orderValue - paidAmount, 0);
   const paymentDate = new Date();
   const dueDate = dateFromISODate(requestData.deliveryDueDate) || dueDateForOrder(paymentDate, 45);
 
@@ -8491,7 +8967,7 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const designStatus = cleanOrderStatus(requestData.designStatus, "Not Yet");
   const settingsSnapshot = await companySettingsDocRef(companyId).get();
   const financialSettings = financialSettingsFromData(settingsSnapshot.exists ? settingsSnapshot.data() || {} : {});
-  const advancedFinanceEnabled = entitlements.advancedFinanceEnabled === true;
+  const advancedFinanceEnabled = entitlements.advancedFinanceEnabled === true && !workflowOnlyCreator;
   const paymentFee = advancedFinanceEnabled ? roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100) : 0;
   const taxType = advancedFinanceEnabled ? financialTaxTypeForPaymentDate(financialSettings, paymentDate) : "";
   const taxRate = advancedFinanceEnabled ? cleanPercentageNumber(financialSettings.defaultTaxRate, 20) : 0;
@@ -8556,8 +9032,10 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     clientFiles: [],
     todoItems: [],
     workSessions: [],
-    assignedToUid: "",
-    assignedToEmail: "",
+    assignedToUid: assignedScopeCreator ? uid : "",
+    assignedToEmail: assignedScopeCreator ? email : "",
+    createdByWorkflowOnly: workflowOnlyCreator,
+    createdByAssignedScope: assignedScopeCreator,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     createdByUid: uid,
@@ -8589,9 +9067,232 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   };
 });
 
+
+function orderDeletionRequestRef(companyId = "", orderId = "") {
+  return admin.firestore().collection("companies").doc(String(companyId || "").trim())
+    .collection("orderDeletionRequests").doc(String(orderId || "").trim());
+}
+
+async function writeOrderDeletionActivityNotification(companyId, notification = {}, recipient = {}) {
+  const ref = notificationCollectionRef(companyId).doc();
+  const recipientUids = supportUniqueStrings(recipient.userIds || recipient.uids || []);
+  const recipientEmails = supportUniqueStrings(recipient.emails || []).map((item) => item.toLowerCase());
+  const title = cleanSupportText(notification.title || "Order deletion request", 140);
+  const message = cleanSupportText(notification.message || "An order deletion request needs review.", 240);
+  const payload = {
+    companyId,
+    type: String(notification.type || "order_deletion_request"),
+    title,
+    message,
+    route: "orderDeletionRequest",
+    orderId: String(notification.orderId || ""),
+    senderUid: String(notification.senderUid || ""),
+    senderEmail: String(notification.senderEmail || ""),
+    senderName: String(notification.senderName || ""),
+    priority: String(notification.priority || "High"),
+    status: String(notification.status || "pending"),
+    source: "orderDeletionApproval",
+    recipientUids,
+    recipientEmails,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    actioned: false
+  };
+  await ref.set(payload);
+  try {
+    const pushResult = await sendPushNotificationToRecipients(companyId, {
+      ...payload,
+      notificationId: ref.id,
+      body: message
+    }, { userIds: recipientUids, emails: recipientEmails });
+    await ref.set({
+      pushSent: Number(pushResult.sent || 0) > 0,
+      pushResult,
+      pushSentAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.warn("Order deletion request push failed:", error?.message || error);
+  }
+  return ref.id;
+}
+
+exports.requestWorkflowOrderDeletion = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  if (!canRequestApprovedOrderDeletion(companyData, uid, role)) {
+    throw new HttpsError("permission-denied", "Only assigned-project roles can request deletion for their assigned order.");
+  }
+
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const db = admin.firestore();
+  const orderRef = db.collection("siparisler").doc(orderId);
+  const requestRef = orderDeletionRequestRef(companyId, orderId);
+  const requesterEmail = String(request.auth?.token?.email || "").trim().toLowerCase();
+  const requesterName = cleanSupportText(request.auth?.token?.name || requesterEmail || "Workflow member", 120);
+  const ownerUid = String(companyData.ownerUid || "").trim();
+  const ownerEmail = String(companyData.ownerEmail || companyData.email || "").trim().toLowerCase();
+
+  if (!ownerUid && !ownerEmail) {
+    throw new HttpsError("failed-precondition", "Workspace owner could not be identified.");
+  }
+
+  const created = await db.runTransaction(async (transaction) => {
+    const [orderSnap, requestSnap] = await Promise.all([
+      transaction.get(orderRef),
+      transaction.get(requestRef)
+    ]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+    const orderData = orderSnap.data() || {};
+    if (orderCompanyId(orderData) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+    requireAssignedProjectAccess(companyData, orderData, uid, role);
+    if (requestSnap.exists && String(requestSnap.data()?.status || "") === "pending") {
+      return { alreadyPending: true, orderData };
+    }
+    transaction.set(requestRef, {
+      companyId,
+      orderId,
+      status: "pending",
+      requestedByUid: uid,
+      requestedByEmail: requesterEmail,
+      requestedByName: requesterName,
+      orderCustomerName: cleanOrderText(orderData.customerName, "Order", 180),
+      orderDesignName: cleanOrderText(orderData.designName, "", 180),
+      assignedToUid: String(orderData.assignedToUid || ""),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: false });
+    return { alreadyPending: false, orderData };
+  });
+
+  if (created.alreadyPending) {
+    return { ok: true, alreadyPending: true, orderId, status: "pending", message: "Deletion request is already waiting for owner approval." };
+  }
+
+  const orderLabel = cleanOrderText(created.orderData.designName || created.orderData.customerName || "Order", "Order", 180);
+  const notificationId = await writeOrderDeletionActivityNotification(companyId, {
+    type: "order_deletion_request",
+    title: "Order deletion request",
+    message: `${requesterName} requested deletion of ${orderLabel}.`,
+    orderId,
+    senderUid: uid,
+    senderEmail: requesterEmail,
+    senderName: requesterName,
+    status: "pending"
+  }, { userIds: [ownerUid], emails: [ownerEmail] });
+  await requestRef.set({ notificationId }, { merge: true });
+
+  return { ok: true, orderId, status: "pending", message: "Deletion request sent to workspace owner." };
+});
+
+exports.approveWorkflowOrderDeletion = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can approve order deletion requests.");
+  }
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const db = admin.firestore();
+  const requestRef = orderDeletionRequestRef(companyId, orderId);
+  const orderRef = db.collection("siparisler").doc(orderId);
+  const viewRef = workflowOrderViewRef(companyId, orderId);
+  const outcome = await db.runTransaction(async (transaction) => {
+    const [requestSnap, orderSnap] = await Promise.all([transaction.get(requestRef), transaction.get(orderRef)]);
+    if (!requestSnap.exists || String(requestSnap.data()?.status || "") !== "pending") {
+      throw new HttpsError("failed-precondition", "This deletion request is no longer pending.");
+    }
+    const requestData = requestSnap.data() || {};
+    if (orderSnap.exists) {
+      const orderData = orderSnap.data() || {};
+      if (orderCompanyId(orderData) !== companyId) {
+        throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+      }
+      transaction.delete(orderRef);
+    }
+    transaction.delete(viewRef);
+    transaction.set(requestRef, {
+      status: "approved",
+      reviewedByUid: uid,
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    if (requestData.notificationId) {
+      transaction.set(notificationCollectionRef(companyId).doc(String(requestData.notificationId)), {
+        status: "approved",
+        actioned: true,
+        actionedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+    return requestData;
+  });
+
+  await writeOrderDeletionActivityNotification(companyId, {
+    type: "order_deletion_approved",
+    title: "Order deletion approved",
+    message: "Your order deletion request was approved by the workspace owner.",
+    orderId,
+    status: "approved"
+  }, { userIds: [String(outcome.requestedByUid || "")], emails: [String(outcome.requestedByEmail || "")] });
+
+  try {
+    const entitlements = billingEntitlementsForCompany(companyData);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
+    const updatedCompanySnap = await companyRef.get();
+    const updatedUsage = await workspaceBillingUsage(companyId, updatedCompanySnap.data() || companyData);
+    await saveWorkspaceBillingUsage(companyRef, updatedUsage, entitlements, limits, "workflow_order_deletion_approved");
+  } catch (error) {
+    console.warn("Order billing usage update after approved delete failed:", error?.message || error);
+  }
+
+  return { ok: true, orderId, status: "approved", message: "Deletion approved and order deleted." };
+});
+
+exports.rejectWorkflowOrderDeletion = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can reject order deletion requests.");
+  }
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+  const requestRef = orderDeletionRequestRef(companyId, orderId);
+  const requestSnap = await requestRef.get();
+  if (!requestSnap.exists || String(requestSnap.data()?.status || "") !== "pending") {
+    throw new HttpsError("failed-precondition", "This deletion request is no longer pending.");
+  }
+  const requestData = requestSnap.data() || {};
+  await requestRef.set({
+    status: "rejected",
+    reviewedByUid: uid,
+    reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  if (requestData.notificationId) {
+    await notificationCollectionRef(companyId).doc(String(requestData.notificationId)).set({
+      status: "rejected",
+      actioned: true,
+      actionedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  await writeOrderDeletionActivityNotification(companyId, {
+    type: "order_deletion_rejected",
+    title: "Order deletion rejected",
+    message: "Your order deletion request was rejected by the workspace owner.",
+    orderId,
+    status: "rejected"
+  }, { userIds: [String(requestData.requestedByUid || "")], emails: [String(requestData.requestedByEmail || "")] });
+  return { ok: true, orderId, status: "rejected", message: "Deletion request rejected." };
+});
+
 exports.deleteWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  if (usesRestrictedAssignedProjectScope(companyData, uid, role)) {
+    throw new HttpsError("permission-denied", "This assigned-project role must request owner approval before deleting an order.");
+  }
   if (!canDeleteOrder(role) || !uidCanAccessWorkspaceArea(companyData, uid, "orders")) {
     throw new HttpsError("permission-denied", "Your workspace role cannot delete orders.");
   }
@@ -8765,6 +9466,7 @@ exports.saveSwiftOrder = onCall({ region: "europe-west2" }, async (request) => {
     if (orderCompanyId(orderData) !== companyId) {
       throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
     }
+    requireAssignedProjectAccess(companyData, orderData, uid, role);
 
     const updates = {
       companyId,
@@ -8805,6 +9507,8 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const rawRole = workspaceOrderRole(companyData, uid);
   const role = normalizeWorkspaceRole(rawRole);
+  const workflowOnlyCreator = role === "workflowOnly";
+  const assignedScopeCreator = usesRestrictedAssignedProjectScope(companyData, uid, role);
   if (!canEditOrderStatus(role)) {
     throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot create orders.`);
   }
@@ -8844,11 +9548,30 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
 
   for (const field of SWIFT_ORDER_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(decodedOrder, field)) continue;
+    if (workflowOnlyCreator && SWIFT_FINANCE_ORDER_FIELDS.has(field)) continue;
     if (entitlements.advancedFinanceEnabled !== true && SWIFT_ADVANCED_FINANCE_FIELDS.has(field)) continue;
     orderPayload[field] = field === "customFields" && entitlements.advancedFinanceEnabled !== true
       ? preserveBasicPlanCustomFinancialFields(decodedOrder[field], {})
       : decodedOrder[field];
     createdFields.push(field);
+  }
+
+  if (assignedScopeCreator) {
+    orderPayload.assignedToUid = uid;
+    orderPayload.assignedToEmail = email;
+    orderPayload.createdByAssignedScope = true;
+  }
+
+  if (workflowOnlyCreator) {
+    orderPayload.createdByWorkflowOnly = true;
+    orderPayload.paidAmount = 0;
+    orderPayload.remainingAmount = 0;
+    orderPayload.watchPurchasePrice = 0;
+    orderPayload.paymentFee = 0;
+    orderPayload.deliveryCost = 0;
+    orderPayload.taxType = "";
+    orderPayload.taxRate = 0;
+    orderPayload.taxAmount = 0;
   }
 
   await admin.firestore().runTransaction(async (transaction) => {
@@ -9025,6 +9748,7 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     if (orderCompanyId(orderData) !== companyId) {
       throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
     }
+    requireAssignedProjectAccess(companyData, orderData, uid, normalizedRole);
 
     const paymentDate = dateFromFirestore(orderData.paymentDate, new Date());
     const updates = {
@@ -9268,6 +9992,7 @@ function validateClientFileMutationPlan(action, companyData = {}, companyId = ""
 
 async function requireClientFileMutationContext(request, action) {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
   if (!uidCanManageClientFiles(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot manage Client Files.");
   }
@@ -9285,13 +10010,14 @@ async function requireClientFileMutationContext(request, action) {
     companyId,
     companyRef,
     companyData,
+    role,
     orderId,
     fileId,
     orderRef: orderDocRef(orderId)
   };
 }
 
-function readClientFileFromOrder(orderSnap, companyId, fileId) {
+function readClientFileFromOrder(orderSnap, companyId, fileId, uid = "", role = "") {
   if (!orderSnap.exists) {
     throw new HttpsError("not-found", "Order not found.");
   }
@@ -9299,6 +10025,7 @@ function readClientFileFromOrder(orderSnap, companyId, fileId) {
   if (orderCompanyId(orderData) !== companyId) {
     throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
   }
+  requireAssignedProjectAccess(companyData, orderData, uid, role);
 
   const files = Array.isArray(orderData.clientFiles) ? [...orderData.clientFiles] : [];
   const fileIndex = findClientFileIndex(files, fileId);
@@ -9392,6 +10119,7 @@ exports.appendClientFile = onCall({ region: "europe-west2" }, async (request) =>
     if (orderCompanyId(orderData) !== companyId) {
       throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
     }
+    requireAssignedProjectAccess(companyData, orderData, uid, workspaceOrderRole(companyData, uid));
 
     const files = Array.isArray(orderData.clientFiles) ? [...orderData.clientFiles] : [];
     const existingIndex = findClientFileIndex(files, clientFile.id);
@@ -9438,7 +10166,7 @@ exports.renameClientFile = onCall({ region: "europe-west2" }, async (request) =>
 
   const result = await db.runTransaction(async (transaction) => {
     const orderSnap = await transaction.get(context.orderRef);
-    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId);
+    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId, context.uid, context.role);
     const oldFileName = clientFileDisplayName(file);
 
     files[fileIndex] = {
@@ -9472,7 +10200,7 @@ exports.deleteClientFile = onCall({ region: "europe-west2" }, async (request) =>
 
   const result = await db.runTransaction(async (transaction) => {
     const orderSnap = await transaction.get(context.orderRef);
-    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId);
+    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId, context.uid, context.role);
     const fileName = clientFileDisplayName(file);
     const storagePath = safeClientFileStoragePath(context.companyId, file.storagePath);
     const downloadURL = String(file.downloadURL || "").trim();
@@ -9737,6 +10465,14 @@ exports.approveWorkspaceJoinRequest = onCall({ region: "europe-west2" }, async (
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
   batch.set(db.collection("users").doc(requesterUid).collection("workspaceAccess").doc(companyId), accessPayload, { merge: true });
+  // Auto-switch the approved user's active workspace to the workspace they just
+  // got accepted into so they don't have to manually pick it from Team Access on
+  // the next platform launch. All clients (Mac, iPhone, Android, Web) listen to
+  // users/{uid}.activeCompanyId and will refresh the visible workspace live.
+  batch.set(db.collection("users").doc(requesterUid), {
+    activeCompanyId: companyId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
   batch.set(requestRef, {
     status: "accepted",
     acceptedBy: uid,
@@ -9842,6 +10578,15 @@ exports.requestWorkspaceAccess = onCall({ region: "europe-west2" }, async (reque
 
   const companyData = companySnap.data() || {};
   companyData.__workspaceId = targetCompanyId;
+
+  const targetEntitlements = billingEntitlementsForCompany(companyData);
+  if (targetEntitlements.teamAccessEnabled !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This workspace is not accepting members because it does not have an active NivaDesk Team plan."
+    );
+  }
+
   if (uidHasCompanyAccess(companyData, uid)) {
     throw new HttpsError("failed-precondition", "You already have access to this workspace.");
   }
@@ -11848,6 +12593,11 @@ async function loadMessageWorkspaceSettings(companyId) {
 
 function canManageMessageWorkspaceSettings(companyData = {}, uid = "") {
   if (uidIsCompanyOwner(companyData, uid)) return true;
+  const roleValue = workspaceMemberRoleValue(companyData, uid, "member");
+  if (customRoleData(companyData, roleValue)) {
+    return canFullyEditOrder(workspaceMemberRole(companyData, uid, "member"))
+      && uidCanAccessWorkspaceArea(companyData, uid, "settingsMessageSettings");
+  }
   return normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member") === "admin";
 }
 
@@ -11934,8 +12684,9 @@ exports.createMessageThread = onCall({ region: "europe-west2" }, async (request)
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to create a message thread.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesWriteAccess(companyData, uid);
-  const type = String(request.data?.type || "team").trim() === "direct" ? "direct" : "team";
+  requireMessagesConversationCreateAccess(companyData, uid);
+  const requestedType = String(request.data?.type || "team").trim().toLowerCase();
+  const type = requestedType === "direct" || requestedType === "group" ? requestedType : "team";
   const messageSettings = await loadMessageWorkspaceSettings(companyId);
 
   if (type === "team") {
@@ -11943,45 +12694,72 @@ exports.createMessageThread = onCall({ region: "europe-west2" }, async (request)
     return { ok: true, threadId: "team" };
   }
 
-  if (messageSettings.directMessagesEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Direct messages are disabled for this workspace.");
-  }
-
-  const otherUid = cleanSupportText(request.data?.memberUid || request.data?.otherUid || "", 160);
-  if (!otherUid || otherUid === uid) throw new HttpsError("invalid-argument", "Please choose a team member.");
-  if (!uidHasCompanyAccess(companyData, otherUid)) throw new HttpsError("permission-denied", "That user is not in this workspace.");
-
-  const ids = [uid, otherUid].sort();
-  const threadId = `direct_${ids[0]}_${ids[1]}`.replace(/[^A-Za-z0-9_-]/g, "_");
   const sender = await messageSenderProfile(companyId, companyData, request);
-  const otherPhotoURL = await supportPhotoURLForUser(companyId, companyData, otherUid, "");
   const members = messageWorkspaceMemberEntries(companyData);
-  const otherEntry = members.find((item) => item.uid === otherUid) || {};
-  const otherEmail = cleanSupportText(otherEntry.email || "", 240).toLowerCase();
+  const memberByUid = new Map(members.map((entry) => [String(entry.uid || ""), entry]));
 
-  const existingThreadRef = messageThreadsRef(companyId).doc(threadId);
-  const existingThreadSnap = await existingThreadRef.get();
-  if (existingThreadSnap.exists) {
+  if (type === "direct") {
+    if (messageSettings.directMessagesEnabled !== true) {
+      throw new HttpsError("failed-precondition", "Direct messages are disabled for this workspace.");
+    }
+    const otherUid = cleanSupportText(request.data?.memberUid || request.data?.otherUid || "", 160);
+    if (!otherUid || otherUid === uid) throw new HttpsError("invalid-argument", "Please choose a team member.");
+    if (!uidHasCompanyAccess(companyData, otherUid)) throw new HttpsError("permission-denied", "That user is not in this workspace.");
+
+    const ids = [uid, otherUid].sort();
+    const threadId = `direct_${ids[0]}_${ids[1]}`.replace(/[^A-Za-z0-9_-]/g, "_");
+    const otherPhotoURL = await supportPhotoURLForUser(companyId, companyData, otherUid, "");
+    const otherEntry = memberByUid.get(otherUid) || {};
+    const otherEmail = cleanSupportText(otherEntry.email || "", 240).toLowerCase();
+    const existingThreadRef = messageThreadsRef(companyId).doc(threadId);
+    const existingThreadSnap = await existingThreadRef.get();
+    if (existingThreadSnap.exists) return { ok: true, threadId };
+
+    await existingThreadRef.set({
+      companyId, type: "direct",
+      title: cleanSupportText(otherEntry.name || otherEntry.email || "Direct message", 120),
+      memberUids: ids,
+      memberEmails: supportUniqueStrings([sender.email, otherEmail]).map((item) => item.toLowerCase()),
+      participantPhotoURLs: { [uid]: sender.photoURL || "", [otherUid]: otherPhotoURL || otherEntry.photoURL || "" },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      source: "messages", messageSchemaVersion: 1
+    }, { merge: true });
     return { ok: true, threadId };
   }
 
-  await existingThreadRef.set({
-    companyId,
-    type: "direct",
-    title: cleanSupportText(otherEntry.name || otherEntry.email || "Direct message", 120),
-    memberUids: ids,
-    memberEmails: supportUniqueStrings([sender.email, otherEmail]).map((item) => item.toLowerCase()),
-    participantPhotoURLs: {
-      [uid]: sender.photoURL || "",
-      [otherUid]: otherPhotoURL || otherEntry.photoURL || ""
-    },
+  if (messageSettings.groupConversationsEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Group conversations are disabled for this workspace.");
+  }
+  const requestedMemberUids = Array.isArray(request.data?.memberUids)
+    ? request.data.memberUids.map((item) => cleanSupportText(item, 160)).filter(Boolean) : [];
+  const additionalUids = supportUniqueStrings(requestedMemberUids).filter((memberUid) => memberUid && memberUid !== uid);
+  if (additionalUids.length === 0) throw new HttpsError("invalid-argument", "Please choose at least one team member.");
+  for (const memberUid of additionalUids) {
+    if (!uidHasCompanyAccess(companyData, memberUid)) throw new HttpsError("permission-denied", "Only workspace members can be added to a private group.");
+  }
+  const groupUids = supportUniqueStrings([uid, ...additionalUids]);
+  const participantPhotoURLs = {};
+  const groupEmails = [];
+  for (const memberUid of groupUids) {
+    const entry = memberByUid.get(memberUid) || {};
+    const memberEmail = memberUid === uid ? sender.email : cleanSupportText(entry.email || "", 240).toLowerCase();
+    if (memberEmail) groupEmails.push(memberEmail);
+    participantPhotoURLs[memberUid] = memberUid === uid ? sender.photoURL || "" :
+      await supportPhotoURLForUser(companyId, companyData, memberUid, memberEmail, entry.photoURL || "");
+  }
+  const groupTitle = cleanSupportText(request.data?.title || "Private group", 120) || "Private group";
+  const threadRef = messageThreadsRef(companyId).doc();
+  await threadRef.set({
+    companyId, type: "group", title: groupTitle,
+    memberUids: groupUids,
+    memberEmails: supportUniqueStrings(groupEmails).map((item) => item.toLowerCase()),
+    participantPhotoURLs,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    source: "messages",
-    messageSchemaVersion: 1
+    source: "messages", messageSchemaVersion: 1
   }, { merge: true });
-
-  return { ok: true, threadId };
+  return { ok: true, threadId: threadRef.id };
 });
 
 exports.listMessageThreads = onCall({ region: "europe-west2" }, async (request) => {
@@ -12091,7 +12869,7 @@ exports.setMessageThreadActive = onCall({ region: "europe-west2" }, async (reque
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update conversation presence.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesWriteAccess(companyData, uid);
+  requireMessagesSendAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const isActive = request.data?.isActive === true;
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
@@ -12306,7 +13084,7 @@ exports.setMessageTypingStatus = onCall({ region: "europe-west2" }, async (reque
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update typing status.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesWriteAccess(companyData, uid);
+  requireMessagesSendAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const isTyping = request.data?.isTyping === true;
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
@@ -12341,7 +13119,7 @@ exports.clearMessageTypingStatus = onCall({ region: "europe-west2" }, async (req
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to update typing status.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesWriteAccess(companyData, uid);
+  requireMessagesSendAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
   const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
@@ -12431,7 +13209,7 @@ exports.addMembersToMessageThread = onCall({ region: "europe-west2" }, async (re
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to add people to a conversation.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesWriteAccess(companyData, uid);
+  requireMessagesConversationCreateAccess(companyData, uid);
   const messageSettings = await loadMessageWorkspaceSettings(companyId);
   if (messageSettings.groupConversationsEnabled !== true) {
     throw new HttpsError("failed-precondition", "Group conversations are disabled for this workspace.");
@@ -12727,7 +13505,7 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to send messages.");
 
   const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
-  requireMessagesWriteAccess(companyData, uid);
+  const sendAccess = requireMessagesSendAccess(companyData, uid);
   const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
   const text = cleanMessageText(request.data?.text || request.data?.message || "", 5000);
   const fileURL = cleanSupportPhotoURL(request.data?.fileURL || "");
@@ -12739,6 +13517,10 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
 
   if (!text && !fileURL) {
     throw new HttpsError("invalid-argument", "Please write a message or attach a file.");
+  }
+
+  if (fileURL && sendAccess.role === "viewOnly") {
+    throw new HttpsError("permission-denied", "View Only members can send text messages but cannot upload message attachments.");
   }
 
   if (fileURL) {
@@ -12943,10 +13725,21 @@ function nvHistoryItem(title = "", oldValue = "", newValue = "") {
 
 function nvRoleCanWriteOrders(companyData = {}, uid = "") {
   const role = normalizeWorkspaceRole(workspaceMemberRole(companyData, uid, "member"), "member");
-  if (uidIsCompanyOwner(companyData, uid) || role === "owner" || role === "admin" || role === "member") {
+  if (uidIsCompanyOwner(companyData, uid) || role === "owner" || role === "admin" || role === "member" || role === "workflowOnly") {
     return true;
   }
   return false;
+}
+
+function nvWorkflowOnlyContext(context = {}) {
+  return normalizeWorkspaceRole(workspaceMemberRole(context.companyData || {}, context.uid || "", "member"), "member") === "workflowOnly";
+}
+
+function nvRequireWorkflowAssignedOrder(context = {}, orderData = {}) {
+  if (!nvWorkflowOnlyContext(context)) return;
+  if (String(orderData.assignedToUid || "").trim() !== String(context.uid || "").trim()) {
+    throw new HttpsError("permission-denied", "Workflow Only members can access only orders assigned to them.");
+  }
 }
 
 function nvSafeOrderForChatGPT(doc) {
@@ -13715,10 +14508,11 @@ function nvOrderDefaults(args = {}, context = {}) {
     deliveryDays = 45;
   }
 
-  const advancedFinanceEnabled = billingEntitlementsForCompany(context.companyData || {}).advancedFinanceEnabled === true;
-  const paidAmount = nvCleanNumber(args.paidAmount ?? args.depositPaid ?? 0);
-  const totalPrice = nvCleanNumber(args.totalPrice ?? args.price ?? 0);
-  const remainingAmount = nvCleanNumber(args.remainingAmount ?? Math.max(0, totalPrice - paidAmount));
+  const workflowOnlyCreator = nvWorkflowOnlyContext(context);
+  const advancedFinanceEnabled = billingEntitlementsForCompany(context.companyData || {}).advancedFinanceEnabled === true && !workflowOnlyCreator;
+  const paidAmount = workflowOnlyCreator ? 0 : nvCleanNumber(args.paidAmount ?? args.depositPaid ?? 0);
+  const totalPrice = workflowOnlyCreator ? 0 : nvCleanNumber(args.totalPrice ?? args.price ?? 0);
+  const remainingAmount = workflowOnlyCreator ? 0 : nvCleanNumber(args.remainingAmount ?? Math.max(0, totalPrice - paidAmount));
 
   const history = [
     nvHistoryItem("Order Created", "-", `${context.email || context.uid || "User"} created this order from ChatGPT.`)
@@ -13772,8 +14566,9 @@ function nvOrderDefaults(args = {}, context = {}) {
     clientFiles: [],
     todoItems: [],
     workSessions: [],
-    assignedToUid: nvCleanString(args.assignedToUid || "", 160),
-    assignedToEmail: nvCleanString(args.assignedToEmail || "", 240).toLowerCase(),
+    assignedToUid: workflowOnlyCreator ? context.uid : nvCleanString(args.assignedToUid || "", 160),
+    assignedToEmail: workflowOnlyCreator ? String(context.email || "").toLowerCase() : nvCleanString(args.assignedToEmail || "", 240).toLowerCase(),
+    createdByWorkflowOnly: workflowOnlyCreator,
     createdByUid: context.uid,
     createdByEmail: context.email || "",
     createdFrom: "chatgpt",
@@ -13799,11 +14594,13 @@ async function nvChatGPTSearchOrders(context, args = {}) {
   const status = nvCleanString(args.status || "", 120).toLowerCase();
   const limit = Math.min(Math.max(Number(args.limit || 30), 1), 100);
 
-  const snap = await admin.firestore()
+  let ordersQuery = admin.firestore()
     .collection("siparisler")
-    .where("companyId", "==", context.companyId)
-    .limit(250)
-    .get();
+    .where("companyId", "==", context.companyId);
+  if (nvWorkflowOnlyContext(context)) {
+    ordersQuery = ordersQuery.where("assignedToUid", "==", context.uid);
+  }
+  const snap = await ordersQuery.limit(250).get();
 
   let orders = snap.docs.map(nvSafeOrderForChatGPT);
 
@@ -13843,6 +14640,7 @@ async function nvChatGPTGetOrderDetail(context, args = {}) {
   if (String(data.companyId || "") !== context.companyId) {
     throw new HttpsError("permission-denied", "This order belongs to another workspace.");
   }
+    nvRequireWorkflowAssignedOrder(context, data);
   return { ok: true, action: "get_order_detail", order: nvSafeOrderForChatGPT(snap) };
 }
 
@@ -13861,6 +14659,8 @@ async function nvChatGPTAddOrderNote(context, args = {}) {
   if (String(data.companyId || "") !== context.companyId) {
     throw new HttpsError("permission-denied", "This order belongs to another workspace.");
   }
+
+  nvRequireWorkflowAssignedOrder(context, data);
 
   const previousNotes = String(data.notes || "");
   const mergedNotes = previousNotes ? `${previousNotes}\n\n${noteText}` : noteText;
@@ -13891,6 +14691,8 @@ async function nvChatGPTUpdateOrderStatus(context, args = {}) {
   if (String(data.companyId || "") !== context.companyId) {
     throw new HttpsError("permission-denied", "This order belongs to another workspace.");
   }
+
+  nvRequireWorkflowAssignedOrder(context, data);
 
   const update = {
     updatedAt: admin.firestore.FieldValue.serverTimestamp()

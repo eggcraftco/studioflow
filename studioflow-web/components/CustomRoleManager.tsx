@@ -6,6 +6,7 @@ import {
   WORKSPACE_CARD_ACCESS_OPTIONS,
   WORKSPACE_MEMBER_ACCESS_DEFAULTS,
   WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
+  WORKSPACE_SETTINGS_ACCESS_OPTIONS,
   type WorkspaceCustomRole,
   type WorkspaceMemberAccess
 } from "@/lib/studioflow/firestore";
@@ -49,6 +50,7 @@ function roleDescription(role: WorkspaceCustomRole) {
   const access = normalizeAccess(role.access);
   const hiddenMenus = WORKSPACE_NAVIGATION_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const hiddenCards = WORKSPACE_CARD_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
+  const hiddenSettings = WORKSPACE_SETTINGS_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const assignedScope = access.assignedProjectsOnly === true ? " · assigned projects only" : "";
   const assignmentControl = access.manageProjectAssignments === true ? " · can assign projects" : "";
   const base = WEB_TEAM_ROLES.find(option => option.value === role.baseRole)?.label ?? "Member";
@@ -59,7 +61,8 @@ function roleDescription(role: WorkspaceCustomRole) {
       : "member edit behavior";
   const hiddenParts = [
     hiddenMenus > 0 ? `${hiddenMenus} menu${hiddenMenus === 1 ? "" : "s"} hidden` : "",
-    hiddenCards > 0 ? `${hiddenCards} card${hiddenCards === 1 ? "" : "s"} hidden` : ""
+    hiddenCards > 0 ? `${hiddenCards} card${hiddenCards === 1 ? "" : "s"} hidden` : "",
+    hiddenSettings > 0 ? `${hiddenSettings} setting menu${hiddenSettings === 1 ? "" : "s"} hidden` : ""
   ].filter(Boolean);
   return hiddenParts.length === 0
     ? `${base} with ${baseDetail}${assignedScope}${assignmentControl}`

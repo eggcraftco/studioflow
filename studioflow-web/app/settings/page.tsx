@@ -16,12 +16,15 @@ import {
   loadDashboardCounts,
   loadQuickReplySettings,
   loadTeamAccessData,
+  loadJoinedWorkspaceOptions,
   loadWorkspaceContext,
+  switchActiveWorkspace,
   loadWorkspaceExportData,
   loadWorkspaceSettingsOverview,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
   type JoinRequestDetail,
+  type JoinedWorkspaceOption,
   type DashboardCounts,
   type CompanyNumberSetting,
   type QuickReplySettings,
@@ -31,7 +34,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
-import { canEditQuickReplySettingsForRole, saveQuickReplySettings } from "@/lib/studioflow/quickReply";
+import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, type QuickReplyContributionItem } from "@/lib/studioflow/quickReply";
 import {
   loadWorkspaceBlockHeadings,
   saveWorkspaceBlockHeadings,
@@ -40,7 +43,7 @@ import {
 } from "@/lib/studioflow/blockHeadings";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
@@ -67,6 +70,7 @@ import {
 } from "@/lib/studioflow/supportTickets";
 
 type SettingsSectionId =
+  | "general"
   | "theme-branding"
   | "language-labels"
   | "workflow"
@@ -107,8 +111,7 @@ const SETTINGS_ICON_PATHS = {
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  { id: "theme-branding", title: "Theme & Branding", appKey: "Theme & Brand", description: "Logo, theme and branding.", icon: "theme" },
-  { id: "language-labels", title: "Language & Labels", appKey: "Language & Labels", description: "Language, currency and label text.", icon: "language" },
+  { id: "general", title: "General", appKey: "General", description: "Appearance, language, profile and security.", icon: "theme" },
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow" },
   { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf" },
   { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply" },
@@ -116,11 +119,9 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart" },
   { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield" },
   { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data" },
-  { id: "account", title: "Account", appKey: "Account", description: "Profile and sign-in security.", icon: "account" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team" },
-  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" },
-  { id: "about", title: "About", appKey: "About", description: "App information.", icon: "about" }
+  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" }
 ];
 
 function formatStorageFromMB(valueMB: number) {
@@ -223,17 +224,40 @@ function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
-  if (sectionId === "account" || sectionId === "about" || sectionId === "support-tickets") return true;
-  if (!workspaceAccessAllows(workspace.memberAccess, "settings")) return false;
-  if (sectionId === "team-access") {
-    return workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess");
+  if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
+
+  const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
+  const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
+
+  // Settings sidebar items are gated SOLELY by their own per-section permission flag.
+  // We deliberately do not require the workspace-level "settings" nav flag here so
+  // an owner can hand out individual settings screens (e.g. only Quick Reply) to a
+  // role without having to also toggle on the broader Settings nav access. Mirrors
+  // the Mac / Android behaviour where disabled permissions hide the menu cleanly
+  // without surfacing a Firestore "Missing or insufficient permissions" popup.
+  if (sectionId === "general" || sectionId === "account" || sectionId === "about") {
+    return allowed("settingsGeneral");
   }
-  if (sectionId === "quick-reply") return workspaceAccessAllows(workspace.memberAccess, "quickReply");
-  if (sectionId === "financial") return workspace.entitlements.features.financial_advanced && workspaceAccessAllows(workspace.memberAccess, "financialInfo");
-  if (sectionId === "plan-access") return workspaceAccessAllows(workspace.memberAccess, "financialInfo");
-  if (sectionId === "pdf" || sectionId === "data") return workspaceAccessAllows(workspace.memberAccess, "exportData");
-  if (sectionId === "safety-uploads") return workspaceAccessAllows(workspace.memberAccess, "clientFiles");
-  return true;
+  if (sectionId === "support-tickets") return allowed("settingsSupport");
+  if (sectionId === "team-access") return allowed("settingsTeamAccess");
+
+  if (isWorkflowOnly) {
+    if (sectionId === "theme-branding" || sectionId === "language-labels") return allowed("settingsGeneral");
+    if (sectionId === "quick-reply") return allowed("settingsQuickReply");
+    if (sectionId === "pdf") return allowed("settingsPdf");
+    return false;
+  }
+
+  // Explicit per-section gates for non-owner, non-workflow members. Default = false.
+  if (sectionId === "workflow") return allowed("settingsWorkflow");
+  if (sectionId === "quick-reply") return allowed("settingsQuickReply");
+  if (sectionId === "financial") return workspace.entitlements.features.financial_advanced && allowed("settingsFinancial");
+  if (sectionId === "pdf") return allowed("settingsPdf");
+  if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");
+  if (sectionId === "data") return allowed("settingsData");
+  if (sectionId === "woocommerce") return allowed("settingsWorkflow");
+  if (sectionId === "plan-access") return allowed("settingsPlanAccess");
+  return false;
 }
 
 export default function SettingsPage() {
@@ -245,7 +269,7 @@ export default function SettingsPage() {
   const [quickReplySettings, setQuickReplySettings] = useState<QuickReplySettings | null>(null);
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("theme-branding");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [error, setError] = useState("");
 
@@ -261,6 +285,20 @@ export default function SettingsPage() {
     }
   }, []);
 
+  // Keep activeSection in sync with the visibleSections set so a user landing on a
+  // section their role can no longer access (e.g. after the owner toggles off a
+  // permission, or via a stale URL `?section=...`) automatically falls back to the
+  // first visible section instead of triggering a Firestore permission error.
+  useEffect(() => {
+    if (!workspace) return;
+    if (!canSeeSettingsSection(workspace, activeSection)) {
+      const firstVisible = SETTINGS_SECTIONS.find(section => canSeeSettingsSection(workspace, section.id));
+      if (firstVisible && firstVisible.id !== activeSection) {
+        setActiveSection(firstVisible.id);
+      }
+    }
+  }, [workspace, activeSection]);
+
   useEffect(() => {
     if (!user) return;
     const currentUser = user;
@@ -272,6 +310,7 @@ export default function SettingsPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(currentUser.uid);
         const teamDataPromise = loadedWorkspace.entitlements.features.team_access
+          && workspaceAccessAllows(loadedWorkspace.memberAccess, "teamAccess")
           ? (async () => {
               if (normalizeWorkspaceRole(loadedWorkspace.role) === "owner") {
                 try {
@@ -283,8 +322,9 @@ export default function SettingsPage() {
               return loadTeamAccessData(loadedWorkspace).catch(() => null);
             })()
           : Promise.resolve(null);
+        const isWorkflowOnly = normalizeWorkspaceRole(loadedWorkspace.role) === "workflow";
         const [loadedCounts, loadedSettings, loadedQuickReplySettings, loadedTeamData, loadedSupportUnreadSummary] = await Promise.all([
-          loadDashboardCounts(loadedWorkspace.id),
+          isWorkflowOnly ? Promise.resolve(null) : loadDashboardCounts(loadedWorkspace.id),
           loadWorkspaceSettingsOverview(loadedWorkspace.id),
           loadQuickReplySettings(loadedWorkspace.id),
           teamDataPromise,
@@ -315,7 +355,7 @@ export default function SettingsPage() {
     [workspace]
   );
   const selectedSection = useMemo(
-    () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "account") ?? SETTINGS_SECTIONS[0],
+    () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "general") ?? SETTINGS_SECTIONS[0],
     [activeSection, visibleSections]
   );
   const language = settings?.selectedLanguage ?? "English";
@@ -335,8 +375,9 @@ export default function SettingsPage() {
 
   async function refreshSettingsAfterImport() {
     if (!workspace) return;
+    const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
     const [nextCounts, nextSettings, nextQuickReplySettings] = await Promise.all([
-      loadDashboardCounts(workspace.id),
+      isWorkflowOnly ? Promise.resolve(null) : loadDashboardCounts(workspace.id),
       loadWorkspaceSettingsOverview(workspace.id),
       loadQuickReplySettings(workspace.id)
     ]);
@@ -346,7 +387,7 @@ export default function SettingsPage() {
   }
 
   async function refreshTeamAccessData() {
-    if (!workspace || !workspace.entitlements.features.team_access) return null;
+    if (!workspace || !workspace.entitlements.features.team_access || !workspaceAccessAllows(workspace.memberAccess, "teamAccess")) return null;
     if (normalizeWorkspaceRole(workspace.role) === "owner") {
       try {
         await syncAcceptedJoinRequests(workspace);
@@ -459,6 +500,16 @@ function renderSettingsSection({
   onDataImported: () => Promise<void>;
 }) {
   switch (sectionId) {
+    case "general":
+      return (
+        <GeneralSettingsSection
+          workspace={workspace}
+          settings={settings}
+          language={language}
+          userEmail={userEmail}
+          onSaved={onWorkspaceSettingsChange}
+        />
+      );
     case "theme-branding":
       return <ThemeBrandingSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
     case "language-labels":
@@ -500,6 +551,97 @@ function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS 
   );
 }
 
+function GeneralSettingsSection({
+  workspace,
+  settings,
+  language,
+  userEmail,
+  onSaved
+}: {
+  workspace: WorkspaceContext;
+  settings: WorkspaceSettingsOverview | null;
+  language: string;
+  userEmail: string;
+  onSaved: (settings: WorkspaceSettingsOverview) => void;
+}) {
+  type GeneralSubsection = "menu" | "appearance" | "language" | "profile" | "about";
+  const [selected, setSelected] = useState<GeneralSubsection>("menu");
+  const t = (text: string) => studioT(text, settings?.selectedLanguage ?? language ?? "English");
+  const normalizedRole = normalizeWorkspaceRole(workspace.role);
+  const canManageWorkspaceIdentity = normalizedRole === "owner" || normalizedRole === "admin" || normalizedRole === "member";
+  const [personalSettings, setPersonalSettings] = useState<{ appTheme?: string; selectedLanguage?: string }>({});
+
+  useEffect(() => {
+    getPersonalInterfaceSettings(workspace)
+      .then(values => setPersonalSettings(values))
+      .catch(() => setPersonalSettings({}));
+  }, [workspace.id]);
+
+  if (selected === "appearance") {
+    return (
+      <div className="settings-card-stack">
+        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
+        <ThemeBrandingSection workspace={workspace} settings={settings} onSaved={onSaved} />
+      </div>
+    );
+  }
+  if (selected === "language") {
+    return (
+      <div className="settings-card-stack">
+        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
+        <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onSaved} />
+      </div>
+    );
+  }
+  if (selected === "profile") {
+    return (
+      <div className="settings-card-stack">
+        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
+        <AccountSection workspace={workspace} settings={settings} userEmail={userEmail} onSaved={onSaved} hideWorkspaceIdentity={!canManageWorkspaceIdentity} />
+      </div>
+    );
+  }
+  if (selected === "about") {
+    return (
+      <div className="settings-card-stack">
+        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
+        <AboutSection workspace={workspace} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="customer" eyebrow={t("Settings")} title={t("General")} />
+        <p className="muted-copy">{t("Manage your personal appearance, language, profile and sign-in security in one place.")}</p>
+        <div className="general-settings-list">
+          <button className="general-settings-row" type="button" onClick={() => setSelected("appearance")}>
+            <span className="general-settings-row__title">{t("Appearance")}</span>
+            <span className="general-settings-row__detail">{personalSettings.appTheme || settings?.appTheme || "System"}</span>
+            <span className="general-settings-row__arrow">›</span>
+          </button>
+          <button className="general-settings-row" type="button" onClick={() => setSelected("language")}>
+            <span className="general-settings-row__title">{t("Language & Region")}</span>
+            <span className="general-settings-row__detail">{personalSettings.selectedLanguage || settings?.selectedLanguage || language || "English"}</span>
+            <span className="general-settings-row__arrow">›</span>
+          </button>
+          <button className="general-settings-row" type="button" onClick={() => setSelected("profile")}>
+            <span className="general-settings-row__title">{t("Profile & Security")}</span>
+            <span className="general-settings-row__detail">{canManageWorkspaceIdentity ? t("Profile, workspace and security") : t("Profile and security")}</span>
+            <span className="general-settings-row__arrow">›</span>
+          </button>
+          <button className="general-settings-row" type="button" onClick={() => setSelected("about")}>
+            <span className="general-settings-row__title">{t("About")}</span>
+            <span className="general-settings-row__detail">NivaDesk</span>
+            <span className="general-settings-row__arrow">›</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ThemeBrandingSection({
   workspace,
   settings,
@@ -514,7 +656,8 @@ function ThemeBrandingSection({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
+  const canEditBranding = canEditWorkspaceSettingsForRole(workspace.role);
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
 
@@ -523,22 +666,48 @@ function ThemeBrandingSection({
     setAppSubtitle(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
     setStatus("");
     setError("");
-  }, [settings]);
+    getPersonalInterfaceSettings(workspace).then(personal => {
+      if (personal.appTheme) setAppTheme(personal.appTheme);
+    }).catch(() => undefined);
+  }, [settings, workspace.id]);
 
-  async function handleSave() {
+  async function handleSaveTheme() {
     if (!settings) return;
     setSaving(true);
     setStatus("");
     setError("");
     try {
-      const result = await saveThemeBrandingSettings(workspace, { appTheme, appSubtitle });
-      const savedSettings = { ...settings, ...(result.settings ?? { appTheme, appSubtitle }) };
-      onSaved(savedSettings);
-      setAppTheme(savedSettings.appTheme);
-      setAppSubtitle(savedSettings.appSubtitle);
-      setStatus(result.message || "Theme & Branding settings saved.");
+      // Theme is ALWAYS personal — each user (owner included) keeps their own
+      // theme across their devices. Workspace branding fields (subtitle) still
+      // route through saveThemeBrandingSettings for owners/admins separately.
+      const personalResult = await savePersonalInterfaceSettings(workspace, { appTheme });
+      if (!isWorkflowOnly && appSubtitle !== settings?.appSubtitle) {
+        await saveThemeBrandingSettings(workspace, { appSubtitle });
+      }
+      const savedTheme = personalResult.settings?.appTheme ?? appTheme;
+      onSaved({ ...settings, appTheme: savedTheme });
+      setAppTheme(savedTheme);
+      setStatus(personalResult.message || "Personal theme saved.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Theme & Branding settings could not be saved.");
+      setError(saveError instanceof Error ? saveError.message : "Theme could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveBranding() {
+    if (!settings || !canEditBranding) return;
+    setSaving(true);
+    setStatus("");
+    setError("");
+    try {
+      const result = await saveThemeBrandingSettings(workspace, { appSubtitle });
+      const savedSettings = { ...settings, ...(result.settings ?? { appSubtitle }) };
+      onSaved(savedSettings);
+      setAppSubtitle(savedSettings.appSubtitle);
+      setStatus(result.message || "Workspace branding saved.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Workspace branding could not be saved.");
     } finally {
       setSaving(false);
     }
@@ -546,13 +715,6 @@ function ThemeBrandingSection({
 
   return (
     <div className="settings-card-stack">
-      {!canEdit ? (
-        <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Theme & Branding is read-only")} />
-          <p className="muted-copy">{t("Your current workspace role cannot edit Theme & Branding.")}</p>
-        </section>
-      ) : null}
-
       <section className="card app-card">
         <CardTitle icon="dashboard" eyebrow={t("Theme")} title={t("Theme selector")} />
         <label className="quick-reply-settings-label">
@@ -560,7 +722,7 @@ function ThemeBrandingSection({
           <select
             className="input"
             value={appTheme}
-            disabled={!canEdit || saving || !settings}
+            disabled={saving || !settings}
             onChange={event => {
               setAppTheme(event.target.value);
               setStatus("");
@@ -572,16 +734,21 @@ function ThemeBrandingSection({
             <option value="Dark">{t("Dark")}</option>
           </select>
         </label>
+        <div className="settings-action-row">
+          <button className="button" type="button" disabled={saving || !settings} onClick={handleSaveTheme}>
+            {saving ? t("Saving...") : t("Save Appearance")}
+          </button>
+        </div>
       </section>
 
-      <section className="card app-card">
+      {canEditBranding ? <section className="card app-card">
         <CardTitle icon="storage" eyebrow={t("Branding")} title={t("Theme & Branding")} />
         <label className="quick-reply-settings-label">
           <span>{t("Brand Subtitle")}</span>
           <input
             className="input"
             value={appSubtitle}
-            disabled={!canEdit || saving || !settings}
+            disabled={!canEditBranding || saving || !settings}
             placeholder="Bespoke Hand-Painted Dials"
             onChange={event => {
               setAppSubtitle(event.target.value);
@@ -592,13 +759,13 @@ function ThemeBrandingSection({
         </label>
         <p className="muted-copy">{t("Workspace logo is managed from Account > Workspace Logo.")}</p>
         <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving || !settings} onClick={handleSave}>
+          <button className="button" type="button" disabled={!canEditBranding || saving || !settings} onClick={handleSaveBranding}>
             {saving ? t("Saving...") : t("Save Theme & Branding")}
           </button>
         </div>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-      </section>
+      </section> : null}
     </div>
   );
 }
@@ -618,7 +785,7 @@ function LanguageLabelsSection({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  const canEdit = workspaceAccessAllows(workspace.memberAccess, "settingsGeneral");
   const previewLanguage = selectedLanguage || language || "English";
   const t = (text: string) => studioT(text, previewLanguage);
 
@@ -626,7 +793,10 @@ function LanguageLabelsSection({
     setSelectedLanguage(settings?.selectedLanguage ?? language ?? "English");
     setStatus("");
     setError("");
-  }, [language, settings]);
+    getPersonalInterfaceSettings(workspace).then(personal => {
+      if (personal.selectedLanguage) setSelectedLanguage(personal.selectedLanguage);
+    }).catch(() => undefined);
+  }, [language, settings, workspace.id]);
 
   async function handleSave() {
     if (!settings) return;
@@ -634,13 +804,10 @@ function LanguageLabelsSection({
     setStatus("");
     setError("");
     try {
-      const result = await saveLanguageSettings(workspace, { selectedLanguage });
-      let savedSettings = { ...settings, selectedLanguage: result.settings?.selectedLanguage ?? selectedLanguage };
-      try {
-        savedSettings = await loadWorkspaceSettingsOverview(workspace.id);
-      } catch {
-        // The callable result is still enough to update the visible web UI.
-      }
+      // Language is ALWAYS personal — each user (owner included) keeps their own
+      // language preference across their devices.
+      const result = await savePersonalInterfaceSettings(workspace, { selectedLanguage });
+      const savedSettings = { ...settings, selectedLanguage: result.settings?.selectedLanguage ?? selectedLanguage };
       onSaved(savedSettings);
       setSelectedLanguage(savedSettings.selectedLanguage);
       setStatus(studioT(result.message || "Language settings saved.", savedSettings.selectedLanguage));
@@ -686,7 +853,7 @@ function LanguageLabelsSection({
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy">{t("This saves to the same app-compatible language key used by NivaDesk: seciliDil.")}</p>
+        <p className="muted-copy">{t("This language is personal to your account and synchronises across your devices.")}</p>
       </section>
     </div>
   );
@@ -1257,13 +1424,22 @@ function PdfExportSettingsSection({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
+  const canEdit = isWorkflowOnly || canEditWorkspaceSettingsForRole(workspace.role);
+  const visiblePdfToggles = isWorkflowOnly
+    ? PDF_SETTING_TOGGLES.filter(([key]) => !["pdfShowFinCustomer", "pdfShowPaymentMethod", "pdfShowFinInternal"].includes(String(key)))
+    : PDF_SETTING_TOGGLES;
 
   useEffect(() => {
     setDraft(settingsWithDefaultCompanyNumbers(settings));
     setStatus("");
     setError("");
-  }, [settings]);
+    if (isWorkflowOnly && settings) {
+      getPersonalInterfaceSettings(workspace).then(personal => {
+        setDraft(current => current ? { ...current, ...personal } : current);
+      }).catch(() => undefined);
+    }
+  }, [settings, isWorkflowOnly, workspace]);
 
   if (!draft) {
     return <PlaceholderSection title="PDF Export Settings" detail="PDF settings could not be loaded yet." action={<Link className="button secondary" href="/export">Open Export</Link>} />;
@@ -1304,19 +1480,29 @@ function PdfExportSettingsSection({
     setStatus("");
     setError("");
     try {
-      const result = await savePdfExportSettings(workspace, {
-        pdfShowCustomer: draft.pdfShowCustomer,
-        pdfShowContact: draft.pdfShowContact,
-        pdfShowPreview: draft.pdfShowPreview,
-        pdfShowFinCustomer: draft.pdfShowFinCustomer,
-        pdfShowPaymentMethod: draft.pdfShowPaymentMethod,
-        pdfShowFinInternal: draft.pdfShowFinInternal,
-        pdfShowStatus: draft.pdfShowStatus,
-        pdfShowShipping: draft.pdfShowShipping,
-        pdfShowMaterials: draft.pdfShowMaterials,
-        pdfShowPriority: draft.pdfShowPriority,
-        companyNumbers: draft.companyNumbers
-      });
+      const result = isWorkflowOnly
+        ? await savePersonalInterfaceSettings(workspace, {
+            pdfShowCustomer: draft.pdfShowCustomer,
+            pdfShowContact: draft.pdfShowContact,
+            pdfShowPreview: draft.pdfShowPreview,
+            pdfShowStatus: draft.pdfShowStatus,
+            pdfShowShipping: draft.pdfShowShipping,
+            pdfShowMaterials: draft.pdfShowMaterials,
+            pdfShowPriority: draft.pdfShowPriority
+          })
+        : await savePdfExportSettings(workspace, {
+            pdfShowCustomer: draft.pdfShowCustomer,
+            pdfShowContact: draft.pdfShowContact,
+            pdfShowPreview: draft.pdfShowPreview,
+            pdfShowFinCustomer: draft.pdfShowFinCustomer,
+            pdfShowPaymentMethod: draft.pdfShowPaymentMethod,
+            pdfShowFinInternal: draft.pdfShowFinInternal,
+            pdfShowStatus: draft.pdfShowStatus,
+            pdfShowShipping: draft.pdfShowShipping,
+            pdfShowMaterials: draft.pdfShowMaterials,
+            pdfShowPriority: draft.pdfShowPriority,
+            companyNumbers: draft.companyNumbers
+          });
       const savedSettings = { ...draft, ...(result.settings ?? {}) };
       setDraft(savedSettings);
       onSaved(savedSettings);
@@ -1332,15 +1518,19 @@ function PdfExportSettingsSection({
     <div className="settings-card-stack">
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Locked" title="PDF settings are read-only" />
-          <p className="muted-copy">Your current workspace role cannot edit PDF Export settings.</p>
+          <CardTitle icon="lock" eyebrow="Safe access" title="Finance-free PDF preferences" />
+          <p className="muted-copy">
+            {isWorkflowOnly
+              ? "Payment and financial PDF fields remain hidden. You can edit your own non-financial export sections below."
+              : "Your current workspace role cannot edit PDF Export settings."}
+          </p>
         </section>
       ) : null}
 
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="docText" eyebrow="PDF Export Settings" title="Visible PDF sections" />
         <div className="pdf-settings-grid">
-          {PDF_SETTING_TOGGLES.map(([key, label]) => (
+          {visiblePdfToggles.map(([key, label]) => (
             <label className="pdf-settings-toggle" key={key}>
               <span>{label}</span>
               <input
@@ -1354,7 +1544,7 @@ function PdfExportSettingsSection({
         </div>
       </section>
 
-      <section className="card app-card quick-reply-settings-card">
+      {!isWorkflowOnly ? <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="notes" eyebrow="Invoice Numbers" title="Company invoice numbers" />
         <div className="quick-reply-template-heading">
           <p className="muted-copy" style={{ margin: 0 }}>VAT, EORI, company number or any reference you want to show on PDF invoices.</p>
@@ -1383,12 +1573,12 @@ function PdfExportSettingsSection({
             </div>
           ))}
         </div>
-      </section>
+      </section> : null}
 
       <section className="card app-card quick-reply-settings-actions">
         <div>
-          <strong>Shared PDF settings</strong>
-          <p className="muted-copy">These values save to the app-compatible PDF keys in companySettings and keep existing web export available.</p>
+          <strong>{isWorkflowOnly ? "Safe PDF access" : "Shared PDF settings"}</strong>
+          <p className="muted-copy">Your finance-free PDF section preferences are personal. Shared financial and invoice PDF settings remain owner-managed.</p>
         </div>
         <div className="settings-action-row">
           <Link className="button secondary" href="/export">Open Export</Link>
@@ -1442,31 +1632,84 @@ function QuickReplySettingsSection({
   const [replyMode, setReplyMode] = useState("AI");
   const [politeness, setPoliteness] = useState("Warm");
   const [replyLength, setReplyLength] = useState("Short");
-  const [knowledgeBase, setKnowledgeBase] = useState("");
+  const [mainKnowledgeBase, setMainKnowledgeBase] = useState("");
+  const [onDeviceKnowledgeBase, setOnDeviceKnowledgeBase] = useState("");
   const [products, setProducts] = useState<QuickReplyTemplateItem[]>(defaultQuickReplyProducts([]));
   const [rules, setRules] = useState<QuickReplyTemplateItem[]>(defaultQuickReplyRules([]));
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [isReplacingOpenAIKey, setIsReplacingOpenAIKey] = useState(false);
   const [clearOpenAIKey, setClearOpenAIKey] = useState(false);
+  const [personalLoaded, setPersonalLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const canEdit = canEditQuickReplySettingsForRole(workspace.role);
+  const [contributionDraft, setContributionDraft] = useState("");
+  const [contributions, setContributions] = useState<QuickReplyContributionItem[]>([]);
+  const [contributionSaving, setContributionSaving] = useState(false);
+  const canEditCore = canEditQuickReplySettingsForRole(workspace.role);
+  const canEditPersonal = canEditPersonalQuickReplySettingsForRole(workspace.role);
+  const canContribute = canContributeQuickReplyKnowledgeForRole(workspace.role);
 
   useEffect(() => {
     if (!settings) return;
-    setReplyMode(settings.replyMode === "Local" ? "Apple" : settings.replyMode);
-    setPoliteness(settings.quickReplyPoliteness);
-    setReplyLength(settings.quickReplyLength);
-    setKnowledgeBase(settings.aiKnowledgeBase);
-    setProducts(defaultQuickReplyProducts(settings.products));
-    setRules(defaultQuickReplyRules(settings.rules));
+    setMainKnowledgeBase(settings.aiKnowledgeBase);
     setApiKeyInput("");
     setIsReplacingOpenAIKey(false);
     setClearOpenAIKey(false);
     setStatus("");
     setError("");
   }, [settings]);
+
+  useEffect(() => {
+    let active = true;
+    if (!canEditPersonal) return;
+    loadQuickReplyPersonalSettings(workspace)
+      .then(personal => {
+        if (!active) return;
+        setReplyMode(personal.replyMode === "Local" ? "Apple" : personal.replyMode);
+        setPoliteness(personal.quickReplyPoliteness);
+        setReplyLength(personal.quickReplyLength);
+        setOnDeviceKnowledgeBase(personal.onDeviceKnowledgeBase);
+        setProducts(defaultQuickReplyProducts(personal.products));
+        setRules(defaultQuickReplyRules(personal.rules));
+        setPersonalLoaded(true);
+      })
+      .catch(loadError => {
+        if (!active) return;
+        setError(loadError instanceof Error ? loadError.message : "Could not load your Quick Reply settings.");
+      });
+    return () => { active = false; };
+  }, [workspace.id, canEditPersonal]);
+
+  useEffect(() => {
+    if (!canContribute) return;
+    listQuickReplyContributions(workspace).then(setContributions).catch(() => undefined);
+  }, [workspace.id, canContribute]);
+
+  async function addTeamContribution() {
+    if (!canContribute || !contributionDraft.trim()) return;
+    setContributionSaving(true);
+    setError("");
+    try {
+      const result = await saveQuickReplyContribution(workspace, contributionDraft.trim());
+      setContributionDraft("");
+      setContributions(await listQuickReplyContributions(workspace));
+      setStatus(result.message || "Contribution added.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not add contribution.");
+    } finally {
+      setContributionSaving(false);
+    }
+  }
+
+  async function removeTeamContribution(id: string) {
+    try {
+      await deleteQuickReplyContribution(workspace, id);
+      setContributions(await listQuickReplyContributions(workspace));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not remove contribution.");
+    }
+  }
 
   function updateProduct(index: number, patch: Partial<QuickReplyTemplateItem>) {
     setProducts(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -1477,25 +1720,30 @@ function QuickReplySettingsSection({
   }
 
   async function handleSave() {
-    if (!settings) return;
+    if (!settings || !canEditPersonal) return;
     setSaving(true);
     setStatus("");
     setError("");
     try {
-      const result = await saveQuickReplySettings(workspace, {
+      const personalResult = await saveQuickReplyPersonalSettings(workspace, {
         replyMode,
         quickReplyPoliteness: politeness,
         quickReplyLength: replyLength,
-        aiKnowledgeBase: knowledgeBase,
+        onDeviceKnowledgeBase,
         products,
-        rules,
-        ...(apiKeyInput.trim() || clearOpenAIKey ? { openAIKey: clearOpenAIKey ? "" : apiKeyInput.trim() } : {})
+        rules
       });
-      if (result.settings) onSaved(result.settings);
+      if (canEditCore) {
+        const ownerResult = await saveQuickReplySettings(workspace, {
+          aiKnowledgeBase: mainKnowledgeBase,
+          ...(apiKeyInput.trim() || clearOpenAIKey ? { openAIKey: clearOpenAIKey ? "" : apiKeyInput.trim() } : {})
+        });
+        if (ownerResult.settings) onSaved(ownerResult.settings);
+      }
       setApiKeyInput("");
       setIsReplacingOpenAIKey(false);
       setClearOpenAIKey(false);
-      setStatus(result.message || "Quick Reply settings saved.");
+      setStatus(personalResult.message || "Your Quick Reply settings were saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Quick Reply settings could not be saved.");
     } finally {
@@ -1507,17 +1755,10 @@ function QuickReplySettingsSection({
     return <PlaceholderSection title="Quick Reply Settings" detail="Quick Reply settings could not be loaded yet." />;
   }
 
-  const showMaskedOpenAIKey = settings.hasOpenAIKey && !isReplacingOpenAIKey && !clearOpenAIKey;
+  const showMaskedOpenAIKey = canEditCore && settings.hasOpenAIKey && !isReplacingOpenAIKey && !clearOpenAIKey;
 
   return (
     <div className="settings-card-stack">
-      {!canEdit ? (
-        <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Locked" title="Quick Reply settings are read-only" />
-          <p className="muted-copy">Your current workspace role can use Quick Reply, but cannot edit workspace Quick Reply settings.</p>
-        </section>
-      ) : null}
-
       <section className="card app-card quick-reply-settings-card quick-reply-settings-shell">
         <div className="quick-reply-settings-main-title">
           <span className="quick-reply-settings-main-icon" aria-hidden="true">✦</span>
@@ -1525,10 +1766,10 @@ function QuickReplySettingsSection({
         </div>
 
         <div className="quick-reply-engine-block">
-          <h3>Reply Engine</h3>
-          <div className={canEdit ? "quick-reply-engine-segment" : "quick-reply-engine-segment is-disabled"}>
+          <h3>Your Reply Engine</h3>
+          <div className={canEditPersonal ? "quick-reply-engine-segment" : "quick-reply-engine-segment is-disabled"}>
             {[
-              ["Apple", "", "Apple On-Device"],
+              ["Apple", "◉", "On-Device Settings"],
               ["AI", "◎", "OpenAI Online"],
               ["Offline", "▤", "Offline Template"]
             ].map(([value, icon, label]) => (
@@ -1536,7 +1777,7 @@ function QuickReplySettingsSection({
                 key={value}
                 className={replyMode === value ? "active" : ""}
                 type="button"
-                disabled={!canEdit}
+                disabled={!canEditPersonal}
                 onClick={() => setReplyMode(value)}
               >
                 <span aria-hidden="true">{icon}</span>
@@ -1544,164 +1785,120 @@ function QuickReplySettingsSection({
               </button>
             ))}
           </div>
-          <p className="muted-copy">{quickReplyEngineDescription(replyMode)}</p>
+          {replyMode === "Apple" ? (
+            <p className="muted-copy">Configure personal on-device knowledge here. On-device generation runs in the supported mobile or desktop app, not in the web browser.</p>
+          ) : (
+            <p className="muted-copy">{quickReplyEngineDescription(replyMode)}</p>
+          )}
         </div>
 
         <div className="quick-reply-style-panel">
-          <h3>Default Reply Style</h3>
+          <h3>Your Default Reply Style</h3>
           <div className="quick-reply-setting-group">
             <span>Politeness</span>
-            <div className={canEdit ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
-              {[
-                ["Direct", "⌁"],
-                ["Warm", "♡"],
-                ["Very Polite", "☆"]
-              ].map(([option, icon]) => (
-                <button
-                  key={option}
-                  className={politeness === option ? "active" : ""}
-                  type="button"
-                  disabled={!canEdit}
-                  onClick={() => setPoliteness(option)}
-                >
-                  <span aria-hidden="true">{icon}</span>
-                  {option}
-                </button>
+            <div className={canEditPersonal ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
+              {["Direct", "Warm", "Very Polite"].map(option => (
+                <button key={option} className={politeness === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setPoliteness(option)}>{option}</button>
               ))}
             </div>
           </div>
           <div className="quick-reply-setting-group">
             <span>Length</span>
-            <div className={canEdit ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
-              {[
-                ["Short", "☷"],
-                ["Balanced", "⚖"],
-                ["Detailed", "☰"]
-              ].map(([option, icon]) => (
-                <button
-                  key={option}
-                  className={replyLength === option ? "active" : ""}
-                  type="button"
-                  disabled={!canEdit}
-                  onClick={() => setReplyLength(option)}
-                >
-                  <span aria-hidden="true">{icon}</span>
-                  {option}
-                </button>
+            <div className={canEditPersonal ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
+              {["Short", "Balanced", "Detailed"].map(option => (
+                <button key={option} className={replyLength === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setReplyLength(option)}>{option}</button>
               ))}
             </div>
           </div>
-          <p className="muted-copy">These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.</p>
+          <p className="muted-copy">These personal settings sync across your devices and do not change another team member&apos;s templates.</p>
         </div>
 
         {replyMode === "Apple" ? (
           <div className="quick-reply-settings-panel">
-            <CardTitle icon="dashboard" eyebrow="Apple On-Device AI" title="Apple On-Device AI" />
-            <div className="quick-reply-settings-info">
-              <strong>Apple On-Device AI</strong>
-              <p>This mode uses Apple Intelligence on the device. Users do not need to download DeepSeek/Ollama models. If Apple Intelligence is not available, Quick Reply will show a clear warning and users can switch to OpenAI Online or Offline Template.</p>
-            </div>
+            <CardTitle icon="dashboard" eyebrow="On-Device Settings" title="Personal On-Device Knowledge" />
+            <p className="muted-copy">Use this knowledge with Apple On-Device AI in the Mac/iPhone/iPad app. Android on-device generation requires a separate Gemini Nano integration and is not presented as active on web.</p>
             <KnowledgeBaseEditor
-              title="Company Knowledge Base (For Apple On-Device AI)"
-              value={knowledgeBase}
-              disabled={!canEdit}
-              onChange={setKnowledgeBase}
+              title="My On-Device Knowledge"
+              value={onDeviceKnowledgeBase}
+              disabled={!canEditPersonal}
+              onChange={setOnDeviceKnowledgeBase}
             />
           </div>
         ) : null}
 
         {replyMode === "AI" ? (
           <>
-            <div className="quick-reply-api-card">
-              <span className="quick-reply-api-icon" aria-hidden="true">⌕</span>
-              <div className="quick-reply-api-title">OpenAI API Key</div>
-              <div className="quick-reply-api-fields">
-                <input
-                  className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
-                  type={showMaskedOpenAIKey ? "text" : "password"}
-                  value={showMaskedOpenAIKey ? "sk-proj-••••" : apiKeyInput}
-                  readOnly={showMaskedOpenAIKey}
-                  disabled={!canEdit || clearOpenAIKey}
-                  onFocus={() => {
-                    if (showMaskedOpenAIKey && canEdit) setIsReplacingOpenAIKey(true);
-                  }}
-                  onChange={event => {
-                    if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value);
-                  }}
-                  placeholder={settings.hasOpenAIKey ? "Paste a new key to replace" : "sk-proj-..."}
-                />
-                <span>Your API key is encrypted and stored securely.</span>
+            {canEditCore ? (
+              <>
+                <div className="quick-reply-api-card">
+                  <span className="quick-reply-api-icon" aria-hidden="true">⌕</span>
+                  <div className="quick-reply-api-title">OpenAI API Key</div>
+                  <div className="quick-reply-api-fields">
+                    <input
+                      className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
+                      type={showMaskedOpenAIKey ? "text" : "password"}
+                      value={showMaskedOpenAIKey ? "sk-proj-••••" : apiKeyInput}
+                      readOnly={showMaskedOpenAIKey}
+                      disabled={clearOpenAIKey}
+                      onFocus={() => { if (showMaskedOpenAIKey) setIsReplacingOpenAIKey(true); }}
+                      onChange={event => { if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value); }}
+                      placeholder={settings.hasOpenAIKey ? "Paste a new key to replace" : "sk-proj-..."}
+                    />
+                    <span>Stored server-side and never shared with workspace members.</span>
+                  </div>
+                </div>
+                <div className="quick-reply-key-row">
+                  <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
+                    {clearOpenAIKey ? "Key will be cleared" : settings.hasOpenAIKey ? "API key configured" : "No API key configured"}
+                  </span>
+                  {showMaskedOpenAIKey ? <button className="button secondary" type="button" onClick={() => setIsReplacingOpenAIKey(true)}>Replace Key</button> : null}
+                  {isReplacingOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>Cancel Replace</button> : null}
+                  {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setClearOpenAIKey(current => !current); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? "Keep Key" : "Clear Key"}</button> : null}
+                </div>
+                <KnowledgeBaseEditor title="Company Knowledge Base (For OpenAI)" value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} />
+              </>
+            ) : (
+              <div className="quick-reply-settings-panel">
+                <CardTitle icon="lock" eyebrow="OpenAI Online" title="Workspace AI Access" />
+                <span className={settings.hasOpenAIKey ? "studio-pill success" : "studio-pill"}>
+                  {settings.hasOpenAIKey ? "Workspace OpenAI key configured" : "Workspace OpenAI key not configured"}
+                </span>
+                <p className="muted-copy">Only the workspace owner can view or change the API key and main Company Knowledge Base. You can use OpenAI replies once a key is configured.</p>
               </div>
-            </div>
-            <div className="quick-reply-key-row">
-              <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
-                {clearOpenAIKey ? "Key will be cleared" : settings.hasOpenAIKey ? "API key configured" : "No API key"}
-              </span>
-              {showMaskedOpenAIKey ? (
-                <button className="button secondary" type="button" disabled={!canEdit} onClick={() => setIsReplacingOpenAIKey(true)}>
-                  Replace Key
-                </button>
-              ) : null}
-              {isReplacingOpenAIKey ? (
-                <button className="button secondary" type="button" disabled={!canEdit} onClick={() => {
-                  setIsReplacingOpenAIKey(false);
-                  setApiKeyInput("");
-                }}>
-                  Cancel Replace
-                </button>
-              ) : null}
-              {settings.hasOpenAIKey ? (
-                <button className="button secondary" type="button" disabled={!canEdit} onClick={() => {
-                  setClearOpenAIKey(current => !current);
-                  setIsReplacingOpenAIKey(false);
-                  setApiKeyInput("");
-                }}>
-                  {clearOpenAIKey ? "Keep Key" : "Clear Key"}
-                </button>
-              ) : null}
-            </div>
-            <KnowledgeBaseEditor
-              title="Company Knowledge Base (For OpenAI)"
-              value={knowledgeBase}
-              disabled={!canEdit}
-              onChange={setKnowledgeBase}
-            />
+            )}
+            {canContribute ? (
+              <section className="quick-reply-settings-panel">
+                <CardTitle icon="notes" eyebrow="Team Contributions" title="Additional Knowledge for OpenAI" />
+                <p className="muted-copy">Add supporting information for shared OpenAI replies without changing the owner-managed Company Knowledge Base.</p>
+                <textarea className="quick-reply-settings-textarea" value={contributionDraft} onChange={event => setContributionDraft(event.target.value)} placeholder="Add an additional fact or instruction for AI replies..." />
+                <button className="button" type="button" disabled={contributionSaving || !contributionDraft.trim()} onClick={addTeamContribution}>{contributionSaving ? "Adding..." : "Add Contribution"}</button>
+                <div className="quick-reply-template-list">
+                  {contributions.map(item => (
+                    <div className="quick-reply-template-row" key={item.id}>
+                      <div><strong>{item.authorName}</strong><p className="muted-copy">{item.text}</p></div>
+                      {item.canDelete ? <button className="icon-action danger" type="button" onClick={() => removeTeamContribution(item.id)} aria-label="Remove">×</button> : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </>
         ) : null}
 
         {replyMode === "Offline" ? (
           <div className="quick-reply-settings-panel">
-            <CardTitle icon="notes" eyebrow="Offline Template" title="Offline Template" />
-            <QuickReplyTemplateEditor
-              title="Products / Services"
-              addLabel="Add Product"
-              titlePlaceholder="Product Name"
-              descPlaceholder="Product Detail / Price"
-              items={products}
-              disabled={!canEdit}
-              onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])}
-              onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))}
-              onChange={updateProduct}
-            />
+            <CardTitle icon="notes" eyebrow="Offline Template" title="My Offline Template" />
+            <p className="muted-copy">Your own reusable products and rules sync across your devices without changing the workspace owner&apos;s Company Knowledge Base.</p>
+            <QuickReplyTemplateEditor title="Products / Services" addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} />
             <div className="settings-divider" />
-            <QuickReplyTemplateEditor
-              title="Custom Rules / FAQs"
-              addLabel="Add Rule"
-              titlePlaceholder="Rule Title"
-              descPlaceholder="Rule Description"
-              items={rules}
-              disabled={!canEdit}
-              onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])}
-              onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))}
-              onChange={updateRule}
-            />
+            <QuickReplyTemplateEditor title="Custom Rules / FAQs" addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} />
           </div>
         ) : null}
 
         <div className="quick-reply-settings-actions quick-reply-settings-footer">
           <Link className="button secondary" href="/quick-reply">Open Quick Reply</Link>
-          <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
-            {saving ? "Saving..." : "Save Settings"}
+          <button className="button" type="button" disabled={!canEditPersonal || !personalLoaded || saving} onClick={handleSave}>
+            {saving ? "Saving..." : "Save My Settings"}
           </button>
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
@@ -1960,12 +2157,14 @@ function AccountSection({
   workspace,
   settings,
   userEmail,
-  onSaved
+  onSaved,
+  hideWorkspaceIdentity = false
 }: {
   workspace: WorkspaceContext;
   settings: WorkspaceSettingsOverview | null;
   userEmail: string;
   onSaved: (settings: WorkspaceSettingsOverview) => void;
+  hideWorkspaceIdentity?: boolean;
 }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -2245,7 +2444,7 @@ function AccountSection({
   return (
     <div className="settings-card-stack">
       <section className="card app-card account-profile-card">
-        <CardTitle icon="customer" eyebrow="Account" title="Profile & Company" />
+        <CardTitle icon="customer" eyebrow="General" title="Profile & Security" />
         <div className="account-profile-panel">
           <div className="account-avatar-preview">
             {accountPhotoUrl ? (
@@ -2318,19 +2517,21 @@ function AccountSection({
               onChange={event => setDisplayName(event.target.value)}
             />
           </label>
-          <label className="quick-reply-settings-label">
-            Company / Studio Name
-            <input
-              className="input"
-              value={companyName}
-              disabled={!canEditCompanyName || savingProfile}
-              placeholder="My Studio"
-              onChange={event => setCompanyName(event.target.value)}
-            />
-          </label>
+          {!hideWorkspaceIdentity ? (
+            <label className="quick-reply-settings-label">
+              Company / Studio Name
+              <input
+                className="input"
+                value={companyName}
+                disabled={!canEditCompanyName || savingProfile}
+                placeholder="My Studio"
+                onChange={event => setCompanyName(event.target.value)}
+              />
+            </label>
+          ) : null}
         </div>
 
-        {!canEditCompanyName ? <p className="muted-copy">Company / Studio Name can only be changed by the workspace owner.</p> : null}
+        {!hideWorkspaceIdentity && !canEditCompanyName ? <p className="muted-copy">Company / Studio Name can only be changed by the workspace owner.</p> : null}
         <div className="settings-mini-grid">
           <InfoTile label="Workspace" value={workspace.name} />
           <InfoTile label="Role" value={workspace.roleLabel} />
@@ -2365,7 +2566,7 @@ function AccountSection({
         </div>
       </section>
 
-      <section className="card app-card">
+      {!hideWorkspaceIdentity ? <section className="card app-card">
         <CardTitle icon="storage" eyebrow="Workspace Logo" title="Upload or replace only" />
         <div className="workspace-logo-row workspace-logo-editor">
           {logoUrl ? (
@@ -2427,7 +2628,7 @@ function AccountSection({
             </div>
           </div>
         ) : null}
-      </section>
+      </section> : null}
     </div>
   );
 }
@@ -3037,6 +3238,7 @@ function PlanAccessSection({
   storagePercent: number;
 }) {
   const currentPlan = workspace.entitlements;
+  const isActiveWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const featurePills = [
     { title: planOrderLimitText(currentPlan), enabled: true },
     { title: planCustomerLimitText(currentPlan), enabled: true },
@@ -3081,7 +3283,11 @@ function PlanAccessSection({
           <div className="progress-fill" style={{ width: `${storagePercent}%` }} />
         </div>
         <p className="muted-copy">{counts?.estimatedFileUsageMB ?? 0} MB used of {formatStorageFromMB(workspace.billingStorageLimitMB)}.</p>
-        <Link className="button secondary" href="/plan">Open full Plan & Billing page</Link>
+        {isActiveWorkspaceOwner ? (
+          <Link className="button secondary" href="/plan">Open full Plan &amp; Billing page</Link>
+        ) : (
+          <p className="muted-copy">This workspace plan is managed by its owner.</p>
+        )}
       </section>
 
       <section className="card app-card">
@@ -3130,7 +3336,11 @@ function PlanAccessSection({
         <p className="muted-copy">
           Subscription access is managed through secure billing and updates automatically when a payment status changes.
         </p>
-        <Link className="button secondary" href="/plan">Open Plan &amp; Billing</Link>
+        {isActiveWorkspaceOwner ? (
+          <Link className="button secondary" href="/plan">Open Plan &amp; Billing</Link>
+        ) : (
+          <p className="muted-copy">Only the workspace owner can change or manage this plan.</p>
+        )}
       </section>
     </div>
   );
@@ -3154,6 +3364,69 @@ function TeamAccessSection({
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
   const [requestOwnerIdentifier, setRequestOwnerIdentifier] = useState("");
+  const [joinedWorkspaces, setJoinedWorkspaces] = useState<JoinedWorkspaceOption[]>([]);
+  const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState("");
+  const { user } = useAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return;
+    loadJoinedWorkspaceOptions(user.uid, workspace.id)
+      .then(options => {
+        if (!cancelled) setJoinedWorkspaces(options);
+      })
+      .catch(loadError => {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Workspaces could not be loaded.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, workspace.id]);
+
+  async function switchWorkspace(option: JoinedWorkspaceOption) {
+    if (!user || option.isCurrent || switchingWorkspaceId) return;
+    setSwitchingWorkspaceId(option.id);
+    setError("");
+    setStatus("");
+    try {
+      await switchActiveWorkspace(user.uid, option.id);
+      window.location.reload();
+    } catch (switchError) {
+      setError(switchError instanceof Error ? switchError.message : "Could not switch workspace.");
+      setSwitchingWorkspaceId("");
+    }
+  }
+
+  const workspaceSwitchPanel = (
+    <section className="card app-card team-access-panel-card">
+      <div className="team-access-panel-heading">
+        <strong>Workspaces</strong>
+        <span>{joinedWorkspaces.length} connected</span>
+      </div>
+      <p className="muted-copy">Switch to a workspace you own or have joined. Your assigned role controls what you can see after switching.</p>
+      {joinedWorkspaces.map(option => (
+        <div className="team-access-workspace-option" key={option.id}>
+          <span className="team-access-icon team-access-icon-owner" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
+          <div>
+            <strong>{option.name}</strong>
+            <small>{option.roleLabel}</small>
+          </div>
+          {option.isCurrent ? (
+            <span className="studio-pill success">Current</span>
+          ) : (
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => void switchWorkspace(option)}
+              disabled={Boolean(switchingWorkspaceId)}
+            >
+              {switchingWorkspaceId === option.id ? "Switching..." : "Switch"}
+            </button>
+          )}
+        </div>
+      ))}
+    </section>
+  );
 
   useEffect(() => {
     setRequestRoles(previous => {
@@ -3167,7 +3440,8 @@ function TeamAccessSection({
 
   const isOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const hasTeamPlan = Boolean(workspace.entitlements.features.team_access);
-  const canManageTeam = Boolean(isOwner && hasTeamPlan);
+  const canViewTeamManagement = Boolean(hasTeamPlan && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
+  const canManageTeam = Boolean(isOwner && canViewTeamManagement);
   const roleOptions = useMemo(() => standardAndCustomRoleOptions(customRoles), [customRoles]);
   const teamLimit = workspace.billingTeamMemberLimit > 9999 ? "Unlimited" : `${members.length} / ${workspace.billingTeamMemberLimit}`;
   const roleCounts = useMemo(() => {
@@ -3212,6 +3486,99 @@ function TeamAccessSection({
       "Access request sent. The workspace owner can approve it from Team Access."
     );
     setRequestOwnerIdentifier("");
+  }
+
+  if (!canViewTeamManagement) {
+    return (
+      <div className="settings-stack team-access-shell">
+        <section className="card app-card team-access-hero-card">
+          <CardTitle icon="team" title="Join an existing Team workspace">
+            <p className="team-access-hero-subtitle">
+              Request access using the Company ID or owner email shared by a Team workspace owner.
+            </p>
+          </CardTitle>
+          <p className="muted-copy">
+            Requesting access is available on every plan. Team management remains available only inside a Team workspace with permission.
+          </p>
+          {status ? <p className="layout-status">{status}</p> : null}
+          {error ? <p className="layout-error">{error}</p> : null}
+        </section>
+
+        {workspaceSwitchPanel}
+
+        <form className="card app-card team-access-panel-card" onSubmit={event => {
+          event.preventDefault();
+          void submitAccessRequest();
+        }}>
+          <div className="team-access-panel-heading">
+            <strong>Request Access</strong>
+            <span>Every plan</span>
+          </div>
+          <p className="muted-copy">Enter the Team workspace owner’s email address or Company ID.</p>
+          <div className="team-access-request-row">
+            <input
+              className="input"
+              value={requestOwnerIdentifier}
+              onChange={event => setRequestOwnerIdentifier(event.target.value)}
+              placeholder="Owner email or Company ID"
+              disabled={Boolean(actioning)}
+            />
+            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label="Send access request">
+              {actioning === "request-access" ? "..." : "➤"}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  if (!isOwner) {
+    return (
+      <div className="settings-stack team-access-shell">
+        <section className="card app-card team-access-hero-card">
+          <CardTitle icon="team" title="Team workspace membership">
+            <p className="team-access-hero-subtitle">
+              You have joined this workspace as {workspace.roleLabel}.
+            </p>
+          </CardTitle>
+          <div className="team-access-hero-meta">
+            <span>{workspace.billingPlanName}</span>
+            <span>{workspace.roleLabel}</span>
+            <span>Shared with you</span>
+          </div>
+          <p className="muted-copy">
+            You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.
+          </p>
+          {status ? <p className="layout-status">{status}</p> : null}
+          {error ? <p className="layout-error">{error}</p> : null}
+        </section>
+
+        {workspaceSwitchPanel}
+
+        <form className="card app-card team-access-panel-card" onSubmit={event => {
+          event.preventDefault();
+          void submitAccessRequest();
+        }}>
+          <div className="team-access-panel-heading">
+            <strong>Request Access</strong>
+            <span>Every plan</span>
+          </div>
+          <p className="muted-copy">Enter another Team workspace owner’s email address or Company ID.</p>
+          <div className="team-access-request-row">
+            <input
+              className="input"
+              value={requestOwnerIdentifier}
+              onChange={event => setRequestOwnerIdentifier(event.target.value)}
+              placeholder="Owner email or Company ID"
+              disabled={Boolean(actioning)}
+            />
+            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label="Send access request">
+              {actioning === "request-access" ? "..." : "➤"}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
   }
 
   return (
@@ -3268,15 +3635,25 @@ function TeamAccessSection({
             <strong>Workspaces</strong>
             <button className="team-access-icon-button" type="button" onClick={() => void onRefreshTeamAccess()} aria-label="Refresh workspaces">↻</button>
           </div>
-          <div className="team-access-workspace-option">
-            <span className="team-access-icon team-access-icon-owner" aria-hidden="true">♛</span>
-            <div>
-              <strong>{workspace.name || "NivaDesk"}</strong>
-              <small>{workspace.roleLabel}</small>
+          {joinedWorkspaces.map(option => (
+            <div className="team-access-workspace-option" key={option.id}>
+              <span className="team-access-icon team-access-icon-owner" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
+              <div>
+                <strong>{option.name}</strong>
+                <small>{option.roleLabel}</small>
+              </div>
+              {option.isCurrent ? (
+                <>
+                  <span className="studio-pill success">Current</span>
+                  <span className="studio-pill team-access-connected-pill">Connected</span>
+                </>
+              ) : (
+                <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
+                  {switchingWorkspaceId === option.id ? "Switching..." : "Switch"}
+                </button>
+              )}
             </div>
-            <span className="studio-pill success">Current</span>
-            <span className="studio-pill team-access-connected-pill">Connected</span>
-          </div>
+          ))}
           <Link className="team-access-advanced-link" href="/team">Advanced: connect with Company ID</Link>
         </section>
 

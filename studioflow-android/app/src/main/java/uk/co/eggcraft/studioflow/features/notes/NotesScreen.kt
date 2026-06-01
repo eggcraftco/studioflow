@@ -263,7 +263,7 @@ fun NotesScreen(
             }
             Spacer(modifier = Modifier.height(20.dp))
 
-            SidebarItem("Notes", sectionCounts["notes"] ?: 0, topTab == "personal" && section == "notes" && labelFilter == null) {
+            SidebarItem(t("Notes"), sectionCounts["notes"] ?: 0, topTab == "personal" && section == "notes" && labelFilter == null) {
                 topTab = "personal"; onSetSection("notes"); labelFilter = null; closeDrawer()
             }
             SidebarItem(t("Reminders"), sectionCounts["reminders"] ?: 0, topTab == "personal" && section == "reminders") {
@@ -301,7 +301,7 @@ fun NotesScreen(
         ) {
             if (showHamburger) {
                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                    Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                    Icon(Icons.Filled.Menu, contentDescription = t("Menu"))
                 }
             }
             Box(
@@ -361,7 +361,7 @@ fun NotesScreen(
             var sortMenuOpen by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { sortMenuOpen = true }) {
-                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = t("Sort"))
                 }
                 androidx.compose.material3.DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
                     listOf("manual" to t("Manual order"), "date" to t("Recently updated"), "title" to t("Title (A–Z)")).forEach { (key, label) ->
@@ -423,7 +423,7 @@ fun NotesScreen(
                 section == "archive" -> t("Archive")
                 section == "trash" -> t("Trash")
                 labelFilter != null -> "#$labelFilter"
-                else -> "Notes"
+                else -> t("Notes")
             }
             Text(pageTitle, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             Text(
@@ -473,7 +473,7 @@ fun NotesScreen(
             }
         }
 
-        // Quick "Take a note..." input
+        // Quick t("Take a note...") input
         Surface(
             shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -493,7 +493,7 @@ fun NotesScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Take a note…",
+                    t("Take a note…"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
@@ -1083,7 +1083,7 @@ private fun NoteCard(
                     var moreOpen by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { moreOpen = true }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.MoreHoriz, contentDescription = "More", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Filled.MoreHoriz, contentDescription = t("More"), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                             androidx.compose.material3.DropdownMenuItem(text = { Text("Edit") }, onClick = { moreOpen = false; onClick() })
@@ -1147,7 +1147,7 @@ private fun NoteCard(
                     var compactMoreOpen by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { compactMoreOpen = true }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.MoreHoriz, contentDescription = "More", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Filled.MoreHoriz, contentDescription = t("More"), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.DropdownMenu(expanded = compactMoreOpen, onDismissRequest = { compactMoreOpen = false }) {
                             androidx.compose.material3.DropdownMenuItem(text = { Text("Edit") }, onClick = { compactMoreOpen = false; onClick() })
@@ -1422,7 +1422,7 @@ private fun ProjectNotesList(state: StudioFlowUiState) {
     val entries = remember(state.orders) {
         state.orders.flatMap { order ->
             buildList {
-                if (order.notes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, "Note", order.notes))
+                if (order.notes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, t("Note"), order.notes))
                 if (order.invNotes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, t("Inventory"), order.invNotes))
             }
         }
@@ -1453,7 +1453,7 @@ private fun ProjectNotesList(state: StudioFlowUiState) {
                 ) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            first.title.ifBlank { first.customer.ifBlank { "Project" } },
+                            first.title.ifBlank { first.customer.ifBlank { t("Project") } },
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 17.sp
                         )

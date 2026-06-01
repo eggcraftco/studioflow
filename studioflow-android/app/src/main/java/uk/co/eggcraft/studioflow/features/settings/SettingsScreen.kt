@@ -154,6 +154,7 @@ fun SettingsScreen(
     onChangeAccountEmail: (String) -> Unit,
     onSendPasswordResetEmail: () -> Unit,
     onRequestWorkspaceAccess: (String) -> Unit,
+    onSwitchWorkspace: (String) -> Unit,
     onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
     onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
@@ -171,7 +172,9 @@ fun SettingsScreen(
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
     val currentPlan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
-    val sections = rememberSettingsSections(currentPlan)
+    val currentAccess = state.workspace?.memberAccess
+    val currentRole = state.workspace?.role.orEmpty()
+    val sections = rememberSettingsSections(currentPlan, currentAccess, currentRole)
     val settingsRepository = remember { StudioFlowRepository() }
     var supportUnreadCount by remember { mutableStateOf(0) }
 
@@ -241,6 +244,7 @@ fun SettingsScreen(
                         onChangeAccountEmail = onChangeAccountEmail,
                         onSendPasswordResetEmail = onSendPasswordResetEmail,
                         onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                        onSwitchWorkspace = onSwitchWorkspace,
                         onApproveJoinRequest = onApproveJoinRequest,
                         onDeclineJoinRequest = onDeclineJoinRequest,
                         onUpdateTeamMemberRole = onUpdateTeamMemberRole,
@@ -276,6 +280,7 @@ fun SettingsScreen(
                 onChangeAccountEmail = onChangeAccountEmail,
                 onSendPasswordResetEmail = onSendPasswordResetEmail,
                 onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                onSwitchWorkspace = onSwitchWorkspace,
                 onApproveJoinRequest = onApproveJoinRequest,
                 onDeclineJoinRequest = onDeclineJoinRequest,
                 onUpdateTeamMemberRole = onUpdateTeamMemberRole,
@@ -310,7 +315,9 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun rememberSettingsSections(plan: StudioBillingPlan): List<SettingsSection> = remember(plan) {
+private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceMemberAccess?, role: String): List<SettingsSection> = remember(plan, access, role) {
+    val normalizedRole = role.lowercase().replace("_", "").replace("-", "").replace(" ", "")
+    val isWorkflowOnly = normalizedRole == "workflow" || normalizedRole == "workflowonly"
     listOf(
         SettingsSection("general", "General", "Appearance, language, profile and workspace identity.", Icons.Filled.Settings),
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline),
@@ -321,15 +328,42 @@ private fun rememberSettingsSections(plan: StudioBillingPlan): List<SettingsSect
         SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart),
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
-        SettingsSection("account", "Sign-in & Security", "Device unlock, password reset and sign out.", Icons.Filled.Lock),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People)
     ).filter { section ->
-        when (section.key) {
-            "team", "messages" -> plan.hasTeamAccess
-            "financial" -> plan.hasAdvancedFinance
-            else -> true
+        if (isWorkflowOnly) {
+            when (section.key) {
+                // Keep operational tools only; hide workspace configuration.
+                "general" -> access?.settingsGeneral != false
+                "pdf" -> access?.exportData != false && access?.settingsPdf != false
+                "quickReply" -> access?.quickReply != false && access?.settingsQuickReply != false
+                "support" -> access?.settingsSupport != false
+                "team" -> access?.settingsTeamAccess != false
+                else -> false
+            }
+        } else {
+            // Settings sidebar items mirror Mac / Web: each section is gated SOLELY
+            // by its own per-section permission flag so an owner can hand out
+            // individual settings screens without also enabling the broader nav
+            // permission. Unknown sections default to FALSE for safety.
+            when (section.key) {
+                "general" -> access?.settingsGeneral != false
+                "workflow" -> access?.settingsWorkflow != false
+                "pdf" -> access?.settingsPdf != false
+                "quickReply" -> access?.settingsQuickReply != false
+                "messages" -> plan.hasTeamAccess && access?.settingsMessageSettings != false
+                "financial" -> plan.hasAdvancedFinance && access?.settingsFinancial != false
+                "safety" -> access?.settingsSafetyUploads != false
+                "data" -> access?.settingsData != false
+                "woo" -> access?.settingsWorkflow != false
+                "account" -> access?.settingsGeneral != false
+                "plan" -> access?.settingsPlanAccess != false
+                "support" -> access?.settingsSupport != false
+                "team" -> access?.settingsTeamAccess != false
+                "about" -> access?.settingsGeneral != false
+                else -> false
+            }
         }
     }
 }
@@ -359,8 +393,8 @@ private fun SettingsRow(
         ) {
             IconBubble(icon = section.icon, tint = StudioBlue, container = StudioBlue.copy(alpha = 0.12f))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(section.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                Text(section.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Text(t(section.title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text(t(section.subtitle), maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             }
             if (unreadCount > 0) {
                 SupportUnreadBadge(unreadCount)
@@ -390,6 +424,7 @@ private fun SettingsDetailScreen(
     onChangeAccountEmail: (String) -> Unit,
     onSendPasswordResetEmail: () -> Unit,
     onRequestWorkspaceAccess: (String) -> Unit,
+    onSwitchWorkspace: (String) -> Unit,
     onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
     onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
@@ -456,6 +491,7 @@ private fun SettingsDetailScreen(
                 "team" -> TeamAccessDetail(
                     state = state,
                     onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                    onSwitchWorkspace = onSwitchWorkspace,
                     onApproveJoinRequest = onApproveJoinRequest,
                     onDeclineJoinRequest = onDeclineJoinRequest,
                     onUpdateTeamMemberRole = onUpdateTeamMemberRole,
@@ -494,27 +530,42 @@ private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack:
             Spacer(modifier = Modifier.weight(1f))
             Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(section.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(t(section.title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
 
 @Composable
-private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit, personalTheme: Boolean = true, showBranding: Boolean = false) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
     var subtitle by rememberSaveable(settings.appSubtitle) { mutableStateOf(settings.appSubtitle) }
+    val displayedTheme = when (settings.appTheme.trim()) {
+        "Light" -> t("Light")
+        "Dark" -> t("Dark")
+        else -> t("System")
+    }
     DetailColumn {
         DetailCard(title = t("Theme"), icon = Icons.Filled.Palette) {
             MenuField(
                 label = t("Theme"),
-                value = settings.appTheme,
+                value = displayedTheme,
                 options = listOf(t("System"), t("Light"), t("Dark")),
-                onSelect = { onSave(mapOf("appTheme" to it), t("Theme saved.")) }
+                onSelect = { selected ->
+                    val canonicalTheme = when (selected) {
+                        t("Light") -> "Light"
+                        t("Dark") -> "Dark"
+                        else -> "System"
+                    }
+                    // Theme is ALWAYS personal — every user picks their own theme
+                    // across their devices, even workspace owners. Workspace-wide
+                    // theme is no longer used.
+                    onSave(mapOf("personalAppTheme" to canonicalTheme), t("Theme saved."))
+                }
             )
         }
-        DetailCard(title = t("Theme & Branding"), icon = Icons.Filled.Palette) {
+        if (showBranding) DetailCard(title = t("Theme & Branding"), icon = Icons.Filled.Palette) {
             OutlinedTextField(
                 value = subtitle,
                 onValueChange = {
@@ -531,7 +582,7 @@ private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, A
 }
 
 @Composable
-private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
+private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit, personalOnly: Boolean = false) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailColumn {
@@ -539,8 +590,10 @@ private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, 
             MenuField(
                 label = t("Select Language"),
                 value = state.workspaceSettings.selectedLanguage,
-                options = listOf("English", "Turkce", "Deutsch", "Francais", "Italiano", "Espanol", "Portugues"),
-                onSelect = { onSave(mapOf("seciliDil" to it), "Language saved.") }
+                options = listOf("English", "Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"),
+                // Language is ALWAYS personal — same rule as theme: each user picks
+                // their own language across their devices, regardless of role.
+                onSelect = { onSave(mapOf("personalSelectedLanguage" to it), "Language saved.") }
             )
         }
     }
@@ -562,13 +615,15 @@ private fun GeneralSettingsDetail(
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     val workspace = state.workspace
     val settings = state.workspaceSettings
+    val normalizedRole = workspace?.role.orEmpty().lowercase().replace("_", "").replace("-", "").replace(" ", "")
+    val isWorkflowOnly = normalizedRole == "workflow" || normalizedRole == "workflowonly"
+    val canManageWorkspaceIdentity = workspace?.isOwner == true || normalizedRole == "owner" || normalizedRole == "admin" || normalizedRole == "member"
     val title = when (selected) {
-        "appearance" -> "Appearance"
+        "appearance" -> t("Appearance")
         "language" -> t("Language & Region")
-        "profile" -> "Profile & Workspace"
-        "logo" -> "Workspace Logo"
+        "account" -> t("Profile & Security")
         "about" -> t("About")
-        else -> "General"
+        else -> t("General")
     }
 
     DetailColumn {
@@ -589,12 +644,11 @@ private fun GeneralSettingsDetail(
                 Text(title, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
                     when (selected) {
-                        "appearance" -> "Choose the app theme and workspace subtitle."
-                        "language" -> "Set the workspace language used across NivaDesk."
-                        "profile" -> "Manage your profile and studio identity."
-                        "logo" -> t("Upload the logo shown in the app header.")
+                        "appearance" -> t("Choose your personal app theme.")
+                        "language" -> t("Set your personal language across NivaDesk devices.")
+                        "account" -> t("Manage your profile and sign-in security in one place.")
                         "about" -> t("Version and ownership information.")
-                        else -> "Keep the everyday workspace identity settings in one quiet place."
+                        else -> t("Keep the everyday workspace identity settings in one quiet place.")
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold
@@ -603,9 +657,9 @@ private fun GeneralSettingsDetail(
         }
 
         when (selected) {
-            "appearance" -> ThemeBrandingDetail(state, onUpdateWorkspaceSettings)
-            "language" -> LanguageLabelsDetail(state, onUpdateWorkspaceSettings)
-            "profile" -> AccountDetail(
+            "appearance" -> ThemeBrandingDetail(state, onUpdateWorkspaceSettings, personalTheme = isWorkflowOnly, showBranding = canManageWorkspaceIdentity)
+            "language" -> LanguageLabelsDetail(state, onUpdateWorkspaceSettings, personalOnly = isWorkflowOnly)
+            "account" -> AccountDetail(
                 state = state,
                 requireDeviceUnlock = false,
                 onSetRequireDeviceUnlock = {},
@@ -619,25 +673,9 @@ private fun GeneralSettingsDetail(
                 onSignOut = {},
                 includeHeader = false,
                 includeProfile = true,
-                includeLogo = false,
-                includeSecurity = false
-            )
-            "logo" -> AccountDetail(
-                state = state,
-                requireDeviceUnlock = false,
-                onSetRequireDeviceUnlock = {},
-                onUpdateAccountProfile = onUpdateAccountProfile,
-                onUploadAccountAvatar = onUploadAccountAvatar,
-                onRemoveAccountAvatar = onRemoveAccountAvatar,
-                onUploadWorkspaceLogo = onUploadWorkspaceLogo,
-                onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
-                onChangeAccountEmail = onChangeAccountEmail,
-                onSendPasswordResetEmail = {},
-                onSignOut = {},
-                includeHeader = false,
-                includeProfile = false,
-                includeLogo = true,
-                includeSecurity = false
+                includeLogo = canManageWorkspaceIdentity,
+                includeSecurity = true,
+                includeWorkspaceIdentity = canManageWorkspaceIdentity
             )
             "about" -> AboutDetail()
             else -> {
@@ -659,19 +697,11 @@ private fun GeneralSettingsDetail(
                     )
                     GeneralDivider()
                     GeneralMenuRow(
-                        icon = Icons.Filled.Business,
-                        title = t("Profile & Workspace"),
-                        subtitle = workspace?.name ?: t("Workspace details"),
-                        tint = StudioOrange,
-                        onClick = { selected = "profile" }
-                    )
-                    GeneralDivider()
-                    GeneralMenuRow(
-                        icon = Icons.Filled.PhotoLibrary,
-                        title = t("Workspace Logo"),
-                        subtitle = if (settings.appLogoUrl.isNotBlank()) t("Logo uploaded") else t("No logo uploaded"),
-                        tint = StudioGreen,
-                        onClick = { selected = "logo" }
+                        icon = Icons.Filled.AccountCircle,
+                        title = t("Profile & Security"),
+                        subtitle = if (isWorkflowOnly) t("Personal profile and sign-in security.") else t("Profile, workspace identity and sign-in security."),
+                        tint = uk.co.eggcraft.studioflow.ui.theme.StudioRed,
+                        onClick = { selected = "account" }
                     )
                     GeneralDivider()
                     GeneralMenuRow(
@@ -885,49 +915,72 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
+    val normalizedRole = state.workspace?.role.orEmpty().lowercase().replace("_", "").replace("-", "").replace(" ", "")
+    val isWorkflowOnly = normalizedRole == "workflow" || normalizedRole == "workflowonly"
     DetailColumn {
         DetailCard(title = t("PDF Export Settings"), icon = Icons.Filled.Description) {
-            TwoColumnSwitches(
-                listOf(
-                    SwitchSpec("Customer & Design", settings.pdfShowCustomer, "pdfShowCustomer"),
-                    SwitchSpec("Contact & Notes", settings.pdfShowContact, "pdfShowContact"),
-                    SwitchSpec("Preview Image", settings.pdfShowPreview, "pdfShowPreview"),
-                    SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "pdfShowMaterials"),
-                    SwitchSpec("Priority / Risk", settings.pdfShowPriority, "pdfShowPriority"),
-                    SwitchSpec("Financials: Paid & Remaining", settings.pdfShowFinCustomer, "pdfShowFinCustomer"),
-                    SwitchSpec("Payment Method", settings.pdfShowPaymentMethod, "pdfShowPaymentMethod"),
-                    SwitchSpec("Internal Financials", settings.pdfShowFinInternal, "pdfShowFinInternal"),
-                    SwitchSpec("Production Status", settings.pdfShowStatus, "pdfShowStatus"),
-                    SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping")
-                ),
-                onSave = { key, value -> onSave(mapOf(key to value), "PDF settings saved.") }
-            )
-            HorizontalDivider()
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(t("Company invoice numbers"), fontWeight = FontWeight.ExtraBold)
-                    Text("VAT, EORI, company number or any reference you want to show on PDF invoices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                TextButton(onClick = {
-                    onSave(mapOf("companyNumbersJSON" to companyNumbersJson(settings.companyNumbers + StudioCompanyNumber("New Number", ""))), "Invoice numbers saved.")
-                }) {
-                    Icon(Icons.Filled.AddCircle, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add")
-                }
-            }
-            settings.companyNumbers.forEachIndexed { index, item ->
-                CompanyNumberRow(
-                    item = item,
-                    onChange = { nextItem ->
-                        val next = settings.companyNumbers.toMutableList().also { it[index] = nextItem }
-                        onSave(mapOf("companyNumbersJSON" to companyNumbersJson(next)), "Invoice numbers saved.")
-                    },
-                    onDelete = {
-                        val next = settings.companyNumbers.toMutableList().also { it.removeAt(index) }
-                        onSave(mapOf("companyNumbersJSON" to companyNumbersJson(next)), "Invoice numbers saved.")
-                    }
+            if (isWorkflowOnly) {
+                Text(
+                    "PDF Export remains available for your workflow. Workspace-wide PDF settings are owner-managed, and payment or financial PDF fields are hidden for this role.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                HorizontalDivider()
+                Text("Your visible non-financial sections", fontWeight = FontWeight.ExtraBold)
+                TwoColumnSwitches(
+                    listOf(
+                        SwitchSpec("Customer & Design", settings.pdfShowCustomer, "personalPdfShowCustomer"),
+                        SwitchSpec("Contact & Notes", settings.pdfShowContact, "personalPdfShowContact"),
+                        SwitchSpec("Preview Image", settings.pdfShowPreview, "personalPdfShowPreview"),
+                        SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "personalPdfShowMaterials"),
+                        SwitchSpec("Priority / Risk", settings.pdfShowPriority, "personalPdfShowPriority"),
+                        SwitchSpec("Production Status", settings.pdfShowStatus, "personalPdfShowStatus"),
+                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "personalPdfShowShipping")
+                    ),
+                    onSave = { key, value -> onSave(mapOf(key to value), "Personal PDF preference saved.") }
+                )
+            } else {
+                TwoColumnSwitches(
+                    listOf(
+                        SwitchSpec("Customer & Design", settings.pdfShowCustomer, "pdfShowCustomer"),
+                        SwitchSpec("Contact & Notes", settings.pdfShowContact, "pdfShowContact"),
+                        SwitchSpec("Preview Image", settings.pdfShowPreview, "pdfShowPreview"),
+                        SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "pdfShowMaterials"),
+                        SwitchSpec("Priority / Risk", settings.pdfShowPriority, "pdfShowPriority"),
+                        SwitchSpec("Financials: Paid & Remaining", settings.pdfShowFinCustomer, "pdfShowFinCustomer"),
+                        SwitchSpec("Payment Method", settings.pdfShowPaymentMethod, "pdfShowPaymentMethod"),
+                        SwitchSpec("Internal Financials", settings.pdfShowFinInternal, "pdfShowFinInternal"),
+                        SwitchSpec("Production Status", settings.pdfShowStatus, "pdfShowStatus"),
+                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping")
+                    ),
+                    onSave = { key, value -> onSave(mapOf(key to value), "PDF settings saved.") }
+                )
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(t("Company invoice numbers"), fontWeight = FontWeight.ExtraBold)
+                        Text("VAT, EORI, company number or any reference you want to show on PDF invoices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = {
+                        onSave(mapOf("companyNumbersJSON" to companyNumbersJson(settings.companyNumbers + StudioCompanyNumber("New Number", ""))), "Invoice numbers saved.")
+                    }) {
+                        Icon(Icons.Filled.AddCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add")
+                    }
+                }
+                settings.companyNumbers.forEachIndexed { index, item ->
+                    CompanyNumberRow(
+                        item = item,
+                        onChange = { nextItem ->
+                            val next = settings.companyNumbers.toMutableList().also { it[index] = nextItem }
+                            onSave(mapOf("companyNumbersJSON" to companyNumbersJson(next)), "Invoice numbers saved.")
+                        },
+                        onDelete = {
+                            val next = settings.companyNumbers.toMutableList().also { it.removeAt(index) }
+                            onSave(mapOf("companyNumbersJSON" to companyNumbersJson(next)), "Invoice numbers saved.")
+                        }
+                    )
+                }
             }
         }
     }
@@ -938,8 +991,11 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
-    var apiKey by rememberSaveable(settings.openAIKey) { mutableStateOf(settings.openAIKey) }
+    val canManageCoreAI = state.workspace?.isOwner == true
+    var selectedReplyMode by rememberSaveable(settings.replyMode) { mutableStateOf(settings.replyMode) }
+    var apiKey by rememberSaveable { mutableStateOf("") }
     var knowledge by rememberSaveable(settings.aiKnowledgeBase) { mutableStateOf(settings.aiKnowledgeBase) }
+    var contributionText by rememberSaveable { mutableStateOf("") }
     var products by remember(settings.quickReplyProducts) { mutableStateOf(settings.quickReplyProducts.ifEmpty { defaultQuickReplyProducts() }) }
     var rules by remember(settings.quickReplyRules) { mutableStateOf(settings.quickReplyRules.ifEmpty { defaultQuickReplyRules() }) }
     val templatesDirty = products != settings.quickReplyProducts || rules != settings.quickReplyRules
@@ -955,15 +1011,16 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
     DetailColumn {
         DetailCard(title = t("Quick Reply Settings"), icon = Icons.Outlined.AutoAwesome) {
             Text(t("Reply Engine"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-            SegmentedRow(listOf("Apple On-Device", "OpenAI Online", "Offline Template"), engineLabel(settings.replyMode)) {
+            SegmentedRow(listOf("On-Device AI", "OpenAI Online", "Offline Template"), engineLabel(selectedReplyMode)) {
                 val mode = when (it) {
-                    "Apple On-Device" -> "Apple"
+                    "On-Device AI" -> "Apple"
                     "Offline Template" -> "Offline"
                     else -> "AI"
                 }
+                selectedReplyMode = mode
                 onSave(mapOf("replyMode" to mode), "Reply engine saved.")
             }
-            Text(engineDescription(settings.replyMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(engineDescription(selectedReplyMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(t("Default Reply Style"), fontWeight = FontWeight.ExtraBold)
@@ -975,108 +1032,153 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     SegmentedRow(listOf("Short", "Balanced", "Detailed"), settings.quickReplyLength) {
                         onSave(mapOf("quickReplyLength" to it), "Reply style saved.")
                     }
-                    Text("These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("These are your personal Quick Reply settings and sync across your devices. Android on-device AI requires Gemini Nano support; Offline Template works now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = {
-                    apiKey = it
-                    onSave(mapOf("openAIKey" to it), "OpenAI key saved.")
-                },
-                label = { Text(t("OpenAI API Key")) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
-            )
-            Text("Your API key is encrypted by Firebase transport and stored in the shared workspace settings, matching the current Apple app behavior.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(
-                value = knowledge,
-                onValueChange = {
-                    knowledge = it
-                    onSave(mapOf("aiKnowledgeBase" to it), "Knowledge base saved.")
-                },
-                label = { Text(t("Company Knowledge Base (For OpenAI)")) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-            )
-            HorizontalDivider()
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(t("Offline Template"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(
-                        "Products, services and custom rules sync with Mac, iPhone and web, then feed the offline reply engine.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            if (canManageCoreAI) {
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text(t("OpenAI API Key")) },
+                    placeholder = { Text(if (settings.hasOpenAIKey) "Key configured - paste to replace" else "sk-proj-...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
                 Button(
-                    onClick = { saveTemplates() },
-                    enabled = templatesDirty && !state.settingsSaving,
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (state.settingsSaving) "Saving..." else "Save", fontWeight = FontWeight.ExtraBold)
-                }
-            }
-            BoxWithConstraints {
-                val wide = maxWidth >= 720.dp
-                if (wide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                        QuickReplyTemplateEditor(
-                            title = t("Products / Services"),
-                            subtitle = "Reusable products, packages, services and price notes.",
-                            addLabel = "Add Product",
-                            items = products,
-                            onItemsChange = { products = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuickReplyTemplateEditor(
-                            title = t("Custom Rules / FAQs"),
-                            subtitle = "Delivery, payment, revision, refund or support rules.",
-                            addLabel = "Add Rule",
-                            items = rules,
-                            onItemsChange = { rules = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        QuickReplyTemplateEditor(
-                            title = t("Products / Services"),
-                            subtitle = "Reusable products, packages, services and price notes.",
-                            addLabel = "Add Product",
-                            items = products,
-                            onItemsChange = { products = it }
-                        )
-                        QuickReplyTemplateEditor(
-                            title = t("Custom Rules / FAQs"),
-                            subtitle = "Delivery, payment, revision, refund or support rules.",
-                            addLabel = "Add Rule",
-                            items = rules,
-                            onItemsChange = { rules = it }
-                        )
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
                     onClick = {
-                        products = defaultQuickReplyProducts()
-                        rules = defaultQuickReplyRules()
+                        onSave(mapOf("openAIKey" to apiKey), "OpenAI key saved securely.")
+                        apiKey = ""
                     },
-                    enabled = !state.settingsSaving,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(t("Reset Defaults"), fontWeight = FontWeight.ExtraBold)
+                    enabled = apiKey.isNotBlank()
+                ) { Text("Save API Key") }
+                Text("The API key is stored server-side and is never shared with team members.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(
+                    value = knowledge,
+                    onValueChange = { knowledge = it },
+                    label = { Text(t("Company Knowledge Base (For OpenAI)")) },
+                    modifier = Modifier.fillMaxWidth().height(180.dp)
+                )
+                Button(onClick = { onSave(mapOf("aiKnowledgeBase" to knowledge), "Knowledge base saved.") }) {
+                    Text("Save Knowledge Base")
                 }
-                Button(
-                    onClick = { saveTemplates() },
-                    enabled = templatesDirty && !state.settingsSaving,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (state.settingsSaving) "Saving..." else "Save Templates", fontWeight = FontWeight.ExtraBold)
+            } else {
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("OpenAI Online", fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            if (settings.hasOpenAIKey) "Workspace OpenAI key configured" else "Workspace OpenAI key not configured",
+                            color = if (settings.hasOpenAIKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text("Only the workspace owner can manage the API key and main Company Knowledge Base. You can use shared AI replies once configured.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (selectedReplyMode == "Apple" || selectedReplyMode == "Local") {
+                OutlinedTextField(
+                    value = knowledge,
+                    onValueChange = {
+                        knowledge = it
+                        onSave(mapOf("onDeviceKnowledgeBase" to it), "Your on-device knowledge was saved.")
+                    },
+                    label = { Text("My On-Device Knowledge") },
+                    modifier = Modifier.fillMaxWidth().height(140.dp)
+                )
+                Text("Android on-device generation is not active in this build. A Gemini Nano / ML Kit GenAI integration is required before this mode can generate locally.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            OutlinedTextField(
+                value = contributionText,
+                onValueChange = { contributionText = it },
+                label = { Text("Team Contribution") },
+                placeholder = { Text("Add a useful fact or customer-answer instruction...") },
+                modifier = Modifier.fillMaxWidth().height(130.dp)
+            )
+            Button(
+                onClick = {
+                    onSave(mapOf("quickReplyContributionText" to contributionText), "Contribution added.")
+                    contributionText = ""
+                },
+                enabled = contributionText.isNotBlank()
+            ) { Text("Add Contribution") }
+            if (selectedReplyMode == "Offline") {
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(t("Offline Template"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            "Your personal products, services and custom rules sync across devices and feed the offline reply engine.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(
+                        onClick = { saveTemplates() },
+                        enabled = templatesDirty && !state.settingsSaving,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (state.settingsSaving) "Saving..." else "Save", fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+                BoxWithConstraints {
+                    val wide = maxWidth >= 720.dp
+                    if (wide) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                            QuickReplyTemplateEditor(
+                                title = t("Products / Services"),
+                                subtitle = "Reusable products, packages, services and price notes.",
+                                addLabel = "Add Product",
+                                items = products,
+                                onItemsChange = { products = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                            QuickReplyTemplateEditor(
+                                title = t("Custom Rules / FAQs"),
+                                subtitle = "Delivery, payment, revision, refund or support rules.",
+                                addLabel = "Add Rule",
+                                items = rules,
+                                onItemsChange = { rules = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            QuickReplyTemplateEditor(
+                                title = t("Products / Services"),
+                                subtitle = "Reusable products, packages, services and price notes.",
+                                addLabel = "Add Product",
+                                items = products,
+                                onItemsChange = { products = it }
+                            )
+                            QuickReplyTemplateEditor(
+                                title = t("Custom Rules / FAQs"),
+                                subtitle = "Delivery, payment, revision, refund or support rules.",
+                                addLabel = "Add Rule",
+                                items = rules,
+                                onItemsChange = { rules = it }
+                            )
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = {
+                            products = defaultQuickReplyProducts()
+                            rules = defaultQuickReplyRules()
+                        },
+                        enabled = !state.settingsSaving,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(t("Reset Defaults"), fontWeight = FontWeight.ExtraBold)
+                    }
+                    Button(
+                        onClick = { saveTemplates() },
+                        enabled = templatesDirty && !state.settingsSaving,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (state.settingsSaving) "Saving..." else "Save Templates", fontWeight = FontWeight.ExtraBold)
+                    }
                 }
             }
         }
@@ -1540,7 +1642,8 @@ private fun AccountDetail(
     includeHeader: Boolean = true,
     includeProfile: Boolean = true,
     includeLogo: Boolean = true,
-    includeSecurity: Boolean = true
+    includeSecurity: Boolean = true,
+    includeWorkspaceIdentity: Boolean = true
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -1643,8 +1746,10 @@ private fun AccountDetail(
             }
             Text("After changing your sign-in email, you can change it again after 10 days.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text(t("Your Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(t("Company / Studio Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+            if (includeWorkspaceIdentity) {
+                OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(t("Company / Studio Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+            }
             CopyableValue(t("User ID"), user?.uid.orEmpty(), "Copy")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextButton(onClick = { onUpdateAccountProfile(displayName, companyName) }) {
@@ -1814,6 +1919,7 @@ private fun PlanAccessDetail(
 private fun TeamAccessDetail(
     state: StudioFlowUiState,
     onRequestWorkspaceAccess: (String) -> Unit,
+    onSwitchWorkspace: (String) -> Unit,
     onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
     onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
@@ -1832,7 +1938,8 @@ private fun TeamAccessDetail(
     var customRoleName by rememberSaveable { mutableStateOf("") }
     var customRoleBase by rememberSaveable { mutableStateOf("member") }
     var customRoleAccess by remember { mutableStateOf(WorkspaceMemberAccess()) }
-    val ownerCanManage = workspace?.isOwner == true
+    val canViewTeamManagement = workspace?.billingPlan?.hasTeamAccess == true && workspace.memberAccess.teamAccess
+    val ownerCanManage = workspace?.isOwner == true && canViewTeamManagement
     val roleOptions = remember(state.customRoles) { teamRoleOptions(state.customRoles) }
     DetailColumn {
         Surface(
@@ -1892,23 +1999,23 @@ private fun TeamAccessDetail(
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         DetailCard(title = t("Workspaces"), icon = Icons.Filled.People) {
-                            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(workspace?.name ?: "NivaDesk", fontWeight = FontWeight.ExtraBold)
-                                        Text(workspace?.roleLabel ?: t("Owner"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Switch to a workspace you own or have joined.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            state.availableWorkspaces.forEach { option ->
+                                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(option.name, fontWeight = FontWeight.ExtraBold)
+                                            Text(option.roleLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        if (option.isCurrent) {
+                                            Pill("Current", StudioGreen)
+                                        } else {
+                                            TextButton(onClick = { onSwitchWorkspace(option.id) }) { Text("Switch") }
+                                        }
                                     }
-                                    Pill("Current", StudioGreen)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Pill(t("Connected"), MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(t("Advanced: connect with Company ID"), color = StudioBlue, fontWeight = FontWeight.ExtraBold)
-                                Spacer(modifier = Modifier.weight(1f))
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                             }
                         }
                         DetailCard(title = t("Invite People"), icon = Icons.Filled.ContentCopy) {
@@ -1928,16 +2035,22 @@ private fun TeamAccessDetail(
                         CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                     }
                     DetailCard(title = t("Workspaces"), icon = Icons.Filled.People) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(workspace?.name ?: "NivaDesk", fontWeight = FontWeight.ExtraBold)
-                                Text(workspace?.roleLabel ?: t("Owner"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Switch to a workspace you own or have joined.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        state.availableWorkspaces.forEach { option ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(option.name, fontWeight = FontWeight.ExtraBold)
+                                    Text(option.roleLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (option.isCurrent) {
+                                    Pill("Current", StudioGreen)
+                                } else {
+                                    TextButton(onClick = { onSwitchWorkspace(option.id) }) { Text("Switch") }
+                                }
                             }
-                            Pill("Current", StudioGreen)
                         }
-                        Text(t("Advanced: connect with Company ID"), color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                     }
                     DetailCard(title = t("Request Access"), icon = Icons.AutoMirrored.Filled.Send) {
                         Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2085,7 +2198,7 @@ private fun TeamAccessDetail(
                 }
             }
         }
-        if (state.teamMembers.isNotEmpty()) {
+        if (canViewTeamManagement && state.teamMembers.isNotEmpty()) {
             DetailCard(title = t("Team Members"), icon = Icons.Filled.People) {
                 state.teamMembers.forEach { member ->
                     Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -2129,9 +2242,21 @@ private fun TeamAccessDetail(
                 }
             }
         }
-        DetailCard(title = t("Current role mix"), icon = Icons.Filled.People) {
-            Text(t("Role counts"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-            RoleMix(state)
+        if (canViewTeamManagement) {
+            DetailCard(title = t("Current role mix"), icon = Icons.Filled.People) {
+                Text(t("Role counts"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                RoleMix(state)
+            }
+        } else {
+            DetailCard(title = t("Join an existing Team workspace"), icon = Icons.Filled.People) {
+                Text(
+                    if (workspace?.billingPlan?.hasTeamAccess == true)
+                        "Your current role does not include Team Access management. You can still request access to another Team workspace."
+                    else
+                        "Team management requires NivaDesk Team, but requesting access to an existing Team workspace is available on every plan.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -2205,6 +2330,8 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
                 AccessOption("orders", "Orders"),
                 AccessOption("schedule", "Schedule"),
                 AccessOption("customers", "Customers"),
+                AccessOption("messages", "Messages"),
+                AccessOption("notes", "Notes"),
                 AccessOption("quickReply", t("Quick Reply")),
                 AccessOption("settings", "Settings"),
                 AccessOption("teamAccess", "Team Access"),
@@ -2214,6 +2341,27 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
             ),
             access = access,
             accent = StudioBlue,
+            onChange = onChange
+        )
+        HorizontalDivider()
+        AccessSectionBlock(
+            title = "Settings Permissions",
+            note = "Controls visible Settings menus. Billing, WooCommerce, data deletion, workspace identity and OpenAI key stay protected.",
+            options = listOf(
+                AccessOption("settingsGeneral", "General / Personal Settings"),
+                AccessOption("settingsPdf", "PDF Export Settings"),
+                AccessOption("settingsQuickReply", "Quick Reply Settings"),
+                AccessOption("settingsMessageSettings", "Message Settings"),
+                AccessOption("settingsWorkflow", "Workflow Steps"),
+                AccessOption("settingsFinancial", "Financial Settings"),
+                AccessOption("settingsSafetyUploads", "Safety & Uploads"),
+                AccessOption("settingsData", "Data Management"),
+                AccessOption("settingsTeamAccess", "Team Access"),
+                AccessOption("settingsPlanAccess", "Plan & Access"),
+                AccessOption("settingsSupport", "Support / Tickets")
+            ),
+            access = access,
+            accent = StudioGreen,
             onChange = onChange
         )
         HorizontalDivider()
@@ -2338,12 +2486,25 @@ private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): Work
         "dashboard" -> copy(dashboard = value)
         "schedule" -> copy(schedule = value)
         "customers" -> copy(customers = value)
+        "messages" -> copy(messages = value)
+        "notes" -> copy(notes = value)
         "quickReply" -> copy(quickReply = value)
         "settings" -> copy(settings = value)
         "teamAccess" -> copy(teamAccess = value)
         "clientFiles" -> copy(clientFiles = value)
         "financialInfo" -> copy(financialInfo = value)
         "exportData" -> copy(exportData = value)
+        "settingsGeneral" -> copy(settingsGeneral = value)
+        "settingsPdf" -> copy(settingsPdf = value)
+        "settingsQuickReply" -> copy(settingsQuickReply = value)
+        "settingsMessageSettings" -> copy(settingsMessageSettings = value)
+        "settingsWorkflow" -> copy(settingsWorkflow = value)
+        "settingsFinancial" -> copy(settingsFinancial = value)
+        "settingsSafetyUploads" -> copy(settingsSafetyUploads = value)
+        "settingsData" -> copy(settingsData = value)
+        "settingsTeamAccess" -> copy(settingsTeamAccess = value)
+        "settingsPlanAccess" -> copy(settingsPlanAccess = value)
+        "settingsSupport" -> copy(settingsSupport = value)
         "assignedProjectsOnly" -> copy(assignedProjectsOnly = value)
         "manageProjectAssignments" -> copy(manageProjectAssignments = value)
         "cardPreview" -> copy(cardPreview = value)
@@ -4414,7 +4575,7 @@ private fun defaultInventoryLabelsForBusiness(businessType: String, showMaterial
 }
 
 private fun engineLabel(value: String): String = when (value) {
-    "Apple", "Local" -> "Apple On-Device"
+    "Apple", "Local" -> "On-Device AI"
     "Offline" -> "Offline Template"
     else -> "OpenAI Online"
 }

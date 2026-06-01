@@ -52,7 +52,8 @@ export default function OrderDetailPage() {
           loadOrderDetail(
             loadedWorkspace.id,
             orderId,
-            loadedWorkspace.entitlements.features.client_files
+            loadedWorkspace.entitlements.features.client_files,
+            loadedWorkspace
           ),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
@@ -104,7 +105,8 @@ export default function OrderDetailPage() {
         setOrder(null);
         setError(message);
         setLoadingOrder(false);
-      }
+      },
+      workspace
     );
   }, [orderId, user, workspace]);
 
@@ -113,7 +115,8 @@ export default function OrderDetailPage() {
     const loadedOrder = await loadOrderDetail(
       workspace.id,
       orderId,
-      workspace.entitlements.features.client_files
+      workspace.entitlements.features.client_files,
+      workspace
     );
     if (workspaceAssignedProjectsOnly(workspace.memberAccess) && !orderIsAssignedToCurrentUser(loadedOrder, user)) {
       setOrder(null);

@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
-import { loadWorkspaceContext, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   addMembersToMessageThread,
   createMessageThread,
@@ -46,9 +48,19 @@ import {
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "✅", "👀", "🙏"];
 const ARCHIVE_KEY = (workspaceId: string, uid: string) => `studio_msg_archive_${workspaceId}_${uid}`;
+const DELETE_KEY = (workspaceId: string, uid: string) => `studio_msg_deleted_${workspaceId}_${uid}`;
 const SAVED_KEY = (workspaceId: string, uid: string) => `studio_msg_saved_${workspaceId}_${uid}`;
 const DRAFT_KEY = (workspaceId: string, uid: string, threadId: string) =>
   `studio_msg_draft_${workspaceId}_${uid}_${threadId}`;
+
+function messageThreadMarkerMap(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([threadId, marker]) => threadId !== "team" && typeof marker === "number" && Number.isFinite(marker))
+      .map(([threadId, marker]) => [threadId, marker as number]),
+  );
+}
 
 export default function MessagesPage() {
   const router = useRouter();
@@ -72,6 +84,7 @@ export default function MessagesPage() {
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [savedMap, setSavedMap] = useState<Record<string, string[]>>({});
   const [archiveMap, setArchiveMap] = useState<Record<string, number>>({});
+  const [deletedThreadMap, setDeletedThreadMap] = useState<Record<string, number>>({});
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -88,7 +101,10 @@ export default function MessagesPage() {
   const [phoneShowingConversation, setPhoneShowingConversation] = useState(false);
   const [isPhoneLayout, setIsPhoneLayout] = useState(false);
   const [viewerImage, setViewerImage] = useState<StudioMessageItem | null>(null);
-  const canEditWorkspace = workspace?.role === "owner" || workspace?.role === "admin";
+  const messageRole = normalizeWorkspaceRole(workspace?.role);
+  const canEditWorkspace = messageRole === "owner" || messageRole === "admin";
+  const canCreateConversations = ["owner", "admin", "member", "workflow"].includes(messageRole);
+  const canSendMessageAttachments = ["owner", "admin", "member", "workflow"].includes(messageRole);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -153,7 +169,7 @@ export default function MessagesPage() {
     return unsub;
   }, [workspace, user]);
 
-  // localStorage hydration
+  // localStorage hydration remains as an offline/migration fallback.
   useEffect(() => {
     if (!workspace || !user || typeof window === "undefined") return;
     try {
@@ -161,9 +177,53 @@ export default function MessagesPage() {
       if (savedRaw) setSavedMap(JSON.parse(savedRaw));
       const archRaw = window.localStorage.getItem(ARCHIVE_KEY(workspace.id, user.uid));
       if (archRaw) setArchiveMap(JSON.parse(archRaw));
+      const deletedRaw = window.localStorage.getItem(DELETE_KEY(workspace.id, user.uid));
+      if (deletedRaw) setDeletedThreadMap(JSON.parse(deletedRaw));
     } catch {
       /* ignore */
     }
+  }, [workspace, user]);
+
+  // Archive/Delete are a user preference, not a destructive thread mutation.
+  // Listen to one cloud preference document so phone web, desktop web, Mac and
+  // Android all show the same conversation list.
+  useEffect(() => {
+    if (!workspace || !user) return;
+    const preferenceRef = doc(db, "companies", workspace.id, "messageUserPreferences", user.uid);
+    let migratedLocalFallback = false;
+    return onSnapshot(preferenceRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as Record<string, unknown>;
+        const nextArchive = messageThreadMarkerMap(data.archivedThreads);
+        const nextDeleted = messageThreadMarkerMap(data.deletedThreads);
+        setArchiveMap(nextArchive);
+        setDeletedThreadMap(nextDeleted);
+        try {
+          window.localStorage.setItem(ARCHIVE_KEY(workspace.id, user.uid), JSON.stringify(nextArchive));
+          window.localStorage.setItem(DELETE_KEY(workspace.id, user.uid), JSON.stringify(nextDeleted));
+        } catch {}
+        return;
+      }
+      if (migratedLocalFallback) return;
+      migratedLocalFallback = true;
+      let localArchived: Record<string, number> = {};
+      let localDeleted: Record<string, number> = {};
+      try {
+        localArchived = messageThreadMarkerMap(JSON.parse(window.localStorage.getItem(ARCHIVE_KEY(workspace.id, user.uid)) || "{}"));
+        localDeleted = messageThreadMarkerMap(JSON.parse(window.localStorage.getItem(DELETE_KEY(workspace.id, user.uid)) || "{}"));
+      } catch {}
+      void setDoc(preferenceRef, {
+        companyId: workspace.id,
+        userId: user.uid,
+        archivedThreads: localArchived,
+        deletedThreads: localDeleted,
+        updatedAt: serverTimestamp(),
+        updatedByUid: user.uid,
+      }, { merge: true });
+    }, () => {
+      // Keep the locally hydrated list available while offline or if the
+      // connected role temporarily loses message access.
+    });
   }, [workspace, user]);
 
   useEffect(() => {
@@ -290,6 +350,10 @@ export default function MessagesPage() {
 
   const handleSendAttachment = async (file: File) => {
     if (!workspace || !user || !selectedThread || sending) return;
+    if (!canSendMessageAttachments) {
+      setErrorMessage("View Only members can send text messages, but cannot upload message attachments.");
+      return;
+    }
     setSending(true);
     setErrorMessage("");
     try {
@@ -359,16 +423,60 @@ export default function MessagesPage() {
     });
   };
 
-  // ----- archive (localStorage) -----
-  const handleToggleArchive = (threadId: string) => {
+  // ----- archive/delete: synced per user across all platforms -----
+  const persistConversationListPreferences = (
+    nextArchive: Record<string, number>,
+    nextDeleted: Record<string, number>,
+  ) => {
     if (!workspace || !user) return;
-    setArchiveMap((prev) => {
-      const next = { ...prev };
-      if (threadId in next) delete next[threadId];
-      else next[threadId] = Date.now();
-      try { window.localStorage.setItem(ARCHIVE_KEY(workspace.id, user.uid), JSON.stringify(next)); } catch {}
-      return next;
-    });
+    try {
+      window.localStorage.setItem(ARCHIVE_KEY(workspace.id, user.uid), JSON.stringify(nextArchive));
+      window.localStorage.setItem(DELETE_KEY(workspace.id, user.uid), JSON.stringify(nextDeleted));
+    } catch {}
+    void setDoc(doc(db, "companies", workspace.id, "messageUserPreferences", user.uid), {
+      companyId: workspace.id,
+      userId: user.uid,
+      archivedThreads: nextArchive,
+      deletedThreads: nextDeleted,
+      updatedAt: serverTimestamp(),
+      updatedByUid: user.uid,
+    }, { merge: true });
+  };
+
+  const handleToggleArchive = (threadId: string) => {
+    if (!workspace || !user || threadId === "team") return;
+    const nextArchive = { ...archiveMap };
+    if (threadId in nextArchive) delete nextArchive[threadId];
+    else nextArchive[threadId] = Date.now();
+    setArchiveMap(nextArchive);
+    persistConversationListPreferences(nextArchive, deletedThreadMap);
+  };
+
+  const handleDeleteConversationForMe = (threadId: string) => {
+    if (!workspace || !user || threadId === "team") return;
+    if (!window.confirm("Delete this conversation from your list? It will reappear on all your devices if a new message is sent.")) return;
+    const nextDeleted = { ...deletedThreadMap, [threadId]: Date.now() };
+    const nextArchive = { ...archiveMap };
+    delete nextArchive[threadId];
+    setDeletedThreadMap(nextDeleted);
+    setArchiveMap(nextArchive);
+    persistConversationListPreferences(nextArchive, nextDeleted);
+    if (selectedThreadId === threadId) {
+      setSelectedThreadId("team");
+      setPhoneShowingConversation(false);
+    }
+  };
+
+  const restoreConversationToMyList = (threadId: string) => {
+    if (!workspace || !user || !threadId || threadId === "team") return;
+    if (!(threadId in archiveMap) && !(threadId in deletedThreadMap)) return;
+    const nextArchive = { ...archiveMap };
+    const nextDeleted = { ...deletedThreadMap };
+    delete nextArchive[threadId];
+    delete nextDeleted[threadId];
+    setArchiveMap(nextArchive);
+    setDeletedThreadMap(nextDeleted);
+    persistConversationListPreferences(nextArchive, nextDeleted);
   };
 
   // ----- forward -----
@@ -395,7 +503,10 @@ export default function MessagesPage() {
     if (!workspace) return;
     try {
       const newId = await createMessageThread(workspace, { type: "direct", memberUid });
-      if (newId) setSelectedThreadId(newId);
+      if (newId) {
+        restoreConversationToMyList(newId);
+        setSelectedThreadId(newId);
+      }
       setNewConvOpen(false);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Could not create conversation.");
@@ -405,7 +516,10 @@ export default function MessagesPage() {
     if (!workspace || memberUids.length === 0) return;
     try {
       const newId = await createMessageThread(workspace, { type: "group", memberUids, title });
-      if (newId) setSelectedThreadId(newId);
+      if (newId) {
+        restoreConversationToMyList(newId);
+        setSelectedThreadId(newId);
+      }
       setNewConvOpen(false);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Could not create group.");
@@ -477,12 +591,14 @@ export default function MessagesPage() {
     const active: StudioMessageThread[] = [];
     const archived: StudioMessageThread[] = [];
     for (const t of threads) {
+      const deletedMarker = deletedThreadMap[t.id];
+      if (t.id !== "team" && deletedMarker && (t.lastMessageAtMillis ?? 0) <= deletedMarker) continue;
       const marker = archiveMap[t.id];
-      if (marker && (t.lastMessageAtMillis ?? 0) <= marker) archived.push(t);
+      if (t.id !== "team" && marker && (t.lastMessageAtMillis ?? 0) <= marker) archived.push(t);
       else active.push(t);
     }
     return { activeThreads: active, archivedThreads: archived };
-  }, [threads, archiveMap]);
+  }, [threads, archiveMap, deletedThreadMap]);
 
   if (authLoading || loadingWorkspace || !user) return <LoadingScreen />;
 
@@ -517,7 +633,7 @@ export default function MessagesPage() {
               {canEditWorkspace && (
                 <button type="button" className="new-conv-btn" onClick={() => setSettingsDialogOpen(true)} title={t("Message settings")} style={{ background: "#6b7280" }}>⚙</button>
               )}
-              {(workspaceSettings.directMessagesEnabled || workspaceSettings.groupConversationsEnabled) && (
+              {canCreateConversations && (workspaceSettings.directMessagesEnabled || workspaceSettings.groupConversationsEnabled) && (
                 <button type="button" className="new-conv-btn" onClick={() => setNewConvOpen(true)} title={t("New conversation")}>+</button>
               )}
             </div>
@@ -536,6 +652,7 @@ export default function MessagesPage() {
                   archived={false}
                   onSelect={() => { setSelectedThreadId(thread.id); setPhoneShowingConversation(true); }}
                   onToggleArchive={() => handleToggleArchive(thread.id)}
+                  onDeleteForMe={() => handleDeleteConversationForMe(thread.id)}
                 />
               ))}
               {archivedThreads.length > 0 && (
@@ -555,6 +672,7 @@ export default function MessagesPage() {
                   archived
                   onSelect={() => { setSelectedThreadId(thread.id); setPhoneShowingConversation(true); }}
                   onToggleArchive={() => handleToggleArchive(thread.id)}
+                  onDeleteForMe={() => handleDeleteConversationForMe(thread.id)}
                 />
               ))}
             </ul>
@@ -700,7 +818,7 @@ export default function MessagesPage() {
                 onClearReply={() => setReplyingTo(null)}
                 sending={sending}
                 teamMembers={teamMembers}
-                attachmentsEnabled={workspaceSettings.attachmentsEnabled}
+                attachmentsEnabled={workspaceSettings.attachmentsEnabled && canSendMessageAttachments}
               />
             </>
           )}
@@ -1597,7 +1715,7 @@ function NewConversationDialog({
                       return next;
                     });
                   } else {
-                    setSelected(new Set([m.id]));
+                    onCreateDirect(m.id);
                   }
                 }}
               >
@@ -1614,17 +1732,18 @@ function NewConversationDialog({
         </div>
         <div className="dialog-actions">
           <button type="button" onClick={onCancel}>Cancel</button>
-          <button
-            type="button"
-            className="primary"
-            disabled={groupMode ? selected.size < 2 : selected.size !== 1}
-            onClick={() => {
-              if (groupMode) onCreateGroup(Array.from(selected), title.trim());
-              else { const uid = Array.from(selected)[0]; if (uid) onCreateDirect(uid); }
-            }}
-          >
-            Create
-          </button>
+          {groupMode ? (
+            <button
+              type="button"
+              className="primary"
+              disabled={selected.size < 2}
+              onClick={() => onCreateGroup(Array.from(selected), title.trim())}
+            >
+              Create
+            </button>
+          ) : (
+            <span style={{ color: "#6b7280", fontSize: 12 }}>Select a person to start messaging.</span>
+          )}
         </div>
       </div>
     </div>
@@ -1874,6 +1993,7 @@ function ThreadRow({
   archived,
   onSelect,
   onToggleArchive,
+  onDeleteForMe,
 }: {
   thread: StudioMessageThread;
   currentUid: string;
@@ -1882,6 +2002,7 @@ function ThreadRow({
   archived: boolean;
   onSelect: () => void;
   onToggleArchive: () => void;
+  onDeleteForMe: () => void;
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
@@ -1911,10 +2032,13 @@ function ThreadRow({
           </div>
         </div>
       </button>
-      {menuOpen && (
+      {menuOpen && thread.id !== "team" && (
         <div className="thread-row__menu" onMouseLeave={() => setMenuOpen(false)}>
           <button type="button" onClick={() => { setMenuOpen(false); onToggleArchive(); }}>
             {archived ? "Unarchive" : t("Archive")}
+          </button>
+          <button type="button" onClick={() => { setMenuOpen(false); onDeleteForMe(); }}>
+            Delete Conversation
           </button>
         </div>
       )}

@@ -32,8 +32,8 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.List
-import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -64,8 +64,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.net.HttpURLConnection
 import java.net.URL
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -117,7 +119,7 @@ fun QuickReplyScreen(
         output = ""
         when (replyMode) {
             "Apple" -> {
-                replyError = "Apple On-Device mode is available on Mac, iPad and iPhone. On Android, switch to OpenAI Online or Offline Template in Quick Reply Settings."
+                replyError = "Android on-device AI is not active in this build yet. Gemini Nano / ML Kit GenAI integration is required. Use OpenAI Online or Offline Template for now."
             }
             "Offline" -> {
                 val filteredProducts = if (selectedCategory.isBlank()) settings.quickReplyProducts
@@ -137,34 +139,31 @@ fun QuickReplyScreen(
                 )
             }
             else -> {
-                val apiKey = settings.openAIKey.trim()
-                if (apiKey.isBlank()) {
-                    replyError = "OpenAI API Key is missing. Add it in Settings > Quick Reply Settings, or switch this workspace to Offline Template."
+                if (!settings.hasOpenAIKey) {
+                    replyError = "OpenAI API Key is missing. Ask the workspace owner to configure it in Quick Reply Settings."
                     return
                 }
+                val workspaceId = state.workspace?.id.orEmpty()
+                if (workspaceId.isBlank()) return
                 generating = true
-                val filteredProducts = if (selectedCategory.isBlank()) settings.quickReplyProducts
-                    else settings.quickReplyProducts.filter { it.title.trim().equals(selectedCategory, ignoreCase = true) }
-                val filteredRules = if (selectedTopic.isBlank() || selectedTopic == "Price & Info") settings.quickReplyRules
-                    else settings.quickReplyRules.filter { it.title.trim().equals(selectedTopic, ignoreCase = true) }
                 scope.launch {
                     runCatching {
-                        generateOpenAIReply(
-                            apiKey = apiKey,
-                            message = input,
-                            politeness = politeness,
-                            length = length,
-                            intent = detectedIntent,
-                            studioName = workspaceName,
-                            knowledge = settings.aiKnowledgeBase,
-                            products = filteredProducts.ifEmpty { settings.quickReplyProducts },
-                            rules = filteredRules.ifEmpty { settings.quickReplyRules },
-                            customerName = customerName.trim()
-                        )
+                        val result = FirebaseFunctions.getInstance("europe-west2")
+                            .getHttpsCallable("generateQuickReply")
+                            .call(mapOf(
+                                "companyId" to workspaceId,
+                                "mode" to "AI",
+                                "customerMessage" to input,
+                                "politeness" to politeness,
+                                "length" to length
+                            ))
+                            .await()
+                        val data = result.data as? Map<*, *>
+                        data?.get("reply")?.toString().orEmpty()
                     }.onSuccess { reply ->
                         output = reply
                     }.onFailure { error ->
-                        replyError = error.message ?: "Could not generate a reply."
+                        replyError = error.message ?: t("Could not generate a reply.")
                     }
                     generating = false
                 }
@@ -189,7 +188,7 @@ fun QuickReplyScreen(
             item {
                 ReplyEngineStatusCard(
                     mode = replyMode,
-                    apiKeyReady = settings.openAIKey.isNotBlank(),
+                    apiKeyReady = settings.hasOpenAIKey,
                     knowledgeReady = settings.aiKnowledgeBase.isNotBlank(),
                     productsReady = settings.quickReplyProducts.any { it.title.isNotBlank() || it.desc.isNotBlank() },
                     rulesReady = settings.quickReplyRules.any { it.title.isNotBlank() || it.desc.isNotBlank() }
@@ -357,7 +356,7 @@ private fun ReplyEngineStatusCard(
                 if (mode == "AI") {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         StatusPill(
-                            label = if (apiKeyReady) "API key ready" else "API key missing",
+                            label = if (apiKeyReady) t("API key ready") else t("API key missing"),
                             active = apiKeyReady,
                             icon = Icons.Filled.Key
                         )
@@ -378,11 +377,11 @@ private fun ReplyEngineStatusCard(
                         StatusPill(
                             label = if (productsReady) "Products ready" else "No products",
                             active = productsReady,
-                            icon = Icons.Outlined.List
+                            icon = Icons.AutoMirrored.Outlined.List
                         )
                     }
                     StatusPill(
-                        label = if (rulesReady) "Custom rules ready" else "No custom rules",
+                        label = if (rulesReady) t("Custom rules ready") else "No custom rules",
                         active = rulesReady,
                         icon = Icons.Filled.CheckCircle
                     )
@@ -424,7 +423,7 @@ private fun QuickReplyStyleCard(
         SegmentTitle(Icons.Filled.FavoriteBorder, "Politeness")
         SegmentRow(
             options = listOf(
-                SegmentOption("Direct", Icons.Outlined.Send),
+                SegmentOption(t("Direct"), Icons.AutoMirrored.Outlined.Send),
                 SegmentOption("Warm", Icons.Filled.FavoriteBorder),
                 SegmentOption("Very Polite", Icons.Filled.StarBorder)
             ),
@@ -435,9 +434,9 @@ private fun QuickReplyStyleCard(
         SegmentTitle(Icons.Filled.Timer, "Length")
         SegmentRow(
             options = listOf(
-                SegmentOption("Short", Icons.Outlined.List),
-                SegmentOption("Balanced", Icons.Filled.MailOutline),
-                SegmentOption("Detailed", Icons.Outlined.List)
+                SegmentOption("Short", Icons.AutoMirrored.Outlined.List),
+                SegmentOption(t("Balanced"), Icons.Filled.MailOutline),
+                SegmentOption(t("Detailed"), Icons.AutoMirrored.Outlined.List)
             ),
             selected = length,
             onSelect = onLength
@@ -459,7 +458,7 @@ private fun QuickReplyDetailsCard(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard {
-        SegmentTitle(Icons.Filled.PersonOutline, "Details")
+        SegmentTitle(Icons.Filled.PersonOutline, t("Details"))
         OutlinedTextField(
             value = customerName,
             onValueChange = onCustomerNameChange,
@@ -629,7 +628,7 @@ private fun QuickReplyOutputCard(
                 contentDescription = null,
                 tint = if (error.isBlank()) Color(0xFF34C759) else Color(0xFFFF3B30)
             )
-            Text(if (error.isBlank()) "Generated Reply" else "Reply Needs Attention", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(if (error.isBlank()) t("Generated Reply") else "Reply Needs Attention", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         }
         Spacer(modifier = Modifier.height(10.dp))
         val body = when {
@@ -759,7 +758,7 @@ private fun normalizeLength(value: String): String = when (value) {
 }
 
 private fun replyModeTitle(mode: String): String = when (mode) {
-    "Apple" -> "Apple On-Device Quick Reply"
+    "Apple" -> "On-Device AI Quick Reply"
     "Offline" -> "Offline Quick Reply"
     else -> "AI Quick Reply Assistant"
 }
@@ -771,7 +770,7 @@ private fun replyModeSubtitle(mode: String): String = when (mode) {
 }
 
 private fun replyModeLabel(mode: String): String = when (mode) {
-    "Apple" -> "Apple On-Device"
+    "Apple" -> "On-Device AI"
     "Offline" -> "Offline Template"
     else -> "OpenAI Online"
 }
@@ -784,7 +783,7 @@ private fun replyModeDescription(mode: String): String = when (mode) {
 
 private fun replyModeIcon(mode: String): ImageVector = when (mode) {
     "Apple" -> Icons.Filled.Warning
-    "Offline" -> Icons.Outlined.List
+    "Offline" -> Icons.AutoMirrored.Outlined.List
     else -> Icons.Outlined.AutoAwesome
 }
 

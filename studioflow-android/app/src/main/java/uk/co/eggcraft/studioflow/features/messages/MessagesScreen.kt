@@ -1,6 +1,8 @@
 package uk.co.eggcraft.studioflow.features.messages
 
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
@@ -71,6 +73,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +97,10 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
@@ -139,16 +146,100 @@ fun MessagesScreen(
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspaceId = state.workspace?.id.orEmpty()
     val workspaceMessageSettings = state.messageWorkspaceSettings
-    val canCreateAnyConversation =
-        workspaceMessageSettings.directMessagesEnabled || workspaceMessageSettings.groupConversationsEnabled
+    val currentRole = state.workspace?.role.orEmpty().trim().lowercase()
+    val isViewOnlyMember = currentRole == "viewer" || currentRole == "viewonly" || currentRole == "readonly"
+    val isWorkflowOnlyMember = currentRole == "workflow" || currentRole == "workflowonly" || currentRole == "workflow_only"
+    val canCreateAnyConversation = !isViewOnlyMember &&
+        (workspaceMessageSettings.directMessagesEnabled || workspaceMessageSettings.groupConversationsEnabled)
+    val canSendMessageAttachments = workspaceMessageSettings.attachmentsEnabled && !isViewOnlyMember
     val currentUid = state.user?.uid.orEmpty()
+    val context = LocalContext.current
+    val deletedThreadPreferences = remember { context.getSharedPreferences("studio_message_deleted_threads", Context.MODE_PRIVATE) }
+    val deletedThreadKey = "deleted_${workspaceId}_${currentUid}"
+    var cloudArchivedThreadMarkers by remember(workspaceId, currentUid) {
+        mutableStateOf(state.archivedThreadMarkers)
+    }
+    var deletedThreadMarkers by remember(workspaceId, currentUid) {
+        mutableStateOf(loadDeletedThreadMarkers(deletedThreadPreferences, deletedThreadKey))
+    }
+    val messagePreferenceReference = remember(workspaceId, currentUid) {
+        if (workspaceId.isBlank() || currentUid.isBlank()) null
+        else FirebaseFirestore.getInstance().collection("companies").document(workspaceId)
+            .collection("messageUserPreferences").document(currentUid)
+    }
+
+    fun persistConversationListPreferences(nextArchived: Map<String, Long>, nextDeleted: Map<String, Long>) {
+        persistDeletedThreadMarkers(deletedThreadPreferences, deletedThreadKey, nextDeleted)
+        messagePreferenceReference?.set(
+            mapOf(
+                "companyId" to workspaceId,
+                "userId" to currentUid,
+                "archivedThreads" to nextArchived,
+                "deletedThreads" to nextDeleted,
+                "updatedAt" to FieldValue.serverTimestamp(),
+                "updatedByUid" to currentUid
+            ),
+            SetOptions.merge()
+        )
+    }
+
+    DisposableEffect(messagePreferenceReference, workspaceId, currentUid) {
+        val registration = messagePreferenceReference?.addSnapshotListener { snapshot, _ ->
+            if (snapshot != null && snapshot.exists()) {
+                cloudArchivedThreadMarkers = firestoreLongMap(snapshot.get("archivedThreads"))
+                deletedThreadMarkers = firestoreLongMap(snapshot.get("deletedThreads"))
+                persistDeletedThreadMarkers(deletedThreadPreferences, deletedThreadKey, deletedThreadMarkers)
+            } else if (messagePreferenceReference != null) {
+                persistConversationListPreferences(cloudArchivedThreadMarkers, deletedThreadMarkers)
+            }
+        }
+        onDispose { registration?.remove() }
+    }
+
+    fun toggleArchiveAcrossDevices(threadId: String) {
+        val cleanThreadId = threadId.trim()
+        if (cleanThreadId.isBlank() || cleanThreadId == "team") return
+        val next = cloudArchivedThreadMarkers.toMutableMap()
+        if (next.containsKey(cleanThreadId)) next.remove(cleanThreadId)
+        else next[cleanThreadId] = System.currentTimeMillis()
+        cloudArchivedThreadMarkers = next.toMap()
+        persistConversationListPreferences(cloudArchivedThreadMarkers, deletedThreadMarkers)
+    }
+
+    fun deleteConversationForMe(threadId: String) {
+        val cleanThreadId = threadId.trim()
+        if (cleanThreadId.isBlank() || cleanThreadId == "team") return
+        val nextDeleted = deletedThreadMarkers.toMutableMap().apply { put(cleanThreadId, System.currentTimeMillis()) }.toMap()
+        val nextArchived = cloudArchivedThreadMarkers.toMutableMap().apply { remove(cleanThreadId) }.toMap()
+        deletedThreadMarkers = nextDeleted
+        cloudArchivedThreadMarkers = nextArchived
+        persistConversationListPreferences(nextArchived, nextDeleted)
+        if (state.selectedMessageThreadId == cleanThreadId) onSelectThread("team")
+    }
+
+    fun restoreConversationToMyList(threadId: String) {
+        val cleanThreadId = threadId.trim()
+        if (cleanThreadId.isBlank() || cleanThreadId == "team") return
+        if (!cloudArchivedThreadMarkers.containsKey(cleanThreadId) && !deletedThreadMarkers.containsKey(cleanThreadId)) return
+        val nextArchived = cloudArchivedThreadMarkers.toMutableMap().apply { remove(cleanThreadId) }.toMap()
+        val nextDeleted = deletedThreadMarkers.toMutableMap().apply { remove(cleanThreadId) }.toMap()
+        cloudArchivedThreadMarkers = nextArchived
+        deletedThreadMarkers = nextDeleted
+        persistConversationListPreferences(nextArchived, nextDeleted)
+    }
+
+    fun directThreadIdFor(memberUid: String): String {
+        val ids = listOf(currentUid.trim(), memberUid.trim()).filter { it.isNotBlank() }.sorted()
+        if (ids.size != 2) return ""
+        return ("direct_" + ids.joinToString("_")).replace(Regex("[^A-Za-z0-9_-]"), "_")
+    }
     val threads = state.messageThreads
     val selectedId = state.selectedMessageThreadId
     val selectedThread = threads.firstOrNull { it.id == selectedId } ?: threads.firstOrNull()
     val allItems = selectedThread?.let { state.messageItemsByThreadId[it.id].orEmpty() } ?: emptyList()
     val typingUsers = selectedThread?.let { state.typingUsersByThreadId[it.id].orEmpty() } ?: emptyList()
     val savedIds = selectedThread?.let { state.savedMessageIdsByThreadId[it.id].orEmpty() } ?: emptySet()
-    val archivedMarkers = state.archivedThreadMarkers
+    val archivedMarkers = cloudArchivedThreadMarkers
 
     // Apply search + attachment filter + saved-only filter
     var showSavedOnly by remember(selectedThread?.id) { mutableStateOf(false) }
@@ -231,7 +322,7 @@ fun MessagesScreen(
                         mutePickerOpen = false
                     },
                     workspaceId = workspaceId,
-                    attachmentsEnabled = workspaceMessageSettings.attachmentsEnabled,
+                    attachmentsEnabled = canSendMessageAttachments,
                     onLoadDraft = onLoadDraft,
                     onSaveDraft = onSaveDraft,
                     onBack = { phoneShowingConversation = false },
@@ -244,6 +335,7 @@ fun MessagesScreen(
                     ThreadListPanel(
                         threads = threads,
                         archivedMarkers = archivedMarkers,
+                        deletedMarkers = deletedThreadMarkers,
                         selectedId = selectedThread?.id.orEmpty(),
                         currentUid = currentUid,
                         teamMembers = state.messageTeamMembers,
@@ -252,7 +344,8 @@ fun MessagesScreen(
                             onSelectThread(id)
                             phoneShowingConversation = true
                         },
-                        onToggleArchive = onToggleThreadArchive
+                        onToggleArchive = ::toggleArchiveAcrossDevices,
+                        onDeleteThread = ::deleteConversationForMe
                     )
                     if (canCreateAnyConversation) {
                         FloatingActionButton(
@@ -275,12 +368,14 @@ fun MessagesScreen(
             ThreadListPanel(
                 threads = threads,
                 archivedMarkers = archivedMarkers,
+                deletedMarkers = deletedThreadMarkers,
                 selectedId = selectedThread?.id.orEmpty(),
                 currentUid = currentUid,
                 teamMembers = state.messageTeamMembers,
                 unreadCount = state.messageUnreadCount,
                 onSelectThread = onSelectThread,
-                onToggleArchive = onToggleThreadArchive
+                onToggleArchive = ::toggleArchiveAcrossDevices,
+                onDeleteThread = ::deleteConversationForMe
             )
             if (canCreateAnyConversation) {
                 FloatingActionButton(
@@ -345,7 +440,7 @@ fun MessagesScreen(
                 mutePickerOpen = false
             },
             workspaceId = workspaceId,
-            attachmentsEnabled = workspaceMessageSettings.attachmentsEnabled,
+            attachmentsEnabled = canSendMessageAttachments,
             onLoadDraft = onLoadDraft,
             onSaveDraft = onSaveDraft,
             onBack = null,
@@ -378,7 +473,11 @@ fun MessagesScreen(
             allowDirect = workspaceMessageSettings.directMessagesEnabled,
             allowGroup = workspaceMessageSettings.groupConversationsEnabled,
             onDismiss = { newConversationOpen = false },
-            onCreateDirect = { uid -> onCreateDirectMessageThread(uid); newConversationOpen = false },
+            onCreateDirect = { uid ->
+                restoreConversationToMyList(directThreadIdFor(uid))
+                onCreateDirectMessageThread(uid)
+                newConversationOpen = false
+            },
             onCreateGroup = { uids, title -> onCreateGroupMessageThread(uids, title); newConversationOpen = false }
         )
     }
@@ -428,21 +527,29 @@ fun MessagesScreen(
 private fun ThreadListPanel(
     threads: List<StudioMessageThread>,
     archivedMarkers: Map<String, Long>,
+    deletedMarkers: Map<String, Long>,
     selectedId: String,
     currentUid: String,
     teamMembers: List<StudioMessageTeamMember>,
     unreadCount: Int,
     onSelectThread: (String) -> Unit,
-    onToggleArchive: (String) -> Unit
+    onToggleArchive: (String) -> Unit,
+    onDeleteThread: (String) -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val active = threads.filter { thread ->
+    val visibleThreads = threads.filter { thread ->
+        if (thread.isTeamThread) return@filter true
+        val marker = deletedMarkers[thread.id] ?: return@filter true
+        val lastTs = thread.lastMessageAt?.time ?: 0L
+        lastTs > marker // restore if a new message arrived
+    }
+    val active = visibleThreads.filter { thread ->
         val marker = archivedMarkers[thread.id] ?: return@filter true
         val lastTs = thread.lastMessageAt?.time ?: 0L
         lastTs > marker // unarchive if new message arrived
     }
-    val archived = threads.filter { thread -> thread !in active }
+    val archived = visibleThreads.filter { thread -> thread !in active }
     var archivedExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -469,7 +576,8 @@ private fun ThreadListPanel(
                         currentUid = currentUid,
                         teamMembers = teamMembers,
                         onClick = { onSelectThread(thread.id) },
-                        onToggleArchive = { onToggleArchive(thread.id) }
+                        onToggleArchive = { onToggleArchive(thread.id) },
+                        onDeleteThread = { onDeleteThread(thread.id) }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 }
@@ -497,7 +605,7 @@ private fun ThreadListPanel(
                             )
                             Spacer(Modifier.weight(1f))
                             Text(
-                                if (archivedExpanded) "Hide" else "Show",
+                                if (archivedExpanded) t("Hide") else t("Show"),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -513,7 +621,8 @@ private fun ThreadListPanel(
                                 currentUid = currentUid,
                                 teamMembers = teamMembers,
                                 onClick = { onSelectThread(thread.id) },
-                                onToggleArchive = { onToggleArchive(thread.id) }
+                                onToggleArchive = { onToggleArchive(thread.id) },
+                        onDeleteThread = { onDeleteThread(thread.id) }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
@@ -533,7 +642,8 @@ private fun ThreadRow(
     currentUid: String,
     teamMembers: List<StudioMessageTeamMember>,
     onClick: () -> Unit,
-    onToggleArchive: () -> Unit
+    onToggleArchive: () -> Unit,
+    onDeleteThread: () -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -593,10 +703,14 @@ private fun ThreadRow(
                 }
             }
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenu(expanded = menuOpen && !thread.isTeamThread, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
-                text = { Text(if (archived) "Unarchive" else "Archive") },
+                text = { Text(if (archived) t("Unarchive") else t("Archive")) },
                 onClick = { menuOpen = false; onToggleArchive() }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete Conversation", color = MaterialTheme.colorScheme.error) },
+                onClick = { menuOpen = false; onDeleteThread() }
             )
         }
     }
@@ -840,7 +954,7 @@ private fun ConversationHeader(
         }
         Box {
             IconButton(onClick = onOpenMutePicker) {
-                Icon(Icons.Filled.NotificationsOff, contentDescription = "Mute", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Filled.NotificationsOff, contentDescription = t("Mute"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             DropdownMenu(expanded = mutePickerOpen, onDismissRequest = onDismissMutePicker) {
                 DropdownMenuItem(text = { Text(t("Mute for 1 hour")) }, onClick = { onSetMute("oneHour") })
@@ -850,11 +964,11 @@ private fun ConversationHeader(
             }
         }
         IconButton(onClick = onToggleSearchVisible) {
-            Icon(Icons.Filled.Search, contentDescription = "Search", tint = StudioBlue)
+            Icon(Icons.Filled.Search, contentDescription = t("Search"), tint = StudioBlue)
         }
         Box {
             IconButton(onClick = { moreOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Filled.MoreVert, contentDescription = t("More"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                 DropdownMenuItem(
@@ -892,7 +1006,7 @@ private fun SearchBar(
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        Icon(Icons.Filled.Close, contentDescription = t("Clear"))
                     }
                 }
             }
@@ -1067,7 +1181,7 @@ private fun MessageBubble(
                 DropdownMenuItem(text = { Text(t("Reply")) }, onClick = { menuOpen = false; onReply() })
                 DropdownMenuItem(text = { Text(t("Forward")) }, onClick = { menuOpen = false; onForward() })
                 DropdownMenuItem(
-                    text = { Text(if (saved) "Unsave" else "Save") },
+                    text = { Text(if (saved) t("Unsave") else t("Save")) },
                     onClick = { menuOpen = false; onToggleSaved() }
                 )
                 if (item.text.isNotBlank()) {
@@ -1080,7 +1194,7 @@ private fun MessageBubble(
                     )
                 }
                 DropdownMenuItem(
-                    text = { Text(if (item.pinned) "Unpin" else "Pin") },
+                    text = { Text(if (item.pinned) t("Unpin") else "Pin") },
                     onClick = { menuOpen = false; onTogglePin() }
                 )
                 if (isMine && !item.isDeleted && item.text.isNotBlank() && item.fileURL.isBlank()) {
@@ -1260,7 +1374,7 @@ private fun AttachmentCard(item: StudioMessageItem, onImageClick: () -> Unit = {
             Icon(Icons.Filled.AttachFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(6.dp))
             Column {
-                Text(item.fileName.ifBlank { "Attachment" }, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+                Text(item.fileName.ifBlank { t("Attachment") }, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
                 val size = formatFileSize(item.fileSize)
                 if (size.isNotBlank()) {
                     Text(size, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1311,7 +1425,7 @@ private fun Composer(
             runCatching {
                 val resolver = context.contentResolver
                 try { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Throwable) {}
-                val name = queryDisplayName(uri, resolver) ?: "Attachment"
+                val name = queryDisplayName(uri, resolver) ?: t("Attachment")
                 val type = resolver.getType(uri) ?: "application/octet-stream"
                 val bytes = withContext(Dispatchers.IO) {
                     resolver.openInputStream(uri)?.use { it.readBytes() }
@@ -1368,7 +1482,7 @@ private fun Composer(
                 Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Replying to ${replyingTo.senderLabel()}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                        Text(replyingTo.text.ifBlank { replyingTo.fileName.ifBlank { "Attachment" } }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Text(replyingTo.text.ifBlank { replyingTo.fileName.ifBlank { t("Attachment") } }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                     IconButton(onClick = onClearReply) { Icon(Icons.Filled.Close, contentDescription = t("Cancel reply")) }
                 }
@@ -1475,7 +1589,7 @@ private fun Composer(
                 modifier = Modifier.weight(1f).heightIn(min = 44.dp)
             ) {
                 PillTextField(
-                    placeholder = "Message",
+                    placeholder = t("Message"),
                     value = draft,
                     onValueChange = {
                         draft = it
@@ -1586,9 +1700,11 @@ private fun NewConversationDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    selectedUids = if (groupMode) {
-                                        if (selectedUids.contains(member.id)) selectedUids - member.id else selectedUids + member.id
-                                    } else setOf(member.id)
+                                    if (groupMode) {
+                                        selectedUids = if (selectedUids.contains(member.id)) selectedUids - member.id else selectedUids + member.id
+                                    } else {
+                                        onCreateDirect(member.id)
+                                    }
                                 }
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -1620,13 +1736,14 @@ private fun NewConversationDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    if (groupMode) onCreateGroup(selectedUids.toList(), groupTitle.trim())
-                    else selectedUids.firstOrNull()?.let { onCreateDirect(it) }
-                },
-                enabled = if (groupMode) selectedUids.size >= 2 else selectedUids.size == 1
-            ) { Text(t("Create")) }
+            if (groupMode) {
+                TextButton(
+                    onClick = { onCreateGroup(selectedUids.toList(), groupTitle.trim()) },
+                    enabled = selectedUids.size >= 2
+                ) { Text(t("Create")) }
+            } else {
+                Text(t("Select a person to start messaging."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
@@ -1842,4 +1959,35 @@ private fun relativeTime(date: Date): String {
         diff < 7 * day -> "${diff / day}d"
         else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(date)
     }
+}
+
+
+private fun loadDeletedThreadMarkers(preferences: SharedPreferences, key: String): Map<String, Long> {
+    val raw = preferences.getString(key, "").orEmpty()
+    if (raw.isBlank()) return emptyMap()
+    return runCatching {
+        val json = JSONObject(raw)
+        val markers = mutableMapOf<String, Long>()
+        json.keys().forEach { threadId ->
+            val value = json.optLong(threadId, 0L)
+            if (value > 0L) markers[threadId] = value
+        }
+        markers.toMap()
+    }.getOrDefault(emptyMap())
+}
+
+private fun persistDeletedThreadMarkers(preferences: SharedPreferences, key: String, markers: Map<String, Long>) {
+    val json = JSONObject()
+    markers.forEach { (threadId, value) -> json.put(threadId, value) }
+    preferences.edit().putString(key, json.toString()).apply()
+}
+
+
+private fun firestoreLongMap(value: Any?): Map<String, Long> {
+    val raw = value as? Map<*, *> ?: return emptyMap()
+    return raw.mapNotNull { (key, marker) ->
+        val threadId = key?.toString().orEmpty()
+        val time = (marker as? Number)?.toLong() ?: return@mapNotNull null
+        if (threadId.isBlank() || threadId == "team") null else threadId to time
+    }.toMap()
 }

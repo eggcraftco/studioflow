@@ -20,6 +20,7 @@ import {
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  normalizeWorkspaceRole,
   workspaceAccessAllows,
   type DashboardFinanceOrder,
   type WorkspaceMemberAccessKey,
@@ -85,6 +86,8 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/dashboard": "dashboard",
   "/schedule": "schedule",
   "/customers": "customers",
+  "/messages": "messages",
+  "/notes": "notes",
   "/quick-reply": "quickReply",
   "/settings": "settings",
 };
@@ -509,7 +512,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function AppShellFrame({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, language: personalLanguage, theme: personalTheme } = useAuth();
   const { hideNumbers, toggleHideNumbers } = usePricePrivacy();
   const pathname = usePathname();
   const router = useRouter();
@@ -597,12 +600,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             : Promise.resolve([]),
           loadWorkspaceSettingsOverview(loadedWorkspace.id),
         ]);
+        // loadWorkspaceSettingsOverview already overlays the signed-in
+        // user's personal theme/language for every workspace role.
+        const resolvedSettings = loadedSettings;
         if (cancelled) return;
         setFinanceOrders(loadedOrders);
-        setSettings(loadedSettings);
+        setSettings(resolvedSettings);
         rememberAppShellSnapshot(currentUser.uid, {
           workspace: loadedWorkspace,
-          settings: loadedSettings,
+          settings: resolvedSettings,
           financeOrders: loadedOrders,
         });
       } catch {
@@ -756,7 +762,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedThemeKey = "studioflow-app-theme";
-    const theme = settings?.appTheme;
+    // Theme is per-user — read the personal theme from auth context, never the
+    // workspace-wide settings value, so members keep their own appearance.
+    const theme = personalTheme;
 
     if (!theme) {
       if (!document.body.dataset.studioTheme) {
@@ -798,7 +806,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       media.addEventListener("change", applyTheme);
       return () => media.removeEventListener("change", applyTheme);
     }
-  }, [settings?.appTheme]);
+  }, [personalTheme]);
 
   useEffect(() => {
     if (!workspace) return;
@@ -843,12 +851,23 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     };
   }, [workspace, user]);
 
-  // Listen to message threads → derive unread count for sidebar badge
+  // Listen to message threads only when the current plan and assigned role
+  // are permitted to read Messages. This avoids Firestore permission errors in
+  // Free/Lite/Pro workspaces and for Workflow Only members.
   useEffect(() => {
-    if (!workspace || !user) {
+    const role = normalizeWorkspaceRole(workspace?.role);
+    const canReadMessages = Boolean(
+      workspace &&
+      user &&
+      workspace.entitlements.features.messages === true &&
+      ["owner", "admin", "member", "viewer", "workflow"].includes(role),
+    );
+
+    if (!canReadMessages || !workspace || !user) {
       setMessageUnreadCount(0);
       return;
     }
+
     let cancelled = false;
     let unsub: (() => void) | null = null;
     (async () => {
@@ -1005,7 +1024,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     canCreateOrdersForRole(workspace.role) &&
     workspace.entitlements.features.orders_create,
   );
-  const language = settings?.selectedLanguage ?? "English";
+  const language = personalLanguage || settings?.selectedLanguage || "English";
   const t = (text: string) => studioT(text, language);
   const showWorkspaceOnboarding = Boolean(
     user &&

@@ -10,9 +10,10 @@ type AuthContextValue = {
   user: User | null;
   loading: boolean;
   language: string;
+  theme: string;
 };
 
-const AuthContext = createContext<AuthContextValue>({ user: null, loading: true, language: "English" });
+const AuthContext = createContext<AuthContextValue>({ user: null, loading: true, language: "English", theme: "System" });
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -93,17 +94,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<string>("English");
+  const [theme, setTheme] = useState<string>("System");
 
-  // Listen to the active workspace's selectedLanguage so children re-render on language change.
+  // Live per-user language + theme sync. Language and theme are STRICTLY personal
+  // for every role (owner included) — they live in the user's own
+  // personalInterfaceSettings doc and never inherit the workspace-wide value, so a
+  // member never sees the owner's language/theme. Also watches
+  // `users/{uid}.activeCompanyId` and refreshes the page whenever the signed-in
+  // user's active workspace changes server-side (e.g. when the owner approves their
+  // join request and the Cloud Function points them at the newly joined workspace).
   useEffect(() => {
-    if (!user) { setLanguage("English"); return; }
-    const ref = doc(db, "companySettings", user.uid);
-    const unsubscribe = onSnapshot(ref, snapshot => {
-      const raw = snapshot.exists() ? (snapshot.data() as Record<string, unknown>)?.["seciliDil"] : undefined;
-      const cleaned = typeof raw === "string" ? raw.trim() : "";
-      setLanguage(cleaned || "English");
-    }, () => setLanguage("English"));
-    return () => unsubscribe();
+    if (!user) { setLanguage("English"); setTheme("System"); return; }
+
+    let unsubPersonal: (() => void) | null = null;
+    let lastSeenActiveCompanyId: string | null = null;
+
+    const unsubUserDoc = onSnapshot(doc(db, "users", user.uid), snap => {
+      const companyId = (snap.exists() ? cleanText((snap.data() as Record<string, unknown>)?.["activeCompanyId"]) : "") || user.uid;
+      if (lastSeenActiveCompanyId !== null && lastSeenActiveCompanyId !== companyId) {
+        window.dispatchEvent(new CustomEvent("studioflow-active-company-changed", { detail: { companyId } }));
+        window.location.reload();
+        return;
+      }
+      lastSeenActiveCompanyId = companyId;
+
+      if (unsubPersonal) { unsubPersonal(); unsubPersonal = null; }
+      const personalRef = doc(db, "companies", companyId, "personalInterfaceSettings", user.uid);
+      unsubPersonal = onSnapshot(personalRef, snap2 => {
+        const data = snap2.exists() ? (snap2.data() as Record<string, unknown>) : {};
+        const rawLang = data?.["selectedLanguage"];
+        const rawTheme = data?.["appTheme"];
+        setLanguage(typeof rawLang === "string" && rawLang.trim() ? rawLang.trim() : "English");
+        setTheme(typeof rawTheme === "string" && rawTheme.trim() ? rawTheme.trim() : "System");
+      }, () => { setLanguage("English"); setTheme("System"); });
+    });
+
+    return () => {
+      unsubUserDoc();
+      if (unsubPersonal) unsubPersonal();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -136,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const value = useMemo(() => ({ user, loading, language }), [user, loading, language]);
+  const value = useMemo(() => ({ user, loading, language, theme }), [user, loading, language, theme]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

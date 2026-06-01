@@ -53,6 +53,7 @@ private enum LoginCredentialStore {
 struct LoginView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @Environment(\.colorScheme) var colorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     @State private var email = ""
     @State private var password = ""
@@ -111,7 +112,7 @@ struct LoginView: View {
                             .padding(.bottom, 8)
                             .accessibilityLabel("NivaDesk")
 
-                        Text(isLoginMode ? "Sign in to your workspace" : "Create a new workspace")
+                        Text(isLoginMode ? t("Sign in to your workspace", lang: seciliDil) : t("Create a new workspace", lang: seciliDil))
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
 
@@ -121,7 +122,7 @@ struct LoginView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: "globe")
                                     .font(.system(size: 18, weight: .semibold))
-                                Text("Continue with Google")
+                                Text(t("Continue with Google", lang: seciliDil))
                                     .font(.system(size: 14, weight: .semibold))
                             }
                             .foregroundColor(.primary)
@@ -150,7 +151,7 @@ struct LoginView: View {
                         }
 
                         VStack(spacing: 15) {
-                            TextField("Email Address", text: $email)
+                            TextField(t("Email Address", lang: seciliDil), text: $email)
                                 .focused($focusedField, equals: .email)
                                 .textFieldStyle(.plain)
                                 .padding()
@@ -171,7 +172,7 @@ struct LoginView: View {
                                 .keyboardType(.emailAddress)
                                 #endif
 
-                            SecureField("Password", text: $password)
+                            SecureField(t("Password", lang: seciliDil), text: $password)
                                 .focused($focusedField, equals: .password)
                                 .textFieldStyle(.plain)
                                 .padding()
@@ -199,7 +200,7 @@ struct LoginView: View {
                                         .controlSize(.small)
                                         .tint(.white)
                                 } else {
-                                    Text(isLoginMode ? "Sign In" : "Create Account")
+                                    Text(isLoginMode ? t("Sign In", lang: seciliDil) : t("Create Account", lang: seciliDil))
                                 }
                             }
                             .font(.system(size: 15, weight: .bold))
@@ -219,7 +220,7 @@ struct LoginView: View {
                                 authVM.errorMessage = ""
                             }
                         }) {
-                            Text(isLoginMode ? "Don't have an account? Create one" : "Already have an account? Sign In")
+                            Text(isLoginMode ? t("Don't have an account? Create one", lang: seciliDil) : t("Already have an account? Sign In", lang: seciliDil))
                                 .font(.system(size: 13))
                                 .foregroundColor(.blue)
                         }

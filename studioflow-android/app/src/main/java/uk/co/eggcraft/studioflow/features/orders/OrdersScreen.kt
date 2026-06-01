@@ -1078,8 +1078,8 @@ private fun OrderListCard(
         if (confirmDeleteOpen) {
             AlertDialog(
                 onDismissRequest = { confirmDeleteOpen = false },
-                title = { Text("Delete order?") },
-                text = { Text("Delete \"${order.displayCustomerName}\"? This cannot be undone.") },
+                title = { Text(if (canRequestOrderDeletionFromList(workspace)) "Request deletion?" else "Delete order?") },
+                text = { Text(if (canRequestOrderDeletionFromList(workspace)) "Request deletion of \"${order.displayCustomerName}\"? The order will be removed only after owner approval." else "Delete \"${order.displayCustomerName}\"? This cannot be undone.") },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -1087,7 +1087,7 @@ private fun OrderListCard(
                             onDeleteOrder()
                         }
                     ) {
-                        Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                        Text(if (canRequestOrderDeletionFromList(workspace)) "Send Request" else t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
                     }
                 },
                 dismissButton = {
@@ -1128,6 +1128,7 @@ private fun OrderListContextMenu(
     val canAssign = canManageOrderAssignments(workspace)
     val canEditStatus = canEditOrderStatusFromList(workspace)
     val canDelete = canDeleteOrderFromList(workspace)
+    val canRequestDelete = canRequestOrderDeletionFromList(workspace)
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
             text = { Text(t("Open Customer")) },
@@ -1212,9 +1213,9 @@ private fun OrderListContextMenu(
         )
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text(t("Delete"), color = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
-            enabled = canDelete,
-            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = if (canDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
+            text = { Text(if (canRequestDelete) "Request Deletion" else t("Delete"), color = if (canDelete || canRequestDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
+            enabled = canDelete || canRequestDelete,
+            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = if (canDelete || canRequestDelete) StudioRed else MaterialTheme.colorScheme.onSurfaceVariant) },
             onClick = onRequestDelete
         )
     }
@@ -1486,6 +1487,12 @@ private fun canDeleteOrderFromList(workspace: StudioWorkspace?): Boolean {
     if (workspace == null || !workspace.memberAccess.orders) return false
     val role = workspace.role.lowercase(Locale.UK)
     return workspace.isOwner || role in setOf("admin", "member")
+}
+
+private fun canRequestOrderDeletionFromList(workspace: StudioWorkspace?): Boolean {
+    if (workspace == null || !workspace.memberAccess.orders) return false
+    val role = workspace.role.lowercase(Locale.UK).replace("_", "").replace("-", "").replace(" ", "")
+    return role == "workflow" || role == "workflowonly" || workspace.shouldShowOnlyAssignedProjects
 }
 
 private fun upcomingScheduleLabel(order: StudioOrder): String? {

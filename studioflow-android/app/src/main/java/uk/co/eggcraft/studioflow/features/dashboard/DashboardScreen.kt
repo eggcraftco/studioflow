@@ -101,8 +101,9 @@ fun DashboardScreen(
     val hideSensitiveNumbers = LocalHideSensitiveNumbers.current
     val widgetVisibility = DashboardWidgetVisibility.from(state.workspaceSettings)
     val advancedFinanceEnabled = state.workspace?.billingPlan == StudioBillingPlan.ProMonthly || state.workspace?.billingPlan == StudioBillingPlan.TeamMonthly
-    val stats = remember(state.orders, period, advancedFinanceEnabled) {
-        DashboardStats.from(state.orders, period, advancedFinanceEnabled)
+    val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
+    val stats = remember(state.orders, period, advancedFinanceEnabled, locale) {
+        DashboardStats.from(state.orders, period, advancedFinanceEnabled, locale)
     }
     val compareEnabled = advancedFinanceEnabled && compareMode != DashboardCompareMode.None && period.supportsYearCompare
     val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled) {
@@ -648,7 +649,7 @@ private data class DashboardStats(
     }
 
     companion object {
-        fun from(orders: List<StudioOrder>, period: DashboardPeriod, advancedFinanceEnabled: Boolean): DashboardStats {
+        fun from(orders: List<StudioOrder>, period: DashboardPeriod, advancedFinanceEnabled: Boolean, locale: Locale = Locale.UK): DashboardStats {
             val now = Calendar.getInstance(Locale.UK)
             val currentYear = now.get(Calendar.YEAR)
             val currentMonth = now.get(Calendar.MONTH)
@@ -679,8 +680,8 @@ private data class DashboardStats(
                 tax = selectedOrders.sumOf { it.taxAmount },
                 netProfit = selectedOrders.sumOf { it.netProfit },
                 chartValues = chartValues,
-                chartLabels = period.chartLabels(now),
-                chartAxisLabels = period.chartAxisLabels(now),
+                chartLabels = period.chartLabels(now, locale),
+                chartAxisLabels = period.chartAxisLabels(now, locale),
                 previousOneYearValues = buildChartValues(orders, period, currentYear, currentMonth, 1, bucketCount, true),
                 previousTwoYearValues = buildChartValues(orders, period, currentYear, currentMonth, 2, bucketCount, true),
                 previousThreeYearValues = buildChartValues(orders, period, currentYear, currentMonth, 3, bucketCount, true),
@@ -936,22 +937,38 @@ private enum class DashboardPeriod(val label: String) {
         }
     }
 
-    fun chartLabels(now: Calendar): List<String> {
+    fun chartLabels(now: Calendar, locale: Locale = Locale.UK): List<String> {
+        val daySdf = java.text.SimpleDateFormat("EEE", locale)
+        val monthSdf = java.text.SimpleDateFormat("LLL", locale)
         return when (this) {
-            Week -> listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+            Week -> (Calendar.MONDAY..Calendar.SATURDAY).toList().plus(Calendar.SUNDAY).map { dow ->
+                val c = Calendar.getInstance(locale).apply { firstDayOfWeek = Calendar.MONDAY; set(Calendar.DAY_OF_WEEK, dow) }
+                daySdf.format(c.time).replaceFirstChar { it.titlecase(locale) }
+            }
             Month -> (1..now.getActualMaximum(Calendar.DAY_OF_MONTH)).map { it.toString() }
-            Year, AllTime -> listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+            Year, AllTime -> (0..11).map { m ->
+                val c = Calendar.getInstance(locale).apply { set(Calendar.MONTH, m); set(Calendar.DAY_OF_MONTH, 1) }
+                monthSdf.format(c.time).replaceFirstChar { it.titlecase(locale) }
+            }
         }
     }
 
-    fun chartAxisLabels(now: Calendar): List<String> {
+    fun chartAxisLabels(now: Calendar, locale: Locale = Locale.UK): List<String> {
+        val daySdf = java.text.SimpleDateFormat("EEE", locale)
+        val monthSdf = java.text.SimpleDateFormat("LLL", locale)
         return when (this) {
-            Week -> listOf("Mon", "Wed", "Fri", "Sun")
+            Week -> listOf(Calendar.MONDAY, Calendar.WEDNESDAY, Calendar.FRIDAY, Calendar.SUNDAY).map { dow ->
+                val c = Calendar.getInstance(locale).apply { firstDayOfWeek = Calendar.MONDAY; set(Calendar.DAY_OF_WEEK, dow) }
+                daySdf.format(c.time).replaceFirstChar { it.titlecase(locale) }
+            }
             Month -> {
                 val last = now.getActualMaximum(Calendar.DAY_OF_MONTH)
                 listOf("1", (last / 3).coerceAtLeast(2).toString(), ((last * 2) / 3).toString(), last.toString())
             }
-            Year, AllTime -> listOf("Jan", "Apr", "Jul", "Oct", "Dec")
+            Year, AllTime -> listOf(0, 3, 6, 9, 11).map { m ->
+                val c = Calendar.getInstance(locale).apply { set(Calendar.MONTH, m); set(Calendar.DAY_OF_MONTH, 1) }
+                monthSdf.format(c.time).replaceFirstChar { it.titlecase(locale) }
+            }
         }
     }
 }
@@ -999,6 +1016,9 @@ private fun ExtraSpendingSummarySection(
     hideNumbers: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
     var expanded by rememberSaveable { mutableStateOf(false) }
     var scope by rememberSaveable { mutableStateOf(SpendingScope.ThisMonth) }
     var customStartMs by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -1134,7 +1154,7 @@ private fun ExtraSpendingSummarySection(
                                 color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Text(
-                                    "From: " + (customStartMs?.let { formatDateShort(it) } ?: "—"),
+                                    t("From") + ": " + (customStartMs?.let { formatDateShort(it, locale) } ?: "—"),
                                     modifier = Modifier.padding(10.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -1144,7 +1164,7 @@ private fun ExtraSpendingSummarySection(
                                 color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Text(
-                                    "To: " + (customEndMs?.let { formatDateShort(it) } ?: "—"),
+                                    t("To") + ": " + (customEndMs?.let { formatDateShort(it, locale) } ?: "—"),
                                     modifier = Modifier.padding(10.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -1157,10 +1177,10 @@ private fun ExtraSpendingSummarySection(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        ToggleRow("Base Cost", incBase) { incBase = it; page = 0 }
-                        ToggleRow("Shipping", incShipping) { incShipping = it; page = 0 }
-                        ToggleRow("Platform Fee", incFee) { incFee = it; page = 0 }
-                        ToggleRow("VAT / Tax", incTax) { incTax = it; page = 0 }
+                        ToggleRow(t("Base Cost"), incBase) { incBase = it; page = 0 }
+                        ToggleRow(t("Shipping"), incShipping) { incShipping = it; page = 0 }
+                        ToggleRow(t("Platform Fee"), incFee) { incFee = it; page = 0 }
+                        ToggleRow(t("VAT / Tax"), incTax) { incTax = it; page = 0 }
                     }
 
                     // Metrics
@@ -1201,8 +1221,8 @@ private fun ExtraSpendingSummarySection(
                                 g.entries.forEach { e ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text("${e.heading} · ${e.description}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                            Text(formatDateShort(e.paymentDate.time), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("${t(e.heading)} · ${t(e.description)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(formatDateShort(e.paymentDate.time, locale), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Text(money(e.amount, currency, decimalSeparator, hideNumbers), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
@@ -1289,7 +1309,7 @@ private fun spendingDateRange(scope: SpendingScope, customStart: Long?, customEn
     }
 }
 
-private fun formatDateShort(ms: Long): String {
-    val sdf = java.text.SimpleDateFormat("dd MMM yyyy", Locale.UK)
+private fun formatDateShort(ms: Long, locale: Locale = Locale.UK): String {
+    val sdf = java.text.SimpleDateFormat("dd MMM yyyy", locale)
     return sdf.format(Date(ms))
 }

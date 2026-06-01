@@ -85,14 +85,15 @@ export default function NotesPage() {
 
   useEffect(() => {
     if (!user) return;
+    const uid = user.uid;
     let cancelled = false;
     (async () => {
-      const ws = await loadWorkspaceContext(user.uid);
+      const ws = await loadWorkspaceContext(uid);
       if (cancelled) return;
       setWorkspace(ws);
       setLoading(false);
       try {
-        const o = await loadRecentOrders(ws.id);
+        const o = await loadRecentOrders(ws.id, ws, uid);
         if (!cancelled) setOrders(o);
       } catch {}
     })();

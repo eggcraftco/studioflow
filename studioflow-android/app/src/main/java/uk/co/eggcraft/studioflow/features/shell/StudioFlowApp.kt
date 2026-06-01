@@ -203,6 +203,10 @@ private fun StudioFlowAppContent(
         }
     }
 
+    LaunchedEffect(state.workspace?.id, state.workspace?.role) {
+        viewModel.refreshPersonalInterfaceSettings()
+    }
+
     LaunchedEffect(state.user?.uid, requireDeviceUnlock) {
         when {
             state.user == null -> {
@@ -228,6 +232,9 @@ private fun StudioFlowAppContent(
 
     DisposableEffect(lifecycleOwner, state.user?.uid, requireDeviceUnlock) {
         val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshPersonalInterfaceSettings()
+            }
             if (event == Lifecycle.Event.ON_STOP && state.user != null && requireDeviceUnlock) {
                 localUnlockSatisfied = false
                 localUnlockMessage = ""
@@ -285,6 +292,7 @@ private fun StudioFlowAppContent(
             onChangeAccountEmail = viewModel::changeAccountEmail,
             onSendPasswordResetEmail = viewModel::sendPasswordResetEmail,
             onRequestWorkspaceAccess = viewModel::requestWorkspaceAccess,
+            onSwitchWorkspace = viewModel::switchWorkspace,
             onApproveJoinRequest = viewModel::approveJoinRequest,
             onDeclineJoinRequest = viewModel::declineJoinRequest,
             onUpdateTeamMemberRole = viewModel::updateTeamMemberRole,
@@ -325,6 +333,7 @@ private fun StudioFlowAppContent(
             onMarkActivityNotificationRead = viewModel::markActivityNotificationRead,
             onMarkAllActivityNotificationsRead = viewModel::markAllActivityNotificationsRead,
             onDismissActivityNotifications = viewModel::dismissActivityNotifications,
+            onReviewOrderDeletion = viewModel::reviewWorkflowOrderDeletion,
             onOpenActivityNotification = viewModel::openActivityNotification,
             onSetKeepNotesSearch = viewModel::setKeepNotesSearch,
             onSetKeepNotesSection = viewModel::setKeepNotesSection,

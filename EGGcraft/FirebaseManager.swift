@@ -540,7 +540,7 @@ private struct StudioLegacyOfflineCacheSnapshot: Codable {
     var musteriler: [Musteri]
 }
 
-private struct StudioOfflineSiparisCacheItem: Codable {
+private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
     var documentId: String?
     var companyId: String
     var paymentMethod: String
@@ -740,6 +740,8 @@ private struct StudioPendingSyncOperation: Codable, Identifiable, Equatable {
     var documentId: String
     var action: String
     var title: String
+    var callableFunction: String? = nil
+    var callableOrder: StudioOfflineSiparisCacheItem? = nil
     var createdAt: Date = Date()
 }
 
@@ -928,6 +930,8 @@ class FirebaseManager: ObservableObject {
     private var musteriListenerRegistration: ListenerRegistration?
     private var supportTicketsListenerRegistration: ListenerRegistration?
     private var messageThreadsListenerRegistration: ListenerRegistration?
+    private var personalInterfaceListenerRegistration: ListenerRegistration?
+    private var personalInterfaceListenerKey: String = ""
     private var messageThreadsListenerCompanyId: String = ""
     private var messageItemsListenerRegistration: ListenerRegistration?
     private var messageItemsListenerKey: String = ""
@@ -942,6 +946,7 @@ class FirebaseManager: ObservableObject {
     private let networkQueue = DispatchQueue(label: "uk.co.eggcraft.studioflow.network-monitor")
     private var pendingSyncOperations: [StudioPendingSyncOperation] = []
     private var pendingClientFileUploads: [StudioPendingClientFileUpload] = []
+    private var isProcessingPendingCallableOrderWrites: Bool = false
     private var activeClientFileUploadTasks: [String: StorageUploadTask] = [:]
     private var locallyReadMessageThreadReadTimes: [String: Date] = [:]
     
@@ -952,6 +957,8 @@ class FirebaseManager: ObservableObject {
     
     @Published var currentCompanyId: String = ""
     @Published var currentWorkspaceRole: String = "owner"
+    @Published var currentWorkspaceAssignedProjectsOnly: Bool = false
+    @Published var currentWorkspaceManageProjectAssignments: Bool = false
     var lastUploadSafetyMessage: String = ""
 
     private var currentStoredBillingPlan: StudioBillingPlan {
@@ -1021,9 +1028,19 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    private var usesRestrictedAssignedProjectScope: Bool {
+        normalizedWorkspaceRole(currentWorkspaceRole) == "workflowOnly"
+            || (currentWorkspaceAssignedProjectsOnly && !currentWorkspaceManageProjectAssignments)
+    }
+
     private var shouldSaveOrdersThroughCallable: Bool {
         let role = normalizedWorkspaceRole(currentWorkspaceRole)
-        return role == "workflowOnly" || role == "unknown"
+        let requiresBasicFinanceProtection = !currentStoredBillingPlan.entitlements.advancedDashboardEnabled
+
+        // Free Demo and Lite must write orders through the verified callable so
+        // financialExpense:: / financialRemaining:: values inside customFields
+        // cannot be changed by bypassing the plan entitlement check.
+        return requiresBasicFinanceProtection || usesRestrictedAssignedProjectScope || role == "unknown"
     }
 
     private func uploadErrorMayHaveFinalized(_ error: Error) -> Bool {
@@ -1096,9 +1113,11 @@ class FirebaseManager: ObservableObject {
         networkMonitor.cancel()
     }
 
-    func configure(companyId: String, workspaceRole: String = "owner") {
+    func configure(companyId: String, workspaceRole: String = "owner", assignedProjectsOnly: Bool = false, manageProjectAssignments: Bool = false) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
         currentWorkspaceRole = workspaceRole
+        currentWorkspaceAssignedProjectsOnly = assignedProjectsOnly
+        currentWorkspaceManageProjectAssignments = manageProjectAssignments
         guard !cleanCompanyId.isEmpty else {
             resetForLogout()
             return
@@ -1123,9 +1142,11 @@ class FirebaseManager: ObservableObject {
         loadOfflineCache(for: cleanCompanyId)
         refreshOfflineStatusMessage()
         startMessageThreadsRealtime(companyId: cleanCompanyId)
+        startPersonalInterfaceRealtime(companyId: cleanCompanyId)
 
         fetchSiparisler()
         fetchMusteriler()
+        processPendingCallableOrderWritesIfPossible()
         processPendingClientFileUploadsIfPossible()
     }
 
@@ -1160,22 +1181,52 @@ class FirebaseManager: ObservableObject {
 
     func fetchSiparisler() {
         guard !currentCompanyId.isEmpty else { siparisler = []; return }
-        listenerRegistration = db.collection("siparisler").whereField("companyId", isEqualTo: currentCompanyId)
-            .addSnapshotListener(includeMetadataChanges: true) { querySnapshot, error in
+        let companyId = currentCompanyId
+        let usesAssignedView = usesRestrictedAssignedProjectScope
+
+        func startOrderListener() {
+            let collectionRef: CollectionReference = usesAssignedView
+                ? self.db.collection("companies").document(companyId).collection("workflowOrders")
+                : self.db.collection("siparisler")
+            var orderQuery: Query = usesAssignedView
+                ? collectionRef
+                : collectionRef.whereField("companyId", isEqualTo: companyId)
+            if usesAssignedView, let uid = Auth.auth().currentUser?.uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                orderQuery = orderQuery.whereField("assignedToUid", isEqualTo: uid)
+            }
+            self.listenerRegistration?.remove()
+            self.listenerRegistration = orderQuery.addSnapshotListener(includeMetadataChanges: true) { querySnapshot, error in
                 if let error = error {
                     print("Hata: \(error)")
                     DispatchQueue.main.async { self.refreshOfflineStatusMessage() }
                     return
                 }
-                let indirilenSiparisler = querySnapshot?.documents.compactMap { document -> Siparis? in
-                    self.decodeSiparisDocument(document)
-                } ?? []
+                let downloaded = querySnapshot?.documents.compactMap { self.decodeSiparisDocument($0) } ?? []
                 DispatchQueue.main.async {
-                    self.siparisler = indirilenSiparisler.sorted(by: { $0.paymentDate > $1.paymentDate })
+                    self.siparisler = downloaded.sorted(by: { $0.paymentDate > $1.paymentDate })
                     self.handleServerSnapshotAcknowledgement(querySnapshot?.metadata)
                     self.saveOfflineCache()
                 }
             }
+        }
+
+        if usesAssignedView {
+#if canImport(FirebaseFunctions)
+            Functions.functions(region: "europe-west2")
+                .httpsCallable("ensureWorkflowAssignedOrderViews")
+                .call(["companyId": companyId]) { _, error in
+                    if let error { print("Could not prepare assigned project views: \(error.localizedDescription)") }
+                    DispatchQueue.main.async {
+                        guard self.currentCompanyId == companyId else { return }
+                        startOrderListener()
+                    }
+                }
+#else
+            startOrderListener()
+#endif
+        } else {
+            startOrderListener()
+        }
     }
 
     private func decodeSiparisDocument(_ document: QueryDocumentSnapshot) -> Siparis? {
@@ -1706,6 +1757,20 @@ class FirebaseManager: ObservableObject {
         let ref = db.collection("siparisler").document()
         yeniSiparis.id = ref.documentID
 
+        if usesRestrictedAssignedProjectScope {
+            yeniSiparis.assignedToUid = Auth.auth().currentUser?.uid ?? ""
+            yeniSiparis.assignedToEmail = Auth.auth().currentUser?.email ?? ""
+        }
+
+        if normalizedWorkspaceRole(currentWorkspaceRole) == "workflowOnly" {
+            yeniSiparis.paidAmount = 0
+            yeniSiparis.remainingAmount = 0
+            yeniSiparis.watchPurchasePrice = 0
+            yeniSiparis.paymentFee = 0
+            yeniSiparis.deliveryCost = 0
+            yeniSiparis.taxAmount = 0
+        }
+
         if shouldSaveOrdersThroughCallable {
             createSiparisThroughCallable(yeniSiparis, documentId: ref.documentID)
             upsertLocalSiparis(yeniSiparis)
@@ -1731,7 +1796,13 @@ class FirebaseManager: ObservableObject {
     private func createSiparisThroughCallable(_ siparis: Siparis, documentId: String) {
         #if canImport(FirebaseFunctions)
         guard isOnline else {
-            print("Workflow order create is waiting for network.")
+            queuePendingCallableOrderWrite(
+                siparis,
+                documentId: documentId,
+                action: "add",
+                callableFunction: "createSwiftOrder"
+            )
+            print("Protected order create queued until network is available.")
             return
         }
 
@@ -1825,7 +1896,13 @@ class FirebaseManager: ObservableObject {
     private func saveSiparisThroughCallable(_ siparis: Siparis, documentId: String) {
         #if canImport(FirebaseFunctions)
         guard isOnline else {
-            print("Workflow order save is waiting for network.")
+            queuePendingCallableOrderWrite(
+                siparis,
+                documentId: documentId,
+                action: "update",
+                callableFunction: "saveSwiftOrder"
+            )
+            print("Protected order save queued until network is available.")
             return
         }
 
@@ -1899,6 +1976,45 @@ class FirebaseManager: ObservableObject {
         } catch {
             print("Client file encode failed: \(error.localizedDescription)")
         }
+    }
+
+    func requestWorkflowOrderDeletion(_ siparis: Siparis, completion: ((String) -> Void)? = nil) {
+        guard let id = siparis.id, !currentCompanyId.isEmpty else { return }
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2").httpsCallable("requestWorkflowOrderDeletion").call([
+            "companyId": currentCompanyId,
+            "orderId": id
+        ]) { result, error in
+            DispatchQueue.main.async {
+                if let error {
+                    completion?(error.localizedDescription)
+                    return
+                }
+                let payload = result?.data as? [String: Any]
+                completion?(payload?["message"] as? String ?? "Deletion request sent to workspace owner.")
+            }
+        }
+        #endif
+    }
+
+    func reviewWorkflowOrderDeletion(orderId: String, approve: Bool, completion: ((String) -> Void)? = nil) {
+        guard !currentCompanyId.isEmpty, !orderId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        #if canImport(FirebaseFunctions)
+        let callable = approve ? "approveWorkflowOrderDeletion" : "rejectWorkflowOrderDeletion"
+        Functions.functions(region: "europe-west2").httpsCallable(callable).call([
+            "companyId": currentCompanyId,
+            "orderId": orderId
+        ]) { result, error in
+            DispatchQueue.main.async {
+                if let error {
+                    completion?(error.localizedDescription)
+                    return
+                }
+                let payload = result?.data as? [String: Any]
+                completion?(payload?["message"] as? String ?? (approve ? "Deletion approved." : "Deletion rejected."))
+            }
+        }
+        #endif
     }
 
     func deleteSiparis(_ siparis: Siparis) {
@@ -2241,6 +2357,7 @@ class FirebaseManager: ObservableObject {
                 self.isOnline = path.status == .satisfied
                 self.refreshOfflineStatusMessage()
                 if self.isOnline {
+                    self.processPendingCallableOrderWritesIfPossible()
                     self.processPendingClientFileUploadsIfPossible()
                 }
             }
@@ -2370,6 +2487,100 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    private func queuePendingCallableOrderWrite(
+        _ siparis: Siparis,
+        documentId: String,
+        action: String,
+        callableFunction: String
+    ) {
+        saveOfflineCache()
+        let cachedOrder = StudioOfflineSiparisCacheItem(siparis)
+
+        if let existingIndex = pendingSyncOperations.firstIndex(where: {
+            $0.companyId == currentCompanyId
+                && $0.collection == "siparisler"
+                && $0.documentId == documentId
+                && $0.callableFunction != nil
+        }) {
+            let existingWasCreate = pendingSyncOperations[existingIndex].callableFunction == "createSwiftOrder"
+            pendingSyncOperations[existingIndex].title = siparis.customerName
+            pendingSyncOperations[existingIndex].callableOrder = cachedOrder
+            pendingSyncOperations[existingIndex].action = existingWasCreate ? "add" : action
+            pendingSyncOperations[existingIndex].callableFunction = existingWasCreate
+                ? "createSwiftOrder"
+                : callableFunction
+        } else {
+            pendingSyncOperations.append(
+                StudioPendingSyncOperation(
+                    companyId: currentCompanyId,
+                    collection: "siparisler",
+                    documentId: documentId,
+                    action: action,
+                    title: siparis.customerName,
+                    callableFunction: callableFunction,
+                    callableOrder: cachedOrder
+                )
+            )
+        }
+
+        savePendingSyncOperations()
+    }
+
+    private func processPendingCallableOrderWritesIfPossible() {
+        #if canImport(FirebaseFunctions)
+        guard isOnline, !currentCompanyId.isEmpty, !isProcessingPendingCallableOrderWrites else { return }
+        guard let pending = pendingSyncOperations.first(where: {
+            $0.companyId == currentCompanyId
+                && $0.collection == "siparisler"
+                && $0.callableFunction != nil
+                && $0.callableOrder != nil
+        }),
+        let callableFunction = pending.callableFunction,
+        let cachedOrder = pending.callableOrder else {
+            refreshOfflineStatusMessage()
+            return
+        }
+
+        let order = cachedOrder.restoredOrder
+        guard let orderPayload = callableOrderPayload(for: order) else {
+            print("Pending protected order encode failed.")
+            return
+        }
+
+        isProcessingPendingCallableOrderWrites = true
+        let payload: [String: Any] = [
+            "companyId": currentCompanyId,
+            "orderId": pending.documentId,
+            "order": orderPayload
+        ]
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable(callableFunction)
+            .call(payload) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.isProcessingPendingCallableOrderWrites = false
+
+                    if let error {
+                        print("Pending protected order sync failed: \(error.localizedDescription)")
+                        self.refreshOfflineStatusMessage()
+                        return
+                    }
+
+                    self.pendingSyncOperations.removeAll { $0.id == pending.id }
+                    self.savePendingSyncOperations()
+
+                    if let data = result?.data as? [String: Any],
+                       let message = data["message"] as? String {
+                        print("Pending protected order sync: \(message)")
+                    }
+
+                    self.processPendingCallableOrderWritesIfPossible()
+                }
+            }
+        #endif
+    }
+
     private func registerOfflineWriteIfNeeded(collection: String, documentId: String, action: String, title: String) {
         saveOfflineCache()
         guard !isOnline else { return }
@@ -2390,11 +2601,12 @@ class FirebaseManager: ObservableObject {
             return
         }
         if metadata?.hasPendingWrites == false, !pendingSyncOperations.isEmpty {
-            pendingSyncOperations.removeAll()
+            pendingSyncOperations.removeAll { $0.callableFunction == nil }
             savePendingSyncOperations()
         } else {
             refreshOfflineStatusMessage()
         }
+        processPendingCallableOrderWritesIfPossible()
         processPendingClientFileUploadsIfPossible()
     }
 
@@ -2751,13 +2963,76 @@ class FirebaseManager: ObservableObject {
         musteriListenerRegistration?.remove()
         supportTicketsListenerRegistration?.remove()
         messageThreadsListenerRegistration?.remove()
+        personalInterfaceListenerRegistration?.remove()
         listenerRegistration = nil
         musteriListenerRegistration = nil
         supportTicketsListenerRegistration = nil
         messageThreadsListenerRegistration = nil
+        personalInterfaceListenerRegistration = nil
+        personalInterfaceListenerKey = ""
         messageThreadsListenerCompanyId = ""
         messageItemsListenerRegistration = nil
         messageItemsListenerKey = ""
+    }
+
+    /// Live listener on `companies/{companyId}/personalInterfaceSettings/{uid}`
+    /// so theme/language/PDF flags sync instantly across Mac, iPhone, Android and Web
+    /// for the signed-in user (works for owner, admin, member and workflow roles).
+    private func startPersonalInterfaceRealtime(companyId: String) {
+        guard let uid = Auth.auth().currentUser?.uid, !uid.isEmpty, !companyId.isEmpty else { return }
+        let key = "\(companyId)|\(uid)"
+        if personalInterfaceListenerKey == key, personalInterfaceListenerRegistration != nil { return }
+        personalInterfaceListenerRegistration?.remove()
+        personalInterfaceListenerKey = key
+        personalInterfaceListenerRegistration = Firestore.firestore()
+            .collection("companies").document(companyId)
+            .collection("personalInterfaceSettings").document(uid)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self, error == nil else { return }
+                // The doc may not exist (a brand-new member who never set a preference).
+                // In that case `data` is empty and we fall back to defaults below so the
+                // current user NEVER inherits the previous account's theme/language that
+                // is still cached in the device-global UserDefaults.
+                let data = snapshot?.data() ?? [:]
+                DispatchQueue.main.async {
+                    let defaults = UserDefaults.standard
+                    var didChange = false
+                    // Always APPLY the resolved value (doc value when present, otherwise
+                    // the default) so language + theme are strictly per-user and reset
+                    // cleanly when switching accounts on a shared device.
+                    func applyString(_ key: String, _ value: String) {
+                        if defaults.string(forKey: key) != value {
+                            defaults.set(value, forKey: key)
+                            didChange = true
+                        }
+                    }
+                    func applyBool(_ key: String, _ docKey: String) {
+                        guard let value = data[docKey] as? Bool else { return }
+                        if defaults.bool(forKey: key) != value {
+                            defaults.set(value, forKey: key)
+                            didChange = true
+                        }
+                    }
+                    // NOTE: appTheme + seciliDil are managed SOLELY by ContentView's
+                    // startPersonalAppearanceLanguageListener (single source of truth)
+                    // to avoid multi-writer races that briefly flashed another user's
+                    // value. This listener only drives the per-user PDF flags.
+                    applyBool("pdfShowCustomer", "pdfShowCustomer")
+                    applyBool("pdfShowContact", "pdfShowContact")
+                    applyBool("pdfShowPreview", "pdfShowPreview")
+                    applyBool("pdfShowMaterials", "pdfShowMaterials")
+                    applyBool("pdfShowPriority", "pdfShowPriority")
+                    applyBool("pdfShowStatus", "pdfShowStatus")
+                    applyBool("pdfShowShipping", "pdfShowShipping")
+                    if didChange {
+                        // Nudge every view that observes FirebaseManager — forces @AppStorage
+                        // bindings inside child views to re-read UserDefaults immediately,
+                        // so Dashboard/Sidebar/Settings/top-bar all redraw without navigation.
+                        self.objectWillChange.send()
+                        NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: defaults)
+                    }
+                }
+            }
     }
 
     func listenSupportTickets(companyId: String, userId: String) {
@@ -3969,7 +4244,7 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
-    func createMessageThread(companyId: String, type: String, memberUid: String = "", completion: ((String?) -> Void)? = nil) {
+    func createMessageThread(companyId: String, type: String, memberUid: String = "", memberUids: [String] = [], title: String = "", completion: ((String?) -> Void)? = nil) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanCompanyId.isEmpty else {
             completion?(nil)
@@ -3980,6 +4255,14 @@ class FirebaseManager: ObservableObject {
         var payload: [String: Any] = ["companyId": cleanCompanyId, "type": type]
         if !memberUid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             payload["memberUid"] = memberUid.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let cleanMemberUids = memberUids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if !cleanMemberUids.isEmpty {
+            payload["memberUids"] = cleanMemberUids
+        }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanTitle.isEmpty {
+            payload["title"] = cleanTitle
         }
 
         Functions.functions(region: "europe-west2")
@@ -5365,4 +5648,10 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+}
+
+private extension String {
+    /// Returns nil when the string is empty, so `?? default` fallbacks work cleanly
+    /// for per-user language/theme resolution.
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

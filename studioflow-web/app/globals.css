@@ -16125,3 +16125,61 @@ html[dir="rtl"] .login-public-shell {
   .public-signup-form-split { grid-template-columns: 1fr; }
   .public-signup-copy { padding-top: 0; }
 }
+
+
+/* General Settings: match the stacked app-style navigation used on Mac/iPhone. */
+.general-settings-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.general-settings-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(110px, auto) 18px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.14));
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.general-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.general-settings-row:hover {
+  background: rgba(127, 127, 127, 0.07);
+}
+
+.general-settings-row__title {
+  font-weight: 600;
+}
+
+.general-settings-row__detail {
+  color: var(--muted-foreground, #777);
+  font-size: 0.92rem;
+  text-align: right;
+}
+
+.general-settings-row__arrow {
+  color: var(--muted-foreground, #777);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+@media (max-width: 680px) {
+  .general-settings-row {
+    grid-template-columns: minmax(120px, 1fr) minmax(88px, auto) 14px;
+    padding: 13px 12px;
+  }
+}

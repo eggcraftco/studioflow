@@ -70,7 +70,9 @@ export type LanguageSettingsResult = {
 };
 
 export type ThemeBrandingSettingsInput = {
-  appTheme: string;
+  // Theme is now a personal cross-platform preference. Workspace branding
+  // saves may update only the shared subtitle without changing anyone's theme.
+  appTheme?: string;
   appSubtitle: string;
 };
 
@@ -355,4 +357,32 @@ export async function deleteWorkspaceData(workspace: WorkspaceContext, confirmat
   } catch (error) {
     throw new Error(friendlySettingsError(error));
   }
+}
+
+
+export type PersonalInterfaceSettings = {
+  appTheme?: string;
+  selectedLanguage?: string;
+  pdfShowCustomer?: boolean;
+  pdfShowContact?: boolean;
+  pdfShowPreview?: boolean;
+  pdfShowMaterials?: boolean;
+  pdfShowPriority?: boolean;
+  pdfShowStatus?: boolean;
+  pdfShowShipping?: boolean;
+};
+
+export async function getPersonalInterfaceSettings(workspace: WorkspaceContext) {
+  const callable = httpsCallable<Record<string, unknown>, { settings?: PersonalInterfaceSettings }>(functions, "getPersonalInterfaceSettings");
+  const result = await callable({ companyId: workspace.id });
+  return result.data.settings ?? {};
+}
+
+export async function savePersonalInterfaceSettings(workspace: WorkspaceContext, settings: PersonalInterfaceSettings) {
+  const callable = httpsCallable<Record<string, unknown>, { message?: string; settings?: PersonalInterfaceSettings }>(functions, "savePersonalInterfaceSettings");
+  const result = await callable({ companyId: workspace.id, settings });
+  if (typeof window !== "undefined" && result.data.settings) {
+    window.dispatchEvent(new CustomEvent("studioflow-settings-updated", { detail: { settings: result.data.settings } }));
+  }
+  return result.data;
 }

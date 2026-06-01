@@ -243,16 +243,37 @@ export function listenToMessageThreads(
     callback([]);
     return () => {};
   }
+  let active = true;
+  let unsubscribeSnapshot: Unsubscribe = () => {};
   const q = query(
     collection(db, "companies", workspace.id, "messageThreads"),
     where("memberUids", "array-contains", currentUid),
   );
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs
-      .map((d) => threadFromDoc(d.id, d.data() as Record<string, unknown>, currentUid))
-      .filter((t) => t.id === "team" || t.memberUids.includes(currentUid));
-    callback(sortThreads(list));
-  });
+  const startRealtimeListener = () => {
+    if (!active) return;
+    unsubscribeSnapshot = onSnapshot(q, (snap) => {
+      const list = snap.docs
+        .map((d) => threadFromDoc(d.id, d.data() as Record<string, unknown>, currentUid))
+        .filter((t) => t.id === "team" || t.memberUids.includes(currentUid));
+      callback(sortThreads(list));
+    });
+  };
+  // The callable synchronises Team Chat membership and returns authorised
+  // threads immediately; private threads remain participant-only.
+  void call<{ threads?: Array<Record<string, unknown>> }>("listMessageThreads", { companyId: workspace.id })
+    .then((data) => {
+      if (!active) return;
+      const initial = (data.threads ?? [])
+        .map((item) => threadFromDoc(String(item.id ?? ""), item, currentUid))
+        .filter((thread) => thread.id === "team" || thread.memberUids.includes(currentUid));
+      callback(sortThreads(initial));
+      startRealtimeListener();
+    })
+    .catch(() => startRealtimeListener());
+  return () => {
+    active = false;
+    unsubscribeSnapshot();
+  };
 }
 
 export function listenToThreadMessages(

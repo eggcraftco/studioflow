@@ -654,9 +654,9 @@ struct MusteriDetayView: View {
         DetayKartiSabit(title: t("Contact Info", lang: seciliDil), iconName: "person.crop.circle") {
             DetailField(label: t("Email", lang: seciliDil), value: $musteri.email)
                 .onChange(of: musteri.email) { _, _ in saveMusteriDetailChange() }
-            DetailField(label: "WhatsApp", value: $musteri.phone)
+            DetailField(label: t("WhatsApp", lang: seciliDil), value: $musteri.phone)
                 .onChange(of: musteri.phone) { _, _ in saveMusteriDetailChange() }
-            DetailField(label: "Instagram", value: $musteri.instagram)
+            DetailField(label: t("Instagram", lang: seciliDil), value: $musteri.instagram)
                 .onChange(of: musteri.instagram) { _, _ in saveMusteriDetailChange() }
             Divider().opacity(0.35)
             DetailField(label: t("Street", lang: seciliDil), value: customerStreetAddressBinding)

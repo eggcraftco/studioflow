@@ -150,6 +150,7 @@ struct StudioManagerApp: App {
 struct WorkspaceLoadingView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     var body: some View {
         ZStack {
@@ -160,10 +161,10 @@ struct WorkspaceLoadingView: View {
                 ProgressView()
                     .controlSize(.large)
 
-                Text("Opening NivaDesk")
+                Text(t("Opening NivaDesk", lang: seciliDil))
                     .font(.system(size: 24, weight: .bold))
 
-                Text("Preparing your workspace...")
+                Text(t("Preparing your workspace...", lang: seciliDil))
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
 
@@ -190,6 +191,7 @@ struct WorkspaceLoadingView: View {
 struct LocalUnlockView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
     @State private var didRequestUnlock = false
 
     var body: some View {
@@ -202,10 +204,10 @@ struct LocalUnlockView: View {
                     .font(.system(size: 54))
                     .foregroundColor(.blue)
 
-                Text("Unlock NivaDesk")
+                Text(t("Unlock NivaDesk", lang: seciliDil))
                     .font(.system(size: 26, weight: .bold))
 
-                Text("Use Face ID, Touch ID or your device passcode to continue.")
+                Text(t("Use Face ID, Touch ID or your device passcode to continue.", lang: seciliDil))
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -222,7 +224,7 @@ struct LocalUnlockView: View {
                 Button {
                     authVM.unlockWithDeviceSecurity()
                 } label: {
-                    Label("Unlock", systemImage: "lock.open.fill")
+                    Label(t("Unlock", lang: seciliDil), systemImage: "lock.open.fill")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: 260)

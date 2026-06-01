@@ -42,6 +42,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioTeamAccessSnapshot
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
+import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceOption
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
 import java.time.Instant
@@ -89,6 +90,20 @@ class StudioFlowRepository(
         auth.signOut()
     }
 
+    /// Live flow of the signed-in user's `activeCompanyId` field. Emits the cleaned
+    /// string (empty when missing). Used to switch workspaces live when the owner
+    /// approves a join request and the Cloud Function points the approved user at
+    /// the newly joined workspace.
+    fun activeCompanyIdFlow(uid: String): Flow<String> = callbackFlow {
+        val registration = db.collection("users").document(uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                val value = snapshot?.getString("activeCompanyId").orEmpty().trim()
+                trySend(value)
+            }
+        awaitClose { registration.remove() }
+    }
+
     suspend fun loadWorkspace(user: FirebaseUser): StudioWorkspace {
         ensureWorkspaceForUser(user)
         val userDoc = db.collection("users").document(user.uid).get().await()
@@ -129,6 +144,48 @@ class StudioFlowRepository(
             ),
             ownerEmail = ownerEmail
         )
+    }
+
+    suspend fun loadWorkspaceOptions(user: FirebaseUser, currentCompanyId: String): List<StudioWorkspaceOption> {
+        val accessDocs = db.collection("users").document(user.uid).collection("workspaceAccess").get().await()
+        val ids = linkedSetOf(user.uid)
+        accessDocs.documents.forEach { ids.add(it.id) }
+
+        return ids.mapNotNull { companyId ->
+            val companyDoc = db.collection("companies").document(companyId).get().await()
+            if (!companyDoc.exists()) return@mapNotNull null
+            if (companyId != user.uid && accessDocs.documents.none { it.id == companyId }) return@mapNotNull null
+
+            val data = companyDoc.data.orEmpty()
+            val ownerUid = stringValue(data["ownerUid"], companyId)
+            val customRoles = customRoles(data)
+            val rawRole = if (companyId == user.uid || ownerUid == user.uid) "owner" else memberRoleValue(data, user.uid, customRoles)
+            val role = effectiveMemberRole(rawRole, customRoles)
+            StudioWorkspaceOption(
+                id = companyId,
+                name = stringValue(data["name"], stringValue(data["companyName"], "My Studio")),
+                role = role,
+                roleLabel = customRoles.firstOrNull { it.id == rawRole }?.name ?: roleLabel(role),
+                isCurrent = companyId == currentCompanyId
+            )
+        }.sortedWith(compareByDescending<StudioWorkspaceOption> { it.isCurrent }.thenByDescending { it.role == "owner" }.thenBy { it.name })
+    }
+
+    suspend fun switchActiveWorkspace(user: FirebaseUser, companyId: String) {
+        val cleanCompanyId = companyId.trim()
+        require(cleanCompanyId.isNotBlank()) { "Workspace could not be selected." }
+
+        if (cleanCompanyId != user.uid) {
+            val accessDoc = db.collection("users").document(user.uid).collection("workspaceAccess").document(cleanCompanyId).get().await()
+            require(accessDoc.exists()) { "Your access to this workspace is no longer available." }
+        }
+
+        val companyDoc = db.collection("companies").document(cleanCompanyId).get().await()
+        require(companyDoc.exists()) { "This workspace is no longer available." }
+
+        db.collection("users").document(user.uid)
+            .set(mapOf("activeCompanyId" to cleanCompanyId, "updatedAt" to FieldValue.serverTimestamp()), SetOptions.merge())
+            .await()
     }
 
     private suspend fun ensureWorkspaceForUser(user: FirebaseUser) {
@@ -209,22 +266,105 @@ class StudioFlowRepository(
     fun workspaceSettingsFlow(
         workspaceId: String,
         userId: String = "",
-        ownerUid: String = ""
+        ownerUid: String = "",
+        role: String = ""
     ): Flow<StudioWorkspaceSettings> = callbackFlow {
+        // Cached state — updated by either listener, merged together for the emitted settings.
+        var sharedData: Map<String, Any> = emptyMap()
+        var personalInterface: Map<String, Any?> = emptyMap()
+        val personalInterfaceKeys = listOf(
+            "appTheme", "selectedLanguage",
+            "pdfShowCustomer", "pdfShowContact", "pdfShowPreview",
+            "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"
+        )
+
+        fun emit() {
+            val merged = HashMap<String, Any>()
+            sharedData.forEach { (k, v) -> if (v != null) merged[k] = v }
+            // Language + theme are STRICTLY per-user. Drop any workspace-wide values
+            // so a member never inherits the owner's language/theme — only the user's
+            // own personalInterfaceSettings doc applies (defaults to English/System).
+            merged.remove("seciliDil")
+            merged.remove("selectedLanguage")
+            merged.remove("appTheme")
+            // Personal interface OVERRIDES — changes made by the signed-in user on any
+            // device (Mac/Android/Web) sync live everywhere for that user only.
+            personalInterfaceKeys.forEach { key -> personalInterface[key]?.let { merged[key] = it } }
+            trySend(workspaceSettings(merged, userId, ownerUid))
+        }
+
+        // Workspace-wide listener.
         val registration = db.collection("companySettings").document(workspaceId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
                     return@addSnapshotListener
                 }
-                trySend(workspaceSettings(snapshot?.data.orEmpty(), userId, ownerUid))
+                sharedData = snapshot?.data.orEmpty()
+                // Refresh quick-reply personal once per workspace change (still callable-based for now).
+                functions.getHttpsCallable("getQuickReplyPersonalSettings")
+                    .call(mapOf("companyId" to workspaceId))
+                    .addOnSuccessListener { result ->
+                        val payload = result.data as? Map<*, *>
+                        val personal = payload?.get("settings") as? Map<*, *>
+                        val merged = sharedData.toMutableMap()
+                        if (personal != null) {
+                            personal["replyMode"]?.let { merged["replyMode"] = it }
+                            personal["quickReplyPoliteness"]?.let { merged["quickReplyPoliteness"] = it }
+                            personal["quickReplyLength"]?.let { merged["quickReplyLength"] = it }
+                            personal["onDeviceKnowledgeBase"]?.let { merged["aiKnowledgeBase"] = it }
+                            personal["offlineProductsJSON"]?.let { merged["customProductsJSON"] = it }
+                            personal["offlineRulesJSON"]?.let { merged["customRulesJSON"] = it }
+                        }
+                        sharedData = merged
+                        emit()
+                    }
+                    .addOnFailureListener { emit() }
             }
-        awaitClose { registration.remove() }
+
+        // Per-user personal interface settings live listener.
+        // Doc path: companies/{workspaceId}/personalInterfaceSettings/{userId}
+        // Changes here (theme / language / pdf flags) sync instantly across the user's devices.
+        val personalRegistration = if (userId.isNotBlank()) {
+            db.collection("companies").document(workspaceId)
+                .collection("personalInterfaceSettings").document(userId)
+                .addSnapshotListener { snap, err ->
+                    if (err != null) return@addSnapshotListener
+                    @Suppress("UNCHECKED_CAST")
+                    personalInterface = (snap?.data as? Map<String, Any?>).orEmpty()
+                    emit()
+                }
+        } else null
+
+        awaitClose {
+            registration.remove()
+            personalRegistration?.remove()
+        }
     }
 
     fun ordersFlow(workspace: StudioWorkspace, user: FirebaseUser): Flow<List<StudioOrder>> = callbackFlow {
-        val registration = db.collection("siparisler")
-            .whereEqualTo("companyId", workspace.id)
+        // Only strict Workflow Only role uses the finance-free /workflowOrders subcollection.
+        // Custom-role members with "Assigned Projects Only" toggled ON query /siparisler
+        // directly (filtered to their own assignedToUid) — Firestore rules grant them full
+        // member-tier access to their OWN assigned orders, including financial fields.
+        val strictWorkflow = normalizeRole(workspace.role) == "workflow"
+        val assignedOnlyCustom = workspace.shouldShowOnlyAssignedProjects && !strictWorkflow
+        val orderQuery: Query = when {
+            strictWorkflow -> {
+                functions.getHttpsCallable("ensureWorkflowAssignedOrderViews")
+                    .call(mapOf("companyId" to workspace.id))
+                    .addOnFailureListener { error -> close(error) }
+                db.collection("companies").document(workspace.id).collection("workflowOrders")
+                    .whereEqualTo("assignedToUid", user.uid)
+            }
+            assignedOnlyCustom -> {
+                db.collection("siparisler")
+                    .whereEqualTo("companyId", workspace.id)
+                    .whereEqualTo("assignedToUid", user.uid)
+            }
+            else -> db.collection("siparisler").whereEqualTo("companyId", workspace.id)
+        }
+        val registration = orderQuery
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -348,13 +488,20 @@ class StudioFlowRepository(
     }
 
     suspend fun deleteOrder(workspace: StudioWorkspace, order: StudioOrder) {
-        functions.getHttpsCallable("deleteWebOrder")
-            .call(
-                mapOf(
-                    "companyId" to workspace.id,
-                    "orderId" to order.id
-                )
-            )
+        // Only strict Workflow Only members need owner approval to delete. Custom-role
+        // members with "Assigned Projects Only" can delete THEIR own orders directly.
+        val normalizedRole = workspace.role.lowercase().replace("_", "").replace("-", "").replace(" ", "")
+        val requiresOwnerApproval = normalizedRole == "workflow" || normalizedRole == "workflowonly"
+        val callable = if (requiresOwnerApproval) "requestWorkflowOrderDeletion" else "deleteWebOrder"
+        functions.getHttpsCallable(callable)
+            .call(mapOf("companyId" to workspace.id, "orderId" to order.id))
+            .await()
+    }
+
+    suspend fun reviewWorkflowOrderDeletion(workspace: StudioWorkspace, orderId: String, approve: Boolean) {
+        val callable = if (approve) "approveWorkflowOrderDeletion" else "rejectWorkflowOrderDeletion"
+        functions.getHttpsCallable(callable)
+            .call(mapOf("companyId" to workspace.id, "orderId" to orderId))
             .await()
     }
 
@@ -566,7 +713,54 @@ class StudioFlowRepository(
         return data["orderId"] as? String ?: ""
     }
 
+    suspend fun loadPersonalInterfaceSettings(workspace: StudioWorkspace): Map<String, Any?> {
+        val result = functions.getHttpsCallable("getPersonalInterfaceSettings")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val payload = result.data as? Map<*, *> ?: return emptyMap()
+        val values = payload["settings"] as? Map<*, *> ?: return emptyMap()
+        return listOf(
+            "appTheme", "selectedLanguage",
+            "pdfShowCustomer", "pdfShowContact", "pdfShowPreview",
+            "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"
+        ).mapNotNull { key ->
+            values[key]?.let { key to it }
+        }.toMap()
+    }
+
     suspend fun updateWorkspaceSettings(workspace: StudioWorkspace, updates: Map<String, Any?>) {
+        val contributionText = updates["quickReplyContributionText"]?.toString()?.trim().orEmpty()
+        if (contributionText.isNotBlank()) {
+            functions.getHttpsCallable("saveQuickReplyContribution")
+                .call(mapOf("companyId" to workspace.id, "text" to contributionText))
+                .await()
+            return
+        }
+        val ownerOnlyQuickReplyKeys = setOf("openAIKey", "aiKnowledgeBase")
+        if (updates.keys.any { it in ownerOnlyQuickReplyKeys }) {
+            functions.getHttpsCallable("saveQuickReplySettings")
+                .call(mapOf("companyId" to workspace.id, "settings" to updates))
+                .await()
+            return
+        }
+        val personalQuickReplyKeys = setOf("replyMode", "quickReplyPoliteness", "quickReplyLength", "onDeviceKnowledgeBase", "customProductsJSON", "customRulesJSON")
+        if (updates.keys.any { it in personalQuickReplyKeys }) {
+            functions.getHttpsCallable("saveQuickReplyPersonalSettings")
+                .call(mapOf("companyId" to workspace.id, "settings" to updates))
+                .await()
+            return
+        }
+        val personalInterfaceKeys = setOf("personalAppTheme", "personalSelectedLanguage", "personalPdfShowCustomer", "personalPdfShowContact", "personalPdfShowPreview", "personalPdfShowMaterials", "personalPdfShowPriority", "personalPdfShowStatus", "personalPdfShowShipping")
+        if (updates.keys.any { it in personalInterfaceKeys }) {
+            val mapped = updates.mapKeys { (key, _) -> when (key) {
+                "personalAppTheme" -> "appTheme"; "personalSelectedLanguage" -> "selectedLanguage"
+                "personalPdfShowCustomer" -> "pdfShowCustomer"; "personalPdfShowContact" -> "pdfShowContact"; "personalPdfShowPreview" -> "pdfShowPreview"
+                "personalPdfShowMaterials" -> "pdfShowMaterials"; "personalPdfShowPriority" -> "pdfShowPriority"; "personalPdfShowStatus" -> "pdfShowStatus"; "personalPdfShowShipping" -> "pdfShowShipping"
+                else -> key
+            } }
+            functions.getHttpsCallable("savePersonalInterfaceSettings").call(mapOf("companyId" to workspace.id, "settings" to mapped)).await()
+            return
+        }
         val cleanUpdates = updates.toMutableMap()
         cleanUpdates["settingsUpdatedAt"] = FieldValue.serverTimestamp()
         db.collection("companySettings").document(workspace.id)
@@ -1185,22 +1379,33 @@ class StudioFlowRepository(
             awaitClose {}
             return@callbackFlow
         }
-        val registration = db.collection("companies")
-            .document(workspace.id)
-            .collection("messageThreads")
-            .whereArrayContains("memberUids", uid)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    close(error)
-                    return@addSnapshotListener
+        var registration: com.google.firebase.firestore.ListenerRegistration? = null
+        fun startRealtimeListener() {
+            if (registration != null) return
+            registration = db.collection("companies").document(workspace.id).collection("messageThreads")
+                .whereArrayContains("memberUids", uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) { close(error); return@addSnapshotListener }
+                    val threads = snapshot?.documents
+                        ?.map { document -> messageThreadFromDocument(document.id, document.data.orEmpty(), workspace.id, uid) }
+                        ?.filter { it.id == "team" || it.memberUids.contains(uid) } ?: emptyList()
+                    trySend(sortedMessageThreadsForDisplay(threads))
                 }
-                val threads = snapshot?.documents
-                    ?.map { document -> messageThreadFromDocument(document.id, document.data.orEmpty(), workspace.id, uid) }
-                    ?.filter { it.id == "team" || it.memberUids.contains(uid) }
-                    ?: emptyList()
-                trySend(sortedMessageThreadsForDisplay(threads))
-            }
-        awaitClose { registration.remove() }
+        }
+        functions.getHttpsCallable("listMessageThreads").call(mapOf("companyId" to workspace.id))
+            .addOnSuccessListener { result ->
+                val data = result.data as? Map<*, *>
+                val initial = (data?.get("threads") as? List<*>)?.mapNotNull { item ->
+                    val raw = item as? Map<*, *> ?: return@mapNotNull null
+                    val values = raw.entries.associate { entry -> entry.key.toString() to entry.value }
+                    val id = stringValue(values["id"], "")
+                    if (id.isBlank()) return@mapNotNull null
+                    messageThreadFromDocument(id, values, workspace.id, uid)
+                }?.filter { it.id == "team" || it.memberUids.contains(uid) } ?: emptyList()
+                trySend(sortedMessageThreadsForDisplay(initial))
+                startRealtimeListener()
+            }.addOnFailureListener { error -> close(error) }
+        awaitClose { registration?.remove() }
     }
 
     fun messageItemsFlow(workspaceId: String, threadId: String, currentUid: String): Flow<List<StudioMessageItem>> = callbackFlow {
@@ -1835,7 +2040,26 @@ class StudioFlowRepository(
         val mergedAccess = defaultAccessMapForRole(rawRole).toMutableMap()
         inlineAccess.forEach { (key, value) -> mergedAccess[key.toString()] = value }
         rootAccess.forEach { (key, value) -> mergedAccess[key.toString()] = value }
-        return accessFromMap(mergedAccess)
+        val resolvedAccess = accessFromMap(mergedAccess)
+        if (effectiveMemberRole(rawRole, customRoles) == "workflow") {
+            // Workflow Only is an enforced production role. Stored or legacy custom
+            // access settings must never reopen finance, customer-list or team control access.
+            return resolvedAccess.copy(
+                dashboard = false,
+                financialInfo = false,
+                customers = false,
+                teamAccess = false,
+                cardFinancial = false,
+                assignedProjectsOnly = true,
+                manageProjectAssignments = false,
+                orders = true,
+                schedule = true,
+                quickReply = true,
+                clientFiles = true,
+                cardClientFiles = true
+            )
+        }
+        return resolvedAccess
     }
 }
 
@@ -1858,7 +2082,7 @@ private fun workspaceSettings(
         appTheme = stringValue(data["appTheme"], fallback.appTheme),
         appSubtitle = stringValue(data["appSubtitle"], fallback.appSubtitle),
         appLogoUrl = stringValue(data["appLogoUrl"], fallback.appLogoUrl),
-        selectedLanguage = stringValue(data["seciliDil"], fallback.selectedLanguage),
+        selectedLanguage = stringValue(data["selectedLanguage"], stringValue(data["seciliDil"], fallback.selectedLanguage)),
         selectedCurrency = stringValue(data["seciliParaBirimi"], fallback.selectedCurrency),
         selectedDecimalSeparator = stringValue(data["seciliOndalik"], fallback.selectedDecimalSeparator),
         feePercentage = doubleValue(data["feePercentage"], fallback.feePercentage).coerceIn(0.0, 100.0),
@@ -1880,7 +2104,7 @@ private fun workspaceSettings(
         replyMode = stringValue(data["replyMode"], fallback.replyMode).let { if (it == "Local") "Apple" else it },
         quickReplyPoliteness = stringValue(data["quickReplyPoliteness"], fallback.quickReplyPoliteness),
         quickReplyLength = stringValue(data["quickReplyLength"], fallback.quickReplyLength),
-        openAIKey = stringValue(data["openAIKey"], fallback.openAIKey),
+        hasOpenAIKey = boolValue(data["hasOpenAIKey"], fallback.hasOpenAIKey),
         aiKnowledgeBase = stringValue(data["aiKnowledgeBase"], fallback.aiKnowledgeBase),
         quickReplyProducts = jsonQuickReplyTemplateItems(data["customProductsJSON"], fallback.quickReplyProducts),
         quickReplyRules = jsonQuickReplyTemplateItems(data["customRulesJSON"], fallback.quickReplyRules),
@@ -2509,7 +2733,14 @@ private fun defaultAccessMapForRole(roleValue: String): Map<String, Any?> {
             "dashboard" to false,
             "financialInfo" to false,
             "teamAccess" to false,
-            "cardFinancial" to false
+            "cardFinancial" to false,
+            "assignedProjectsOnly" to true,
+            "manageProjectAssignments" to false,
+            "orders" to true,
+            "schedule" to true,
+            "quickReply" to true,
+            "clientFiles" to true,
+            "cardClientFiles" to true
         )
     } else {
         emptyMap()
@@ -2523,12 +2754,25 @@ private fun accessFromMap(value: Map<*, *>, forceFullAccess: Boolean = false): W
         dashboard = boolValue(value["dashboard"], true),
         schedule = boolValue(value["schedule"], true),
         customers = boolValue(value["customers"], true),
+        messages = boolValue(value["messages"], true),
+        notes = boolValue(value["notes"], true),
         quickReply = boolValue(value["quickReply"], true),
         settings = boolValue(value["settings"], true),
         teamAccess = boolValue(value["teamAccess"], true),
         clientFiles = boolValue(value["clientFiles"], true),
         financialInfo = boolValue(value["financialInfo"], true),
         exportData = boolValue(value["exportData"], true),
+        settingsGeneral = boolValue(value["settingsGeneral"], true),
+        settingsPdf = boolValue(value["settingsPdf"], true),
+        settingsQuickReply = boolValue(value["settingsQuickReply"], true),
+        settingsMessageSettings = boolValue(value["settingsMessageSettings"], true),
+        settingsWorkflow = boolValue(value["settingsWorkflow"], true),
+        settingsFinancial = boolValue(value["settingsFinancial"], true),
+        settingsSafetyUploads = boolValue(value["settingsSafetyUploads"], true),
+        settingsData = boolValue(value["settingsData"], true),
+        settingsTeamAccess = boolValue(value["settingsTeamAccess"], true),
+        settingsPlanAccess = boolValue(value["settingsPlanAccess"], true),
+        settingsSupport = boolValue(value["settingsSupport"], true),
         assignedProjectsOnly = boolValue(value["assignedProjectsOnly"], false),
         manageProjectAssignments = boolValue(value["manageProjectAssignments"], false),
         cardPreview = boolValue(value["cardPreview"], true),
@@ -2555,12 +2799,25 @@ private fun accessToMap(access: WorkspaceMemberAccess): Map<String, Boolean> {
         "dashboard" to access.dashboard,
         "schedule" to access.schedule,
         "customers" to access.customers,
+        "messages" to access.messages,
+        "notes" to access.notes,
         "quickReply" to access.quickReply,
         "settings" to access.settings,
         "teamAccess" to access.teamAccess,
         "clientFiles" to access.clientFiles,
         "financialInfo" to access.financialInfo,
         "exportData" to access.exportData,
+        "settingsGeneral" to access.settingsGeneral,
+        "settingsPdf" to access.settingsPdf,
+        "settingsQuickReply" to access.settingsQuickReply,
+        "settingsMessageSettings" to access.settingsMessageSettings,
+        "settingsWorkflow" to access.settingsWorkflow,
+        "settingsFinancial" to access.settingsFinancial,
+        "settingsSafetyUploads" to access.settingsSafetyUploads,
+        "settingsData" to access.settingsData,
+        "settingsTeamAccess" to access.settingsTeamAccess,
+        "settingsPlanAccess" to access.settingsPlanAccess,
+        "settingsSupport" to access.settingsSupport,
         "assignedProjectsOnly" to access.assignedProjectsOnly,
         "manageProjectAssignments" to access.manageProjectAssignments,
         "cardPreview" to access.cardPreview,

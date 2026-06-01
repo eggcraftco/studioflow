@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
+import FirebaseFunctions
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -26,6 +27,7 @@ struct AutoReplyView: View {
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var firebaseManager: FirebaseManager
     
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("replyMode") private var replyMode: String = "AI"
     
     @State private var customerMessage: String = ""
@@ -43,7 +45,6 @@ struct AutoReplyView: View {
 
     @FocusState private var focusedEditor: QuickReplyFocusedEditor?
     
-    @AppStorage("openAIKey") private var openAIKey: String = ""
     @AppStorage("localAIURL") private var localAIURL: String = "http://localhost:11434"
     @AppStorage("localAIModel") private var localAIModel: String = "llama3.1:latest"
     @AppStorage("aiKnowledgeBase") private var aiKnowledgeBase: String = ""
@@ -120,7 +121,7 @@ struct AutoReplyView: View {
         quickReplyPanel {
             let content = Group {
                 quickReplyOptionGroup(
-                    title: "Politeness",
+                    title: t("Politeness", lang: seciliDil),
                     iconName: "heart",
                     options: [
                         ("Direct", "paperplane"),
@@ -137,7 +138,7 @@ struct AutoReplyView: View {
                 }
 
                 quickReplyOptionGroup(
-                    title: "Length",
+                    title: t("Length", lang: seciliDil),
                     iconName: "clock",
                     options: [
                         ("Short", "list.bullet"),
@@ -265,9 +266,6 @@ struct AutoReplyView: View {
         .onChange(of: aiKnowledgeBase) { _, _ in
             scheduleKnowledgeBaseCloudSave()
         }
-        .onChange(of: openAIKey) { _, _ in
-            scheduleKnowledgeBaseCloudSave()
-        }
         .onChange(of: quickReplyPoliteness) { _, _ in
             scheduleKnowledgeBaseCloudSave()
         }
@@ -340,7 +338,7 @@ struct AutoReplyView: View {
             HStack(spacing: 0) {
                 ForEach(options, id: \.0) { option in
                     quickReplyChoiceButton(
-                        title: option.0,
+                        title: t(option.0, lang: seciliDil),
                         iconName: option.1,
                         isSelected: selection == option.0,
                         action: { action(option.0) }
@@ -446,7 +444,7 @@ struct AutoReplyView: View {
 
                         quickReplyTextEditor(
                             text: $customerMessage,
-                            placeholder: "Paste the customer's email or message here...",
+                            placeholder: t("Paste the customer's email or message here...", lang: seciliDil),
                             minHeight: 300,
                             fontSize: 15,
                             focus: .customerMessage,
@@ -492,7 +490,7 @@ struct AutoReplyView: View {
                 }
             } else {
                 quickReplyPanel {
-                    quickReplyCardHeader(iconName: "person.fill", title: "Customer Info", subtitle: "Build a saved-template reply from customer details.")
+                    quickReplyCardHeader(iconName: "person.fill", title: t("Customer Info", lang: seciliDil), subtitle: t("Build a saved-template reply from customer details.", lang: seciliDil))
                     VStack(spacing: 12) {
                     HStack {
                         Text("Customer Name")
@@ -514,7 +512,7 @@ struct AutoReplyView: View {
 
                 quickReplyPanel {
                     VStack(spacing: 15) {
-                        quickReplyCardHeader(iconName: "list.bullet", title: "Select Details", subtitle: "Choose the product and rule for this reply.")
+                        quickReplyCardHeader(iconName: "list.bullet", title: t("Select Details", lang: seciliDil), subtitle: t("Choose the product and rule for this reply.", lang: seciliDil))
 
                         if !categories.isEmpty {
                             HStack {
@@ -578,13 +576,13 @@ struct AutoReplyView: View {
                 VStack(spacing: 15) {
                     quickReplyCardHeader(
                         iconName: "doc.text",
-                        title: "Generated Email",
-                        subtitle: "Your AI-generated reply will appear here. Review and copy with one click."
+                        title: t("Generated Email", lang: seciliDil),
+                        subtitle: t("Your AI-generated reply will appear here. Review and copy with one click.", lang: seciliDil)
                     )
 
                     quickReplyTextEditor(
                         text: $generatedText,
-                        placeholder: "Your AI-generated reply will appear here...",
+                        placeholder: t("Your AI-generated reply will appear here...", lang: seciliDil),
                         minHeight: 260,
                         fontSize: 15,
                         focus: .generatedText,
@@ -594,7 +592,7 @@ struct AutoReplyView: View {
                     Button(action: copyToClipboard) {
                         HStack {
                             Image(systemName: isCopied ? "checkmark.circle.fill" : "doc.on.doc.fill")
-                            Text(isCopied ? "Copied to Clipboard!" : "Copy Reply")
+                            Text(isCopied ? t("Copied to Clipboard!", lang: seciliDil) : t("Copy Reply", lang: seciliDil))
                         }
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(generatedText.isEmpty ? quickReplyMutedText.opacity(0.45) : (isCopied ? Color.green : quickReplyAccent))
@@ -628,6 +626,8 @@ struct AutoReplyView: View {
                 }
 
                 guard let data = snapshot?.data() else { return }
+                let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if role != "owner" { return }
 
                 var changedFromCloud = false
 
@@ -643,12 +643,6 @@ struct AutoReplyView: View {
                    cloudKnowledgeBase != aiKnowledgeBase {
                     changedFromCloud = true
                     aiKnowledgeBase = cloudKnowledgeBase
-                }
-
-                if let cloudOpenAIKey = data["openAIKey"] as? String,
-                   cloudOpenAIKey != openAIKey {
-                    changedFromCloud = true
-                    openAIKey = cloudOpenAIKey
                 }
 
                 if let cloudPoliteness = data["quickReplyPoliteness"] as? String,
@@ -682,6 +676,27 @@ struct AutoReplyView: View {
                     }
                 }
             }
+        loadPersonalQuickReplySettings()
+    }
+
+    private func loadPersonalQuickReplySettings() {
+        guard !firebaseManager.currentCompanyId.isEmpty else { return }
+        Functions.functions(region: "europe-west2").httpsCallable("getQuickReplyPersonalSettings").call([
+            "companyId": firebaseManager.currentCompanyId
+        ]) { result, _ in
+            guard let payload = result?.data as? [String: Any],
+                  let settings = payload["settings"] as? [String: Any] else { return }
+            DispatchQueue.main.async {
+                isApplyingCloudKnowledgeBase = true
+                if let mode = settings["replyMode"] as? String { replyMode = mode == "Local" ? "Apple" : mode }
+                if let style = settings["quickReplyPoliteness"] as? String { quickReplyPoliteness = style }
+                if let length = settings["quickReplyLength"] as? String { quickReplyLength = length }
+                if let knowledge = settings["onDeviceKnowledgeBase"] as? String { aiKnowledgeBase = knowledge }
+                if let json = settings["offlineProductsJSON"] as? String { customProductsJSON = json }
+                if let json = settings["offlineRulesJSON"] as? String { customRulesJSON = json }
+                isApplyingCloudKnowledgeBase = false
+            }
+        }
     }
 
     private func stopKnowledgeBaseCloudListener() {
@@ -695,23 +710,23 @@ struct AutoReplyView: View {
         guard !isApplyingCloudKnowledgeBase else { return }
 
         knowledgeBaseSaveWorkItem?.cancel()
-
         let latestText = aiKnowledgeBase
-        let latestOpenAIKey = openAIKey
         let latestPoliteness = quickReplyPoliteness
         let latestLength = quickReplyLength
+        let latestMode = replyMode == "Local" ? "Apple" : replyMode
 
         let workItem = DispatchWorkItem {
-            Firestore.firestore()
-                .collection("companySettings")
-                .document(firebaseManager.currentCompanyId)
-                .setData([
-                    "aiKnowledgeBase": latestText,
-                    "openAIKey": latestOpenAIKey,
+            Functions.functions(region: "europe-west2").httpsCallable("saveQuickReplyPersonalSettings").call([
+                "companyId": firebaseManager.currentCompanyId,
+                "settings": [
+                    "replyMode": latestMode,
                     "quickReplyPoliteness": latestPoliteness,
                     "quickReplyLength": latestLength,
-                    "quickReplySettingsUpdatedAt": FieldValue.serverTimestamp()
-                ], merge: true)
+                    "onDeviceKnowledgeBase": latestText,
+                    "products": decodedCustomProducts.map { ["id": $0.id.uuidString, "title": $0.title, "desc": $0.desc] },
+                    "rules": decodedCustomRules.map { ["id": $0.id.uuidString, "title": $0.title, "desc": $0.desc] }
+                ]
+            ]) { _, _ in }
         }
 
         knowledgeBaseSaveWorkItem = workItem
@@ -723,15 +738,15 @@ struct AutoReplyView: View {
         let nameGreeting: String
 
         if trimmedName.isEmpty {
-            nameGreeting = quickReplyPoliteness == "Direct" ? "Hi," : "Hi there,"
+            nameGreeting = quickReplyPoliteness == t("Direct", lang: seciliDil) ? "Hi," : "Hi there,"
         } else {
-            nameGreeting = quickReplyPoliteness == "Very Polite" ? "Dear \(trimmedName)," : "Hi \(trimmedName),"
+            nameGreeting = quickReplyPoliteness == t("Very Polite", lang: seciliDil) ? "Dear \(trimmedName)," : "Hi \(trimmedName),"
         }
 
         var bodyText = ""
 
         if selectedTopic == "Price & Info" {
-            if quickReplyPoliteness == "Direct" {
+            if quickReplyPoliteness == t("Direct", lang: seciliDil) {
                 bodyText = ""
             } else {
                 bodyText = "Thank you for your interest!\n\n"
@@ -747,14 +762,14 @@ struct AutoReplyView: View {
         } else if let matchedRule = decodedCustomRules.first(where: { $0.title == selectedTopic }) {
             bodyText = matchedRule.desc
         } else {
-            bodyText = "Thank you for your message. We will get back to you shortly."
+            bodyText = t("Thank you for your message. We will get back to you shortly.", lang: seciliDil)
         }
 
-        if quickReplyLength == "Detailed" {
+        if quickReplyLength == t("Detailed", lang: seciliDil) {
             bodyText += "\n\nIf helpful, please send any additional details and we will guide you through the next step."
         }
 
-        let signOff = quickReplyPoliteness == "Very Polite" ? "Kind regards," : "Best regards,"
+        let signOff = quickReplyPoliteness == t("Very Polite", lang: seciliDil) ? "Kind regards," : "Best regards,"
         generatedText = "\(nameGreeting)\n\n\(bodyText.trimmingCharacters(in: .whitespacesAndNewlines))\n\n\(signOff)\nThe Team"
         isCopied = false
     }
@@ -1024,27 +1039,35 @@ struct AutoReplyView: View {
     }
 
     private func fetchAIResponse() async {
-        let apiKey = openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let message = customerMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-        let knowledge = aiKnowledgeBase.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !apiKey.isEmpty else { generatedText = "⚠️ Error: OpenAI API Key is missing.\n\nPlease go to Settings -> 'Quick Reply Settings' and enter your 'sk-proj-...' key to use this feature."; return }
-        guard !message.isEmpty else { generatedText = "⚠️ Error: Customer message is empty. Please paste a message."; return }
+        guard !message.isEmpty else {
+            generatedText = "⚠️ Error: Customer message is empty. Please paste a message."
+            return
+        }
         isLoading = true
-        let systemPrompt = aiSystemPrompt(knowledge: knowledge)
-        let userPrompt = "Customer Message: \"\(message)\""
-        let requestBody = OpenAIRequest(model: "gpt-4o-mini", messages: [OpenAIMessage(role: "system", content: systemPrompt), OpenAIMessage(role: "user", content: userPrompt)], temperature: 0.2)
-        guard let url = URL(string: "https://api.openai.com/v1/chat/completions"), let jsonData = try? JSONEncoder().encode(requestBody) else { isLoading = false; return }
-        var request = URLRequest(url: url); request.httpMethod = "POST"; request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization"); request.addValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = jsonData
+        let payload: [String: Any] = [
+            "companyId": firebaseManager.currentCompanyId,
+            "mode": "AI",
+            "customerMessage": message,
+            "politeness": quickReplyPoliteness,
+            "length": quickReplyLength
+        ]
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-                if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data), let errMsg = errorResponse.error?.message { DispatchQueue.main.async { self.generatedText = "⚠️ API Error (\(httpResponse.statusCode)):\n\(errMsg)"; self.isLoading = false } } else { DispatchQueue.main.async { self.generatedText = "⚠️ Unknown API Error. Status Code: \(httpResponse.statusCode)"; self.isLoading = false } }; return
+            let result = try await Functions.functions(region: "europe-west2").httpsCallable("generateQuickReply").call(payload)
+            let data = result.data as? [String: Any]
+            let reply = (data?["reply"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            await MainActor.run {
+                generatedText = reply.isEmpty ? "⚠️ OpenAI returned no response text." : reply
+                isLoading = false
             }
-            let decodedResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
-            if let reply = decodedResponse.choices?.first?.message?.content { DispatchQueue.main.async { self.generatedText = reply.trimmingCharacters(in: .whitespacesAndNewlines); self.isLoading = false } }
-        } catch { DispatchQueue.main.async { self.generatedText = "⚠️ Network Error: \(error.localizedDescription)"; self.isLoading = false } }
+        } catch {
+            await MainActor.run {
+                generatedText = "⚠️ Quick Reply Error:\n\(error.localizedDescription)"
+                isLoading = false
+            }
+        }
     }
-    
+
     private func copyToClipboard() {
         #if os(macOS)
         let pasteboard = NSPasteboard.general

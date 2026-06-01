@@ -51,12 +51,28 @@ let studioNavigationAccessOptions: [(key: String, label: String)] = [
     ("dashboard", "Dashboard"),
     ("schedule", "Schedule"),
     ("customers", "Customers"),
+    ("messages", "Messages"),
+    ("notes", "Notes"),
     ("quickReply", "Quick Reply"),
     ("settings", "Settings"),
     ("teamAccess", "Team Access"),
     ("clientFiles", "Client Files"),
     ("financialInfo", "Financial Info"),
     ("exportData", "Export Data")
+]
+
+let studioSettingsAccessOptions: [(key: String, label: String)] = [
+    ("settingsGeneral", "General / Personal Settings"),
+    ("settingsPdf", "PDF Export Settings"),
+    ("settingsQuickReply", "Quick Reply Settings"),
+    ("settingsMessageSettings", "Message Settings"),
+    ("settingsWorkflow", "Workflow Steps"),
+    ("settingsFinancial", "Financial Settings"),
+    ("settingsSafetyUploads", "Safety & Uploads"),
+    ("settingsData", "Data Management"),
+    ("settingsTeamAccess", "Team Access"),
+    ("settingsPlanAccess", "Plan & Access"),
+    ("settingsSupport", "Support / Tickets")
 ]
 
 let studioCardAccessOptions: [(key: String, label: String)] = [
@@ -82,7 +98,7 @@ let studioScopeAccessOptions: [(key: String, label: String)] = [
     ("manageProjectAssignments", "Change Project Assignments")
 ]
 
-let studioMemberAccessOptions = studioNavigationAccessOptions + studioCardAccessOptions + studioScopeAccessOptions
+let studioMemberAccessOptions = studioNavigationAccessOptions + studioSettingsAccessOptions + studioCardAccessOptions + studioScopeAccessOptions
 
 func studioDefaultMemberAccess() -> [String: Bool] {
     Dictionary(uniqueKeysWithValues: studioMemberAccessOptions.map { ($0.key, ["assignedProjectsOnly", "manageProjectAssignments"].contains($0.key) ? false : true) })
@@ -108,8 +124,16 @@ private func studioDefaultAccessForRole(_ role: String) -> [String: Bool] {
     if studioNormalizedTeamRole(role) == "workflow" {
         access["dashboard"] = false
         access["financialInfo"] = false
+        access["customers"] = false
         access["teamAccess"] = false
         access["cardFinancial"] = false
+        access["assignedProjectsOnly"] = true
+        access["manageProjectAssignments"] = false
+        access["orders"] = true
+        access["schedule"] = true
+        access["quickReply"] = true
+        access["clientFiles"] = true
+        access["cardClientFiles"] = true
     }
     return access
 }
@@ -224,8 +248,8 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
     var purchaseModel: String {
         switch self {
         case .demo: return "Demo"
-        case .lifetimeLite: return "One-Time Purchase"
-        case .proMonthly, .teamMonthly: return "Monthly Subscription"
+        case .lifetimeLite: return "Monthly or Annual Subscription"
+        case .proMonthly, .teamMonthly: return "Monthly or Annual Subscription"
         }
     }
 
@@ -337,7 +361,7 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
                 orderLimit: nil,
                 customerLimit: nil,
                 storageLimitMB: 51200,
-                teamMemberLimit: 10,
+                teamMemberLimit: 5,
                 clientFilesEnabled: true,
                 shareSheetEnabled: true,
                 teamAccessEnabled: true,
@@ -625,7 +649,7 @@ class AuthViewModel: ObservableObject {
     @Published private(set) var currentUserId: String? = nil
     @Published private(set) var currentCompanyId: String? = nil
     @Published private(set) var isWorkspaceReady: Bool = false
-    @Published var currentBillingPlan: StudioBillingPlan = .teamMonthly
+    @Published var currentBillingPlan: StudioBillingPlan = .demo
     @Published var billingPlanSource: String = "legacy"
     @Published var billingUpdatedAt: Date? = nil
 
@@ -740,6 +764,8 @@ class AuthViewModel: ObservableObject {
     private var isRepairingAcceptedJoinRequests = false
     private var activeCompanyListener: ListenerRegistration?
     private var activeCompanyListenerCompanyId: String?
+    private var userDocListener: ListenerRegistration?
+    private var userDocListenerUserId: String?
     private var workspaceAccessListener: ListenerRegistration?
     private var workspaceAccessListenerUserId: String?
     private let db = Firestore.firestore()
@@ -1903,81 +1929,31 @@ class AuthViewModel: ObservableObject {
     }
 
     private func commitAcceptJoinRequest(_ request: StudioJoinRequest, companyId: String, cleanUid: String, cleanRole: String) {
-        let roleAccess = accessForRoleWrite(cleanRole)
-        let storedRole = storedBaseTeamRoleForWrite(cleanRole)
-        let customRoleId = customTeamRoleIdForWrite(cleanRole)
-        var memberPayload: [String: Any] = [
-            "uid": cleanUid,
-            "email": request.requesterEmail,
-            "displayName": request.requesterDisplayName,
-            "photoURL": request.requesterPhotoURL,
-            "role": storedRole,
-            "access": roleAccess,
-            "addedBy": currentUserId ?? "",
-            "addedAt": FieldValue.serverTimestamp()
-        ]
-        if let customRoleId {
-            memberPayload["customRoleId"] = customRoleId
-        }
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("approveWorkspaceJoinRequest")
+            .call([
+                "companyId": companyId,
+                "requestId": request.id,
+                "role": cleanRole
+            ]) { [weak self] _, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.isProfileLoading = false
+                    if let error {
+                        self.profileErrorMessage = error.localizedDescription
+                        return
+                    }
 
-        var accessPayload: [String: Any] = [
-            "companyId": companyId,
-            "name": companyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "My Studio" : companyName.trimmingCharacters(in: .whitespacesAndNewlines),
-            "ownerUid": currentUserId ?? "",
-            "ownerEmail": accountEmail,
-            "role": storedRole,
-            "access": roleAccess,
-            "memberEmail": request.requesterEmail,
-            "memberPhotoURL": request.requesterPhotoURL,
-            "addedBy": currentUserId ?? "",
-            "addedAt": FieldValue.serverTimestamp(),
-            "updatedAt": FieldValue.serverTimestamp()
-        ]
-        if let customRoleId {
-            accessPayload["customRoleId"] = customRoleId
-        }
-
-        let companyRef = db.collection("companies").document(companyId)
-        let accessRef = db.collection("users").document(cleanUid).collection("workspaceAccess").document(companyId)
-        let requestRef = db.collection("workspaceJoinRequests").document(request.id)
-
-        let batch = db.batch()
-        var companyUpdate: [String: Any] = [
-            "members.\(cleanUid)": memberPayload,
-            "memberRoles.\(cleanUid)": storedRole,
-            "memberAccess.\(cleanUid)": roleAccess,
-            "memberUids": FieldValue.arrayUnion([cleanUid]),
-            "updatedAt": FieldValue.serverTimestamp()
-        ]
-        if let customRoleId {
-            companyUpdate["memberCustomRoles.\(cleanUid)"] = customRoleId
-        } else {
-            companyUpdate["memberCustomRoles.\(cleanUid)"] = FieldValue.delete()
-        }
-        batch.updateData(companyUpdate, forDocument: companyRef)
-        batch.setData(accessPayload, forDocument: accessRef, merge: true)
-        batch.setData([
-            "status": "accepted",
-            "acceptedBy": currentUserId ?? "",
-            "acceptedAt": FieldValue.serverTimestamp(),
-            "updatedAt": FieldValue.serverTimestamp()
-        ], forDocument: requestRef, merge: true)
-
-        batch.commit { [weak self] error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isProfileLoading = false
-                if let error = error {
-                    self.profileErrorMessage = error.localizedDescription
-                    return
+                    self.profileMessage = "Access request approved. The user will now see this workspace in Available Workspaces."
+                    self.reloadCompanyProfileAfterTeamWrite(companyId: companyId, user: Auth.auth().currentUser)
                 }
-
-                self.profileMessage = "Access request approved. The user will now see this workspace in Available Workspaces."
-                self.reloadCompanyProfileAfterTeamWrite(companyId: companyId, user: Auth.auth().currentUser)
             }
-        }
+        #else
+        isProfileLoading = false
+        profileErrorMessage = "Firebase Functions is required to approve workspace access."
+        #endif
     }
-
 
     private func reloadCompanyProfileAfterTeamWrite(companyId: String, user: User?) {
         guard let user else {
@@ -2113,24 +2089,29 @@ class AuthViewModel: ObservableObject {
         profileMessage = ""
         profileErrorMessage = ""
 
-        db.collection("workspaceJoinRequests").document(request.id).setData([
-            "status": "declined",
-            "declinedBy": currentUserId ?? "",
-            "declinedAt": FieldValue.serverTimestamp(),
-            "updatedAt": FieldValue.serverTimestamp()
-        ], merge: true) { [weak self] error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isProfileLoading = false
-                if let error = error {
-                    self.profileErrorMessage = error.localizedDescription
-                    return
-                }
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("declineWorkspaceJoinRequest")
+            .call([
+                "companyId": companyId,
+                "requestId": request.id
+            ]) { [weak self] _, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.isProfileLoading = false
+                    if let error {
+                        self.profileErrorMessage = error.localizedDescription
+                        return
+                    }
 
-                self.profileMessage = "Access request declined."
-                self.loadJoinRequests(for: companyId)
+                    self.profileMessage = "Access request declined."
+                    self.loadJoinRequests(for: companyId)
+                }
             }
-        }
+        #else
+        isProfileLoading = false
+        profileErrorMessage = "Firebase Functions is required to decline workspace access."
+        #endif
     }
 
     func logout() {
@@ -2185,8 +2166,8 @@ class AuthViewModel: ObservableObject {
         currentWorkspaceRole = "owner"
         currentWorkspaceRoleLabel = "Owner"
         currentWorkspaceAccess = studioDefaultMemberAccess()
-        currentBillingPlan = .teamMonthly
-        billingPlanSource = "legacy"
+        currentBillingPlan = .demo
+        billingPlanSource = "secure_default"
         billingUpdatedAt = nil
         UserDefaults.standard.set(currentBillingPlan.rawValue, forKey: billingPlanDefaultsKey)
     }
@@ -2269,6 +2250,7 @@ class AuthViewModel: ObservableObject {
     private func startRealtimeWorkspaceListeners(for user: User, companyId: String) {
         startWorkspaceAccessListener(for: user)
         startActiveCompanyListener(companyId: companyId, user: user)
+        startUserDocListener(for: user)
     }
 
     private func stopRealtimeWorkspaceListeners() {
@@ -2279,6 +2261,37 @@ class AuthViewModel: ObservableObject {
         workspaceAccessListener?.remove()
         workspaceAccessListener = nil
         workspaceAccessListenerUserId = nil
+
+        userDocListener?.remove()
+        userDocListener = nil
+        userDocListenerUserId = nil
+    }
+
+    /// Live listener on `users/{uid}` so a server-side change to `activeCompanyId`
+    /// (for example, when the owner approves this user's join request and the
+    /// Cloud Function points them at the newly joined workspace) instantly switches
+    /// the currently visible workspace without requiring a manual Team Access pick.
+    private func startUserDocListener(for user: User) {
+        if userDocListenerUserId == user.uid, userDocListener != nil { return }
+        userDocListener?.remove()
+        userDocListenerUserId = user.uid
+        userDocListener = db.collection("users").document(user.uid).addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor in
+                guard let self, error == nil, let data = snapshot?.data() else { return }
+                let remoteActive = (data["activeCompanyId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !remoteActive.isEmpty else { return }
+                guard remoteActive != (self.currentCompanyId ?? "") else { return }
+                // Verify the user still has access before switching — protects against
+                // race conditions where the workspaceAccess subcollection hasn't been
+                // populated yet on this device.
+                self.validateCompanyAccess(companyId: remoteActive, user: user) { [weak self] hasAccess in
+                    Task { @MainActor in
+                        guard let self, hasAccess else { return }
+                        self.activateCompany(remoteActive, user: user, message: nil)
+                    }
+                }
+            }
+        }
     }
 
     private func startActiveCompanyListener(companyId: String, user: User) {
@@ -2436,7 +2449,7 @@ class AuthViewModel: ObservableObject {
 
     private func applyBillingPlan(from data: [String: Any]) {
         let rawPlan = (data["billingPlan"] as? String) ?? ""
-        let resolvedPlan = StudioBillingPlan(rawValue: rawPlan) ?? .teamMonthly
+        let resolvedPlan = StudioBillingPlan(rawValue: rawPlan) ?? .demo
         currentBillingPlan = resolvedPlan
         billingPlanSource = (data["billingPlanSource"] as? String) ?? (rawPlan.isEmpty ? "legacy_default" : "manual")
         billingUpdatedAt = (data["billingUpdatedAt"] as? Timestamp)?.dateValue()
@@ -2444,73 +2457,11 @@ class AuthViewModel: ObservableObject {
     }
 
     func updateWorkspaceBillingPlan(_ plan: StudioBillingPlan) {
-        guard isCompanyOwner, let companyId = currentCompanyId, !companyId.isEmpty else {
-            profileErrorMessage = "Only the workspace owner can change the plan."
-            return
-        }
-
-        isProfileLoading = true
-        profileMessage = ""
-        profileErrorMessage = ""
-
-        db.collection("companies").document(companyId).setData([
-            "billingPlan": plan.rawValue,
-            "billingPlanName": plan.displayName,
-            "billingPlanSource": "manual_workspace",
-            "billingUpdatedAt": FieldValue.serverTimestamp(),
-            "billingStorageLimitMB": plan.entitlements.storageLimitMB,
-            "billingTeamMemberLimit": plan.entitlements.teamMemberLimit,
-            "updatedAt": FieldValue.serverTimestamp()
-        ], merge: true) { [weak self] error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isProfileLoading = false
-                if let error {
-                    self.profileErrorMessage = error.localizedDescription
-                    return
-                }
-                self.currentBillingPlan = plan
-                self.billingPlanSource = "manual_workspace"
-                UserDefaults.standard.set(plan.rawValue, forKey: self.billingPlanDefaultsKey)
-                self.profileMessage = "Plan updated to \(plan.displayName)."
-            }
-        }
+        profileErrorMessage = "Manual plan switching is disabled. Plans are managed through secure billing."
     }
 
-
     func updateWorkspaceBillingPlanFromStoreKit(_ plan: StudioBillingPlan, productId: String) {
-        guard isCompanyOwner, let companyId = currentCompanyId, !companyId.isEmpty else {
-            profileErrorMessage = "Only the workspace owner can buy or restore a plan."
-            return
-        }
-
-        isProfileLoading = true
-        profileMessage = ""
-        profileErrorMessage = ""
-
-        db.collection("companies").document(companyId).setData([
-            "billingPlan": plan.rawValue,
-            "billingPlanName": plan.displayName,
-            "billingPlanSource": "storekit",
-            "billingProductId": productId,
-            "billingUpdatedAt": FieldValue.serverTimestamp(),
-            "billingStorageLimitMB": plan.entitlements.storageLimitMB,
-            "billingTeamMemberLimit": plan.entitlements.teamMemberLimit,
-            "updatedAt": FieldValue.serverTimestamp()
-        ], merge: true) { [weak self] error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isProfileLoading = false
-                if let error {
-                    self.profileErrorMessage = error.localizedDescription
-                    return
-                }
-                self.currentBillingPlan = plan
-                self.billingPlanSource = "storekit"
-                UserDefaults.standard.set(plan.rawValue, forKey: self.billingPlanDefaultsKey)
-                self.profileMessage = "Plan updated to \(plan.displayName)."
-            }
-        }
+        profileErrorMessage = "App Store purchases will become available after secure server verification is connected."
     }
 
     func canCreateMoreOrders(currentCount: Int) -> Bool {
@@ -2572,8 +2523,16 @@ class AuthViewModel: ObservableObject {
         if studioNormalizedTeamRole(rawRole) == "workflow" {
             access["dashboard"] = false
             access["financialInfo"] = false
+            access["customers"] = false
             access["teamAccess"] = false
             access["cardFinancial"] = false
+            access["assignedProjectsOnly"] = true
+            access["manageProjectAssignments"] = false
+            access["orders"] = true
+            access["schedule"] = true
+            access["quickReply"] = true
+            access["clientFiles"] = true
+            access["cardClientFiles"] = true
         }
         return access
     }

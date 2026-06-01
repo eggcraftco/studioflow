@@ -430,7 +430,7 @@ export default function SchedulePage() {
         setWorkspace(loadedWorkspace);
 
         const [loadedOrders, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([
-          loadScheduleOrders(loadedWorkspace.id),
+          loadScheduleOrders(loadedWorkspace.id, loadedWorkspace, uid),
           loadWorkspaceBlockHeadings(loadedWorkspace).catch(() => null),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
@@ -640,7 +640,8 @@ export default function SchedulePage() {
   }
 
   async function saveScheduleOrderRange(order: ScheduleOrderItem, nextPaymentDate: Date, nextDeliveryTime: number) {
-    if (!workspace || !canEditSchedule || savingScheduleOrderId) return;
+    if (!workspace || !user || !canEditSchedule || savingScheduleOrderId) return;
+    const uid = user.uid;
 
     const normalizedPaymentDate = startOfDay(nextPaymentDate);
     const normalizedDeliveryTime = Math.min(730, Math.max(1, Math.round(nextDeliveryTime)));
@@ -676,7 +677,7 @@ export default function SchedulePage() {
           deliveryTime: normalizedDeliveryTime
         }
       });
-      const refreshedOrders = await loadScheduleOrders(workspace.id);
+      const refreshedOrders = await loadScheduleOrders(workspace.id, workspace, uid);
       setOrders(refreshedOrders);
       setScheduleStatus(`Schedule updated: ${previousRange} -> ${nextRange}`);
     } catch (saveError) {
@@ -709,7 +710,8 @@ export default function SchedulePage() {
   }
 
   async function addScheduleOrder() {
-    if (!workspace || creatingScheduleOrder) return;
+    if (!workspace || !user || creatingScheduleOrder) return;
+    const uid = user.uid;
 
     setScheduleStatus("");
     setScheduleError("");
@@ -730,7 +732,7 @@ export default function SchedulePage() {
       const result = await createOrderFromWeb(workspace, {
         deliveryDueDate: isoDateValue(addDays(today, 14))
       });
-      const refreshedOrders = await loadScheduleOrders(workspace.id);
+      const refreshedOrders = await loadScheduleOrders(workspace.id, workspace, uid);
       setOrders(refreshedOrders);
       const createdOrder = refreshedOrders.find(order => order.id === result.orderId) ?? null;
       if (createdOrder) {

@@ -2973,7 +2973,7 @@ private fun DesktopPreviewCard(
         }
     }
 
-    DetailCard(title = "Preview") {
+    DetailCard(title = t("Preview")) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3379,7 +3379,7 @@ private fun DesktopClientFilesCard(
         }
     }
 
-    DetailCard(title = "Client Files") {
+    DetailCard(title = t("Client Files")) {
         ClientFileDropUploadArea(
             order = order,
             enabled = clientFilesEnabled,
@@ -3602,7 +3602,7 @@ private fun DesktopTodoCard(
     }
     val selectedAssignee = teamMembers.firstOrNull { it.id == newTaskAssigneeId }
 
-    DetailCard(title = "To Do") {
+    DetailCard(title = t("To Do")) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -3975,7 +3975,7 @@ private fun DesktopWorkTimeCard(order: StudioOrder, onUpdateOrderFields: (Studio
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var workTitle by remember(order.id) { mutableStateOf("Work session") }
 
-    DetailCard(title = "Work Time") {
+    DetailCard(title = t("Work Time")) {
         WorkTimeCardBody(
             order = order,
             workTitle = workTitle,
@@ -6548,7 +6548,7 @@ private fun TrackingInfoRow(label: String, value: String) {
 private fun NotesCard(order: StudioOrder) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    DetailCard(title = "Notes") {
+    DetailCard(title = t("Notes")) {
         Text(
             text = order.notes.ifBlank { t("No special notes provided.") },
             color = if (order.notes.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,

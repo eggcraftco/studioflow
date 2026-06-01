@@ -180,6 +180,7 @@ fun StudioFlowMainScreen(
     onChangeAccountEmail: (String) -> Unit,
     onSendPasswordResetEmail: () -> Unit,
     onRequestWorkspaceAccess: (String) -> Unit,
+    onSwitchWorkspace: (String) -> Unit,
     onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
     onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
@@ -220,6 +221,7 @@ fun StudioFlowMainScreen(
     onMarkActivityNotificationRead: (String) -> Unit,
     onMarkAllActivityNotificationsRead: () -> Unit,
     onDismissActivityNotifications: (List<String>) -> Unit,
+    onReviewOrderDeletion: (String, Boolean) -> Unit,
     onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit,
     onSetKeepNotesSearch: (String) -> Unit,
     onSetKeepNotesSection: (String) -> Unit,
@@ -369,6 +371,7 @@ fun StudioFlowMainScreen(
                     currency = state.workspaceSettings.selectedCurrency.ifBlank { "£" },
                     decimalSeparator = state.workspaceSettings.selectedDecimalSeparator,
                     hideSensitiveNumbers = hideSensitiveNumbers,
+                    showFinancialMetrics = state.workspace?.canSeeFinancialData == true,
                     cloudStatus = cloudStatus,
                     creatingOrder = state.creatingOrder,
                     sections = availableSections,
@@ -423,6 +426,7 @@ fun StudioFlowMainScreen(
                     onChangeAccountEmail = onChangeAccountEmail,
                     onSendPasswordResetEmail = onSendPasswordResetEmail,
                     onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                    onSwitchWorkspace = onSwitchWorkspace,
                     onApproveJoinRequest = onApproveJoinRequest,
                     onDeclineJoinRequest = onDeclineJoinRequest,
                     onUpdateTeamMemberRole = onUpdateTeamMemberRole,
@@ -463,6 +467,7 @@ fun StudioFlowMainScreen(
                     onMarkActivityNotificationRead = onMarkActivityNotificationRead,
                     onMarkAllActivityNotificationsRead = onMarkAllActivityNotificationsRead,
                     onDismissActivityNotifications = onDismissActivityNotifications,
+                    onReviewOrderDeletion = onReviewOrderDeletion,
                     onOpenActivityNotification = onOpenActivityNotification,
                     onSetKeepNotesSearch = onSetKeepNotesSearch,
                     onSetKeepNotesSection = onSetKeepNotesSection,
@@ -538,6 +543,7 @@ fun StudioFlowMainScreen(
                     onChangeAccountEmail = onChangeAccountEmail,
                     onSendPasswordResetEmail = onSendPasswordResetEmail,
                     onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                    onSwitchWorkspace = onSwitchWorkspace,
                     onApproveJoinRequest = onApproveJoinRequest,
                     onDeclineJoinRequest = onDeclineJoinRequest,
                     onUpdateTeamMemberRole = onUpdateTeamMemberRole,
@@ -578,6 +584,7 @@ fun StudioFlowMainScreen(
                     onMarkActivityNotificationRead = onMarkActivityNotificationRead,
                     onMarkAllActivityNotificationsRead = onMarkAllActivityNotificationsRead,
                     onDismissActivityNotifications = onDismissActivityNotifications,
+                    onReviewOrderDeletion = onReviewOrderDeletion,
                     onOpenActivityNotification = onOpenActivityNotification,
                     onSetKeepNotesSearch = onSetKeepNotesSearch,
                     onSetKeepNotesSection = onSetKeepNotesSection,
@@ -630,6 +637,7 @@ fun StudioFlowMainScreen(
                 onMarkRead = onMarkActivityNotificationRead,
                 onMarkAllRead = onMarkAllActivityNotificationsRead,
                 onDismiss = onDismissActivityNotifications,
+                onReviewOrderDeletion = onReviewOrderDeletion,
                 onOpen = { item ->
                     onOpenActivityNotification(item)
                 },
@@ -902,6 +910,7 @@ private fun StudioSectionContent(
     onChangeAccountEmail: (String) -> Unit,
     onSendPasswordResetEmail: () -> Unit,
     onRequestWorkspaceAccess: (String) -> Unit,
+    onSwitchWorkspace: (String) -> Unit,
     onApproveJoinRequest: (StudioJoinRequest, String) -> Unit,
     onDeclineJoinRequest: (StudioJoinRequest) -> Unit,
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
@@ -942,6 +951,7 @@ private fun StudioSectionContent(
     onMarkActivityNotificationRead: (String) -> Unit,
     onMarkAllActivityNotificationsRead: () -> Unit,
     onDismissActivityNotifications: (List<String>) -> Unit,
+    onReviewOrderDeletion: (String, Boolean) -> Unit,
     onOpenActivityNotification: (uk.co.eggcraft.studioflow.data.model.StudioActivityNotification) -> Unit,
     onSetKeepNotesSearch: (String) -> Unit,
     onSetKeepNotesSection: (String) -> Unit,
@@ -993,6 +1003,7 @@ private fun StudioSectionContent(
                 onMarkRead = onMarkActivityNotificationRead,
                 onMarkAllRead = onMarkAllActivityNotificationsRead,
                 onDismiss = onDismissActivityNotifications,
+                onReviewOrderDeletion = onReviewOrderDeletion,
                 onOpen = onOpenActivityNotification
             )
             StudioSection.Messages -> uk.co.eggcraft.studioflow.features.messages.MessagesScreen(
@@ -1057,6 +1068,7 @@ private fun StudioSectionContent(
                 onChangeAccountEmail = onChangeAccountEmail,
                 onSendPasswordResetEmail = onSendPasswordResetEmail,
                 onRequestWorkspaceAccess = onRequestWorkspaceAccess,
+                onSwitchWorkspace = onSwitchWorkspace,
                 onApproveJoinRequest = onApproveJoinRequest,
                 onDeclineJoinRequest = onDeclineJoinRequest,
                 onUpdateTeamMemberRole = onUpdateTeamMemberRole,
@@ -1082,6 +1094,7 @@ private fun StudioLargeTopBar(
     currency: String,
     decimalSeparator: String,
     hideSensitiveNumbers: Boolean,
+    showFinancialMetrics: Boolean,
     cloudStatus: HeaderCloudStatus,
     creatingOrder: Boolean,
     sections: List<StudioSection>,
@@ -1122,22 +1135,24 @@ private fun StudioLargeTopBar(
                     .width(if (compact) 156.dp else 230.dp)
                     .height(if (compact) 42.dp else 52.dp)
             )
-            TopMetric(
-                label = "Month Net",
-                value = formatNetPounds(monthNet, currency, decimalSeparator, hideSensitiveNumbers),
-                compact = compact
-            )
-            Surface(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(if (compact) 30.dp else 34.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            ) {}
-            TopMetric(
-                label = "Year Net",
-                value = formatNetPounds(yearNet, currency, decimalSeparator, hideSensitiveNumbers),
-                compact = compact
-            )
+            if (showFinancialMetrics) {
+                TopMetric(
+                    label = "Month Net",
+                    value = formatNetPounds(monthNet, currency, decimalSeparator, hideSensitiveNumbers),
+                    compact = compact
+                )
+                Surface(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(if (compact) 30.dp else 34.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                ) {}
+                TopMetric(
+                    label = "Year Net",
+                    value = formatNetPounds(yearNet, currency, decimalSeparator, hideSensitiveNumbers),
+                    compact = compact
+                )
+            }
             Row(
                 modifier = Modifier
                     .weight(1f)

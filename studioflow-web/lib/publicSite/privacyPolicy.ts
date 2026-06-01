@@ -13,7 +13,7 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-export const PRIVACY_POLICY_LAST_UPDATED = "28 May 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "1 June 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -235,7 +235,8 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       {
         title: "",
         paragraphs: [
-          "We do not claim ownership of your uploaded content. You retain all rights to the content you upload, subject to the rights you grant us to operate and provide the service."
+          "We do not claim ownership of your uploaded content. You retain all rights to the content you upload, subject to the rights you grant us to operate and provide the service.",
+          "Client Files and cloud-stored message attachments require an active eligible paid plan to open, preview, download, upload, rename, or delete them through the app. If eligible paid access ends, those files may be retained for up to 90 days so access can be restored if the workspace resubscribes during that period; after the retention period they may be deleted."
         ]
       }
     ]
@@ -379,7 +380,8 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "billing and invoice data may be kept for legal, tax, and accounting requirements;",
       "support messages may be kept to help us respond to your request and improve support;",
       "technical logs may be kept for a limited period for security and troubleshooting;",
-      "deleted data may remain in backups for a limited time before being permanently removed."
+      "deleted data may remain in backups for a limited time before being permanently removed;",
+      "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted."
     ],
     subsections: [
       {
@@ -1921,12 +1923,13 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
   }
 };
 
-export function getPrivacyPolicySections(language: StudioLanguage | string | null | undefined) {
-  const localized = LOCALIZED_PRIVACY_POLICIES[language as StudioLanguage];
-  return localized?.sections ?? PRIVACY_POLICY_SECTIONS;
+// English is the current authoritative public legal copy. Localised policy
+// drafts remain in this file for later review but are intentionally not shown
+// until they are aligned with the current subscription and file-retention terms.
+export function getPrivacyPolicySections(_language: StudioLanguage | string | null | undefined) {
+  return PRIVACY_POLICY_SECTIONS;
 }
 
-export function getPrivacyPolicyLastUpdatedLabel(language: StudioLanguage | string | null | undefined) {
-  const localized = LOCALIZED_PRIVACY_POLICIES[language as StudioLanguage];
-  return localized?.lastUpdatedLabel ?? "Last updated";
+export function getPrivacyPolicyLastUpdatedLabel(_language: StudioLanguage | string | null | undefined) {
+  return "Last updated";
 }

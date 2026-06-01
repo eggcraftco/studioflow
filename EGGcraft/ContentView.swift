@@ -452,6 +452,13 @@ struct StudioActivityCenterView: View {
         dismissActivityNotificationIds([item.id])
     }
 
+    private func reviewOrderDeletionNotification(_ item: StudioActivityNotification, approve: Bool) {
+        firebaseManager.reviewWorkflowOrderDeletion(orderId: item.orderId, approve: approve) { message in
+            firebaseManager.activityNotificationError = message
+        }
+        firebaseManager.markActivityNotificationRead(companyId: companyId, notificationId: item.id)
+    }
+
     private func dismissVisibleActivityNotifications() {
         let ids = filteredNotifications.map { $0.id }
         dismissActivityNotificationIds(ids)
@@ -1341,6 +1348,19 @@ struct StudioActivityCenterView: View {
                 .buttonStyle(.plain)
                 .offset(x: -7, y: -7)
                 .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if item.type == "order_deletion_request" && item.status == "pending" {
+                HStack(spacing: 6) {
+                    Button("Approve Delete") { reviewOrderDeletionNotification(item, approve: true) }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+                    Button("Reject") { reviewOrderDeletionNotification(item, approve: false) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                }
+                .padding(8)
             }
         }
     }
@@ -6513,6 +6533,7 @@ struct ContentView: View {
     @State private var temporaryOrdersSidebarWidth: Double?
     @State private var orderSidebarResizerHovering: Bool = false
     @State private var companySettingsListener: ListenerRegistration?
+    @State private var personalInterfaceSettingsListener: ListenerRegistration?
     @State private var phoneShowsOrderDetail: Bool = false
     @State private var phoneSearchVisible: Bool = false
     @State private var cloudSyncState: String = "connecting"
@@ -6611,7 +6632,11 @@ struct ContentView: View {
     @AppStorage("showCardToDo") private var showCardToDo = true
     @AppStorage("showCardWorkTime") private var showCardWorkTime = true
 
-    var aktifTema: ColorScheme? { if appTheme == t("Light", lang: seciliDil) { return .light }; if appTheme == t("Dark", lang: seciliDil) { return .dark }; return nil }
+    var aktifTema: ColorScheme? {
+        if appTheme == "Light" || appTheme == t("Light", lang: seciliDil) { return .light }
+        if appTheme == "Dark" || appTheme == t("Dark", lang: seciliDil) { return .dark }
+        return nil
+    }
     var colorScheme: ColorScheme { aktifTema ?? systemColorScheme }
     var bgHeader: Color { colorScheme == .dark ? Color(white: 0.1) : Color.white }
     var bgSidebar: Color { colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.97) }
@@ -6646,7 +6671,8 @@ struct ContentView: View {
     private var canAccessSchedule: Bool { workspaceAccessAllows("schedule") }
     private var canAccessCustomers: Bool { workspaceAccessAllows("customers") }
     private var canAccessQuickReply: Bool { workspaceAccessAllows("quickReply") }
-    private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled }
+    private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("messages") }
+    private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
 
     private var canEditCurrentWorkspace: Bool {
@@ -6675,7 +6701,12 @@ struct ContentView: View {
     }
 
     private var shouldShowOnlyAssignedProjects: Bool {
-        authVM.currentWorkspaceAccess["assignedProjectsOnly"] == true
+        (authVM.currentWorkspaceAccess["assignedProjectsOnly"] == true)
+            && (authVM.currentWorkspaceAccess["manageProjectAssignments"] != true)
+    }
+
+    private var requiresOwnerApprovalForDeletion: Bool {
+        isWorkflowOnlyWorkspace || shouldShowOnlyAssignedProjects
     }
 
     private func orderIsAssignedToCurrentWorkspaceMember(_ siparis: Siparis) -> Bool {
@@ -7355,11 +7386,13 @@ struct ContentView: View {
                 }
             }
 
-            Button {
-                aktifSekme = "Notes"
-                phoneShowsOrderDetail = false
-            } label: {
-                Label(t("Notes", lang: seciliDil), systemImage: "note.text")
+            if canAccessNotes {
+                Button {
+                    aktifSekme = "Notes"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Notes", lang: seciliDil), systemImage: "note.text")
+                }
             }
 
             Button {
@@ -7663,7 +7696,9 @@ struct ContentView: View {
             if canAccessMessages {
                 messagesTopNavigationButton
             }
-            UstMenuButonu(title: t("Notes", lang: seciliDil), icon: "note.text", isSelected: aktifSekme == "Notes") { aktifSekme = "Notes" }
+            if canAccessNotes {
+                UstMenuButonu(title: t("Notes", lang: seciliDil), icon: "note.text", isSelected: aktifSekme == "Notes") { aktifSekme = "Notes" }
+            }
             if canAccessSettings {
                 UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
             }
@@ -7822,7 +7857,13 @@ struct ContentView: View {
                                                 Button { hizliTamamla(siparis) } label: { Label(t("Mark as Done", lang: seciliDil), systemImage: "checkmark.circle.fill") }
                                                 Button { hizliIptalEt(siparis) } label: { Label(t("Cancel Order", lang: seciliDil), systemImage: "xmark.circle.fill") }
                                                 Divider()
-                                                Button(role: .destructive) { silSiparis(siparis) } label: { Label(t("Delete", lang: seciliDil), systemImage: "trash") }
+                                                if requiresOwnerApprovalForDeletion {
+                                                    Button(role: .destructive) { silmeTalebiGonder(siparis) } label: { Label("Request Deletion", systemImage: "trash.badge.clock") }
+                                                } else {
+                                                    Button(role: .destructive) { silSiparis(siparis) } label: { Label(t("Delete", lang: seciliDil), systemImage: "trash") }
+                                                }
+                                            } else if requiresOwnerApprovalForDeletion {
+                                                Button(role: .destructive) { silmeTalebiGonder(siparis) } label: { Label("Request Deletion", systemImage: "trash.badge.clock") }
                                             }
                                         }
                                     }
@@ -8034,17 +8075,21 @@ struct ContentView: View {
                     )
                 }
             } else if aktifSekme == "Notes" {
-                StudioKeepNotesView(onOpenProject: { orderKey in
-                    if let order = firebaseManager.siparisler.first(where: { orderSelectionKey($0) == orderKey }) {
-                        handleOrderTap(order)
-                        aktifSekme = "Orders"
-                        orderSelectionShouldScroll = true
-                    }
-                })
-                    .environmentObject(firebaseManager)
-                    .environmentObject(authVM)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(bgMain)
+                if canAccessNotes {
+                    StudioKeepNotesView(onOpenProject: { orderKey in
+                        if let order = firebaseManager.siparisler.first(where: { orderSelectionKey($0) == orderKey }) {
+                            handleOrderTap(order)
+                            aktifSekme = "Orders"
+                            orderSelectionShouldScroll = true
+                        }
+                    })
+                        .environmentObject(firebaseManager)
+                        .environmentObject(authVM)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Notes hidden", lang: seciliDil), message: t("Your current workspace role does not include Notes access.", lang: seciliDil))
+                }
             } else if aktifSekme == "QuickReply" {
                 if canAccessQuickReply {
                     AutoReplyView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
@@ -8117,6 +8162,7 @@ struct ContentView: View {
         .onAppear {
             syncFirebaseManagerWithAuthCompany()
             startCompanySettingsListener()
+            startPersonalAppearanceLanguageListener()
             scheduleBusinessOnboardingGate()
             enforceWorkspaceRoleAccess()
             scheduleSharedClientFileInboxCheck()
@@ -8131,11 +8177,15 @@ struct ContentView: View {
             firebaseManager.stopActivityNotificationsRealtime()
         }
         .onChange(of: authVM.currentUserId) { _, _ in
+            // Re-bind the per-user language/theme listener on account switch so a new
+            // signed-in user never inherits the previous account's preference.
+            startPersonalAppearanceLanguageListener()
             refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
         }
         .onChange(of: authVM.currentCompanyId) { _, _ in
             syncFirebaseManagerWithAuthCompany()
             startCompanySettingsListener()
+            startPersonalAppearanceLanguageListener()
             scheduleBusinessOnboardingGate()
             enforceWorkspaceRoleAccess()
             refreshMacFirstProjectGuideForCurrentAccount(forceReload: true)
@@ -8150,9 +8200,11 @@ struct ContentView: View {
         }
         .onChange(of: authVM.currentWorkspaceRole) { _, _ in
             syncFirebaseManagerWithAuthCompany()
+            startPersonalAppearanceLanguageListener()
             enforceWorkspaceRoleAccess()
         }
         .onChange(of: authVM.currentWorkspaceAccess) { _, _ in
+            syncFirebaseManagerWithAuthCompany()
             enforceWorkspaceRoleAccess()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -9401,7 +9453,50 @@ struct ContentView: View {
             return
         }
 
-        firebaseManager.configure(companyId: companyId, workspaceRole: authVM.currentWorkspaceRole)
+        firebaseManager.configure(
+            companyId: companyId,
+            workspaceRole: authVM.currentWorkspaceRole,
+            assignedProjectsOnly: authVM.currentWorkspaceAccess["assignedProjectsOnly"] == true,
+            manageProjectAssignments: authVM.currentWorkspaceAccess["manageProjectAssignments"] == true
+        )
+    }
+
+    private func startPersonalAppearanceLanguageListener() {
+        personalInterfaceSettingsListener?.remove()
+        personalInterfaceSettingsListener = nil
+
+        // Reset to defaults SYNCHRONOUSLY before (re)attaching. This guarantees that
+        // when accounts/workspaces switch on the same device, the previous user's
+        // language/theme (cached in device-global UserDefaults / @AppStorage) is
+        // cleared immediately, so a joined member never momentarily inherits the
+        // owner's language/theme while the new snapshot is loading.
+        let uidClean = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyIdClean = (authVM.currentCompanyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if appTheme != "System" { appTheme = "System" }
+        if seciliDil != "English" { seciliDil = "English" }
+
+        guard !uidClean.isEmpty, !companyIdClean.isEmpty else { return }
+
+        // Capture the identity this listener was started for so a late snapshot from a
+        // previous account/workspace can never overwrite the current user's values.
+        let listenerUid = uidClean
+        let listenerCompanyId = companyIdClean
+
+        personalInterfaceSettingsListener = Firestore.firestore()
+            .collection("companies").document(companyIdClean)
+            .collection("personalInterfaceSettings").document(uidClean)
+            .addSnapshotListener { snapshot, _ in
+                let values = snapshot?.data() ?? [:]
+                DispatchQueue.main.async {
+                    // Ignore stale callbacks from a listener that belonged to a previous
+                    // account/workspace (guards against rapid account switches).
+                    guard listenerUid == (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                          listenerCompanyId == (authVM.currentCompanyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+                    // No workspace fallback: each user starts from their own defaults.
+                    appTheme = (values["appTheme"] as? String) ?? "System"
+                    seciliDil = (values["selectedLanguage"] as? String) ?? "English"
+                }
+            }
     }
 
     private func startCompanySettingsListener() {
@@ -9467,8 +9562,8 @@ struct ContentView: View {
 
                 applyString("businessType", { businessType = $0 }, businessType)
                 applyString("businessDescriptionPrompt", { businessDescriptionPrompt = $0 }, businessDescriptionPrompt)
-                applyString("seciliDil", { seciliDil = $0 }, seciliDil)
-                applyString("appTheme", { appTheme = $0 }, appTheme)
+                // Theme and language are personal settings for every role.
+                // They are handled only by startPersonalAppearanceLanguageListener().
                 applyString("appSubtitle", { appSubtitle = $0 }, appSubtitle)
                 applyString("activeStatusesJSON", { activeStatusesJSON = $0 }, activeStatusesJSON)
                 applyString("customFieldsJSON", { customFieldsJSON = $0 }, customFieldsJSON)
@@ -9528,21 +9623,15 @@ struct ContentView: View {
 
     @ViewBuilder
     private func orderDetailView(for siparis: Siparis) -> some View {
-        if isViewOnlyWorkspace {
-            ViewOnlyOrderDetailView(
-                siparis: siparis,
-                seciliDil: seciliDil,
-                summaryStep1: summaryStep1,
-                summaryStep2: summaryStep2
-            )
-        } else {
-            SiparisDetayView(
-                siparis: guvenliBinding(icin: siparis),
-                seciliMusteri: $seciliMusteri,
-                aktifSekme: $aktifSekme,
-                hideFinancialForWorkflow: !canSeeFinancialData
-            )
-        }
+        // View Only uses the standard card layout for a consistent order view.
+        // guvenliBinding blocks order changes for roles without edit access,
+        // while hideFinancialForWorkflow preserves restricted financial visibility.
+        SiparisDetayView(
+            siparis: guvenliBinding(icin: siparis),
+            seciliMusteri: $seciliMusteri,
+            aktifSekme: $aktifSekme,
+            hideFinancialForWorkflow: !canSeeFinancialData
+        )
     }
 
 
@@ -9611,7 +9700,7 @@ struct ContentView: View {
         case "Customers": return canAccessCustomers
         case "QuickReply": return canAccessQuickReply
         case "Messages": return canAccessMessages
-        case "Notes": return true
+        case "Notes": return canAccessNotes
         case "Settings": return canAccessSettings
         default: return false
         }
@@ -9674,6 +9763,8 @@ struct ContentView: View {
     private func stopCompanySettingsListener() {
         companySettingsListener?.remove()
         companySettingsListener = nil
+        personalInterfaceSettingsListener?.remove()
+        personalInterfaceSettingsListener = nil
         cloudSyncState = "connecting"
         cloudSyncMessage = t("Cloud listener stopped.", lang: seciliDil)
     }
@@ -9974,6 +10065,13 @@ struct ContentView: View {
     
     private func hizliTamamla(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Done"; guncelSiparis.status = "Done"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Done" }; guncelSiparis.extraStatuses = yeniExtralar }; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
     private func hizliIptalEt(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Cancelled"; guncelSiparis.status = "Cancelled"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Cancelled" }; guncelSiparis.extraStatuses = yeniExtralar }; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
+    private func silmeTalebiGonder(_ siparis: Siparis) {
+        guard requiresOwnerApprovalForDeletion else { return }
+        firebaseManager.requestWorkflowOrderDeletion(siparis) { message in
+            firebaseManager.activityNotificationError = message
+        }
+    }
+
     private func silSiparis(_ siparis: Siparis) {
         guard canEditCurrentWorkspace else { return }
         withAnimation {
@@ -12024,7 +12122,7 @@ struct AccountProfileView: View {
     private var sectionHeaderTitle: String {
         switch sectionMode {
         case .account:
-            return "Account"
+            return "Profile & Security"
         case .profileWorkspace:
             return t("Profile & Workspace", lang: seciliDil)
         case .workspaceLogo:
@@ -12041,7 +12139,9 @@ struct AccountProfileView: View {
     private var sectionHeaderSubtitle: String {
         switch sectionMode {
         case .account:
-            return "Manage your NivaDesk profile, company details and sign-in security."
+            return canEditWorkspaceBranding
+                ? "Manage your profile, workspace identity and sign-in security."
+                : "Manage your personal profile and sign-in security."
         case .profileWorkspace:
             return "Manage your profile, company name and workspace identifiers."
         case .workspaceLogo:
@@ -12130,10 +12230,13 @@ struct AccountProfileView: View {
             }
 
             labeledField(title: t("Your Name", lang: seciliDil), text: $displayName, placeholder: t("Your name", lang: seciliDil))
-            labeledField(title: t("Company / Studio Name", lang: seciliDil), text: $companyName, placeholder: t("My Studio", lang: seciliDil))
 
-            if let companyId = authVM.currentCompanyId, !companyId.isEmpty {
-                copyableIdField(title: t("Company ID", lang: seciliDil), value: companyId, copiedMessage: t("Company ID copied.", lang: seciliDil))
+            if canEditWorkspaceBranding {
+                labeledField(title: t("Company / Studio Name", lang: seciliDil), text: $companyName, placeholder: t("My Studio", lang: seciliDil))
+
+                if let companyId = authVM.currentCompanyId, !companyId.isEmpty {
+                    copyableIdField(title: t("Company ID", lang: seciliDil), value: companyId, copiedMessage: t("Company ID copied.", lang: seciliDil))
+                }
             }
 
             if let userId = authVM.currentUserId, !userId.isEmpty {
@@ -12276,8 +12379,6 @@ struct AccountProfileView: View {
 
             currentPlanHero(entitlements)
 
-            storeKitPurchaseCard
-
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 8) {
                     Label(t("Compare plans", lang: seciliDil), systemImage: "rectangle.3.group.fill")
@@ -12322,37 +12423,11 @@ struct AccountProfileView: View {
                 }
             }
 
-            if authVM.isCompanyOwner {
-                Divider().background(Color.primary.opacity(0.08))
-                DisclosureGroup(isExpanded: $showOwnerTestingControls) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Picker("", selection: Binding(
-                            get: { authVM.currentBillingPlan },
-                            set: { authVM.updateWorkspaceBillingPlan($0) }
-                        )) {
-                            ForEach(StudioBillingPlan.allCases) { plan in
-                                Text(t(plan.displayName, lang: seciliDil)).tag(plan)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(authVM.isProfileLoading)
-
-                        Text(t("Plan comparison is shown for testing now. StoreKit purchases will replace manual switching later.", lang: seciliDil))
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 8)
-                } label: {
-                    Label(t("Owner testing controls", lang: seciliDil), systemImage: "hammer.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Text(t("Only the workspace owner can manage the plan.", lang: seciliDil))
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
+            Divider().background(Color.primary.opacity(0.08))
+            Text(t("Plan changes are protected and will be managed through verified subscriptions.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(accountCardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -12978,10 +13053,16 @@ struct AccountProfileView: View {
         .buttonStyle(.plain)
     }
 
+    private var canViewTeamWorkspaceManagement: Bool {
+        authVM.currentPlanEntitlements.teamAccessEnabled
+    }
+
     private var teamAccessCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             sectionTitle(t("Team Access", lang: seciliDil), icon: "person.2.fill")
 
+            // Workspace membership and switching are available to every accepted role.
+            // Management controls remain gated separately below.
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 14) {
                     currentWorkspaceCard
@@ -13000,14 +13081,12 @@ struct AccountProfileView: View {
                 readOnlyWorkspaceNotice
             }
 
-            // Requesting access to another workspace must remain available on every device,
-            // every plan and every role. A user may be the owner of their own workspace on Mac,
-            // but still need to request access to a different owner workspace.
+            // Requesting access to another Team workspace remains available on every plan.
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 14) {
                     requestAccessCard
                         .frame(maxWidth: .infinity, alignment: .topLeading)
-                    if authVM.currentPlanEntitlements.teamAccessEnabled, authVM.isCompanyOwner {
+                    if canViewTeamWorkspaceManagement, authVM.isCompanyOwner {
                         ownerInviteCard
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
@@ -13015,13 +13094,13 @@ struct AccountProfileView: View {
 
                 VStack(alignment: .leading, spacing: 14) {
                     requestAccessCard
-                    if authVM.currentPlanEntitlements.teamAccessEnabled, authVM.isCompanyOwner {
+                    if canViewTeamWorkspaceManagement, authVM.isCompanyOwner {
                         ownerInviteCard
                     }
                 }
             }
 
-            if authVM.currentPlanEntitlements.teamAccessEnabled {
+            if canViewTeamWorkspaceManagement {
                 if authVM.isCompanyOwner {
                     pendingJoinRequestsSection
                     roleProfilesSection
@@ -13030,9 +13109,11 @@ struct AccountProfileView: View {
                 roleMixSection
             } else {
                 planLockedNotice(
-                    title: t("Team access is locked", lang: seciliDil),
-                    message: "Team members, roles and shared workspace access are available on the NivaDesk Team monthly plan.",
-                    icon: "person.2.slash.fill"
+                    title: t("Join an existing Team workspace", lang: seciliDil),
+                    message: authVM.currentPlanEntitlements.teamAccessEnabled
+                        ? "Your current role does not include Team Access management. You can still request access to another Team workspace."
+                        : "Team management requires NivaDesk Team, but requesting access to an existing Team workspace is available on every plan.",
+                    icon: "person.badge.plus"
                 )
             }
         }
@@ -14073,6 +14154,17 @@ private struct StudioRoleAccessEditor: View {
                 onLabel: "Allowed",
                 offLabel: "Hidden / locked",
                 tint: .blue,
+                allowBulk: true
+            )
+
+            accessSection(
+                eyebrow: "Settings access",
+                title: "Settings Permissions",
+                note: "Controls visible Settings menus. Billing, WooCommerce, data deletion, workspace identity and OpenAI key remain protected.",
+                options: studioSettingsAccessOptions,
+                onLabel: "Allowed",
+                offLabel: "Hidden / locked",
+                tint: .green,
                 allowBulk: true
             )
 
@@ -16101,12 +16193,14 @@ struct SchedulePlannerView: View {
 
     private func shortDate(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "MMM d"
         return formatter.string(from: date)
     }
 
     private func mediumDate(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
@@ -16114,30 +16208,35 @@ struct SchedulePlannerView: View {
 
     private func monthTitle(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "MMM yyyy"
         return formatter.string(from: date)
     }
 
     private func yearTitle(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "yyyy"
         return formatter.string(from: date)
     }
 
     private func shortMonthName(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "MMM"
         return formatter.string(from: date)
     }
 
     private func dayName(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "E"
         return formatter.string(from: date)
     }
 
     private func dayNumber(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "d"
         return formatter.string(from: date)
     }
