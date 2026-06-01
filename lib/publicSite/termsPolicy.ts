@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const TERMS_POLICY_LAST_UPDATED = "13 May 2026";
+export const TERMS_POLICY_LAST_UPDATED = "1 June 2026";
 
 export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -85,7 +85,7 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "6. Plans, subscriptions, and feature limits",
     paragraphs: [
-      "NivaDesk may offer free plans, trial plans, lifetime plans, paid subscriptions, team plans, add-ons, or other plan types. Each plan may have different limits and features, such as:"
+      "NivaDesk may offer free or demo access, monthly or annual paid subscriptions, team plans, storage add-ons, or other plan types. Each plan may have different limits and features, such as:"
     ],
     bullets: [
       "number of orders",
@@ -120,7 +120,8 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "Subscriptions may renew automatically unless cancelled before the renewal date. You are responsible for cancelling your subscription through the platform where you purchased it.",
       "Cancelling a subscription usually stops future renewals. It does not always automatically provide a refund for the current billing period.",
-      "If your paid subscription expires, is cancelled, or payment fails, your account may be downgraded to a free or limited plan. Where technically available, we aim to allow users to access and export their own existing business data even after a downgrade, subject to security, abuse prevention, legal, and technical limits."
+      "If your paid subscription expires, is cancelled, or payment fails, your account may be downgraded to a Free Demo or limited plan. Core order, customer, and available basic financial data may remain available for export after a downgrade, subject to security, abuse prevention, legal, and technical limits.",
+      "Client Files and cloud-stored message attachments are paid-plan features. Once the eligible paid period ends, they cannot be opened, previewed, downloaded, uploaded, renamed, or deleted through the app. We may retain them for up to 90 days so access can be restored if the workspace resubscribes during that period; after that period they may be deleted."
     ],
     bullets: [
       "Apple App Store subscriptions must usually be managed through your Apple account",
@@ -1332,10 +1333,13 @@ const LOCALIZED_TERMS_POLICIES: Partial<Record<StudioLanguage, PrivacyPolicySect
   ])
 ) as Partial<Record<StudioLanguage, PrivacyPolicySection[]>>;
 
-export function getTermsPolicySections(language: StudioLanguage | string | null | undefined) {
-  return LOCALIZED_TERMS_POLICIES[language as StudioLanguage] ?? TERMS_POLICY_SECTIONS;
+// English is the current authoritative public legal copy. Localised policy
+// drafts remain in this file for later review but are intentionally not shown
+// until they are aligned with the current subscription and file-retention terms.
+export function getTermsPolicySections(_language: StudioLanguage | string | null | undefined) {
+  return TERMS_POLICY_SECTIONS;
 }
 
-export function getTermsPolicyLastUpdatedLabel(language: StudioLanguage | string | null | undefined) {
-  return TERMS_POLICY_DRAFTS[language as StudioLanguage]?.lastUpdatedLabel ?? "Last updated";
+export function getTermsPolicyLastUpdatedLabel(_language: StudioLanguage | string | null | undefined) {
+  return "Last updated";
 }

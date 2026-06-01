@@ -44,7 +44,7 @@ export function isClientFileImage(file: Pick<ClientFileDetail, "contentType" | "
 
 export function canManageClientFilesForRole(role: string) {
   const normalized = normalizeWorkspaceRole(role);
-  return normalized === "owner" || normalized === "admin" || normalized === "member";
+  return normalized === "owner" || normalized === "admin" || normalized === "member" || normalized === "workflow";
 }
 
 type UploadUser = {
@@ -127,14 +127,20 @@ async function callClientFileFunction(name: string, payload: Record<string, unkn
 }
 
 async function requireOrderInWorkspace(workspace: WorkspaceContext, orderId: string) {
-  const orderRef = doc(db, "siparisler", orderId);
+  const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
+  const orderRef = isWorkflowOnly
+    ? doc(db, "companies", workspace.id, "workflowOrders", orderId)
+    : doc(db, "siparisler", orderId);
   const snapshot = await getDoc(orderRef);
   if (!snapshot.exists()) {
-    throw new Error("Order not found.");
+    throw new Error(isWorkflowOnly ? "This assigned order is not available to your workflow role." : "Order not found.");
   }
   const companyId = stringValue(snapshot.data().companyId, workspace.id);
   if (companyId !== workspace.id) {
     throw new Error("This order does not belong to the active workspace.");
+  }
+  if (isWorkflowOnly && stringValue(snapshot.data().assignedToUid, "") === "") {
+    throw new Error("This assigned order is not available to your workflow role.");
   }
   return orderRef;
 }

@@ -1,13 +1,13 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const REFUND_CANCELLATION_POLICY_LAST_UPDATED = "13 May 2026";
+export const REFUND_CANCELLATION_POLICY_LAST_UPDATED = "1 June 2026";
 
 export const REFUND_CANCELLATION_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "NivaDesk Refund and Cancellation Policy",
     paragraphs: [
-      "This Refund and Cancellation Policy explains how cancellations, renewals, downgrades, refunds, trials, and account access work for NivaDesk paid plans, free plans, lifetime plans, and add-ons.",
+      "This Refund and Cancellation Policy explains how cancellations, renewals, downgrades, refunds, trials, and account access work for NivaDesk free access, monthly or annual paid subscriptions, team plans, and add-ons.",
       "NivaDesk is operated by EGGCRAFT LIMITED (\"NivaDesk\", \"we\", \"us\", or \"our\"). This policy forms part of our Terms of Service. If there is a conflict between this policy and mandatory consumer law, the mandatory law will apply."
     ]
   },
@@ -25,7 +25,7 @@ export const REFUND_CANCELLATION_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "2. Plans covered by this policy",
     paragraphs: [
-      "This policy applies to NivaDesk plans and purchases, including free access, trials, monthly subscriptions, annual subscriptions, lifetime plans, team plans, storage add-ons, and other paid features we may offer.",
+      "This policy applies to NivaDesk plans and purchases, including free access, trials, monthly subscriptions, annual subscriptions, team plans, storage add-ons, and other paid features we may offer.",
       "Each plan may include different limits, features, storage allowances, team access, file upload rights, export options, integrations, and support levels. The features included in your plan will be shown on the pricing page, in the app, or during checkout."
     ]
   },
@@ -116,16 +116,17 @@ export const REFUND_CANCELLATION_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "11. What happens after cancellation or expiry",
     paragraphs: [
       "If your Pro, Team, or other paid subscription expires, is cancelled, or payment fails, your account may fall back to a Free/Demo or limited-access plan rather than remaining on the paid plan.",
-      "We aim to let users access and export their existing business data after cancellation or expiry, subject to reasonable security, technical, legal, abuse prevention, and storage limits.",
-      "Some paid features may stop working after cancellation, including file upload, advanced customisation, team management, storage expansion, integrations, or role-based controls depending on the plan."
+      "We aim to let users access and export their existing core business data, such as available order, customer, and basic financial data, after cancellation or expiry, subject to reasonable security, technical, legal, abuse prevention, and storage limits.",
+      "Client Files and cloud-stored message attachments require an active eligible paid plan. When that paid access ends, the files cannot be opened, previewed, downloaded, uploaded, renamed, or deleted through the app.",
+      "We may retain inaccessible Client Files and cloud-stored message attachments for up to 90 days after paid access ends so they can be restored if the workspace resubscribes during that period. After the retention period they may be deleted."
     ]
   },
   {
-    title: "12. Lifetime plans",
+    title: "12. Client Files and message attachment retention",
     paragraphs: [
-      "If we offer a lifetime plan, lifetime means access to the included NivaDesk features for the lifetime of the product or plan, not for the lifetime of the user, company, device, app store, or payment platform.",
-      "Lifetime plans may still be subject to fair use limits, storage limits, supported platform limits, account rules, acceptable use rules, and feature availability described at the time of purchase.",
-      "Lifetime plans may not include future paid add-ons, third-party service fees, storage upgrades, enterprise features, or new products unless stated otherwise."
+      "Client Files and cloud-stored message attachments are not included in Free Demo or Lite access and may require an active Pro, Team, or other eligible paid plan.",
+      "Ending eligible paid access does not immediately remove these stored files, but it removes in-app access to open, preview, download, upload, rename, or delete them.",
+      "Files may be retained for up to 90 days after access ends so a resubscribing workspace can restore access during that period. After 90 days, deletion may occur."
     ]
   },
   {
@@ -812,11 +813,13 @@ const LOCALIZED_REFUND_CANCELLATION_POLICIES: Partial<Record<StudioLanguage, Pri
   ])
 ) as Partial<Record<StudioLanguage, PrivacyPolicySection[]>>;
 
-export function getRefundCancellationPolicySections(language: StudioLanguage | string | null | undefined) {
-  const normalized = language as StudioLanguage;
-  return LOCALIZED_REFUND_CANCELLATION_POLICIES[normalized] ?? REFUND_CANCELLATION_POLICY_SECTIONS;
+// English is the current authoritative public legal copy. Localised policy
+// drafts remain in this file for later review but are intentionally not shown
+// until they are aligned with the current subscription and file-retention terms.
+export function getRefundCancellationPolicySections(_language: StudioLanguage | string | null | undefined) {
+  return REFUND_CANCELLATION_POLICY_SECTIONS;
 }
 
-export function getRefundCancellationPolicyLastUpdatedLabel(language: StudioLanguage | string | null | undefined) {
-  return REFUND_CANCELLATION_POLICY_LABELS[language as StudioLanguage] ?? "Last updated";
+export function getRefundCancellationPolicyLastUpdatedLabel(_language: StudioLanguage | string | null | undefined) {
+  return "Last updated";
 }

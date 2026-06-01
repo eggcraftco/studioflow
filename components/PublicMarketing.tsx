@@ -353,6 +353,11 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
+    titleKey: "planBridge.chatgptApp.title",
+    bodyKey: "planBridge.chatgptApp.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
     titleKey: "planBridge.basicFinance.title",
     bodyKey: "planBridge.basicFinance.body",
     planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
@@ -388,14 +393,14 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     planKeys: ["team_monthly"]
   },
   {
+    titleKey: "planBridge.quickReplies.title",
+    bodyKey: "planBridge.quickReplies.body",
+    planKeys: ["team_monthly"]
+  },
+  {
     titleKey: "planBridge.storageAddons.title",
     bodyKey: "planBridge.storageAddons.body",
     planKeys: ["pro_monthly", "team_monthly"]
-  },
-  {
-    titleKey: "planBridge.chatgptApp.title",
-    bodyKey: "planBridge.chatgptApp.body",
-    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
     titleKey: "planBridge.teamAccess.title",
@@ -1867,6 +1872,21 @@ function PublicLegalSubsection({ subsection }: { subsection: PrivacyPolicySubsec
   );
 }
 
+function PublicLegalLanguageNotice({ language }: { language: StudioLanguage }) {
+  if (language === "English") return null;
+
+  return (
+    <article className="public-card public-legal-card">
+      <h2>Legal document language</h2>
+      <p>
+        The current authoritative version of this legal document is provided in English.
+        The public site navigation may be displayed in your selected language, but the legal
+        terms below remain in English until reviewed translations are available.
+      </p>
+    </article>
+  );
+}
+
 function PublicLegalSection({ section }: { section: PrivacyPolicySection }) {
   return (
     <article className="public-card public-legal-card">
@@ -1908,6 +1928,7 @@ export function PublicPrivacyPage() {
 
         <section className="public-section">
           <div className="public-shell public-legal-document">
+            <PublicLegalLanguageNotice language={language} />
             {privacyPolicySections.map(section => (
               <PublicLegalSection key={section.title} section={section} />
             ))}
@@ -1943,6 +1964,7 @@ export function PublicTermsPage() {
 
         <section className="public-section">
           <div className="public-shell public-legal-document">
+            <PublicLegalLanguageNotice language={language} />
             {termsPolicySections.map(section => (
               <PublicLegalSection key={section.title} section={section} />
             ))}
@@ -2048,6 +2070,7 @@ export function PublicRefundCancellationPage() {
 
         <section className="public-section">
           <div className="public-shell public-legal-document">
+            <PublicLegalLanguageNotice language={language} />
             {refundCancellationPolicySections.map(section => (
               <PublicLegalSection key={section.title} section={section} />
             ))}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  approveWorkflowOrderDeletion,
   colorForType,
   dismissActivityNotifications,
   iconForType,
@@ -11,6 +12,7 @@ import {
   markActivityNotificationRead,
   markAllActivityNotificationsRead,
   notificationStackKey,
+  rejectWorkflowOrderDeletion,
   type StudioActivityNotification,
   typeKeyFor,
   typeLabel,
@@ -46,6 +48,7 @@ export function NotificationsDrawer({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [optimisticReadIds, setOptimisticReadIds] = useState<Set<string>>(new Set());
   const [optimisticAllRead, setOptimisticAllRead] = useState(false);
+  const [reviewingOrderId, setReviewingOrderId] = useState("");
 
   // Persist dismissed IDs to localStorage so they don't come back after refresh.
   useEffect(() => {
@@ -143,6 +146,18 @@ export function NotificationsDrawer({
     }
     if (!workspace) return;
     try { await dismissActivityNotifications(workspace, ids); } catch {}
+  };
+
+  const handleReviewDeletion = async (item: StudioActivityNotification, approve: boolean) => {
+    if (!workspace || !item.orderId || reviewingOrderId) return;
+    setReviewingOrderId(item.orderId);
+    try {
+      if (approve) await approveWorkflowOrderDeletion(workspace, item.orderId);
+      else await rejectWorkflowOrderDeletion(workspace, item.orderId);
+      await handleMarkRead(item.id);
+    } finally {
+      setReviewingOrderId("");
+    }
   };
 
   const handleOpenNotification = (n: StudioActivityNotification) => {
@@ -296,6 +311,8 @@ export function NotificationsDrawer({
                       sectionId={section.id}
                       onClick={() => handleOpenNotification(group.items[0])}
                       onDismiss={() => void handleDismiss([group.items[0].id])}
+                      onReviewDeletion={(approve) => void handleReviewDeletion(group.items[0], approve)}
+                      reviewing={reviewingOrderId === group.items[0].orderId}
                     />
                   );
                 }
@@ -329,6 +346,8 @@ export function NotificationsDrawer({
                         indent
                         onClick={() => handleOpenNotification(item)}
                         onDismiss={() => void handleDismiss([item.id])}
+                        onReviewDeletion={(approve) => void handleReviewDeletion(item, approve)}
+                        reviewing={reviewingOrderId === item.orderId}
                       />
                     ))}
                   </div>
@@ -350,6 +369,8 @@ function NotificationCard({
   indent,
   onClick,
   onDismiss,
+  onReviewDeletion,
+  reviewing = false,
 }: {
   item: StudioActivityNotification;
   isUnread: boolean;
@@ -357,6 +378,8 @@ function NotificationCard({
   indent?: boolean;
   onClick: () => void;
   onDismiss: () => void;
+  onReviewDeletion?: (approve: boolean) => void;
+  reviewing?: boolean;
 }) {
   const key = typeKeyFor(item);
   const tint = colorForType(key);
@@ -389,6 +412,12 @@ function NotificationCard({
           <span className="notif-type-pill" style={{ background: `${tint}1e`, color: tint }}>
             {typeLabel(key)}
           </span>
+          {item.type === "order_deletion_request" && item.status === "pending" && onReviewDeletion ? (
+            <div className="notif-review-actions" onClick={(event) => event.stopPropagation()}>
+              <button type="button" disabled={reviewing} onClick={() => onReviewDeletion(true)}>Approve Delete</button>
+              <button type="button" className="reject" disabled={reviewing} onClick={() => onReviewDeletion(false)}>Reject</button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -546,6 +575,10 @@ function DrawerStyles() {
       .notif-stack-sub { font-size: 12px; font-weight: 700; color: #111827; margin-top: 2px; }
       .notif-type-pill { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
       .notif-expand-pill { display: inline-block; background: rgba(0,0,0,0.06); color: #6b7280; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; margin-top: 6px; }
+      .notif-review-actions { display: flex; gap: 6px; margin-top: 8px; }
+      .notif-review-actions button { border: 0; border-radius: 8px; padding: 6px 9px; background: #2563eb; color: white; font-size: 11px; font-weight: 700; cursor: pointer; }
+      .notif-review-actions button.reject { background: #f3f4f6; color: #374151; }
+      .notif-review-actions button:disabled { opacity: .55; cursor: wait; }
       .notif-stack-banner { display: flex; align-items: center; padding: 2px 4px; }
       .notif-stack-banner span { flex: 1; font-size: 10px; font-weight: 700; color: #2563eb; }
       .notif-stack-banner button { background: transparent; border: none; color: #2563eb; font-size: 11px; cursor: pointer; font-weight: 600; }

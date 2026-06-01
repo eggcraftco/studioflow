@@ -9,8 +9,12 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   loadTeamAccessData,
+  loadJoinedWorkspaceOptions,
   loadWorkspaceContext,
+  switchActiveWorkspace,
+  workspaceAccessAllows,
   type JoinRequestDetail,
+  type JoinedWorkspaceOption,
   type TeamMemberDetail,
   type WorkspaceCustomRole,
   type WorkspaceContext
@@ -65,6 +69,8 @@ export default function TeamPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  const [joinedWorkspaces, setJoinedWorkspaces] = useState<JoinedWorkspaceOption[]>([]);
+  const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState("");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -76,6 +82,7 @@ export default function TeamPage() {
     setError("");
     try {
       const workspaceContext = await loadWorkspaceContext(currentUser.uid);
+      setJoinedWorkspaces(await loadJoinedWorkspaceOptions(currentUser.uid, workspaceContext.id));
       if (workspaceContext.role.toLowerCase() === "owner") {
         try {
           await syncAcceptedJoinRequests(workspaceContext);
@@ -83,6 +90,14 @@ export default function TeamPage() {
           console.warn("Team access sync skipped:", syncError);
         }
       }
+      if (!workspaceContext.entitlements.features.team_access || !workspaceAccessAllows(workspaceContext.memberAccess, "teamAccess")) {
+        setWorkspace(workspaceContext);
+        setMembers([]);
+        setJoinRequests([]);
+        setCustomRoles([]);
+        return;
+      }
+
       const teamData = await loadTeamAccessData(workspaceContext);
       setWorkspace(workspaceContext);
       setMembers(teamData.members);
@@ -110,9 +125,13 @@ export default function TeamPage() {
       setError("");
       try {
         const workspaceContext = await loadWorkspaceContext(user.uid);
-        if (!cancelled) setWorkspace(workspaceContext);
+        const availableOptions = await loadJoinedWorkspaceOptions(user.uid, workspaceContext.id);
+        if (!cancelled) {
+          setWorkspace(workspaceContext);
+          setJoinedWorkspaces(availableOptions);
+        }
 
-        if (!workspaceContext.entitlements.features.team_access) {
+        if (!workspaceContext.entitlements.features.team_access || !workspaceAccessAllows(workspaceContext.memberAccess, "teamAccess")) {
           if (!cancelled) {
             setMembers([]);
             setJoinRequests([]);
@@ -151,7 +170,8 @@ export default function TeamPage() {
 
   const isOwner = workspace?.role.toLowerCase() === "owner";
   const hasTeamPlan = Boolean(workspace?.entitlements.features.team_access);
-  const canManageTeam = Boolean(isOwner && hasTeamPlan && workspace);
+  const canViewTeamManagement = Boolean(workspace && hasTeamPlan && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
+  const canManageTeam = Boolean(isOwner && canViewTeamManagement && workspace);
   const teamLimit = workspace?.billingTeamMemberLimit ?? workspace?.entitlements.teamMemberLimit ?? 1;
   const currentMemberCount = members.length;
   const limitText = teamLimit > 9999 ? "Unlimited" : `${currentMemberCount} / ${teamLimit}`;
@@ -186,6 +206,43 @@ export default function TeamPage() {
     }
   }
 
+  async function switchWorkspace(option: JoinedWorkspaceOption) {
+    if (!user || option.isCurrent || switchingWorkspaceId) return;
+    setSwitchingWorkspaceId(option.id);
+    setError("");
+    setMessage("");
+    try {
+      await switchActiveWorkspace(user.uid, option.id);
+      window.location.reload();
+    } catch (switchError) {
+      setError(switchError instanceof Error ? switchError.message : "Could not switch workspace.");
+      setSwitchingWorkspaceId("");
+    }
+  }
+
+  const workspaceSwitchPanel = (
+    <section className="card" style={{ padding: 22, maxWidth: 760, marginBottom: 18 }}>
+      <div className="pill">Workspaces</div>
+      <h2 style={{ margin: "12px 0 8px" }}>Connected workspaces</h2>
+      <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>Switch into the Team workspace you joined to view its orders and permitted tools.</p>
+      {joinedWorkspaces.map(option => (
+        <div className="team-access-workspace-option" key={option.id}>
+          <div>
+            <strong>{option.name}</strong>
+            <small>{option.roleLabel}</small>
+          </div>
+          {option.isCurrent ? (
+            <span className="pill">Current</span>
+          ) : (
+            <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
+              {switchingWorkspaceId === option.id ? "Switching..." : "Switch"}
+            </button>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+
   async function submitAccessRequest() {
     const cleanIdentifier = requestOwnerIdentifier.trim();
     if (!cleanIdentifier || actioning) return;
@@ -199,21 +256,94 @@ export default function TeamPage() {
 
   if (loading || !user) return <LoadingScreen />;
 
-  if (!loadingTeam && workspace && !workspace.entitlements.features.team_access) {
+  if (!loadingTeam && workspace && !canViewTeamManagement) {
     return (
       <AppShell>
-        <section className="card" style={{ padding: 28, maxWidth: 760 }}>
-          <div className="pill">Available on Team</div>
+        {workspaceSwitchPanel}
+        <section className="card" style={{ padding: 28, maxWidth: 760, marginBottom: 18 }}>
+          <div className="pill">Join a Team workspace</div>
           <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 10px" }}>
-            Team Access is not included in {workspace.billingPlanName}.
+            Request access to an existing Team workspace
           </h1>
           <p style={{ color: "var(--muted)", margin: "0 0 18px" }}>
-            Roles, join requests and shared workspace member management are available on NivaDesk Team. Team includes 5 seats, with additional seats available up to 10 users through self-service.
+            Requesting access is available on every plan. Enter the Company ID or owner email shared by a Team workspace owner.
           </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link className="button" href="/plan">View Team plan</Link>
-            <Link className="button secondary" href="/settings?section=plan-access">Back to Plan &amp; Access</Link>
-          </div>
+          <form onSubmit={event => {
+            event.preventDefault();
+            void submitAccessRequest();
+          }}>
+            <div className="team-access-request-row">
+              <input
+                className="input"
+                value={requestOwnerIdentifier}
+                onChange={event => setRequestOwnerIdentifier(event.target.value)}
+                placeholder="Owner email or Company ID"
+                disabled={Boolean(actioning)}
+              />
+              <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
+                {actioning === "request-access" ? "Sending..." : "Send request"}
+              </button>
+            </div>
+          </form>
+          {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{message}</p> : null}
+          {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{error}</p> : null}
+        </section>
+        {!hasTeamPlan ? (
+          <section className="card" style={{ padding: 22, maxWidth: 760 }}>
+            <strong>Team management is not included in {workspace.billingPlanName}.</strong>
+            <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
+              Once a Team workspace owner approves your request, you can access that shared workspace according to your assigned role.
+            </p>
+            <Link className="button secondary" href="/plan" style={{ marginTop: 16 }}>View Team plan</Link>
+          </section>
+        ) : null}
+      </AppShell>
+    );
+  }
+
+  if (!loadingTeam && workspace && canViewTeamManagement && !isOwner) {
+    return (
+      <AppShell>
+        {workspaceSwitchPanel}
+
+        <section className="card" style={{ padding: 24, marginBottom: 18, maxWidth: 820 }}>
+          <div className="pill">Team workspace membership</div>
+          <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "12px 0 8px" }}>
+            {workspace.name || "Shared workspace"}
+          </h1>
+          <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>
+            You have joined this workspace as <strong>{workspace.roleLabel}</strong>. You can access the areas permitted by your assigned role.
+          </p>
+          <p style={{ color: "var(--muted)", margin: 0 }}>
+            Members, roles, join requests and billing are managed by the workspace owner.
+          </p>
+        </section>
+
+        <section className="card" style={{ padding: 22, maxWidth: 820 }}>
+          <div className="pill">Request Access</div>
+          <h2 style={{ margin: "12px 0 8px" }}>Join another Team workspace</h2>
+          <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>
+            Enter another owner’s email address or Company ID to request access.
+          </p>
+          <form onSubmit={event => {
+            event.preventDefault();
+            void submitAccessRequest();
+          }}>
+            <div className="team-access-request-row">
+              <input
+                className="input"
+                value={requestOwnerIdentifier}
+                onChange={event => setRequestOwnerIdentifier(event.target.value)}
+                placeholder="Owner email or Company ID"
+                disabled={Boolean(actioning)}
+              />
+              <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
+                {actioning === "request-access" ? "Sending..." : "Send request"}
+              </button>
+            </div>
+          </form>
+          {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{message}</p> : null}
+          {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{error}</p> : null}
         </section>
       </AppShell>
     );
@@ -222,6 +352,8 @@ export default function TeamPage() {
   return (
     <AppShell>
       {loadingTeam ? <LoadingScreen /> : null}
+
+      {workspaceSwitchPanel}
 
       <section className="card" style={{ padding: 24, marginBottom: 18 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 18, alignItems: "center" }}>

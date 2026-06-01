@@ -33,6 +33,7 @@ import {
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
   deleteOrderFromWeb,
+  requestWorkflowOrderDeletionFromWeb,
   updateOrderFromWeb
 } from "@/lib/studioflow/orders";
 import { saveOrderCardDisplaySettings } from "@/lib/studioflow/settingsActions";
@@ -169,7 +170,7 @@ export default function OrdersPage() {
         setWorkspace(loadedWorkspace);
 
         const [loadedOrders, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([
-          loadRecentOrders(loadedWorkspace.id),
+          loadRecentOrders(loadedWorkspace.id, loadedWorkspace, uid),
           loadWorkspaceBlockHeadings(loadedWorkspace).catch(() => null),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
@@ -222,7 +223,8 @@ export default function OrdersPage() {
         setSelectedOrder(null);
         setDetailError(message);
         setLoadingDetail(false);
-      }
+      },
+      currentWorkspace
     );
   }, [selectedOrderId, workspace]);
 
@@ -252,13 +254,14 @@ export default function OrdersPage() {
   }, [filteredOrders, loadingOrders, selectedOrderId]);
 
   useEffect(() => {
-    if (!workspace) return;
+    if (!workspace || !user) return;
+    const uid = user.uid;
 
     async function handleCreatedOrder(event: Event) {
       const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
       if (!orderId || !workspace) return;
       setFirstProjectGuideState({ step: 2, orderId, completed: false });
-      const loadedOrders = await loadRecentOrders(workspace.id);
+      const loadedOrders = await loadRecentOrders(workspace.id, workspace, uid);
       setOrders(loadedOrders);
       setSelectedOrderId(orderId);
       setRequestedOrderId(orderId);
@@ -266,7 +269,7 @@ export default function OrdersPage() {
 
     window.addEventListener("studioflow-order-created", handleCreatedOrder);
     return () => window.removeEventListener("studioflow-order-created", handleCreatedOrder);
-  }, [workspace]);
+  }, [workspace, user]);
 
   useEffect(() => {
     if (!orderContextMenu) return;
@@ -285,10 +288,11 @@ export default function OrdersPage() {
   }, [orderContextMenu]);
 
   async function refreshSelectedOrder() {
-    if (!workspace || !selectedOrderId) return;
+    if (!workspace || !selectedOrderId || !user) return;
+    const uid = user.uid;
     const [loadedOrder, loadedOrders] = await Promise.all([
-      loadOrderDetail(workspace.id, selectedOrderId, workspace.entitlements.features.client_files),
-      loadRecentOrders(workspace.id)
+      loadOrderDetail(workspace.id, selectedOrderId, workspace.entitlements.features.client_files, workspace),
+      loadRecentOrders(workspace.id, workspace, uid)
     ]);
     setSelectedOrder(loadedOrder);
     setOrders(loadedOrders);
@@ -331,7 +335,8 @@ export default function OrdersPage() {
   }
 
   async function saveOrderStatusFromMenu(order: OrderListItem, status: "Done" | "Cancelled") {
-    if (!workspace) return;
+    if (!workspace || !user) return;
+    const uid = user.uid;
     if (!canEditOrderStatusForRole(workspace.role)) {
       setOrderActionError("Your workspace role cannot edit this order.");
       return;
@@ -355,13 +360,32 @@ export default function OrdersPage() {
       if (workspace && selectedOrderId === order.id) {
         await refreshSelectedOrder().catch(() => undefined);
       } else {
-        loadRecentOrders(workspace.id).then(setOrders).catch(() => undefined);
+        loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
       }
     }
   }
 
   async function deleteOrderFromMenu(order: OrderListItem) {
-    if (!workspace) return;
+    if (!workspace || !user) return;
+    const uid = user.uid;
+    const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
+      || (workspace.memberAccess.assignedProjectsOnly === true
+        && workspace.memberAccess.manageProjectAssignments !== true);
+    if (requiresOwnerApproval) {
+      const confirmed = window.confirm(`Request deletion of "${order.customerName.trim() || "New Project"}"? The order will be deleted only after owner approval.`);
+      if (!confirmed) return;
+      setOrderContextMenu(null);
+      setOrderActionError(null);
+      setOrderActionStatus("Sending deletion request to owner...");
+      try {
+        const result = await requestWorkflowOrderDeletionFromWeb(workspace, order.id);
+        setOrderActionStatus(result.message || "Deletion request sent to workspace owner.");
+      } catch (requestError) {
+        setOrderActionStatus(null);
+        setOrderActionError(requestError instanceof Error ? requestError.message : "Could not send deletion request.");
+      }
+      return;
+    }
     if (!canDeleteOrdersForRole(workspace.role)) {
       setOrderActionError("Your workspace role cannot delete orders.");
       return;
@@ -385,7 +409,7 @@ export default function OrdersPage() {
     } catch (deleteError) {
       setOrderActionStatus(null);
       setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete this order.");
-      loadRecentOrders(workspace.id).then(setOrders).catch(() => undefined);
+      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
     }
   }
 
@@ -407,7 +431,8 @@ export default function OrdersPage() {
   }
 
   async function assignOrderFromMenu(order: OrderListItem, member: TeamMemberDetail | null) {
-    if (!workspace) return;
+    if (!workspace || !user) return;
+    const uid = user.uid;
     const canManageAssignments = normalizeWorkspaceAssignmentAccess(workspace);
     if (!canManageAssignments) {
       setOrderActionError("Your workspace role cannot assign projects.");
@@ -432,7 +457,7 @@ export default function OrdersPage() {
     } catch (assignError) {
       setOrderActionStatus(null);
       setOrderActionError(assignError instanceof Error ? assignError.message : "Could not update project assignment.");
-      loadRecentOrders(workspace.id).then(setOrders).catch(() => undefined);
+      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
       if (selectedOrderId === order.id) refreshSelectedOrder().catch(() => undefined);
     }
   }
@@ -456,7 +481,12 @@ export default function OrdersPage() {
 
   const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
   const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
-  const canDeleteOrders = workspace ? canDeleteOrdersForRole(workspace.role) : false;
+  const canRequestOrderDeletion = workspace
+    ? normalizeWorkspaceRole(workspace.role) === "workflow"
+      || (workspace.memberAccess.assignedProjectsOnly === true
+        && workspace.memberAccess.manageProjectAssignments !== true)
+    : false;
+  const canDeleteOrders = workspace ? canDeleteOrdersForRole(workspace.role) && !canRequestOrderDeletion : false;
   const canAssignOrders = workspace ? normalizeWorkspaceAssignmentAccess(workspace) : false;
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
@@ -632,11 +662,11 @@ export default function OrdersPage() {
                 role="menuitem"
                 type="button"
                 className="order-list-context-row danger"
-                disabled={!canDeleteOrders}
+                disabled={!canDeleteOrders && !canRequestOrderDeletion}
                 onClick={() => void deleteOrderFromMenu(contextOrder)}
               >
                 <span aria-hidden="true">⌫</span>
-                {t("Delete")}
+                {canRequestOrderDeletion ? "Request Deletion" : t("Delete")}
               </button>
             </div>
           ) : null}

@@ -5,6 +5,7 @@ import {
   WORKSPACE_MEMBER_ACCESS_DEFAULTS,
   WORKSPACE_MEMBER_ACCESS_OPTIONS,
   WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
+  WORKSPACE_SETTINGS_ACCESS_OPTIONS,
   WORKSPACE_SCOPE_ACCESS_OPTIONS,
   type WorkspaceMemberAccess,
   type WorkspaceMemberAccessKey
@@ -72,6 +73,16 @@ export function MemberAccessEditor({
       title: "Navigation & menus",
       note: "Controls the main web app areas shown in the sidebar and top-level pages.",
       options: WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
+      onLabel: "Allowed",
+      offLabel: "Hidden / locked",
+      allowBulk: true
+    },
+    {
+      id: "settings",
+      eyebrow: "Settings access",
+      title: "Settings Permissions",
+      note: "Controls permitted Settings menus. Billing, WooCommerce, data deletion, workspace identity and OpenAI key controls remain protected.",
+      options: WORKSPACE_SETTINGS_ACCESS_OPTIONS,
       onLabel: "Allowed",
       offLabel: "Hidden / locked",
       allowBulk: true
