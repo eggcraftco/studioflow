@@ -10,6 +10,7 @@ import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth } from "@/lib/firebase/client";
+import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
 import {
@@ -2940,15 +2941,32 @@ function FinancialSettingsSection({
   );
 }
 
-function wooCommerceDeliveryUrl(companyId: string) {
-  const encodedCompanyId = encodeURIComponent(companyId);
-  return `https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook?companyId=${encodedCompanyId}`;
-}
-
 function WooCommerceIntegrationSection({ workspace }: { workspace: WorkspaceContext }) {
   const [copyStatus, setCopyStatus] = useState("");
   const companyId = workspace.id.trim();
-  const deliveryUrl = companyId ? wooCommerceDeliveryUrl(companyId) : "";
+  // The signed Delivery URL (with this workspace's webhook token) is loaded from the backend
+  // so the copied URL authenticates with the webhook.
+  const [deliveryUrl, setDeliveryUrl] = useState("");
+  const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  useEffect(() => {
+    if (!companyId) {
+      setDeliveryUrl("");
+      return;
+    }
+    let active = true;
+    setDeliveryUrlLoading(true);
+    getWooCommerceWebhookDeliveryUrl(companyId)
+      .then((url) => {
+        if (active) setDeliveryUrl(url);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setDeliveryUrlLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
 
   async function copyText(value: string, label: string) {
     if (!value) return;
@@ -2985,7 +3003,7 @@ function WooCommerceIntegrationSection({ workspace }: { workspace: WorkspaceCont
         />
         <CopyableIntegrationValue
           title="Delivery URL with Company ID"
-          value={deliveryUrl || "Unavailable"}
+          value={deliveryUrl || (deliveryUrlLoading ? "Loading…" : "Unavailable")}
           buttonTitle="Copy Delivery URL"
           canCopy={Boolean(deliveryUrl)}
           onCopy={() => copyText(deliveryUrl, "Delivery URL")}

@@ -519,6 +519,16 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "This order layout was saved."
     }
 
+    // Returns this workspace's signed WooCommerce Delivery URL (with the per-workspace
+    // webhook token), minting the token on first use. Owner-only on the backend.
+    suspend fun getWooCommerceWebhookDeliveryUrl(workspace: StudioWorkspace): String {
+        val result = functions.getHttpsCallable("getWooCommerceWebhookToken")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("deliveryUrl") as? String ?: ""
+    }
+
     // Mints (or reuses) the workspace-linked obfuscated account token used as the
     // Google Play obfuscatedAccountId. Mirrors prepareAppleSubscriptionPurchase.
     suspend fun prepareGooglePlayPurchase(workspace: StudioWorkspace): String {

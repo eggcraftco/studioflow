@@ -1525,7 +1525,21 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
-    val deliveryUrl = "https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook?companyId=$companyId"
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    var tokenizedDeliveryUrl by remember { mutableStateOf("") }
+    var deliveryUrlLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(state.workspace?.id) {
+        val workspace = state.workspace ?: return@LaunchedEffect
+        if (workspace.id.isEmpty()) return@LaunchedEffect
+        deliveryUrlLoading = true
+        tokenizedDeliveryUrl = runCatching { repository.getWooCommerceWebhookDeliveryUrl(workspace) }.getOrDefault("")
+        deliveryUrlLoading = false
+    }
+    val deliveryUrl = when {
+        tokenizedDeliveryUrl.isNotEmpty() -> tokenizedDeliveryUrl
+        deliveryUrlLoading -> t("Loading...")
+        else -> "—"
+    }
     DetailColumn {
         DetailCard(title = t("Connect WooCommerce"), icon = Icons.Filled.ShoppingCart) {
             Text("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
