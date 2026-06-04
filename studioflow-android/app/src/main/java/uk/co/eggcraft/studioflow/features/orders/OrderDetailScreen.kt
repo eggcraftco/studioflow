@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
@@ -5800,6 +5801,30 @@ private fun FinancialCard(
     val finalProfit = financialFinalProfit(order, workspaceSettings)
     val outstandingPayment = order.remainingAmount + remainingItems.sumOf { financialCustomValue(order, "financialRemaining::", it.title) }
     val fullPaymentReceived = outstandingPayment <= 0.009
+    var showPaymentForm by remember(order.id) { mutableStateOf(false) }
+    var paymentAmountInput by remember(order.id) { mutableStateOf("") }
+    var paymentMethodInput by remember(order.id) { mutableStateOf("Deposit") }
+    var paymentNoteInput by remember(order.id) { mutableStateOf("") }
+
+    fun recordPayment() {
+        val amt = parseDecimal(paymentAmountInput, 0.0)
+        if (amt <= 0.0) return
+        onUpdateOrderFields(
+            order,
+            mapOf("finance" to mapOf("recordPayment" to mapOf(
+                "amount" to amt,
+                "method" to paymentMethodInput,
+                "note" to paymentNoteInput.trim()
+            )))
+        )
+        paymentAmountInput = ""
+        paymentNoteInput = ""
+        showPaymentForm = false
+    }
+
+    fun deletePayment(paymentId: String) {
+        onUpdateOrderFields(order, mapOf("finance" to mapOf("deletePaymentId" to paymentId)))
+    }
 
     fun saveFinance(markFullPayment: Boolean = false) {
         val finance = mutableMapOf<String, Any?>(
@@ -5887,6 +5912,20 @@ private fun FinancialCard(
                             paymentMethod = selected
                             onUpdateOrderFields(order, mapOf("finance" to mapOf("paymentMethod" to selected)))
                         }
+                    )
+                    PaymentLedgerSection(
+                        order = order,
+                        canEditFinance = canEditFinance,
+                        showForm = showPaymentForm,
+                        amountInput = paymentAmountInput,
+                        methodInput = paymentMethodInput,
+                        noteInput = paymentNoteInput,
+                        onToggleForm = { showPaymentForm = !showPaymentForm },
+                        onAmountChange = { paymentAmountInput = cleanDecimalInput(it) },
+                        onMethodChange = { paymentMethodInput = it },
+                        onNoteChange = { paymentNoteInput = it },
+                        onAdd = { recordPayment() },
+                        onDelete = { deletePayment(it) }
                     )
                 }
                 HorizontalRule()
@@ -5986,7 +6025,151 @@ private fun FinancialCard(
                     HorizontalRule()
                 }
                 if (advancedEnabled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            t("Order Value"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            money(order.paidAmount + order.remainingAmount),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     FinanceFinalProfitRow(finalProfit = finalProfit)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentLedgerSection(
+    order: StudioOrder,
+    canEditFinance: Boolean,
+    showForm: Boolean,
+    amountInput: String,
+    methodInput: String,
+    noteInput: String,
+    onToggleForm: () -> Unit,
+    onAmountChange: (String) -> Unit,
+    onMethodChange: (String) -> Unit,
+    onNoteChange: (String) -> Unit,
+    onAdd: () -> Unit,
+    onDelete: (String) -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val dateFormatter = remember(lang) {
+        java.text.SimpleDateFormat("dd MMM yyyy", uk.co.eggcraft.studioflow.language.studioLocale(lang))
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                t("Payments"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (order.payments.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(shape = RoundedCornerShape(999.dp), color = StudioGreen.copy(alpha = 0.18f)) {
+                    Text(
+                        "${order.payments.size}",
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
+                        color = StudioGreen,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            if (canEditFinance) {
+                Text(
+                    if (showForm) t("Close") else "+ ${t("Add Payment")}",
+                    color = StudioGreen,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onToggleForm() }
+                )
+            }
+        }
+        if (showForm) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = onAmountChange,
+                    label = { Text(t("Amount")) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                FinanceSelectInlineRow(
+                    label = "Method",
+                    value = methodInput,
+                    options = listOf("Deposit", "Card", "Cash", "Bank Transfer", "PayPal", "Apple Pay", "Final", "Other"),
+                    enabled = true,
+                    onSelect = onMethodChange
+                )
+                OutlinedTextField(
+                    value = noteInput,
+                    onValueChange = onNoteChange,
+                    label = { Text(t("Note")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = StudioGreen,
+                    modifier = Modifier.clickable { onAdd() }
+                ) {
+                    Text(
+                        t("Add"),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+        order.payments.forEach { payment ->
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = StudioGreen.copy(alpha = 0.08f)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioGreen, modifier = Modifier.size(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(money(payment.amount), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        val meta = buildList {
+                            payment.date?.let { add(dateFormatter.format(it)) }
+                            if (payment.method.isNotBlank()) add(payment.method)
+                            if (payment.note.isNotBlank()) add(payment.note)
+                        }.joinToString("  ·  ")
+                        if (meta.isNotBlank()) {
+                            Text(meta, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (canEditFinance) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Remove payment",
+                            tint = StudioRed.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp).clickable { onDelete(payment.id) }
+                        )
+                    }
                 }
             }
         }

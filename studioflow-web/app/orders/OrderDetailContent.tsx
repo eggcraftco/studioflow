@@ -1531,6 +1531,10 @@ export function OrderDetailContent({
   const [financeStatus, setFinanceStatus] = useState<string | null>(null);
   const [financeError, setFinanceError] = useState<string | null>(null);
   const [savingFinanceField, setSavingFinanceField] = useState<string | null>(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentAmountInput, setPaymentAmountInput] = useState("");
+  const [paymentMethodInput, setPaymentMethodInput] = useState("Deposit");
+  const [paymentNoteInput, setPaymentNoteInput] = useState("");
   const [inlineStatus, setInlineStatus] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
@@ -3132,6 +3136,12 @@ export function OrderDetailContent({
       paidAmount = orderValue;
       remainingAmount = 0;
     }
+    if (patch.recordPayment && typeof patch.recordPayment.amount === "number") {
+      const amt = Math.max(0, patch.recordPayment.amount);
+      paidAmount = paidAmount + amt;
+      remainingAmount = Math.max(0, remainingAmount - amt);
+      orderValue = paidAmount + remainingAmount;
+    }
 
     const watchPurchasePrice = typeof patch.watchPurchasePrice === "number" ? Math.max(0, patch.watchPurchasePrice) : order.watchPurchasePrice;
     let paymentFee = typeof patch.paymentFee === "number" ? Math.max(0, patch.paymentFee) : order.paymentFee;
@@ -3191,6 +3201,27 @@ export function OrderDetailContent({
     } finally {
       setSavingFinanceField(null);
     }
+  }
+
+  async function recordManualPayment() {
+    const amount = parseFinanceNumber(paymentAmountInput);
+    if (amount === null || amount <= 0) {
+      setFinanceError("Enter a payment amount greater than zero.");
+      return;
+    }
+    await saveFinancePatch(
+      { recordPayment: { amount, method: paymentMethodInput, note: paymentNoteInput.trim() } },
+      "Payment"
+    );
+    setPaymentAmountInput("");
+    setPaymentNoteInput("");
+    setShowPaymentForm(false);
+    await onReloadOrder();
+  }
+
+  async function deletePaymentEntry(paymentId: string) {
+    await saveFinancePatch({ deletePaymentId: paymentId }, "Payment");
+    await onReloadOrder();
   }
 
   function savePaidFinanceValue(value: string | number) {
@@ -4591,6 +4622,78 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Full payment"}
                       onSave={() => saveFinancePatch({ fullPaymentReceived: true }, "Full payment")}
                     />
+                    <div className="finance-payments-ledger">
+                      <div className="finance-payments-head">
+                        <span className="finance-payments-title">
+                          Payments
+                          {order.payments.length > 0 ? <span className="finance-payments-count">{order.payments.length}</span> : null}
+                        </span>
+                        {canInlineEditFinance ? (
+                          <button
+                            type="button"
+                            className="finance-payments-add"
+                            onClick={() => setShowPaymentForm(value => !value)}
+                          >
+                            {showPaymentForm ? "Close" : "+ Add Payment"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {showPaymentForm ? (
+                        <div className="finance-payments-form">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="Amount"
+                            value={paymentAmountInput}
+                            onChange={event => setPaymentAmountInput(event.target.value)}
+                          />
+                          <select value={paymentMethodInput} onChange={event => setPaymentMethodInput(event.target.value)}>
+                            {["Deposit", "Card", "Cash", "Bank Transfer", "PayPal", "Apple Pay", "Final", "Other"].map(option => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Note (optional)"
+                            value={paymentNoteInput}
+                            onChange={event => setPaymentNoteInput(event.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="finance-payments-save"
+                            disabled={savingFinanceField === "Payment"}
+                            onClick={() => void recordManualPayment()}
+                          >
+                            {savingFinanceField === "Payment" ? "Saving..." : "Add"}
+                          </button>
+                        </div>
+                      ) : null}
+                      {order.payments.length > 0 ? (
+                        <ul className="finance-payments-list">
+                          {order.payments.map(payment => (
+                            <li key={payment.id} className="finance-payments-item">
+                              <span className="finance-payments-amount">{money(payment.amount, hideNumbers)}</span>
+                              <span className="finance-payments-meta">
+                                {payment.date ? payment.date.toLocaleDateString() : ""}
+                                {payment.method ? ` · ${payment.method}` : ""}
+                                {payment.note ? ` · ${payment.note}` : ""}
+                              </span>
+                              {canInlineEditFinance ? (
+                                <button
+                                  type="button"
+                                  className="finance-payments-delete"
+                                  aria-label="Remove payment"
+                                  disabled={savingFinanceField === "Payment"}
+                                  onClick={() => void deletePaymentEntry(payment.id)}
+                                >
+                                  ×
+                                </button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                     <FinanceInlineRow
                       label="Payment method"
                       displayValue={order.paymentMethod || "-"}
@@ -4651,6 +4754,10 @@ export function OrderDetailContent({
                     />
                     <DetailRow label="VAT Amount" value={money(order.taxAmount, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
+                    <div className="detail-row order-value-row">
+                      <span>Order Value</span>
+                      <strong>{money(order.paidAmount + order.remainingAmount, hideNumbers)}</strong>
+                    </div>
                     <DetailRow label="Final Profit" value={money(order.netProfit, hideNumbers)} tone="positive" emphasis />
                   </>
                 ) : (

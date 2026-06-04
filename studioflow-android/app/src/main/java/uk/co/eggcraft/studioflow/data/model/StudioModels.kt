@@ -800,6 +800,14 @@ data class StudioHistoryLogItem(
     val newValue: String
 )
 
+data class StudioPaymentEntry(
+    val id: String,
+    val amount: Double,
+    val date: Date?,
+    val method: String,
+    val note: String
+)
+
 data class StudioScheduleReminder(
     val id: String,
     val title: String,
@@ -857,6 +865,7 @@ data class StudioOrder(
     val todoItems: List<StudioTodoItem>,
     val workSessions: List<StudioWorkSession>,
     val historyLog: List<StudioHistoryLogItem>,
+    val payments: List<StudioPaymentEntry>,
     val clientFileCount: Int,
     val todoCount: Int,
     val completedTodoCount: Int,
@@ -893,6 +902,7 @@ data class StudioOrder(
             val todoItems = parseTodoItems(document.get("todoItems"))
             val workSessions = parseWorkSessions(document.get("workSessions"))
             val historyLog = parseHistoryLog(document.get("historyLog"))
+            val payments = parsePayments(document.get("payments"))
             val customFields = stringMap(document.get("customFields"))
             return StudioOrder(
                 id = document.id,
@@ -939,6 +949,7 @@ data class StudioOrder(
                 todoItems = todoItems,
                 workSessions = workSessions,
                 historyLog = historyLog,
+                payments = payments,
                 clientFileCount = clientFiles.size,
                 todoCount = todoItems.size,
                 completedTodoCount = todoItems.count { it.isDone },
@@ -1023,6 +1034,18 @@ private fun parseHistoryLog(value: Any?): List<StudioHistoryLogItem> {
             newValue = stringAny(item["newValue"], "")
         )
     }.sortedByDescending { it.createdAt?.time ?: 0L }
+}
+
+private fun parsePayments(value: Any?): List<StudioPaymentEntry> {
+    return mapItems(value).mapIndexed { index, item ->
+        StudioPaymentEntry(
+            id = stringAny(item["id"], "payment-$index"),
+            amount = doubleAny(item["amount"], 0.0),
+            date = dateAny(item["date"]),
+            method = stringAny(item["method"], ""),
+            note = stringAny(item["note"], "")
+        )
+    }.sortedByDescending { it.date?.time ?: 0L }
 }
 
 private const val SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1"
@@ -1119,6 +1142,17 @@ private fun longAny(value: Any?, fallback: Long): Long {
         is Double -> value.toLong()
         is Float -> value.toLong()
         is String -> value.toLongOrNull()
+        else -> null
+    } ?: fallback
+}
+
+private fun doubleAny(value: Any?, fallback: Double): Double {
+    return when (value) {
+        is Double -> value
+        is Float -> value.toDouble()
+        is Long -> value.toDouble()
+        is Int -> value.toDouble()
+        is String -> value.toDoubleOrNull()
         else -> null
     } ?: fallback
 }

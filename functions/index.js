@@ -7298,6 +7298,8 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     "taxType",
     "paymentMethod",
     "fullPaymentReceived",
+    "recordPayment",
+    "deletePaymentId",
     "financialRemainingValues",
     "financialExpenseValues"
   ]);
@@ -7312,7 +7314,9 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     "deliveryCost",
     "taxRate",
     "taxType",
-    "fullPaymentReceived"
+    "fullPaymentReceived",
+    "recordPayment",
+    "deletePaymentId"
   ].includes(field));
 
   const unknownFields = Object.keys(patch).filter((field) => !knownFields.has(field));
@@ -7355,6 +7359,52 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     orderValue = paidAmount + remainingAmount;
   }
 
+  // Structured payment ledger: each instalment is stored so the order keeps a
+  // full record of how many times and how much the customer paid, even after
+  // "Full Payment Received" aggregates everything into paidAmount.
+  let nextPayments = Array.isArray(orderData.payments) ? orderData.payments.slice(0, 400) : [];
+  let paymentsChanged = false;
+  const appendPaymentEntry = (amount, method, note) => {
+    const amt = roundMoneyValue(amount);
+    if (!(amt > 0)) return;
+    nextPayments = nextPayments.concat([{
+      id: crypto.randomUUID(),
+      amount: amt,
+      date: admin.firestore.Timestamp.now(),
+      method: cleanOrderText(method, "", 60),
+      note: cleanOrderText(note, "", 200),
+      createdByUid: uid || "",
+      createdByEmail: email || ""
+    }]);
+    if (nextPayments.length > 200) nextPayments = nextPayments.slice(nextPayments.length - 200);
+    paymentsChanged = true;
+  };
+
+  if (hasOwnField(patch, "recordPayment") && patch.recordPayment && typeof patch.recordPayment === "object" && !Array.isArray(patch.recordPayment)) {
+    const amt = roundMoneyValue(patch.recordPayment.amount);
+    if (amt > 0) {
+      paidAmount = roundMoneyValue(paidAmount + amt);
+      remainingAmount = Math.max(0, roundMoneyValue(remainingAmount - amt));
+      orderValue = paidAmount + remainingAmount;
+      appendPaymentEntry(amt, patch.recordPayment.method, patch.recordPayment.note);
+      pushHistoryChange(historyEntries, "Payment received", `Payment #${nextPayments.length}`, amountHistoryValue(amt), uid, email);
+    }
+  }
+
+  if (hasOwnField(patch, "deletePaymentId")) {
+    const targetId = cleanOrderText(patch.deletePaymentId, "", 80);
+    const removed = nextPayments.find((entry) => entry && cleanOrderText(entry.id, "", 80) === targetId);
+    if (removed) {
+      const amt = roundMoneyValue(removed.amount);
+      nextPayments = nextPayments.filter((entry) => entry !== removed);
+      paymentsChanged = true;
+      paidAmount = Math.max(0, roundMoneyValue(paidAmount - amt));
+      remainingAmount = roundMoneyValue(remainingAmount + amt);
+      orderValue = paidAmount + remainingAmount;
+      pushHistoryChange(historyEntries, "Payment removed", amountHistoryValue(amt), "-", uid, email);
+    }
+  }
+
   const currentFields = orderData.customFields && typeof orderData.customFields === "object" && !Array.isArray(orderData.customFields)
     ? { ...orderData.customFields }
     : {};
@@ -7369,9 +7419,12 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     .reduce((total, title) => total + roundMoneyValue(customFieldValueForKey(`financialRemaining::${title}`)), 0);
 
   if (hasOwnField(patch, "fullPaymentReceived") && Boolean(patch.fullPaymentReceived)) {
+    const finalOutstanding = roundMoneyValue(remainingAmount + currentCustomRemainingTotal);
     paidAmount = roundMoneyValue(paidAmount + remainingAmount + currentCustomRemainingTotal);
     remainingAmount = 0;
     orderValue = paidAmount;
+    // Record the cleared balance as a final ledger entry so the payment count survives.
+    appendPaymentEntry(finalOutstanding, "Final", "");
   }
 
   if (hasOwnField(patch, "watchPurchasePrice")) watchPurchasePrice = roundMoneyValue(patch.watchPurchasePrice);
@@ -7464,6 +7517,10 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   applyCustomFinancialMap("financialExpenseValues", "financialExpense::", financialSettings?.financialExpenseItems || []);
   if (customFieldsChanged) {
     updates.customFields = currentFields;
+  }
+
+  if (paymentsChanged) {
+    updates.payments = nextPayments;
   }
 
   return true;

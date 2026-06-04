@@ -383,6 +383,16 @@ export type HistoryLogDetail = {
   createdAt: Date | null;
 };
 
+export type PaymentEntryDetail = {
+  id: string;
+  amount: number;
+  date: Date | null;
+  method: string;
+  note: string;
+  createdByUid: string;
+  createdByEmail: string;
+};
+
 export type OrderDetail = {
   id: string;
   companyId: string;
@@ -431,6 +441,7 @@ export type OrderDetail = {
   todoItems: ToDoDetail[];
   workSessions: WorkSessionDetail[];
   historyLog: HistoryLogDetail[];
+  payments: PaymentEntryDetail[];
 };
 
 const ACTIVE_CLOSED_STATUSES = new Set(["done", "completed", "cancelled", "canceled"]);
@@ -1477,6 +1488,21 @@ function mapHistoryLog(value: unknown): HistoryLogDetail[] {
   }).sort((first, second) => (second.createdAt?.getTime() ?? 0) - (first.createdAt?.getTime() ?? 0));
 }
 
+function mapPayments(value: unknown): PaymentEntryDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `payment-${index}`),
+      amount: numberValue(entry.amount),
+      date: dateValue(entry.date),
+      method: stringValue(entry.method, ""),
+      note: stringValue(entry.note, ""),
+      createdByUid: stringValue(entry.createdByUid, ""),
+      createdByEmail: stringValue(entry.createdByEmail, "")
+    };
+  }).sort((first, second) => (second.date?.getTime() ?? 0) - (first.date?.getTime() ?? 0));
+}
+
 function mapOrderDetailSnapshot(
   snapshot: DocumentSnapshot<DocumentData>,
   companyId: string,
@@ -1556,7 +1582,8 @@ function mapOrderDetailSnapshot(
     }),
     todoItems: mapTodoItems(data.todoItems),
     workSessions: mapWorkSessions(data.workSessions),
-    historyLog: mapHistoryLog(data.historyLog)
+    historyLog: mapHistoryLog(data.historyLog),
+    payments: mapPayments(data.payments)
   };
 }
 
