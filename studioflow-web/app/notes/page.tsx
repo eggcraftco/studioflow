@@ -666,6 +666,10 @@ function NotesGrid({
   );
 }
 
+function notesIsDark(): boolean {
+  return typeof document !== "undefined" && document.body?.dataset?.studioTheme === "dark";
+}
+
 function NoteCard({
   note,
   onClick,
@@ -705,6 +709,7 @@ function NoteCard({
   const [reminderOpen, setReminderOpen] = useState(false);
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  const isDark = notesIsDark();
   return (
     <div
       onMouseEnter={() => setHover(true)}
@@ -736,7 +741,7 @@ function NoteCard({
         position: "relative",
         background: colorForNote(note.colorName),
         borderRadius: 14,
-        border: isOver || isSelected ? "2px solid #2D7BF4" : "1px solid #e5e7eb",
+        border: isOver || isSelected ? "2px solid #2D7BF4" : `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "#e5e7eb"}`,
         padding: 14,
         cursor: canDrag && !note.isPinned ? "grab" : "pointer",
         display: "flex",
@@ -783,7 +788,7 @@ function NoteCard({
           </div>
         )}
         {!note.title && <div style={{ flex: 1 }} />}
-        <span style={{ color: note.isPinned ? "#2D7BF4" : "#374151" }}>
+        <span style={{ color: note.isPinned ? "#2D7BF4" : (isDark ? "#cbd5e1" : "#374151") }}>
           <IconBtn
             title={note.isPinned ? t("Unpin") : t("Pin")}
             onClick={(e) => { e.stopPropagation(); onSave({ ...note, isPinned: !note.isPinned }); }}
@@ -812,7 +817,7 @@ function NoteCard({
       {note.labels.length > 0 && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           {note.labels.map((l) => (
-            <span key={l} style={{ fontSize: 10, fontWeight: 700, background: "#f3f4f6", padding: "2px 8px", borderRadius: 999 }}>
+            <span key={l} style={{ fontSize: 10, fontWeight: 700, background: isDark ? "rgba(255,255,255,0.1)" : "#f3f4f6", padding: "2px 8px", borderRadius: 999 }}>
               {l}
             </span>
           ))}
