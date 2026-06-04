@@ -80,6 +80,8 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     taxType?: string;
     paymentMethod?: string;
     fullPaymentReceived?: boolean;
+    recordPayment?: { amount: number; method?: string; note?: string };
+    deletePaymentId?: string;
   };
   todo?: {
     action: "add" | "toggle" | "delete" | "update" | "move" | "reorder";
