@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -770,7 +771,7 @@ private fun ScheduleTimelineDayHeader(range: ScheduleRange, dayWidth: Dp) {
                     .width(dayWidth)
                     .fillMaxSize()
                     .background(if (today) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface)
-                    .border(1.dp, Color(0xFFE5E5E5)),
+                    .border(1.dp, scheduleGridColor()),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -810,16 +811,17 @@ private fun ScheduleTimelineRow(
             .width(timelineWidth)
             .height(68.dp)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, Color(0xFFE5E5E5))
+            .border(1.dp, scheduleGridColor())
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
+            val cellGrid = scheduleGridColor()
             range.days.forEach { day ->
                 Box(
                     modifier = Modifier
                         .width(dayWidth)
                         .fillMaxSize()
                         .background(if (isSameScheduleDay(day.date, Date())) StudioBlue.copy(alpha = 0.04f) else Color.Transparent)
-                        .border(1.dp, Color(0xFFEAEAEA))
+                        .border(1.dp, cellGrid)
                 )
             }
         }
@@ -1104,7 +1106,7 @@ private fun DayColumn(
     Column(
         modifier = modifier
             .height((360 * zoom).coerceIn(260.0, 620.0).toInt().dp)
-            .border(1.dp, Color(0xFFE6E6E6))
+            .border(1.dp, scheduleGridColor())
     ) {
         Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1881,6 +1883,12 @@ private fun deliveryUrgencyColor(order: StudioOrder): Color {
         order.remainingDays <= 14 -> StudioWarningOrange
         else -> StudioGreen
     }
+}
+
+@Composable
+private fun scheduleGridColor(): Color {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return if (isDark) Color.White.copy(alpha = 0.06f) else Color(0xFFE5E5E5)
 }
 
 private fun scheduleColor(order: StudioOrder): Color {
