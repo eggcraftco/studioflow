@@ -212,24 +212,29 @@ export function isNoteEmpty(note: StudioKeepNote): boolean {
   return !note.title.trim() && !note.text.trim();
 }
 
+function notesDarkTheme(): boolean {
+  return typeof document !== "undefined" && document.body?.dataset?.studioTheme === "dark";
+}
+
 export function colorForNote(name: string): string {
+  const dark = notesDarkTheme();
   switch ((name || "default").toLowerCase()) {
     case "red":
-      return "#FFE0E0";
+      return dark ? "#3a2628" : "#FFE0E0";
     case "orange":
-      return "#FFEFD0";
+      return dark ? "#3a3024" : "#FFEFD0";
     case "yellow":
-      return "#FFF7CC";
+      return dark ? "#39371f" : "#FFF7CC";
     case "green":
-      return "#D8F5D8";
+      return dark ? "#23362b" : "#D8F5D8";
     case "blue":
-      return "#D8E9FF";
+      return dark ? "#233140" : "#D8E9FF";
     case "purple":
-      return "#E6DAFF";
+      return dark ? "#2f2842" : "#E6DAFF";
     case "pink":
-      return "#FFD9F0";
+      return dark ? "#3a2636" : "#FFD9F0";
     default:
-      return "#FFFFFF";
+      return dark ? "#262629" : "#FFFFFF";
   }
 }
 
