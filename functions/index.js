@@ -12326,6 +12326,27 @@ function nvTimingSafeEqual(a, b) {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
+function woocommerceDeliveryUrl(companyId, token) {
+  return "https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook"
+    + `?companyId=${encodeURIComponent(companyId)}&token=${encodeURIComponent(token)}`;
+}
+
+// Owner-only: returns this workspace's WooCommerce webhook token + full Delivery URL,
+// minting a per-workspace token on first use. The token is what the webhook checks, so each
+// workspace gets an isolated, unguessable credential shown in the app's integration screen.
+exports.getWooCommerceWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+  let token = String(companyData.woocommerceWebhookToken || "").trim();
+  if (!token) {
+    token = crypto.randomBytes(24).toString("hex");
+    await companyRef.set({
+      woocommerceWebhookToken: token,
+      woocommerceWebhookTokenCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  return { ok: true, companyId, token, deliveryUrl: woocommerceDeliveryUrl(companyId, token) };
+});
+
 exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
   try {
     if (req.method !== "POST") {
@@ -12337,33 +12358,6 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       return;
     }
 
-    // Authenticate the request when a secret is configured. Accepts EITHER a matching
-    // shared token (?token= / x-studioflow-token header) OR a valid WooCommerce HMAC
-    // signature (X-WC-Webhook-Signature). The token path is deterministic and the
-    // recommended setup. Backward compatible: if WOOCOMMERCE_WEBHOOK_SECRET is unset the
-    // request is allowed (with a warning) so the integration keeps working until configured.
-    const wooSecret = String(process.env.WOOCOMMERCE_WEBHOOK_SECRET || "").trim();
-    if (wooSecret) {
-      const providedToken = String(req.query?.token || req.headers["x-studioflow-token"] || "");
-      const tokenOk = nvTimingSafeEqual(providedToken, wooSecret);
-
-      let signatureOk = false;
-      const signature = String(req.headers["x-wc-webhook-signature"] || "");
-      if (signature) {
-        const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-        const expected = crypto.createHmac("sha256", wooSecret).update(rawBody).digest("base64");
-        signatureOk = nvTimingSafeEqual(signature, expected);
-      }
-
-      if (!tokenOk && !signatureOk) {
-        console.warn("woocommerceOrderWebhook: rejected request with invalid token/signature.");
-        res.status(401).json({ ok: false, error: "unauthorized" });
-        return;
-      }
-    } else {
-      console.warn("woocommerceOrderWebhook: WOOCOMMERCE_WEBHOOK_SECRET not set — request not authenticated.");
-    }
-
     const order = req.body || {};
     const companyId = wooCompanyId(req, order);
     if (!companyId) {
@@ -12372,6 +12366,48 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
         error: "Missing companyId. Add ?companyId=YOUR_COMPANY_ID to the webhook Delivery URL."
       });
       return;
+    }
+
+    // Authentication. Primary: a per-workspace token (woocommerceWebhookToken on the company
+    // doc, shown in the app's WooCommerce integration screen). Fallback (transition):
+    // a global WOOCOMMERCE_WEBHOOK_SECRET via token or WooCommerce HMAC signature. Each
+    // workspace's token is isolated, so knowing one workspace's URL cannot forge orders into
+    // another. Backward compatible: if neither a workspace token nor a global secret exists,
+    // the request is allowed with a warning.
+    const providedToken = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+    const companyAuthRef = admin.firestore().collection("companies").doc(companyId);
+    const companyAuthSnap = await companyAuthRef.get();
+    if (!companyAuthSnap.exists) {
+      res.status(404).json({ ok: false, error: "unknown_company" });
+      return;
+    }
+    const workspaceToken = String(companyAuthSnap.data()?.woocommerceWebhookToken || "").trim();
+    const globalSecret = String(process.env.WOOCOMMERCE_WEBHOOK_SECRET || "").trim();
+
+    let authed = false;
+    if (workspaceToken && nvTimingSafeEqual(providedToken, workspaceToken)) {
+      authed = true;
+    }
+    if (!authed && globalSecret) {
+      if (nvTimingSafeEqual(providedToken, globalSecret)) {
+        authed = true;
+      } else {
+        const signature = String(req.headers["x-wc-webhook-signature"] || "");
+        if (signature) {
+          const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+          const expected = crypto.createHmac("sha256", globalSecret).update(rawBody).digest("base64");
+          authed = nvTimingSafeEqual(signature, expected);
+        }
+      }
+    }
+    if (!authed) {
+      if (!workspaceToken && !globalSecret) {
+        console.warn("woocommerceOrderWebhook: no token configured for workspace — request not authenticated.");
+      } else {
+        console.warn("woocommerceOrderWebhook: rejected request with invalid token/signature.");
+        res.status(401).json({ ok: false, error: "unauthorized" });
+        return;
+      }
     }
 
     const wooOrderId = cleanWooText(order?.id || order?.number);

@@ -244,7 +244,9 @@ service cloud.firestore {
         'billingLastInvoicePaidAt',
         'billingPaymentFailedAt',
         'billingUpdatedAt',
-        'billingUpdatedBy'
+        'billingUpdatedBy',
+        'woocommerceWebhookToken',
+        'woocommerceWebhookTokenCreatedAt'
       ];
     }
 
