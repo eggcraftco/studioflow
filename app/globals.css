@@ -16275,3 +16275,22 @@ html[dir="rtl"] .login-public-shell {
     padding: 13px 12px;
   }
 }
+
+/* Dark theme: panels/rows/pills that used a light grey background and lacked a dark override. */
+body[data-studio-theme="dark"] .company-number-row,
+body[data-studio-theme="dark"] .quick-reply-template-row,
+body[data-studio-theme="dark"] .quick-reply-engine-panel,
+body[data-studio-theme="dark"] .workflow-settings-row,
+body[data-studio-theme="dark"] .settings-toggle-row,
+body[data-studio-theme="dark"] .settings-range-row,
+body[data-studio-theme="dark"] .upload-safety-panel,
+body[data-studio-theme="dark"] .pdf-settings-toggle {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border);
+}
+
+body[data-studio-theme="dark"] .studio-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border);
+  color: var(--muted);
+}
