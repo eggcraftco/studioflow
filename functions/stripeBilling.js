@@ -1669,23 +1669,6 @@ function createStripeBillingFunctions({
     await reconcileExpiredBillingEntitlements();
   });
 
-  // TEMPORARY manual trigger for testing the reconcile without waiting for the schedule.
-  // Guarded by a random token. Remove this endpoint once expiry behaviour is verified.
-  const BILLING_RECONCILE_ADMIN_TOKEN = "482d1d8f5abd6025801adc9ea0f837947a87af5c234c303b";
-  const adminRunBillingReconcile = onRequest({ region: STRIPE_BILLING_REGION }, async (request, response) => {
-    if (String(request.query.token || "") !== BILLING_RECONCILE_ADMIN_TOKEN) {
-      response.status(403).json({ ok: false, error: "forbidden" });
-      return;
-    }
-    try {
-      const result = await reconcileExpiredBillingEntitlements();
-      response.json({ ok: true, ...result });
-    } catch (error) {
-      console.error("Manual billing reconcile failed:", error?.message || error);
-      response.status(500).json({ ok: false, error: "reconcile_failed" });
-    }
-  });
-
   return {
     createStripeCheckoutSession,
     createStripeCustomerPortalSession,
@@ -1697,7 +1680,6 @@ function createStripeBillingFunctions({
     verifyGooglePlayPurchase,
     googlePlayRtdnNotification,
     scheduledBillingEntitlementReconcile,
-    adminRunBillingReconcile,
     stripeWebhook
   };
 }
