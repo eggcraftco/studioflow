@@ -16307,3 +16307,10 @@ body[data-studio-theme="dark"] .settings-danger-box {
   background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.3);
 }
+
+/* Dark theme: selected order list card (incl. mobile/narrow list) used a light blue background. */
+body[data-studio-theme="dark"] .orders-mobile-list .order-list-card.selected,
+body[data-studio-theme="dark"] .order-list-card.selected {
+  background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(37, 99, 235, 0.5);
+}
