@@ -9,6 +9,20 @@ struct OrderHistoryLogItem: Identifiable, Codable, Equatable {
     var newValue: String
 }
 
+// Structured payment ledger entry. Each customer payment (deposit, instalment,
+// final balance) is recorded so the order keeps a full history of how many times
+// and how much the customer paid — even after "Full Payment Received" aggregates
+// everything into paidAmount.
+struct PaymentEntry: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var amount: Double
+    var date: Date = Date()
+    var method: String = ""   // optional: "Deposit", "Card", "Cash", "Final"...
+    var note: String = ""     // optional free text
+    var createdByUid: String = ""
+    var createdByEmail: String = ""
+}
+
 
 
 struct OrderToDoItem: Identifiable, Codable, Equatable {
@@ -104,6 +118,7 @@ struct Siparis: Identifiable, Codable {
     var clientFiles: [ClientFileItem]?
     var todoItems: [OrderToDoItem]?
     var workSessions: [OrderWorkSessionItem]?
+    var payments: [PaymentEntry]?
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
     // 🌟 OTOMATİK NET KAR HESAPLAYICI 🌟
@@ -145,6 +160,7 @@ extension Siparis {
         self.clientFiles = []
         self.todoItems = []
         self.workSessions = []
+        self.payments = []
         self.assignedToUid = ""
         self.assignedToEmail = ""
     }

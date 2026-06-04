@@ -1130,6 +1130,11 @@ struct SiparisDetayView: View {
     @State private var isHoveringTitle = false
     @State private var showWidgetMenu = false
     @State private var headingEditorTarget: KartTipi? = nil
+    @State private var showAddPaymentSheet: Bool = false
+    @State private var newPaymentAmount: String = ""
+    @State private var newPaymentMethod: String = ""
+    @State private var newPaymentNote: String = ""
+    @State private var paymentsExpanded: Bool = false
     @State private var workspaceStatusMessage: String = ""
     @State private var isApplyingWorkspaceLayout: Bool = false
 
@@ -8860,50 +8865,234 @@ struct SiparisDetayView: View {
         outstandingPaymentTotal <= 0.005
     }
 
-    private func markFullPaymentReceived() {
-        let outstandingTotal = outstandingPaymentTotal
-        guard outstandingTotal > 0.005 else { return }
+    // MARK: - Payment ledger
 
-        let oldPaidAmount = siparis.paidAmount
+    private var paymentEntries: [PaymentEntry] {
+        (siparis.payments ?? []).sorted { $0.date > $1.date }
+    }
+
+    private var paymentCount: Int { (siparis.payments ?? []).count }
+
+    private var paymentsTotal: Double {
+        (siparis.payments ?? []).reduce(0) { $0 + $1.amount }
+    }
+
+    // Records a customer payment as a structured ledger entry, then aggregates it
+    // into paidAmount and reduces the outstanding balance. paidAmount stays the
+    // single source of truth so dashboards/exports are unchanged.
+    private func recordPayment(amount: Double, method: String, note: String, markFinal: Bool) {
+        let cleanAmount = (amount * 100).rounded() / 100
+        guard cleanAmount > 0.005 else { return }
+
         var updatedOrder = siparis
-        updatedOrder.paidAmount += outstandingTotal
-        updatedOrder.remainingAmount = 0
+        let entry = PaymentEntry(
+            id: UUID(),
+            amount: cleanAmount,
+            date: Date(),
+            method: method.trimmingCharacters(in: .whitespacesAndNewlines),
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+            createdByUid: authVM.currentUserId ?? "",
+            createdByEmail: authVM.accountEmail
+        )
+        var ledger = updatedOrder.payments ?? []
+        ledger.append(entry)
+        if ledger.count > 200 { ledger = Array(ledger.suffix(200)) }
+        updatedOrder.payments = ledger
 
-        var currentFields = updatedOrder.customFields ?? [:]
-        for item in financialRemainingItems {
-            let key = financialCustomKey(prefix: "financialRemaining::", title: item.title)
-            if currentFields[key] != nil {
-                currentFields[key] = "0"
-            }
-        }
-        updatedOrder.customFields = currentFields
+        updatedOrder.paidAmount += cleanAmount
+        updatedOrder.remainingAmount = max(0, updatedOrder.remainingAmount - cleanAmount)
 
-        let cleanedOld = cleanHistoryValue(amountHistoryValue(oldPaidAmount))
-        let cleanedNew = cleanHistoryValue(amountHistoryValue(updatedOrder.paidAmount))
-        if cleanedOld != cleanedNew {
-            var logs = updatedOrder.historyLog ?? []
-            logs.insert(
-                OrderHistoryLogItem(
-                    id: UUID(),
-                    createdAt: Date(),
-                    title: "Full payment received",
-                    oldValue: cleanedOld,
-                    newValue: cleanedNew
-                ),
-                at: 0
-            )
-            if logs.count > 120 {
-                logs = Array(logs.prefix(120))
+        if markFinal {
+            updatedOrder.remainingAmount = 0
+            var currentFields = updatedOrder.customFields ?? [:]
+            for item in financialRemainingItems {
+                let key = financialCustomKey(prefix: "financialRemaining::", title: item.title)
+                if currentFields[key] != nil { currentFields[key] = "0" }
             }
-            updatedOrder.historyLog = logs
+            updatedOrder.customFields = currentFields
         }
 
-        // Apply the payment completion as one atomic order update.
-        // This keeps Cmd+Z clean: one shortcut press restores Paid, Remaining,
-        // extra Remaining headings and the History / Log entry together.
+        let ordinal = ledger.count
+        let methodSuffix = entry.method.isEmpty ? "" : " · \(entry.method)"
+        var logs = updatedOrder.historyLog ?? []
+        logs.insert(
+            OrderHistoryLogItem(
+                id: UUID(),
+                createdAt: Date(),
+                title: markFinal ? "Full payment received" : "Payment received",
+                oldValue: cleanHistoryValue("Payment #\(ordinal)\(methodSuffix)"),
+                newValue: cleanHistoryValue(amountHistoryValue(cleanAmount))
+            ),
+            at: 0
+        )
+        if logs.count > 120 { logs = Array(logs.prefix(120)) }
+        updatedOrder.historyLog = logs
+
         siparis = updatedOrder
         otomatikKesintiHesapla()
         firebaseManager.updateSiparis(updatedOrder)
+    }
+
+    private func deletePayment(_ entry: PaymentEntry) {
+        var updatedOrder = siparis
+        var ledger = updatedOrder.payments ?? []
+        guard let idx = ledger.firstIndex(where: { $0.id == entry.id }) else { return }
+        ledger.remove(at: idx)
+        updatedOrder.payments = ledger
+        // Return the removed amount to the outstanding balance (paidAmount stays the truth).
+        updatedOrder.paidAmount = max(0, updatedOrder.paidAmount - entry.amount)
+        updatedOrder.remainingAmount += entry.amount
+
+        var logs = updatedOrder.historyLog ?? []
+        logs.insert(
+            OrderHistoryLogItem(
+                id: UUID(),
+                createdAt: Date(),
+                title: "Payment removed",
+                oldValue: cleanHistoryValue(amountHistoryValue(entry.amount)),
+                newValue: "-"
+            ),
+            at: 0
+        )
+        if logs.count > 120 { logs = Array(logs.prefix(120)) }
+        updatedOrder.historyLog = logs
+
+        siparis = updatedOrder
+        otomatikKesintiHesapla()
+        firebaseManager.updateSiparis(updatedOrder)
+    }
+
+    private func markFullPaymentReceived() {
+        let outstandingTotal = outstandingPaymentTotal
+        guard outstandingTotal > 0.005 else { return }
+        // Record the remaining balance as a final ledger entry so the payment
+        // count/history survives the aggregation into paidAmount.
+        recordPayment(amount: outstandingTotal, method: "Final", note: "", markFinal: true)
+    }
+
+    @ViewBuilder
+    private var paymentLedgerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(t("Payments", lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.gray)
+                if paymentCount > 0 {
+                    Text("\(paymentCount)")
+                        .font(.system(size: 11, weight: .bold))
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Color.green.opacity(0.18))
+                        .foregroundColor(.green)
+                        .clipShape(Capsule())
+                }
+                Spacer()
+                Button {
+                    newPaymentAmount = ""
+                    newPaymentMethod = "Deposit"
+                    newPaymentNote = ""
+                    showAddPaymentSheet = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                        Text(t("Add Payment", lang: seciliDil))
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.green)
+            }
+
+            if !paymentEntries.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(paymentEntries) { entry in
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.green)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(privacyCurrency(entry.amount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                                    .font(.system(size: 13, weight: .bold))
+                                HStack(spacing: 5) {
+                                    Text(privacyDate(entry.date, hideNumbers: hideSensitiveNumbers))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.gray)
+                                    if !entry.method.isEmpty {
+                                        Text("· \(t(entry.method, lang: seciliDil))")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                                if !entry.note.isEmpty {
+                                    Text(entry.note)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                            Spacer()
+                            Button { deletePayment(entry) } label: {
+                                Image(systemName: "trash").font(.system(size: 11))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.red.opacity(0.7))
+                        }
+                        .padding(8)
+                        .background(Color.green.opacity(0.06))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showAddPaymentSheet) { addPaymentSheet }
+    }
+
+    @ViewBuilder
+    private var addPaymentSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(t("Add Payment", lang: seciliDil))
+                .font(.system(size: 18, weight: .bold))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("Amount", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                TextField("0", text: $newPaymentAmount)
+                    .textFieldStyle(.roundedBorder)
+                    #if os(iOS)
+                    .keyboardType(.decimalPad)
+                    #endif
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("Payment Method", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                Picker("", selection: $newPaymentMethod) {
+                    ForEach(["Deposit", "Card", "Apple Pay", "PayPal", "Direct Transfer", "Cash", "Final"], id: \.self) { option in
+                        Text(t(option, lang: seciliDil)).tag(option)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("Note", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                TextField(t("Optional", lang: seciliDil), text: $newPaymentNote)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                Button(t("Cancel", lang: seciliDil)) { showAddPaymentSheet = false }
+                Spacer()
+                Button(t("Add", lang: seciliDil)) {
+                    let normalized = newPaymentAmount
+                        .replacingOccurrences(of: ",", with: ".")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let amt = Double(normalized), amt > 0 {
+                        recordPayment(amount: amt, method: newPaymentMethod, note: newPaymentNote, markFinal: false)
+                    }
+                    showAddPaymentSheet = false
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 340)
     }
 
     private var baseCostTotal: Double {
@@ -9036,6 +9225,8 @@ struct SiparisDetayView: View {
                         }
                     }
                 ))
+
+                paymentLedgerSection
 
                 PickerField(label: t("Payment Method", lang: seciliDil), value: Binding(get: { siparis.paymentMethod }, set: { siparis.paymentMethod = $0 }), options: ["Card", "Apple Pay", "PayPal", "Direct Transfer"])
             }
