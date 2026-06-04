@@ -4706,42 +4706,42 @@ struct AyarlarView: View {
 
     private func smartFinancialPreset(for text: String) -> (base: String, expenses: [String], pending: [String]) {
         if containsAny(text, ["watch", "dial", "paint", "art", "artwork", "miniature", "portrait", "custom art", "canvas", "eggcraft", "saat", "kadran", "boya", "boyama", "sanat"]) {
-            return ("Cost (Base)", ["Dial Cost", "Paint / Materials", "Watchmaker Cost", "Packaging Cost"], ["Second Payment", "Artwork Balance"])
+            return ("Cost (Base)", ["Dial Cost", "Paint / Materials", "Watchmaker Cost", "Packaging Cost"], [])
         }
 
         if containsAny(text, ["repair", "fix", "diagnostic", "diagnostics", "warranty", "device", "parts", "service center", "maintenance", "tamir", "onarım", "arıza", "servis"]) {
-            return ("Service Cost (Base)", ["Parts Cost", "Technician Cost", "Testing Cost"], ["Repair Balance", "Parts Reimbursement"])
+            return ("Service Cost (Base)", ["Parts Cost", "Technician Cost", "Testing Cost"], [])
         }
 
         if containsAny(text, ["tailor", "alteration", "sewing", "garment", "fabric", "dress", "suit", "fitting", "terzi", "tadilat", "dikiş", "kumaş"]) {
-            return ("Labour Cost (Base)", ["Fabric Cost", "Trim / Accessories", "Outwork Cost"], ["Final Fitting Balance"])
+            return ("Labour Cost (Base)", ["Fabric Cost", "Trim / Accessories", "Outwork Cost"], [])
         }
 
         if containsAny(text, ["jewellery", "jewelry", "ring", "necklace", "bracelet", "stone", "diamond", "gold", "silver", "mücevher", "takı", "yüzük"]) {
-            return ("Workshop Cost (Base)", ["Metal Cost", "Stone Cost", "Casting Cost", "Hallmark Cost"], ["Final Jewellery Balance"])
+            return ("Workshop Cost (Base)", ["Metal Cost", "Stone Cost", "Casting Cost", "Hallmark Cost"], [])
         }
 
         if containsAny(text, ["photo", "photography", "video", "shoot", "wedding", "retouch", "editing", "fotoğraf", "çekim"]) {
-            return ("Shoot Cost (Base)", ["Assistant Cost", "Studio / Location", "Editing Cost", "Travel Cost"], ["Shoot Balance", "Extra Edits"])
+            return ("Shoot Cost (Base)", ["Assistant Cost", "Studio / Location", "Editing Cost", "Travel Cost"], [])
         }
 
         if containsAny(text, ["agency", "design", "branding", "website", "marketing", "social media", "consulting", "ajans", "tasarım", "pazarlama"]) {
-            return ("Project Cost (Base)", ["Freelancer Cost", "Software / Tools", "Asset Purchase"], ["Project Balance", "Extra Revision Fee"])
+            return ("Project Cost (Base)", ["Freelancer Cost", "Software / Tools", "Asset Purchase"], [])
         }
 
         if containsAny(text, ["food", "bakery", "cake", "catering", "restaurant", "ingredient", "allergy", "yemek", "pasta", "catering"]) {
-            return ("Order Cost (Base)", ["Ingredient Cost", "Packaging Cost", "Kitchen / Prep Cost", "Delivery Prep"], ["Event Balance"])
+            return ("Order Cost (Base)", ["Ingredient Cost", "Packaging Cost", "Kitchen / Prep Cost", "Delivery Prep"], [])
         }
 
         if containsAny(text, ["beauty", "clinic", "wellness", "salon", "treatment", "therapy", "güzellik", "klinik", "salon"]) {
-            return ("Treatment Cost (Base)", ["Product Cost", "Room / Equipment", "Practitioner Cost"], ["Treatment Balance", "Follow-up Payment"])
+            return ("Treatment Cost (Base)", ["Product Cost", "Room / Equipment", "Practitioner Cost"], [])
         }
 
         if containsAny(text, ["handmade", "product", "craft", "maker", "etsy", "shop", "ecommerce", "stock", "packaging", "el yapımı", "ürün", "e-ticaret"]) {
-            return ("Product Cost (Base)", ["Material Cost", "Component Cost", "Packaging Cost"], ["Order Balance"])
+            return ("Product Cost (Base)", ["Material Cost", "Component Cost", "Packaging Cost"], [])
         }
 
-        return ("Cost (Base)", ["Material Cost", "Supplier Cost", "Packaging Cost"], ["Remaining Balance"])
+        return ("Cost (Base)", ["Material Cost", "Supplier Cost", "Packaging Cost"], [])
     }
 
     private func smartPreset(for text: String) -> SmartWorkflowPreset {
