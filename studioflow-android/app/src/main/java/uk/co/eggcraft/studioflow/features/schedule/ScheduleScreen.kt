@@ -865,9 +865,6 @@ private fun ScheduleTimelineRow(
                     dayWidth = dayWidth,
                     onDelta = { onResizeLeading(order, it) }
                 )
-                if (canEditSchedule) {
-                    Icon(Icons.Outlined.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f), modifier = Modifier.size(17.dp))
-                }
                 ScheduleTimelineThumbnail(order = order)
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -884,12 +881,11 @@ private fun ScheduleTimelineRow(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
-                    }
-                }
-                val countdown = timelineCountdownText(order)
-                if (countdown.isNotBlank()) {
-                    Surface(shape = RoundedCornerShape(9.dp), color = tone.copy(alpha = 0.16f)) {
-                        Text(countdown, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = tone, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                        // Inline remaining-days (matches the web schedule bar) instead of a large separate badge.
+                        val countdown = timelineCountdownText(order)
+                        if (countdown.isNotBlank()) {
+                            Text(countdown, color = tone, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                        }
                     }
                 }
                 ScheduleResizeHandle(
