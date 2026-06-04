@@ -366,7 +366,7 @@ export default function TeamPage() {
               Manage workspace members, roles and join requests from the web portal. Owner actions are protected by the Team plan and Firebase Functions checks.
             </p>
           </div>
-          <div className="card" style={{ padding: 16, background: "rgba(255,255,255,0.62)", boxShadow: "none" }}>
+          <div className="card" style={{ padding: 16, background: "var(--panel)", boxShadow: "none" }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
               <span className="pill">{workspace?.billingPlanName ?? "Plan"}</span>
               <span className="pill">{workspace?.roleLabel ?? "Role"}</span>
