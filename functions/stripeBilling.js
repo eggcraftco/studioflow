@@ -1609,48 +1609,81 @@ function createStripeBillingFunctions({
   // ---------------------------------------------------------------------------
   const BILLING_EXPIRY_GRACE_MS = 2 * 60 * 60 * 1000; // 2h buffer for renewal/notification lag
 
+  // Finds workspaces still marked active whose paid period ended past the grace buffer,
+  // expires their stale subscription docs and re-resolves the entitlement. Uses a
+  // companies-collection query (deployable composite index) instead of a collection-group
+  // query, so no manual index step is required.
+  async function reconcileExpiredBillingEntitlements() {
+    const db = admin.firestore();
+    const cutoffMs = Date.now() - BILLING_EXPIRY_GRACE_MS;
+    const cutoff = admin.firestore.Timestamp.fromMillis(cutoffMs);
+    const companiesSnap = await db.collection("companies")
+      .where("billingEffectiveStatus", "==", "active")
+      .where("billingCurrentPeriodEnd", "<", cutoff)
+      .get();
+
+    let expiredCount = 0;
+    let workspaceCount = 0;
+    for (const companyDoc of companiesSnap.docs) {
+      const subsSnap = await companyDoc.ref.collection("subscriptions")
+        .where("activeForEntitlement", "==", true)
+        .get();
+
+      let flippedHere = 0;
+      for (const subDoc of subsSnap.docs) {
+        const data = subDoc.data() || {};
+        if (String(data.subscriptionType || "") !== "plan") continue;
+        // Apple/Google grace-period subscriptions stay active until the grace window ends.
+        if (String(data.providerStatus || "") === "grace_period") continue;
+        const endMs = firestoreTimestampMillis(data.currentPeriodEnd);
+        if (!(endMs > 0 && endMs < cutoffMs)) continue;
+
+        await subDoc.ref.set({
+          activeForEntitlement: false,
+          providerStatus: "expired",
+          lastProviderEventType: "scheduled.expiry_reconcile",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        flippedHere += 1;
+        expiredCount += 1;
+      }
+
+      if (flippedHere > 0) {
+        await recomputeEffectiveWorkspaceEntitlement(
+          { id: companyDoc.id, ref: companyDoc.ref },
+          { triggerEventType: "scheduled.expiry_reconcile", triggerProviderStatus: "expired" }
+        );
+        workspaceCount += 1;
+      }
+    }
+
+    console.log(`Billing reconcile: expired ${expiredCount} subscription(s) across ${workspaceCount} workspace(s).`);
+    return { expiredCount, workspaceCount };
+  }
+
   const scheduledBillingEntitlementReconcile = onSchedule({
     region: STRIPE_BILLING_REGION,
     schedule: "every 60 minutes",
     timeZone: "Europe/London"
   }, async () => {
-    const db = admin.firestore();
-    const cutoffMs = Date.now() - BILLING_EXPIRY_GRACE_MS;
-    const snap = await db.collectionGroup("subscriptions")
-      .where("activeForEntitlement", "==", true)
-      .get();
+    await reconcileExpiredBillingEntitlements();
+  });
 
-    const workspaces = new Map();
-    let expiredCount = 0;
-    for (const doc of snap.docs) {
-      const data = doc.data() || {};
-      if (String(data.subscriptionType || "") !== "plan") continue;
-      // Apple/Google grace-period subscriptions stay active until the grace window ends.
-      if (String(data.providerStatus || "") === "grace_period") continue;
-      const endMs = firestoreTimestampMillis(data.currentPeriodEnd);
-      if (!(endMs > 0 && endMs < cutoffMs)) continue;
-
-      await doc.ref.set({
-        activeForEntitlement: false,
-        providerStatus: "expired",
-        lastProviderEventType: "scheduled.expiry_reconcile",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-      expiredCount += 1;
-      const wsRef = doc.ref.parent.parent;
-      if (wsRef) workspaces.set(wsRef.path, wsRef);
+  // TEMPORARY manual trigger for testing the reconcile without waiting for the schedule.
+  // Guarded by a random token. Remove this endpoint once expiry behaviour is verified.
+  const BILLING_RECONCILE_ADMIN_TOKEN = "482d1d8f5abd6025801adc9ea0f837947a87af5c234c303b";
+  const adminRunBillingReconcile = onRequest({ region: STRIPE_BILLING_REGION }, async (request, response) => {
+    if (String(request.query.token || "") !== BILLING_RECONCILE_ADMIN_TOKEN) {
+      response.status(403).json({ ok: false, error: "forbidden" });
+      return;
     }
-
-    for (const wsRef of workspaces.values()) {
-      const wsSnap = await wsRef.get();
-      if (!wsSnap.exists) continue;
-      await recomputeEffectiveWorkspaceEntitlement(
-        { id: wsRef.id, ref: wsRef },
-        { triggerEventType: "scheduled.expiry_reconcile", triggerProviderStatus: "expired" }
-      );
+    try {
+      const result = await reconcileExpiredBillingEntitlements();
+      response.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("Manual billing reconcile failed:", error?.message || error);
+      response.status(500).json({ ok: false, error: "reconcile_failed" });
     }
-
-    console.log(`Billing reconcile: expired ${expiredCount} subscription(s) across ${workspaces.size} workspace(s).`);
   });
 
   return {
@@ -1664,6 +1697,7 @@ function createStripeBillingFunctions({
     verifyGooglePlayPurchase,
     googlePlayRtdnNotification,
     scheduledBillingEntitlementReconcile,
+    adminRunBillingReconcile,
     stripeWebhook
   };
 }

@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "companies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "billingEffectiveStatus", "order": "ASCENDING" },
+        { "fieldPath": "billingCurrentPeriodEnd", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
