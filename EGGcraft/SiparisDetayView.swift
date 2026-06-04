@@ -9329,6 +9329,16 @@ struct SiparisDetayView: View {
                 Divider().background(Color.primary.opacity(0.1))
 
                 HStack {
+                    Text(t("Order Value", lang: seciliDil))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Text(privacyCurrency(siparis.paidAmount + siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.gray)
+                }
+
+                HStack {
                     Text(t("Final Profit", lang: seciliDil))
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.primary)
