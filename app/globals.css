@@ -16294,3 +16294,16 @@ body[data-studio-theme="dark"] .studio-pill {
   border-color: var(--border);
   color: var(--muted);
 }
+
+/* Dark theme: dashboard extra-spending card and the danger/delete box used light backgrounds. */
+body[data-studio-theme="dark"] .extra-spending-compact {
+  background: var(--panel);
+  border-color: var(--border);
+}
+body[data-studio-theme="dark"] .extra-spending-compact:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+body[data-studio-theme="dark"] .settings-danger-box {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
