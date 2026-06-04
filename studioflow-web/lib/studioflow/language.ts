@@ -1,3 +1,5 @@
+import { MAC_TRANSLATIONS } from "./macTranslations";
+
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
   "Türkçe",
@@ -3281,6 +3283,22 @@ const MESSAGES_TRANSLATIONS: TranslationTable = {
   "Next": { "Türkçe": "Sonraki", "Deutsch": "Weiter", "Français": "Suivant", "Italiano": "Successivo", "Español (Spanish)": "Siguiente", "Português": "Próximo", "Русский (Russian)": "Далее", "日本語 (Japanese)": "次へ", "中文 (Chinese)": "下一个", "العربية (Arabic)": "التالي", "हिन्दी (Hindi)": "अगला" }
 };
 
+// Settings menu titles/descriptions that the Mac source does not fully translate.
+const SETTINGS_MENU_TRANSLATIONS: TranslationTable = {
+  General: { Türkçe: "Genel", Deutsch: "Allgemein", Français: "Général", Italiano: "Generale", "Español (Spanish)": "General", Português: "Geral", "Русский (Russian)": "Общие", "日本語 (Japanese)": "一般", "中文 (Chinese)": "常规", "العربية (Arabic)": "عام", "हिन्दी (Hindi)": "सामान्य" },
+  "Appearance, language, profile and security.": { Türkçe: "Görünüm, dil, profil ve güvenlik.", Deutsch: "Darstellung, Sprache, Profil und Sicherheit.", Français: "Apparence, langue, profil et sécurité.", Italiano: "Aspetto, lingua, profilo e sicurezza.", "Español (Spanish)": "Apariencia, idioma, perfil y seguridad.", Português: "Aparência, idioma, perfil e segurança.", "Русский (Russian)": "Оформление, язык, профиль и безопасность.", "日本語 (Japanese)": "外観、言語、プロフィール、セキュリティ。", "中文 (Chinese)": "外观、语言、个人资料和安全。", "العربية (Arabic)": "المظهر واللغة والملف الشخصي والأمان.", "हिन्दी (Hindi)": "रूप, भाषा, प्रोफ़ाइल और सुरक्षा।" },
+  "Order steps and custom fields.": { Türkçe: "Sipariş adımları ve özel alanlar.", Deutsch: "Bestellschritte und benutzerdefinierte Felder.", Français: "Étapes de commande et champs personnalisés.", Italiano: "Fasi dell'ordine e campi personalizzati.", "Español (Spanish)": "Pasos del pedido y campos personalizados.", Português: "Etapas do pedido e campos personalizados.", "Русский (Russian)": "Этапы заказа и пользовательские поля.", "日本語 (Japanese)": "注文ステップとカスタムフィールド。", "中文 (Chinese)": "订单步骤和自定义字段。", "العربية (Arabic)": "خطوات الطلب والحقول المخصصة.", "हिन्दी (Hindi)": "ऑर्डर चरण और कस्टम फ़ील्ड।" },
+  "Invoice and PDF export options.": { Türkçe: "Fatura ve PDF dışa aktarma seçenekleri.", Deutsch: "Rechnungs- und PDF-Exportoptionen.", Français: "Options d'export de facture et PDF.", Italiano: "Opzioni di esportazione fattura e PDF.", "Español (Spanish)": "Opciones de exportación de factura y PDF.", Português: "Opções de exportação de fatura e PDF.", "Русский (Russian)": "Параметры экспорта счёта и PDF.", "日本語 (Japanese)": "請求書とPDFのエクスポート設定。", "中文 (Chinese)": "发票和 PDF 导出选项。", "العربية (Arabic)": "خيارات تصدير الفاتورة وPDF.", "हिन्दी (Hindi)": "इनवॉइस और PDF निर्यात विकल्प।" },
+  "Quick reply templates.": { Türkçe: "Hızlı yanıt şablonları.", Deutsch: "Schnellantwort-Vorlagen.", Français: "Modèles de réponse rapide.", Italiano: "Modelli di risposta rapida.", "Español (Spanish)": "Plantillas de respuesta rápida.", Português: "Modelos de resposta rápida.", "Русский (Russian)": "Шаблоны быстрых ответов.", "日本語 (Japanese)": "クイック返信テンプレート。", "中文 (Chinese)": "快速回复模板。", "العربية (Arabic)": "قوالب الرد السريع.", "हिन्दी (Hindi)": "त्वरित उत्तर टेम्पलेट।" },
+  "Fees, tax and calculations.": { Türkçe: "Ücretler, vergi ve hesaplamalar.", Deutsch: "Gebühren, Steuern und Berechnungen.", Français: "Frais, taxes et calculs.", Italiano: "Commissioni, tasse e calcoli.", "Español (Spanish)": "Tarifas, impuestos y cálculos.", Português: "Taxas, impostos e cálculos.", "Русский (Russian)": "Сборы, налоги и расчёты.", "日本語 (Japanese)": "手数料、税金、計算。", "中文 (Chinese)": "费用、税费和计算。", "العربية (Arabic)": "الرسوم والضرائب والحسابات.", "हिन्दी (Hindi)": "शुल्क, कर और गणनाएँ।" },
+  "Live website orders and webhook setup.": { Türkçe: "Canlı web sitesi siparişleri ve webhook kurulumu.", Deutsch: "Live-Website-Bestellungen und Webhook-Einrichtung.", Français: "Commandes du site en direct et configuration du webhook.", Italiano: "Ordini live dal sito e configurazione webhook.", "Español (Spanish)": "Pedidos del sitio en vivo y configuración de webhook.", Português: "Encomendas do site ao vivo e configuração de webhook.", "Русский (Russian)": "Живые заказы с сайта и настройка webhook.", "日本語 (Japanese)": "ライブサイト注文とwebhook設定。", "中文 (Chinese)": "实时网站订单和 webhook 设置。", "العربية (Arabic)": "طلبات الموقع المباشرة وإعداد webhook.", "हिन्दी (Hindi)": "लाइव वेबसाइट ऑर्डर और webhook सेटअप।" },
+  "Upload rules, file limits and audit protection.": { Türkçe: "Yükleme kuralları, dosya limitleri ve denetim koruması.", Deutsch: "Upload-Regeln, Dateilimits und Audit-Schutz.", Français: "Règles d'envoi, limites de fichiers et protection d'audit.", Italiano: "Regole di caricamento, limiti file e protezione audit.", "Español (Spanish)": "Reglas de subida, límites de archivos y protección de auditoría.", Português: "Regras de upload, limites de ficheiros e proteção de auditoria.", "Русский (Russian)": "Правила загрузки, лимиты файлов и защита аудита.", "日本語 (Japanese)": "アップロード規則、ファイル制限、監査保護。", "中文 (Chinese)": "上传规则、文件限制和审计保护。", "العربية (Arabic)": "قواعد الرفع وحدود الملفات وحماية التدقيق.", "हिन्दी (Hindi)": "अपलोड नियम, फ़ाइल सीमाएँ और ऑडिट सुरक्षा।" },
+  "Import, export and backup.": { Türkçe: "İçe aktarma, dışa aktarma ve yedekleme.", Deutsch: "Import, Export und Sicherung.", Français: "Import, export et sauvegarde.", Italiano: "Importazione, esportazione e backup.", "Español (Spanish)": "Importar, exportar y copia de seguridad.", Português: "Importação, exportação e cópia de segurança.", "Русский (Russian)": "Импорт, экспорт и резервное копирование.", "日本語 (Japanese)": "インポート、エクスポート、バックアップ。", "中文 (Chinese)": "导入、导出和备份。", "العربية (Arabic)": "الاستيراد والتصدير والنسخ الاحتياطي.", "हिन्दी (Hindi)": "आयात, निर्यात और बैकअप।" },
+  "Billing, limits and feature access.": { Türkçe: "Faturalandırma, limitler ve özellik erişimi.", Deutsch: "Abrechnung, Limits und Funktionszugriff.", Français: "Facturation, limites et accès aux fonctionnalités.", Italiano: "Fatturazione, limiti e accesso alle funzioni.", "Español (Spanish)": "Facturación, límites y acceso a funciones.", Português: "Faturação, limites e acesso a funcionalidades.", "Русский (Russian)": "Биллинг, лимиты и доступ к функциям.", "日本語 (Japanese)": "請求、制限、機能アクセス。", "中文 (Chinese)": "账单、限制和功能访问。", "العربية (Arabic)": "الفوترة والحدود والوصول إلى الميزات.", "हिन्दी (Hindi)": "बिलिंग, सीमाएँ और सुविधा पहुँच।" },
+  "Members, roles and workspace requests.": { Türkçe: "Üyeler, roller ve çalışma alanı istekleri.", Deutsch: "Mitglieder, Rollen und Workspace-Anfragen.", Français: "Membres, rôles et demandes d'espace de travail.", Italiano: "Membri, ruoli e richieste del workspace.", "Español (Spanish)": "Miembros, roles y solicitudes del espacio de trabajo.", Português: "Membros, funções e pedidos do espaço de trabalho.", "Русский (Russian)": "Участники, роли и запросы рабочего пространства.", "日本語 (Japanese)": "メンバー、ロール、ワークスペース申請。", "中文 (Chinese)": "成员、角色和工作区请求。", "العربية (Arabic)": "الأعضاء والأدوار وطلبات مساحة العمل.", "हिन्दी (Hindi)": "सदस्य, भूमिकाएँ और कार्यस्थान अनुरोध।" },
+  "Contact your workspace owner or NivaDesk support.": { Türkçe: "Çalışma alanı sahibinizle veya NivaDesk desteğiyle iletişime geçin.", Deutsch: "Kontaktieren Sie Ihren Workspace-Inhaber oder den NivaDesk-Support.", Français: "Contactez le propriétaire de votre espace ou le support NivaDesk.", Italiano: "Contatta il proprietario del workspace o il supporto NivaDesk.", "Español (Spanish)": "Contacta al propietario de tu espacio o al soporte de NivaDesk.", Português: "Contacte o proprietário do espaço ou o suporte NivaDesk.", "Русский (Russian)": "Свяжитесь с владельцем рабочего пространства или поддержкой NivaDesk.", "日本語 (Japanese)": "ワークスペースのオーナーまたはNivaDeskサポートに連絡してください。", "中文 (Chinese)": "联系您的工作区所有者或 NivaDesk 支持。", "العربية (Arabic)": "تواصل مع مالك مساحة العمل أو دعم NivaDesk.", "हिन्दी (Hindi)": "अपने कार्यस्थान स्वामी या NivaDesk समर्थन से संपर्क करें।" }
+};
+
 const TRANSLATIONS: TranslationTable = {
   ...WEB_TRANSLATIONS,
   ...TOP_MENU_TRANSLATIONS,
@@ -3289,8 +3307,15 @@ const TRANSLATIONS: TranslationTable = {
   ...MISSING_UI_TRANSLATIONS,
   ...MISSING_UI_TRANSLATIONS_MORE,
   ...NOTES_TRANSLATIONS,
-  ...MESSAGES_TRANSLATIONS
+  ...MESSAGES_TRANSLATIONS,
+  ...SETTINGS_MENU_TRANSLATIONS
 };
+
+// Per-language deep merge of the Mac app translations: fills missing languages for each key
+// without dropping any language an existing table already provided.
+for (const [key, langs] of Object.entries(MAC_TRANSLATIONS)) {
+  TRANSLATIONS[key] = { ...(TRANSLATIONS[key] || {}), ...(langs as Partial<Record<StudioLanguage, string>>) };
+}
 
 export function normalizeStudioLanguage(value: string | null | undefined): StudioLanguage {
   const cleaned = String(value || "").trim();
