@@ -1,4 +1,5 @@
 import { MAC_TRANSLATIONS } from "./macTranslations";
+import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -3308,7 +3309,8 @@ const TRANSLATIONS: TranslationTable = {
   ...MISSING_UI_TRANSLATIONS_MORE,
   ...NOTES_TRANSLATIONS,
   ...MESSAGES_TRANSLATIONS,
-  ...SETTINGS_MENU_TRANSLATIONS
+  ...SETTINGS_MENU_TRANSLATIONS,
+  ...(SETTINGS_CONTENT_TRANSLATIONS as TranslationTable)
 };
 
 // Per-language deep merge of the Mac app translations: fills missing languages for each key
