@@ -11,6 +11,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth } from "@/lib/firebase/client";
 import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
+import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
 import {
@@ -149,19 +150,6 @@ function planTeamLimitText(plan: { plan?: string; teamMemberLimit: number }) {
   return plan.teamMemberLimit <= 1 ? "1 user" : `Up to ${plan.teamMemberLimit} users`;
 }
 
-function planIconMark(plan: string) {
-  switch (plan) {
-    case "lifetime_lite":
-      return "✓";
-    case "pro_monthly":
-      return "⚡";
-    case "team_monthly":
-      return "3";
-    default:
-      return "✦";
-  }
-}
-
 function planSummaryText(plan: string) {
   switch (plan) {
     case "lifetime_lite":
@@ -173,35 +161,6 @@ function planSummaryText(plan: string) {
     default:
       return "Try the core order workflow with safe limits before upgrading.";
   }
-}
-
-function planBestForText(plan: string) {
-  switch (plan) {
-    case "lifetime_lite":
-      return "Best for solo makers who want unlimited order tracking without files, AI tools or team access.";
-    case "pro_monthly":
-      return "Best for active studios that need cloud files and advanced workflows.";
-    case "team_monthly":
-      return "Best for studios working with multiple people in one shared workspace.";
-    default:
-      return "Best for testing the app with a small sample workspace.";
-  }
-}
-
-function planComparisonRows(plan: PlanEntitlements) {
-  const isProOrTeam = plan.plan === "pro_monthly" || plan.plan === "team_monthly";
-  const isLiteOrAbove = plan.plan !== "demo";
-  return [
-    { title: planOrderLimitText(plan), enabled: true },
-    { title: planCustomerLimitText(plan), enabled: true },
-    { title: `Storage: ${storageLimitLabel(plan)}`, enabled: plan.features.client_files },
-    { title: "Client Files", enabled: plan.features.client_files },
-    { title: "Share Sheet", enabled: isProOrTeam },
-    { title: "Team Access", enabled: plan.features.team_access },
-    { title: "Advanced Dashboard", enabled: isProOrTeam },
-    { title: "Card Customization", enabled: isLiteOrAbove },
-    { title: "Card Profile Sync", enabled: plan.plan === "team_monthly" }
-  ];
 }
 
 function memberLabel(member: TeamMemberDetail) {
@@ -3322,29 +3281,14 @@ function PlanAccessSection({
 
       <section className="card app-card">
         <CardTitle icon="check" eyebrow="Plan Matrix" title="Shared app and web plan keys" />
-        <div className="settings-plan-list">
+        <div className="plan-compare-grid">
           {Object.values(PLAN_ENTITLEMENTS).map(plan => (
-            <article key={plan.plan} className={plan.plan === workspace.billingPlan ? "mini-panel active-plan" : "mini-panel"}>
-              <div className="settings-plan-card-head">
-                <div className="settings-plan-card-title">
-                  <span className={`settings-plan-icon plan-${plan.plan}`} aria-hidden="true">{planIconMark(plan.plan)}</span>
-                  <div>
-                    <strong>{plan.title}</strong>
-                    <span>{plan.purchaseModel}</span>
-                  </div>
-                </div>
-                {plan.plan === workspace.billingPlan ? <small>Current plan</small> : null}
-              </div>
-              <p>{planBestForText(plan.plan)}</p>
-              <div className="settings-plan-feature-list">
-                {planComparisonRows(plan).map(row => (
-                  <span className={row.enabled ? "enabled" : ""} key={`${plan.plan}-${row.title}`}>
-                    <b>{row.enabled ? "✓" : "–"}</b>
-                    {row.title}
-                  </span>
-                ))}
-              </div>
-            </article>
+            <PlanComparisonCard
+              key={plan.plan}
+              plan={plan}
+              currentPlanKey={workspace.billingPlan}
+              footer={plan.plan === workspace.billingPlan ? <span>Your workspace is using this plan.</span> : null}
+            />
           ))}
         </div>
       </section>
