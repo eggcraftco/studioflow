@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -889,7 +890,8 @@ private fun OrderListCard(
     var confirmDeleteOpen by remember { mutableStateOf(false) }
     val cardShape = RoundedCornerShape(20.dp)
     val cardTone = if (selected) {
-        Color(0xFFDCEBFF)
+        // Theme-aware selected tint: dark blue in dark mode (matching the Mac app), light blue otherwise.
+        if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF1E3354) else Color(0xFFDCEBFF)
     } else {
         MaterialTheme.colorScheme.surface
     }
@@ -926,6 +928,7 @@ private fun OrderListCard(
                 .alpha(if (order.status == "Cancelled") 0.62f else 1f),
             shape = cardShape,
             color = cardTone,
+            contentColor = MaterialTheme.colorScheme.onSurface,
             border = BorderStroke(if (selected || multiSelected) 2.dp else 1.dp, if (multiSelected) StudioBlue else borderTone),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
