@@ -12337,18 +12337,27 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       return;
     }
 
-    // Authenticate the request with the WooCommerce HMAC signature when a secret is
-    // configured. Backward compatible: if WOOCOMMERCE_WEBHOOK_SECRET is unset the request
-    // is allowed (with a warning) so the existing integration keeps working; once the secret
-    // is set to match the webhook's secret in WooCommerce, unsigned/forged requests are rejected.
+    // Authenticate the request when a secret is configured. Accepts EITHER a matching
+    // shared token (?token= / x-studioflow-token header) OR a valid WooCommerce HMAC
+    // signature (X-WC-Webhook-Signature). The token path is deterministic and the
+    // recommended setup. Backward compatible: if WOOCOMMERCE_WEBHOOK_SECRET is unset the
+    // request is allowed (with a warning) so the integration keeps working until configured.
     const wooSecret = String(process.env.WOOCOMMERCE_WEBHOOK_SECRET || "").trim();
     if (wooSecret) {
+      const providedToken = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+      const tokenOk = nvTimingSafeEqual(providedToken, wooSecret);
+
+      let signatureOk = false;
       const signature = String(req.headers["x-wc-webhook-signature"] || "");
-      const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-      const expected = crypto.createHmac("sha256", wooSecret).update(rawBody).digest("base64");
-      if (!nvTimingSafeEqual(signature, expected)) {
-        console.warn("woocommerceOrderWebhook: rejected request with invalid signature.");
-        res.status(401).json({ ok: false, error: "invalid_signature" });
+      if (signature) {
+        const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+        const expected = crypto.createHmac("sha256", wooSecret).update(rawBody).digest("base64");
+        signatureOk = nvTimingSafeEqual(signature, expected);
+      }
+
+      if (!tokenOk && !signatureOk) {
+        console.warn("woocommerceOrderWebhook: rejected request with invalid token/signature.");
+        res.status(401).json({ ok: false, error: "unauthorized" });
         return;
       }
     } else {
