@@ -1,6 +1,13 @@
 package uk.co.eggcraft.studioflow.features.dashboard
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -301,7 +308,10 @@ fun DashboardScreen(
                         values = stats.chartValues,
                         labels = stats.chartLabels,
                         axisLabels = stats.chartAxisLabels,
-                        comparisonSeries = if (compareEnabled) stats.comparisonSeries(compareMode) else emptyList()
+                        comparisonSeries = if (compareEnabled) stats.comparisonSeries(compareMode) else emptyList(),
+                        currency = currency,
+                        decimalSeparator = decimalSeparator,
+                        hideNumbers = hideSensitiveNumbers
                     )
                     if (!advancedFinanceEnabled) {
                         Text(t("Received minus Base Cost only. Detailed profit and year comparisons are available on Pro."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
@@ -527,64 +537,190 @@ private fun SummaryTile(
     }
 }
 
+private fun compactAxisMoney(value: Double, currency: String): String {
+    val sign = if (value < 0) "-" else ""
+    val abs = kotlin.math.abs(value)
+    return when {
+        abs >= 1000.0 -> {
+            val k = abs / 1000.0
+            val text = if (k % 1.0 == 0.0) k.toInt().toString() else String.format(Locale.UK, "%.1f", k).trimEnd('0').trimEnd('.')
+            "$sign$currency${text}k"
+        }
+        else -> "$sign$currency${abs.toInt()}"
+    }
+}
+
 @Composable
 private fun ProfitLineChart(
     values: List<Double>,
     labels: List<String>,
     axisLabels: List<String>,
-    comparisonSeries: List<DashboardComparisonSeries>
+    comparisonSeries: List<DashboardComparisonSeries>,
+    currency: String,
+    decimalSeparator: String,
+    hideNumbers: Boolean
 ) {
     val lineColor = StudioGreen
     val allSeries = listOf(values) + comparisonSeries.map { it.values }
+    val allValues = allSeries.flatten()
+    val maxValue = maxOf(100.0, allValues.maxOrNull() ?: 0.0)
+    val minValue = minOf(0.0, allValues.minOrNull() ?: 0.0)
+    val valueRange = (maxValue - minValue).takeIf { it > 0.0 } ?: 1.0
+
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val gridColor = if (isDark) Color.White.copy(alpha = 0.10f) else Color(0xFFE7E7E7)
+    val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val density = LocalDensity.current
+    val chartHeight = 250.dp
+    var selectedIndex by remember { mutableStateOf<Int?>(null) }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Canvas(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .height(chartHeight)
         ) {
-            val allValues = allSeries.flatten()
-            val maxValue = maxOf(100.0, allValues.maxOrNull() ?: 0.0)
-            val minValue = minOf(0.0, allValues.minOrNull() ?: 0.0)
-            val valueRange = (maxValue - minValue).takeIf { it > 0.0 } ?: 1.0
-            val left = 22f
-            val right = size.width - 16f
-            val top = 10f
-            val bottom = size.height - 28f
-            val width = right - left
-            val height = bottom - top
+            val widthPx = with(density) { maxWidth.toPx() }
+            val heightPx = with(density) { chartHeight.toPx() }
+            val axisGutterPx = with(density) { 46.dp.toPx() }
+            val left = with(density) { 6.dp.toPx() }
+            val right = widthPx - axisGutterPx
+            val top = with(density) { 10.dp.toPx() }
+            val bottom = heightPx - with(density) { 12.dp.toPx() }
+            val plotWidth = right - left
+            val plotHeight = bottom - top
             val pointDenominator = (values.size - 1).coerceAtLeast(1).toFloat()
 
-            repeat(4) { index ->
-                val y = top + (height / 3f) * index
-                drawLine(Color(0xFFE7E7E7), Offset(left, y), Offset(right, y), strokeWidth = 1.2f)
+            fun pointFor(index: Int, value: Double): Offset {
+                val x = left + plotWidth * (index / pointDenominator)
+                val normalized = ((value - minValue) / valueRange).toFloat()
+                val y = bottom - (plotHeight * normalized)
+                return Offset(x, y)
             }
+
+            val mainPoints = values.mapIndexed { i, v -> pointFor(i, v) }
+
+            fun nearestIndex(px: Float): Int {
+                if (values.size <= 1) return 0
+                val ratio = ((px - left) / plotWidth).coerceIn(0f, 1f)
+                return Math.round(ratio * pointDenominator).coerceIn(0, values.size - 1)
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(values.size, widthPx) {
+                        detectTapGestures(onTap = { off -> selectedIndex = nearestIndex(off.x) })
+                    }
+                    .pointerInput(values.size, widthPx) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { off -> selectedIndex = nearestIndex(off.x) },
+                            onHorizontalDrag = { change, _ -> selectedIndex = nearestIndex(change.position.x) }
+                        )
+                    }
+            ) {
+                repeat(5) { index ->
+                    val y = top + (plotHeight / 4f) * index
+                    drawLine(gridColor, Offset(left, y), Offset(right, y), strokeWidth = 1.2f)
+                }
+                repeat(5) { index ->
+                    val x = left + (plotWidth / 4f) * index
+                    drawLine(gridColor, Offset(x, top), Offset(x, bottom), strokeWidth = 1.2f)
+                }
+
+                fun drawSeries(points: List<Offset>, color: Color, strokeWidth: Float, pointRadius: Float) {
+                    if (points.isEmpty()) return
+                    val path = Path()
+                    points.forEachIndexed { index, point ->
+                        if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+                    }
+                    drawPath(path, color, style = Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                    points.forEach { point -> drawCircle(color, radius = pointRadius, center = point) }
+                }
+
+                comparisonSeries.forEach { series ->
+                    drawSeries(series.values.mapIndexed { i, v -> pointFor(i, v) }, series.color, 3f, 5f)
+                }
+                drawSeries(mainPoints, lineColor, 5f, 8f)
+
+                selectedIndex?.let { idx ->
+                    mainPoints.getOrNull(idx)?.let { p ->
+                        drawLine(
+                            onVariant.copy(alpha = 0.5f),
+                            Offset(p.x, top),
+                            Offset(p.x, bottom),
+                            strokeWidth = 1.4f,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+                        )
+                        drawCircle(Color.White, radius = 11f, center = p)
+                        drawCircle(lineColor, radius = 8f, center = p)
+                    }
+                }
+            }
+
+            // Right-side Y-axis value labels aligned to gridlines
             repeat(5) { index ->
-                val x = left + (width / 4f) * index
-                drawLine(Color(0xFFEDEDED), Offset(x, top), Offset(x, bottom), strokeWidth = 1.2f)
+                val yPx = top + (plotHeight / 4f) * index
+                val tickValue = maxValue - valueRange * (index / 4.0)
+                Text(
+                    if (hideNumbers) privateCurrencyText(currency) else compactAxisMoney(tickValue, currency),
+                    color = onVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.offset(
+                        x = with(density) { (right + 6f).toDp() },
+                        y = with(density) { (yPx - 8f).toDp() }
+                    )
+                )
             }
 
-            fun drawSeries(seriesValues: List<Double>, color: Color, strokeWidth: Float, pointRadius: Float) {
-                if (seriesValues.isEmpty()) return
-                val points = seriesValues.mapIndexed { index, value ->
-                    val x = left + width * (index / pointDenominator)
-                    val normalized = ((value - minValue) / valueRange).toFloat()
-                    val y = bottom - (height * normalized)
-                    Offset(x, y)
+            // Hover/tap tooltip
+            selectedIndex?.let { idx ->
+                val p = mainPoints.getOrNull(idx)
+                if (p != null) {
+                    val tipWidthPx = with(density) { 150.dp.toPx() }
+                    val rawX = p.x + with(density) { 12.dp.toPx() }
+                    val clampedX = rawX.coerceAtMost(right - tipWidthPx).coerceAtLeast(left)
+                    val tipY = (p.y - with(density) { 30.dp.toPx() }).coerceAtLeast(top)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isDark) Color(0xFF1C1C1E) else Color.White,
+                        tonalElevation = 6.dp,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier.offset(
+                            x = with(density) { clampedX.toDp() },
+                            y = with(density) { tipY.toDp() }
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text(
+                                labels.getOrNull(idx) ?: "",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(lineColor, RoundedCornerShape(99.dp))
+                                )
+                                Text(
+                                    "Net: ${money(values.getOrNull(idx) ?: 0.0, currency, decimalSeparator, hideNumbers)}",
+                                    color = lineColor,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
                 }
-                val path = Path()
-                points.forEachIndexed { index, point ->
-                    if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
-                }
-                drawPath(path, color, style = Stroke(width = strokeWidth, cap = StrokeCap.Round))
-                points.forEach { point -> drawCircle(color, radius = pointRadius, center = point) }
             }
-
-            comparisonSeries.forEach { series -> drawSeries(series.values, series.color, 3f, 5f) }
-            drawSeries(values, lineColor, 5f, 8f)
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             axisLabels.ifEmpty { labels.take(5) }.forEach {
-                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Text(it, color = onVariant, fontWeight = FontWeight.SemiBold)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
