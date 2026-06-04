@@ -3714,6 +3714,7 @@ Object.assign(exports, createStripeBillingFunctions({
   admin,
   onCall,
   onRequest,
+  onSchedule,
   HttpsError,
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,

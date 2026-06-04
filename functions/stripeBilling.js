@@ -114,6 +114,7 @@ function createStripeBillingFunctions({
   admin,
   onCall,
   onRequest,
+  onSchedule,
   HttpsError,
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
@@ -1598,6 +1599,60 @@ function createStripeBillingFunctions({
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // Safety net: a missed Apple/Google expiry notification would otherwise leave a
+  // workspace on a paid plan forever, because activeForEntitlement is a stored flag
+  // that is only re-evaluated when a provider event arrives. This scheduled job
+  // expires any verified plan whose period ended well past a grace buffer and
+  // re-resolves the workspace entitlement (dropping it to Free Demo when nothing
+  // active remains).
+  // ---------------------------------------------------------------------------
+  const BILLING_EXPIRY_GRACE_MS = 2 * 60 * 60 * 1000; // 2h buffer for renewal/notification lag
+
+  const scheduledBillingEntitlementReconcile = onSchedule({
+    region: STRIPE_BILLING_REGION,
+    schedule: "every 60 minutes",
+    timeZone: "Europe/London"
+  }, async () => {
+    const db = admin.firestore();
+    const cutoffMs = Date.now() - BILLING_EXPIRY_GRACE_MS;
+    const snap = await db.collectionGroup("subscriptions")
+      .where("activeForEntitlement", "==", true)
+      .get();
+
+    const workspaces = new Map();
+    let expiredCount = 0;
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      if (String(data.subscriptionType || "") !== "plan") continue;
+      // Apple/Google grace-period subscriptions stay active until the grace window ends.
+      if (String(data.providerStatus || "") === "grace_period") continue;
+      const endMs = firestoreTimestampMillis(data.currentPeriodEnd);
+      if (!(endMs > 0 && endMs < cutoffMs)) continue;
+
+      await doc.ref.set({
+        activeForEntitlement: false,
+        providerStatus: "expired",
+        lastProviderEventType: "scheduled.expiry_reconcile",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      expiredCount += 1;
+      const wsRef = doc.ref.parent.parent;
+      if (wsRef) workspaces.set(wsRef.path, wsRef);
+    }
+
+    for (const wsRef of workspaces.values()) {
+      const wsSnap = await wsRef.get();
+      if (!wsSnap.exists) continue;
+      await recomputeEffectiveWorkspaceEntitlement(
+        { id: wsRef.id, ref: wsRef },
+        { triggerEventType: "scheduled.expiry_reconcile", triggerProviderStatus: "expired" }
+      );
+    }
+
+    console.log(`Billing reconcile: expired ${expiredCount} subscription(s) across ${workspaces.size} workspace(s).`);
+  });
+
   return {
     createStripeCheckoutSession,
     createStripeCustomerPortalSession,
@@ -1608,6 +1663,7 @@ function createStripeBillingFunctions({
     prepareGooglePlayPurchase,
     verifyGooglePlayPurchase,
     googlePlayRtdnNotification,
+    scheduledBillingEntitlementReconcile,
     stripeWebhook
   };
 }
