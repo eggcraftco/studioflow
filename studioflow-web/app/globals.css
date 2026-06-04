@@ -2316,6 +2316,98 @@ th {
   font-weight: 950;
 }
 
+/* Native-style plan comparison cards (matches the Mac app design) */
+.plan-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.plan-compare-card {
+  background: var(--panel);
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.plan-compare-card.current {
+  border-color: rgba(37, 99, 235, 0.5);
+  background: var(--accent-soft);
+}
+
+.plan-compare-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.plan-compare-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 900;
+  flex: none;
+  background: rgba(127, 127, 127, 0.14);
+}
+
+.plan-compare-card.plan-demo .plan-compare-icon { background: rgba(245, 158, 11, 0.16); color: #f59e0b; }
+.plan-compare-card.plan-lifetime_lite .plan-compare-icon { background: rgba(34, 197, 94, 0.16); color: #22c55e; }
+.plan-compare-card.plan-pro_monthly .plan-compare-icon { background: rgba(59, 130, 246, 0.16); color: #3b82f6; }
+.plan-compare-card.plan-team_monthly .plan-compare-icon { background: rgba(168, 85, 247, 0.18); color: #a855f7; }
+
+.plan-compare-titles { display: grid; gap: 2px; min-width: 0; }
+.plan-compare-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-compare-name strong { font-size: 16px; }
+
+.plan-compare-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.14);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.plan-compare-sub { font-size: 11px; font-weight: 700; color: var(--muted); }
+.plan-compare-desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+.plan-compare-features { display: grid; gap: 8px; }
+
+.plan-compare-features .feature {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.plan-compare-features .feature.enabled { color: var(--text); }
+
+.plan-compare-features .feature i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.plan-compare-features .feature.enabled i { background: #22c55e; color: #fff; }
+.plan-compare-features .feature:not(.enabled) i { background: transparent; font-size: 12px; opacity: 0.7; }
+
+.plan-compare-footer { font-size: 11px; font-weight: 700; color: var(--muted); }
+
 .owner-testing-card {
   border-color: rgba(var(--warning-rgb), 0.22);
 }

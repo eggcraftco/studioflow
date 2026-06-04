@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   PLAN_ENTITLEMENTS,
-  storageLimitLabel,
   usagePercent,
   type FeatureKey,
   type PlanEntitlements
@@ -331,18 +331,42 @@ export default function PlanPage() {
             </div>
           </section>
 
-          <section className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", marginBottom: 18 }}>
-            {Object.values(PLAN_ENTITLEMENTS).map(plan => (
-              <PlanCard
-                key={plan.plan}
-                plan={plan}
-                active={plan.plan === workspace.billingPlan}
-                canManage={isWorkspaceOwner(workspace.role)}
-                checkoutLoadingKey={checkoutLoadingKey}
-                onCheckout={handleTestCheckout}
-                allowInternalBillingTests={allowInternalBillingTests}
-              />
-            ))}
+          <section className="plan-compare-grid" style={{ marginBottom: 18 }}>
+            {Object.values(PLAN_ENTITLEMENTS).map(plan => {
+              const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
+              const isActive = plan.plan === workspace.billingPlan;
+              const canManage = isWorkspaceOwner(workspace.role);
+              const footer = isActive ? (
+                <span>Your workspace is using this plan.</span>
+              ) : checkout && allowInternalBillingTests ? (
+                <div style={{ display: "grid", gap: 8, width: "100%" }}>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={!canManage || checkoutLoadingKey !== null}
+                    onClick={() => handleTestCheckout(checkout.monthly.itemKey)}
+                  >
+                    {checkoutLoadingKey === checkout.monthly.itemKey ? "Opening checkout..." : `Test ${checkout.monthly.label}`}
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={!canManage || checkoutLoadingKey !== null}
+                    onClick={() => handleTestCheckout(checkout.yearly.itemKey)}
+                  >
+                    {checkoutLoadingKey === checkout.yearly.itemKey ? "Opening checkout..." : `Test ${checkout.yearly.label}`}
+                  </button>
+                </div>
+              ) : null;
+              return (
+                <PlanComparisonCard
+                  key={plan.plan}
+                  plan={plan}
+                  currentPlanKey={workspace.billingPlan}
+                  footer={footer}
+                />
+              );
+            })}
           </section>
 
           <section className="card" style={{ padding: 22, marginBottom: 18 }}>
@@ -415,72 +439,3 @@ function MiniMetric({ title, value, note }: { title: string; value: string; note
   );
 }
 
-function teamSeatLabel(plan: PlanEntitlements) {
-  if (plan.plan !== "team_monthly") return String(plan.teamMemberLimit);
-  return `${plan.includedTeamSeats ?? 5} included`;
-}
-
-function PlanCard({
-  plan,
-  active,
-  canManage,
-  checkoutLoadingKey,
-  onCheckout,
-  allowInternalBillingTests
-}: {
-  plan: PlanEntitlements;
-  active: boolean;
-  canManage: boolean;
-  checkoutLoadingKey: StripeBillingItemKey | null;
-  onCheckout: (itemKey: StripeBillingItemKey) => void;
-  allowInternalBillingTests: boolean;
-}) {
-  const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
-
-  return (
-    <article className="card" style={{ padding: 20, background: active ? "var(--accent-soft)" : "var(--panel)" }}>
-      <div className="pill">{active ? "Current plan" : plan.purchaseModel}</div>
-      <h3 style={{ margin: "12px 0 6px", fontSize: 23 }}>{plan.title}</h3>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        Orders: {plan.orderLimit ?? "Unlimited"}<br />
-        Customers: {plan.customerLimit ?? "Unlimited"}<br />
-        Client Files storage: {plan.features.client_files ? storageLimitLabel(plan) : "Not included"}<br />
-        Team members: {teamSeatLabel(plan)}
-        {plan.plan === "team_monthly" ? (
-          <>
-            <br />
-            Additional seats: £5/month or £50/year each<br />
-            Self-service maximum: 10 users<br />
-            More than 10 users: contact@nivadesk.co.uk
-          </>
-        ) : null}
-      </p>
-      <div className="grid" style={{ gap: 8 }}>
-        {Object.entries(plan.features).filter(([, enabled]) => enabled).slice(0, 4).map(([key]) => (
-          <span key={key} className="pill">{FEATURE_LABELS[key as FeatureKey]}</span>
-        ))}
-      </div>
-      {checkout && allowInternalBillingTests ? (
-        <div style={{ marginTop: 18, display: "grid", gap: 8 }}>
-          <div className="pill">Internal billing test</div>
-          <button
-            className="button secondary"
-            type="button"
-            disabled={!canManage || checkoutLoadingKey !== null}
-            onClick={() => onCheckout(checkout.monthly.itemKey)}
-          >
-            {checkoutLoadingKey === checkout.monthly.itemKey ? "Opening checkout..." : `Test ${checkout.monthly.label}`}
-          </button>
-          <button
-            className="button secondary"
-            type="button"
-            disabled={!canManage || checkoutLoadingKey !== null}
-            onClick={() => onCheckout(checkout.yearly.itemKey)}
-          >
-            {checkoutLoadingKey === checkout.yearly.itemKey ? "Opening checkout..." : `Test ${checkout.yearly.label}`}
-          </button>
-        </div>
-      ) : null}
-    </article>
-  );
-}
