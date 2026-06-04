@@ -54,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1496,14 +1497,15 @@ private fun colorForNote(name: String): Color = colorForName(name)
 
 @Composable
 private fun colorForName(name: String): Color {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     return when (name.lowercase()) {
-        "red" -> Color(0xFFFFE0E0)
-        "orange" -> Color(0xFFFFEFD0)
-        "yellow" -> Color(0xFFFFF7CC)
-        "green" -> Color(0xFFD8F5D8)
-        "blue" -> Color(0xFFD8E9FF)
-        "purple" -> Color(0xFFE6DAFF)
-        "pink" -> Color(0xFFFFD9F0)
+        "red" -> if (dark) Color(0xFF3A2628) else Color(0xFFFFE0E0)
+        "orange" -> if (dark) Color(0xFF3A3024) else Color(0xFFFFEFD0)
+        "yellow" -> if (dark) Color(0xFF39371F) else Color(0xFFFFF7CC)
+        "green" -> if (dark) Color(0xFF23362B) else Color(0xFFD8F5D8)
+        "blue" -> if (dark) Color(0xFF233140) else Color(0xFFD8E9FF)
+        "purple" -> if (dark) Color(0xFF2F2842) else Color(0xFFE6DAFF)
+        "pink" -> if (dark) Color(0xFF3A2636) else Color(0xFFFFD9F0)
         else -> MaterialTheme.colorScheme.surface
     }
 }
