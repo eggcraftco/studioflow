@@ -1,4 +1,29 @@
+const crypto = require("crypto");
+
 const STRIPE_BILLING_REGION = "europe-west2";
+const APPLE_BILLING_REGION = STRIPE_BILLING_REGION;
+
+const APPLE_PLAN_PRODUCTS = {
+  "uk.co.eggcraft.studioflow.lite.monthly": "lite_monthly",
+  "uk.co.eggcraft.studioflow.lite.yearly": "lite_yearly",
+  "uk.co.eggcraft.studioflow.pro.monthly": "pro_monthly",
+  "uk.co.eggcraft.studioflow.pro.yearly": "pro_yearly",
+  "uk.co.eggcraft.studioflow.team.monthly": "team_monthly",
+  "uk.co.eggcraft.studioflow.team.yearly": "team_yearly"
+};
+
+// Google Play subscriptions use a subscription product id + a base plan id.
+// Keys are "<subscriptionId>|<basePlanId>" and map to the shared internal item key.
+// NOTE: These ids are placeholders mirroring the Apple scheme — confirm/replace the
+// exact values when the subscriptions are created in Google Play Console, then redeploy.
+const GOOGLE_PLAY_PRODUCTS = {
+  "nivadesk_lite|lite-monthly": "lite_monthly",
+  "nivadesk_lite|lite-yearly": "lite_yearly",
+  "nivadesk_pro|pro-monthly": "pro_monthly",
+  "nivadesk_pro|pro-yearly": "pro_yearly",
+  "nivadesk_team|team-monthly": "team_monthly",
+  "nivadesk_team|team-yearly": "team_yearly"
+};
 
 const STRIPE_BILLING_ITEMS = {
   lite_monthly: {
@@ -92,6 +117,8 @@ function createStripeBillingFunctions({
   HttpsError,
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
+  APPLE_ROOT_CA_CERTS_PEM,
+  GOOGLE_PLAY_SERVICE_ACCOUNT,
   PLAN_ENTITLEMENTS,
   requireWorkspaceForBilling,
   workspaceOrderRole,
@@ -225,6 +252,90 @@ function createStripeBillingFunctions({
   function stripeClient(secretKey) {
     const Stripe = require("stripe");
     return new Stripe(secretKey);
+  }
+
+  function appleBillingEnabled() {
+    return String(process.env.APPLE_BILLING_ENABLED || "").trim().toLowerCase() === "true";
+  }
+
+  function appleBundleId() {
+    return String(process.env.APPLE_APP_BUNDLE_ID || "uk.co.eggcraft.studioflow").trim();
+  }
+
+  function appleAppStoreId() {
+    const value = Number(String(process.env.APPLE_APP_STORE_ID || "").trim());
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+
+  function appleLedgerId(originalTransactionId) {
+    return `apple_${String(originalTransactionId || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 180)}`;
+  }
+
+  function appleItemForProductId(productId) {
+    const key = APPLE_PLAN_PRODUCTS[String(productId || "").trim()];
+    return key ? STRIPE_BILLING_ITEMS[key] || null : null;
+  }
+
+  function appleRootCertificates() {
+    const pem = secretValue(APPLE_ROOT_CA_CERTS_PEM, "APPLE_ROOT_CA_CERTS_PEM");
+    if (!pem) return [];
+    const matches = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) || [];
+    return matches.map((certificate) => Buffer.from(
+      certificate.replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s/g, ""),
+      "base64"
+    ));
+  }
+
+  function appleVerificationConfigStatus() {
+    if (!appleBillingEnabled()) {
+      return { configured: false, message: "App Store billing setup coming soon." };
+    }
+    const roots = appleRootCertificates();
+    if (!roots.length) {
+      return { configured: false, message: "Apple root certificates are not configured." };
+    }
+    const environments = ["Sandbox"];
+    if (String(process.env.APPLE_ALLOW_XCODE_TESTING || "").trim().toLowerCase() === "true") {
+      environments.push("Xcode");
+    }
+    if (String(process.env.APPLE_ALLOW_PRODUCTION_BILLING || "").trim().toLowerCase() === "true") {
+      if (!appleAppStoreId()) return { configured: false, message: "Apple App Store ID is required before production billing is enabled." };
+      environments.unshift("Production");
+    }
+    return { configured: true, roots, environments };
+  }
+
+  async function verifyAppleSignedData(kind, signedPayload) {
+    const payload = String(signedPayload || "").trim();
+    if (!payload || payload.length > 16000) {
+      throw new HttpsError("invalid-argument", "A valid signed Apple purchase payload is required.");
+    }
+    const config = appleVerificationConfigStatus();
+    if (!config.configured) {
+      throw new HttpsError("failed-precondition", config.message);
+    }
+    const { SignedDataVerifier, Environment } = require("@apple/app-store-server-library");
+    let lastError = null;
+    for (const name of config.environments) {
+      const environment = Environment[String(name || "").toUpperCase()];
+      try {
+        const verifier = new SignedDataVerifier(
+          config.roots,
+          true,
+          environment,
+          appleBundleId(),
+          name === "Production" ? appleAppStoreId() : undefined
+        );
+        const decoded = kind === "notification"
+          ? await verifier.verifyAndDecodeNotification(payload)
+          : await verifier.verifyAndDecodeTransaction(payload);
+        return { decoded, verifier, environmentName: name };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    console.warn("Apple signed payload verification failed:", lastError?.message || lastError);
+    throw new HttpsError("permission-denied", "Apple purchase verification failed.");
   }
 
   function ownerOrAdminRole(companyData, uid) {
@@ -378,6 +489,66 @@ function createStripeBillingFunctions({
     if (!ledgerSnap.exists || !ledgerSnap.data()?.createdAt) {
       await ledgerRef.set({ createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     }
+  }
+
+  function timestampFromAppleMillis(milliseconds) {
+    const value = Number(milliseconds || 0);
+    return Number.isFinite(value) && value > 0 ? admin.firestore.Timestamp.fromMillis(value) : null;
+  }
+
+  async function persistApplePlanSubscription(workspace, transaction, {
+    environmentName = "Sandbox",
+    eventType = "client.verify",
+    notificationStatus = null
+  } = {}) {
+    const item = appleItemForProductId(transaction?.productId);
+    const originalTransactionId = String(transaction?.originalTransactionId || "").trim();
+    const transactionId = String(transaction?.transactionId || "").trim();
+    if (!item || item.type !== "plan" || !originalTransactionId || !transactionId) {
+      throw new HttpsError("failed-precondition", "This App Store purchase is not a supported NivaDesk subscription.");
+    }
+
+    const expirationMilliseconds = Number(transaction?.expiresDate || 0);
+    const revoked = Number(transaction?.revocationDate || 0) > 0;
+    const activeByDate = expirationMilliseconds > Date.now();
+    const statusNumber = Number(notificationStatus || 0);
+    const activeForEntitlement = !revoked && activeByDate && ![2, 5].includes(statusNumber);
+    const providerStatus = revoked || statusNumber === 5
+      ? "revoked"
+      : activeForEntitlement
+        ? (statusNumber === 4 ? "grace_period" : "active")
+        : "expired";
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(appleLedgerId(originalTransactionId));
+    const existing = await ledgerRef.get();
+
+    await ledgerRef.set({
+      provider: "apple",
+      subscriptionType: "plan",
+      planTier: planTierForItem(item),
+      internalPlanKey: item.plan || "",
+      itemKey: item.key,
+      interval: item.interval || "",
+      originalTransactionId,
+      latestTransactionId: transactionId,
+      externalSubscriptionId: originalTransactionId,
+      workspaceId: workspace.id,
+      appAccountToken: String(transaction?.appAccountToken || "").trim(),
+      productId: String(transaction?.productId || "").trim(),
+      providerStatus,
+      activeForEntitlement,
+      autoRenew: activeForEntitlement,
+      currentPeriodEnd: timestampFromAppleMillis(expirationMilliseconds),
+      environment: String(environmentName || "Sandbox").toLowerCase(),
+      lastProviderEventType: String(eventType || ""),
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(existing.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
+    }, { merge: true });
+
+    return recomputeEffectiveWorkspaceEntitlement(workspace, {
+      triggerEventType: String(eventType || "apple.verify"),
+      triggerProviderStatus: providerStatus
+    });
   }
 
   async function recomputeEffectiveWorkspaceEntitlement(workspace, {
@@ -553,6 +724,15 @@ function createStripeBillingFunctions({
     return null;
   }
 
+  function billingUpdatedBySource(provider) {
+    switch (String(provider || "").trim().toLowerCase()) {
+      case "apple": return "apple_verification";
+      case "google": return "google_verification";
+      case "none": return "entitlement_resolver";
+      default: return "stripe_webhook";
+    }
+  }
+
   function planUpdatePayload(planKey, status, rawStatus, common = {}) {
     const entitlements = PLAN_ENTITLEMENTS[planKey] || PLAN_ENTITLEMENTS.demo;
     return {
@@ -574,7 +754,7 @@ function createStripeBillingFunctions({
       billingTeamSelfServiceMax: entitlements.plan === "team_monthly" ? 10 : entitlements.teamMemberLimit,
       billingExportAccessPreserved: true,
       billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      billingUpdatedBy: "stripe_webhook",
+      billingUpdatedBy: common.billingUpdatedBy || billingUpdatedBySource(common.billingEffectiveProvider),
       ...common
     };
   }
@@ -1034,6 +1214,105 @@ function createStripeBillingFunctions({
     };
   });
 
+  const prepareAppleSubscriptionPurchase = onCall({ region: APPLE_BILLING_REGION }, async (request) => {
+    const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+    ownerOrAdminRole(companyData, uid);
+    let appAccountToken = String(companyData.billingAppleAppAccountToken || "").trim();
+    if (!appAccountToken) {
+      appAccountToken = crypto.randomUUID();
+      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+      await companyRef.set({
+        billingAppleAppAccountToken: appAccountToken,
+        billingAppleTokenCreatedAt: timestamp,
+        billingUpdatedAt: timestamp
+      }, { merge: true });
+      await admin.firestore().collection("appleBillingAccounts").doc(appAccountToken).set({
+        workspaceId: companyId,
+        ownerUid: uid,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }, { merge: true });
+    }
+    return { ok: true, workspaceId: companyId, appAccountToken };
+  });
+
+  const verifyAppleSubscriptionPurchase = onCall({ region: APPLE_BILLING_REGION, secrets: [APPLE_ROOT_CA_CERTS_PEM] }, async (request) => {
+    const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+    ownerOrAdminRole(companyData, uid);
+    const signedTransactionInfo = String(request.data?.signedTransactionInfo || "").trim();
+    const verified = await verifyAppleSignedData("transaction", signedTransactionInfo);
+    const transaction = verified.decoded || {};
+    const expectedToken = String(companyData.billingAppleAppAccountToken || "").trim();
+    const transactionToken = String(transaction.appAccountToken || "").trim();
+    if (!expectedToken || transactionToken !== expectedToken) {
+      throw new HttpsError("permission-denied", "This App Store purchase is not linked to the current NivaDesk workspace.");
+    }
+    if (String(transaction.bundleId || "").trim() !== appleBundleId()) {
+      throw new HttpsError("permission-denied", "Apple purchase app identifier does not match NivaDesk.");
+    }
+    const result = await persistApplePlanSubscription({ id: companyId, ref: companyRef }, transaction, {
+      environmentName: verified.environmentName,
+      eventType: "client.verified_purchase"
+    });
+    return {
+      ok: true,
+      workspaceId: companyId,
+      plan: result.plan,
+      provider: "apple",
+      productId: String(transaction.productId || ""),
+      currentPeriodEnd: Number(transaction.expiresDate || 0) || null
+    };
+  });
+
+  const appleAppStoreServerNotification = onRequest({ region: APPLE_BILLING_REGION, secrets: [APPLE_ROOT_CA_CERTS_PEM] }, async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).send("Method not allowed");
+      return;
+    }
+    try {
+      const signedPayload = String(request.body?.signedPayload || "").trim();
+      const verifiedNotification = await verifyAppleSignedData("notification", signedPayload);
+      const notification = verifiedNotification.decoded || {};
+      if (String(notification.notificationType || "") === "TEST") {
+        response.status(200).json({ received: true, test: true });
+        return;
+      }
+      const signedTransactionInfo = String(notification.data?.signedTransactionInfo || "").trim();
+      if (!signedTransactionInfo) {
+        response.status(200).json({ received: true, skipped: "no_transaction" });
+        return;
+      }
+      const transactionVerified = await verifyAppleSignedData("transaction", signedTransactionInfo);
+      const transaction = transactionVerified.decoded || {};
+      const appAccountToken = String(transaction.appAccountToken || "").trim();
+      if (!appAccountToken) {
+        response.status(200).json({ received: true, skipped: "no_account_token" });
+        return;
+      }
+      const mapping = await admin.firestore().collection("appleBillingAccounts").doc(appAccountToken).get();
+      const workspaceId = String(mapping.data()?.workspaceId || "").trim();
+      if (!workspaceId) {
+        response.status(200).json({ received: true, skipped: "unknown_account_token" });
+        return;
+      }
+      const companyRef = admin.firestore().collection("companies").doc(workspaceId);
+      const companySnap = await companyRef.get();
+      if (!companySnap.exists || String(companySnap.data()?.billingAppleAppAccountToken || "").trim() !== appAccountToken) {
+        response.status(200).json({ received: true, skipped: "workspace_token_mismatch" });
+        return;
+      }
+      await persistApplePlanSubscription({ id: workspaceId, ref: companyRef }, transaction, {
+        environmentName: transactionVerified.environmentName,
+        eventType: `notification.${String(notification.notificationType || "unknown")}`,
+        notificationStatus: notification.data?.status
+      });
+      response.status(200).json({ received: true, processed: true });
+    } catch (error) {
+      console.error("Apple App Store notification processing failed:", error?.message || error);
+      response.status(400).json({ received: false, error: "verification_failed" });
+    }
+  });
+
   const stripeWebhook = onRequest({ region: STRIPE_BILLING_REGION, secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET] }, async (request, response) => {
     if (request.method !== "POST") {
       response.status(405).send("Method not allowed");
@@ -1070,15 +1349,271 @@ function createStripeBillingFunctions({
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // Google Play Billing (provider-neutral mirror of the Apple StoreKit flow).
+  // Inert until a Google Play service account secret is configured, exactly like
+  // the Apple flow stayed inert until APPLE_ROOT_CA_CERTS_PEM was added.
+  // ---------------------------------------------------------------------------
+  const GOOGLE_BILLING_REGION = STRIPE_BILLING_REGION;
+
+  function googlePackageName() {
+    return String(process.env.GOOGLE_PLAY_PACKAGE_NAME || "uk.co.eggcraft.studioflow").trim();
+  }
+
+  function googlePlayServiceAccount() {
+    const raw = secretValue(GOOGLE_PLAY_SERVICE_ACCOUNT, "GOOGLE_PLAY_SERVICE_ACCOUNT");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function googlePlayConfigStatus() {
+    const credentials = googlePlayServiceAccount();
+    if (!credentials || !credentials.client_email || !credentials.private_key) {
+      return { configured: false, message: "Google Play billing setup coming soon." };
+    }
+    return { configured: true, credentials, packageName: googlePackageName() };
+  }
+
+  function googleLedgerId(purchaseToken) {
+    const hash = crypto.createHash("sha256").update(String(purchaseToken || "")).digest("hex");
+    return `google_${hash.slice(0, 48)}`;
+  }
+
+  function googleItemForProduct(productId, basePlanId) {
+    const composite = `${String(productId || "").trim()}|${String(basePlanId || "").trim()}`;
+    const key = GOOGLE_PLAY_PRODUCTS[composite] || GOOGLE_PLAY_PRODUCTS[String(productId || "").trim()];
+    return key ? STRIPE_BILLING_ITEMS[key] || null : null;
+  }
+
+  function androidPublisherClient(credentials) {
+    const { google } = require("googleapis");
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/androidpublisher"]
+    });
+    return google.androidpublisher({ version: "v3", auth });
+  }
+
+  // Calls the Google Play Developer API and returns a normalized purchase record.
+  async function fetchGooglePlaySubscription(productId, purchaseToken) {
+    const config = googlePlayConfigStatus();
+    if (!config.configured) {
+      throw new HttpsError("failed-precondition", config.message);
+    }
+    const publisher = androidPublisherClient(config.credentials);
+    const { data } = await publisher.purchases.subscriptionsv2.get({
+      packageName: config.packageName,
+      token: purchaseToken
+    });
+
+    const lineItems = Array.isArray(data?.lineItems) ? data.lineItems : [];
+    const lineItem = lineItems.find((entry) => String(entry?.productId || "").trim() === String(productId || "").trim())
+      || lineItems[0]
+      || {};
+    const state = String(data?.subscriptionState || "").trim();
+    const expiryMillis = lineItem?.expiryTime ? Date.parse(lineItem.expiryTime) : 0;
+
+    return {
+      productId: String(lineItem?.productId || productId || "").trim(),
+      basePlanId: String(lineItem?.offerDetails?.basePlanId || "").trim(),
+      purchaseToken: String(purchaseToken || "").trim(),
+      orderId: String(data?.latestOrderId || "").trim(),
+      obfuscatedAccountId: String(data?.externalAccountIdentifiers?.obfuscatedExternalAccountId || "").trim(),
+      state,
+      expiryMillis: Number.isFinite(expiryMillis) ? expiryMillis : 0,
+      autoRenewing: lineItem?.autoRenewingPlan?.autoRenewEnabled === true,
+      linkedPurchaseToken: String(data?.linkedPurchaseToken || "").trim()
+    };
+  }
+
+  function googleProviderStatusFor(state, activeForEntitlement) {
+    switch (String(state || "").trim()) {
+      case "SUBSCRIPTION_STATE_IN_GRACE_PERIOD": return "grace_period";
+      case "SUBSCRIPTION_STATE_ON_HOLD": return "on_hold";
+      case "SUBSCRIPTION_STATE_PAUSED": return "paused";
+      case "SUBSCRIPTION_STATE_EXPIRED": return "expired";
+      case "SUBSCRIPTION_STATE_PENDING": return "pending";
+      case "SUBSCRIPTION_STATE_CANCELED": return activeForEntitlement ? "cancelled_active" : "cancelled";
+      default: return activeForEntitlement ? "active" : "expired";
+    }
+  }
+
+  async function persistGooglePlanSubscription(workspace, purchase, {
+    eventType = "client.verify"
+  } = {}) {
+    const item = googleItemForProduct(purchase?.productId, purchase?.basePlanId);
+    const purchaseToken = String(purchase?.purchaseToken || "").trim();
+    if (!item || item.type !== "plan" || !purchaseToken) {
+      throw new HttpsError("failed-precondition", "This Google Play purchase is not a supported NivaDesk subscription.");
+    }
+
+    const inactiveStates = [
+      "SUBSCRIPTION_STATE_EXPIRED",
+      "SUBSCRIPTION_STATE_ON_HOLD",
+      "SUBSCRIPTION_STATE_PAUSED",
+      "SUBSCRIPTION_STATE_PENDING"
+    ];
+    const activeByDate = Number(purchase?.expiryMillis || 0) > Date.now();
+    const activeForEntitlement = activeByDate && !inactiveStates.includes(String(purchase?.state || "").trim());
+    const providerStatus = googleProviderStatusFor(purchase?.state, activeForEntitlement);
+
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(googleLedgerId(purchaseToken));
+    const existing = await ledgerRef.get();
+
+    await ledgerRef.set({
+      provider: "google",
+      subscriptionType: "plan",
+      planTier: planTierForItem(item),
+      internalPlanKey: item.plan || "",
+      itemKey: item.key,
+      interval: item.interval || "",
+      purchaseToken,
+      purchaseTokenHash: crypto.createHash("sha256").update(purchaseToken).digest("hex"),
+      latestOrderId: String(purchase?.orderId || ""),
+      externalSubscriptionId: purchaseToken,
+      linkedPurchaseToken: String(purchase?.linkedPurchaseToken || ""),
+      workspaceId: workspace.id,
+      obfuscatedAccountId: String(purchase?.obfuscatedAccountId || ""),
+      productId: String(purchase?.productId || ""),
+      basePlanId: String(purchase?.basePlanId || ""),
+      providerStatus,
+      activeForEntitlement,
+      autoRenew: activeForEntitlement && purchase?.autoRenewing === true,
+      currentPeriodEnd: timestampFromAppleMillis(purchase?.expiryMillis),
+      environment: "production",
+      lastProviderEventType: String(eventType || ""),
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(existing.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
+    }, { merge: true });
+
+    return recomputeEffectiveWorkspaceEntitlement(workspace, {
+      triggerEventType: String(eventType || "google.verify"),
+      triggerProviderStatus: providerStatus
+    });
+  }
+
+  async function workspaceForGoogleAccountToken(token) {
+    const clean = String(token || "").trim();
+    if (!clean) return null;
+    const mapping = await admin.firestore().collection("googleBillingAccounts").doc(clean).get();
+    const workspaceId = String(mapping.data()?.workspaceId || "").trim();
+    if (!workspaceId) return null;
+    const companyRef = admin.firestore().collection("companies").doc(workspaceId);
+    const companySnap = await companyRef.get();
+    if (!companySnap.exists) return null;
+    return { id: workspaceId, ref: companyRef, data: companySnap.data() || {} };
+  }
+
+  const prepareGooglePlayPurchase = onCall({ region: GOOGLE_BILLING_REGION }, async (request) => {
+    const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+    ownerOrAdminRole(companyData, uid);
+    let accountToken = String(companyData.billingGoogleAccountToken || "").trim();
+    if (!accountToken) {
+      accountToken = crypto.randomUUID();
+      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+      await companyRef.set({
+        billingGoogleAccountToken: accountToken,
+        billingGoogleTokenCreatedAt: timestamp,
+        billingUpdatedAt: timestamp
+      }, { merge: true });
+      await admin.firestore().collection("googleBillingAccounts").doc(accountToken).set({
+        workspaceId: companyId,
+        ownerUid: uid,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }, { merge: true });
+    }
+    return { ok: true, workspaceId: companyId, obfuscatedAccountId: accountToken };
+  });
+
+  const verifyGooglePlayPurchase = onCall({ region: GOOGLE_BILLING_REGION, secrets: [GOOGLE_PLAY_SERVICE_ACCOUNT] }, async (request) => {
+    const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+    ownerOrAdminRole(companyData, uid);
+    const productId = String(request.data?.productId || "").trim();
+    const purchaseToken = String(request.data?.purchaseToken || "").trim();
+    if (!productId || !purchaseToken) {
+      throw new HttpsError("invalid-argument", "A Google Play productId and purchaseToken are required.");
+    }
+
+    const purchase = await fetchGooglePlaySubscription(productId, purchaseToken);
+    const expectedToken = String(companyData.billingGoogleAccountToken || "").trim();
+    if (!expectedToken || purchase.obfuscatedAccountId !== expectedToken) {
+      throw new HttpsError("permission-denied", "This Google Play purchase is not linked to the current NivaDesk workspace.");
+    }
+
+    const result = await persistGooglePlanSubscription({ id: companyId, ref: companyRef }, purchase, {
+      eventType: "client.verified_purchase"
+    });
+    return {
+      ok: true,
+      workspaceId: companyId,
+      plan: result.plan,
+      provider: "google",
+      productId: purchase.productId,
+      currentPeriodEnd: Number(purchase.expiryMillis || 0) || null
+    };
+  });
+
+  // Google Real-time Developer Notifications arrive as a Pub/Sub push request.
+  const googlePlayRtdnNotification = onRequest({ region: GOOGLE_BILLING_REGION, secrets: [GOOGLE_PLAY_SERVICE_ACCOUNT] }, async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).send("Method not allowed");
+      return;
+    }
+    if (!googlePlayConfigStatus().configured) {
+      response.status(200).json({ received: true, skipped: "not_configured" });
+      return;
+    }
+    try {
+      const encoded = request.body?.message?.data;
+      if (!encoded) {
+        response.status(200).json({ received: true, skipped: "no_data" });
+        return;
+      }
+      const payload = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+      const sub = payload?.subscriptionNotification;
+      if (!sub?.purchaseToken || !sub?.subscriptionId) {
+        // testNotification / voidedPurchase / oneTimeProduct events are acknowledged but ignored.
+        response.status(200).json({ received: true, skipped: "no_subscription_notification" });
+        return;
+      }
+      const purchase = await fetchGooglePlaySubscription(sub.subscriptionId, sub.purchaseToken);
+      const workspace = await workspaceForGoogleAccountToken(purchase.obfuscatedAccountId);
+      if (!workspace) {
+        response.status(200).json({ received: true, skipped: "unknown_account_token" });
+        return;
+      }
+      await persistGooglePlanSubscription({ id: workspace.id, ref: workspace.ref }, purchase, {
+        eventType: `notification.${String(sub.notificationType || "unknown")}`
+      });
+      response.status(200).json({ received: true, processed: true });
+    } catch (error) {
+      console.error("Google Play RTDN processing failed:", error?.message || error);
+      response.status(400).json({ received: false, error: "verification_failed" });
+    }
+  });
+
   return {
     createStripeCheckoutSession,
     createStripeCustomerPortalSession,
     resyncStripeWorkspaceEntitlements,
+    prepareAppleSubscriptionPurchase,
+    verifyAppleSubscriptionPurchase,
+    appleAppStoreServerNotification,
+    prepareGooglePlayPurchase,
+    verifyGooglePlayPurchase,
+    googlePlayRtdnNotification,
     stripeWebhook
   };
 }
 
 module.exports = {
   STRIPE_BILLING_ITEMS,
+  APPLE_PLAN_PRODUCTS,
   createStripeBillingFunctions
 };

@@ -34,6 +34,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
 
     implementation("androidx.activity:activity-compose:1.12.0")
     implementation("androidx.compose.foundation:foundation")

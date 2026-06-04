@@ -104,6 +104,7 @@ import java.util.Locale
 import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
@@ -171,6 +172,11 @@ fun StudioFlowMainScreen(
     onDeleteOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    googlePlanOffers: List<StudioGooglePlanOffer> = emptyList(),
+    googleBillingPurchasing: Boolean = false,
+    onLoadGooglePlayProducts: () -> Unit = {},
+    onPurchaseGooglePlan: (android.app.Activity, StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
     onUploadAccountAvatar: (ByteArray, String) -> Unit,
@@ -417,6 +423,11 @@ fun StudioFlowMainScreen(
                     settingsInitialSectionKey = settingsStartKey,
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                    googlePlanOffers = googlePlanOffers,
+                    googleBillingPurchasing = googleBillingPurchasing,
+                    onLoadGooglePlayProducts = onLoadGooglePlayProducts,
+                    onPurchaseGooglePlan = onPurchaseGooglePlan,
+                    onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                     onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                     onUpdateAccountProfile = onUpdateAccountProfile,
                     onUploadAccountAvatar = onUploadAccountAvatar,
@@ -534,6 +545,11 @@ fun StudioFlowMainScreen(
                     settingsInitialSectionKey = settingsStartKey,
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                    googlePlanOffers = googlePlanOffers,
+                    googleBillingPurchasing = googleBillingPurchasing,
+                    onLoadGooglePlayProducts = onLoadGooglePlayProducts,
+                    onPurchaseGooglePlan = onPurchaseGooglePlan,
+                    onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                     onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                     onUpdateAccountProfile = onUpdateAccountProfile,
                     onUploadAccountAvatar = onUploadAccountAvatar,
@@ -901,6 +917,11 @@ private fun StudioSectionContent(
     settingsInitialSectionKey: String?,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    googlePlanOffers: List<StudioGooglePlanOffer> = emptyList(),
+    googleBillingPurchasing: Boolean = false,
+    onLoadGooglePlayProducts: () -> Unit = {},
+    onPurchaseGooglePlan: (android.app.Activity, StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
     onUploadAccountAvatar: (ByteArray, String) -> Unit,
@@ -1059,6 +1080,11 @@ private fun StudioSectionContent(
                 onSignOut = onSignOut,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                 onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                googlePlanOffers = googlePlanOffers,
+                googleBillingPurchasing = googleBillingPurchasing,
+                onLoadGooglePlayProducts = onLoadGooglePlayProducts,
+                onPurchaseGooglePlan = onPurchaseGooglePlan,
+                onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                 onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                 onUpdateAccountProfile = onUpdateAccountProfile,
                 onUploadAccountAvatar = onUploadAccountAvatar,

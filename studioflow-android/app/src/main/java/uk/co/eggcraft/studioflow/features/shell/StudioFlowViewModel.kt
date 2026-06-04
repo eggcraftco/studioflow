@@ -1,10 +1,13 @@
 package uk.co.eggcraft.studioflow.features.shell
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer
+import uk.co.eggcraft.studioflow.billing.StudioGooglePlayBillingManager
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -572,6 +575,63 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
         }
+    }
+
+    // ----- Google Play Billing -------------------------------------------------
+    private val billingManager: StudioGooglePlayBillingManager by lazy {
+        StudioGooglePlayBillingManager(
+            context = getApplication(),
+            scope = viewModelScope,
+            verifier = { result ->
+                val workspace = mutableState.value.workspace
+                    ?: error("No active workspace for purchase verification.")
+                repository.verifyGooglePlayPurchase(workspace, result.subscriptionId, result.purchaseToken)
+            },
+            onPlanResolved = { planKey ->
+                val resolved = StudioBillingPlan.fromRaw(planKey)
+                mutableState.update { it.copy(workspace = it.workspace?.copy(billingPlan = resolved)) }
+            },
+            onMessage = { message ->
+                mutableState.update { it.copy(settingsMessage = message, errorMessage = "") }
+            },
+            onError = { message ->
+                mutableState.update { it.copy(errorMessage = message) }
+            }
+        )
+    }
+
+    val googlePlanOffers: StateFlow<List<StudioGooglePlanOffer>> by lazy { billingManager.offers }
+    val googleBillingLoading: StateFlow<Boolean> by lazy { billingManager.isLoading }
+    val googleBillingPurchasing: StateFlow<Boolean> by lazy { billingManager.isPurchasing }
+
+    fun loadGooglePlayProducts() {
+        billingManager.loadProducts()
+    }
+
+    fun purchaseGooglePlan(activity: Activity, offer: StudioGooglePlanOffer) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.prepareGooglePlayPurchase(workspace) }
+                .onSuccess { token ->
+                    if (token.isEmpty()) {
+                        mutableState.update { it.copy(errorMessage = "Could not start Google Play purchase.") }
+                    } else {
+                        billingManager.purchase(activity, offer.subscriptionId, offer.basePlanId, token)
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not start Google Play purchase.") }
+                }
+        }
+    }
+
+    fun restoreGooglePlayPurchases() {
+        billingManager.restorePurchases()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        billingManager.release()
     }
 
     fun updateWorkspaceBillingPlan(plan: StudioBillingPlan) {

@@ -2,12 +2,14 @@
   "name": "eggcraft-tracking-functions",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
+    "@apple/app-store-server-library": "^3.1.0",
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^6.1.0",
+    "googleapis": "^173.0.0",
     "stripe": "^22.1.1"
   }
 }

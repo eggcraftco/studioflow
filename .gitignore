@@ -105,6 +105,10 @@ npm-debug.log*
 serviceAccountKey.json
 *.p8
 *.pem
+*.cer
+.env.*
+functions/apple-certificates/
+functions/serviceAccount*.json
 *.key
 
 # Temporary archives

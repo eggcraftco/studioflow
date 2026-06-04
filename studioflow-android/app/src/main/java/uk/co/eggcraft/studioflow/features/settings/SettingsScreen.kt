@@ -145,6 +145,11 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    googlePlanOffers: List<uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer> = emptyList(),
+    googleBillingPurchasing: Boolean = false,
+    onLoadGooglePlayProducts: () -> Unit = {},
+    onPurchaseGooglePlan: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
     onUploadAccountAvatar: (ByteArray, String) -> Unit,
@@ -235,6 +240,11 @@ fun SettingsScreen(
                         onSignOut = onSignOut,
                         onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                         onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                        googlePlanOffers = googlePlanOffers,
+                        googleBillingPurchasing = googleBillingPurchasing,
+                        onLoadGooglePlayProducts = onLoadGooglePlayProducts,
+                        onPurchaseGooglePlan = onPurchaseGooglePlan,
+                        onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                         onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                         onUpdateAccountProfile = onUpdateAccountProfile,
                         onUploadAccountAvatar = onUploadAccountAvatar,
@@ -271,6 +281,11 @@ fun SettingsScreen(
                 onSignOut = onSignOut,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                 onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                googlePlanOffers = googlePlanOffers,
+                googleBillingPurchasing = googleBillingPurchasing,
+                onLoadGooglePlayProducts = onLoadGooglePlayProducts,
+                onPurchaseGooglePlan = onPurchaseGooglePlan,
+                onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                 onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                 onUpdateAccountProfile = onUpdateAccountProfile,
                 onUploadAccountAvatar = onUploadAccountAvatar,
@@ -415,6 +430,11 @@ private fun SettingsDetailScreen(
     onSignOut: () -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    googlePlanOffers: List<uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer> = emptyList(),
+    googleBillingPurchasing: Boolean = false,
+    onLoadGooglePlayProducts: () -> Unit = {},
+    onPurchaseGooglePlan: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
     onUploadAccountAvatar: (ByteArray, String) -> Unit,
@@ -487,7 +507,15 @@ private fun SettingsDetailScreen(
                     includeSecurity = true
                 )
                 "support" -> SupportTicketsDetail(state)
-                "plan" -> PlanAccessDetail(state, onUpdateWorkspaceBillingPlan)
+                "plan" -> PlanAccessDetail(
+                    state = state,
+                    onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
+                    googlePlanOffers = googlePlanOffers,
+                    googleBillingPurchasing = googleBillingPurchasing,
+                    onLoadGooglePlayProducts = onLoadGooglePlayProducts,
+                    onPurchaseGooglePlan = onPurchaseGooglePlan,
+                    onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases
+                )
                 "team" -> TeamAccessDetail(
                     state = state,
                     onRequestWorkspaceAccess = onRequestWorkspaceAccess,
@@ -1859,12 +1887,20 @@ private fun AccountDetail(
 @Composable
 private fun PlanAccessDetail(
     state: StudioFlowUiState,
-    onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit
+    onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
+    googlePlanOffers: List<uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer> = emptyList(),
+    googleBillingPurchasing: Boolean = false,
+    onLoadGooglePlayProducts: () -> Unit = {},
+    onPurchaseGooglePlan: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onRestoreGooglePlayPurchases: () -> Unit = {}
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspace = state.workspace
     val plan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
+    val isOwner = workspace?.isOwner == true
+    val activity = LocalContext.current as? android.app.Activity
+    LaunchedEffect(Unit) { onLoadGooglePlayProducts() }
     DetailColumn {
         DetailCard(title = t("Plan & Access"), icon = Icons.Filled.CreditCard) {
             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -1882,9 +1918,54 @@ private fun PlanAccessDetail(
                     }
                 }
             }
-            StoreProductCard(t("NivaDesk Lite"), "uk.co.eggcraft.studioflow.lite.monthly", t("Subscribe"))
-            StoreProductCard(t("NivaDesk Pro"), "uk.co.eggcraft.studioflow.pro.monthly", t("Subscribe"))
-            StoreProductCard("NivaDesk Team", "uk.co.eggcraft.studioflow.team.monthly", t("Subscribe"))
+            if (isOwner) {
+                Text(t("App Store Purchases"), fontWeight = FontWeight.ExtraBold)
+                Text(
+                    t("Connect real Google Play products to NivaDesk plans."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                googlePlanOffers.groupBy { it.plan }.forEach { (offerPlan, offersForPlan) ->
+                    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(offerPlan.title, fontWeight = FontWeight.ExtraBold)
+                            offersForPlan.forEach { offer ->
+                                val isCurrent = plan == offer.plan
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        if (offer.interval == "year") t("Yearly") else t("Monthly"),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        offer.formattedPrice ?: t("Product not loaded"),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Button(
+                                    onClick = { activity?.let { onPurchaseGooglePlan(it, offer) } },
+                                    enabled = !googleBillingPurchasing && offer.formattedPrice != null && activity != null && !isCurrent,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (isCurrent) t("Current plan") else t("Subscribe")) }
+                            }
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onLoadGooglePlayProducts, enabled = !googleBillingPurchasing) {
+                        Text(t("Load products"))
+                    }
+                    OutlinedButton(onClick = onRestoreGooglePlayPurchases, enabled = !googleBillingPurchasing) {
+                        Text(t("Restore Purchases"))
+                    }
+                }
+                if (googlePlanOffers.isEmpty()) {
+                    Text(
+                        t("Create this product ID in Google Play Console."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
         DetailCard(title = t("Available now"), icon = Icons.Filled.CheckCircle) {
             Text(t("Current plan access"), fontWeight = FontWeight.ExtraBold)
@@ -3915,9 +3996,9 @@ private fun StoreProductCard(title: String, productId: String, button: String) {
 private val StudioBillingPlan.purchaseModel: String
     get() = when (this) {
         StudioBillingPlan.Demo -> "Demo"
-        StudioBillingPlan.LifetimeLite -> "One-Time Purchase"
+        StudioBillingPlan.LifetimeLite,
         StudioBillingPlan.ProMonthly,
-        StudioBillingPlan.TeamMonthly -> "Monthly Subscription"
+        StudioBillingPlan.TeamMonthly -> "Monthly or Annual Subscription"
     }
 
 private val StudioBillingPlan.hasClientFiles: Boolean

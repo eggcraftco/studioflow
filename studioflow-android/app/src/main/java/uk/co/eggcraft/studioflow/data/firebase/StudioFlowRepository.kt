@@ -519,6 +519,32 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "This order layout was saved."
     }
 
+    // Mints (or reuses) the workspace-linked obfuscated account token used as the
+    // Google Play obfuscatedAccountId. Mirrors prepareAppleSubscriptionPurchase.
+    suspend fun prepareGooglePlayPurchase(workspace: StudioWorkspace): String {
+        val result = functions.getHttpsCallable("prepareGooglePlayPurchase")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("obfuscatedAccountId") as? String ?: ""
+    }
+
+    // Sends a Google Play purchase token to the backend for server-side verification.
+    // The backend verifies via the Play Developer API and updates the entitlement.
+    suspend fun verifyGooglePlayPurchase(workspace: StudioWorkspace, productId: String, purchaseToken: String): String {
+        val result = functions.getHttpsCallable("verifyGooglePlayPurchase")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "productId" to productId,
+                    "purchaseToken" to purchaseToken
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("plan") as? String ?: ""
+    }
+
     suspend fun resetOrderCardLayout(workspace: StudioWorkspace, order: StudioOrder): String {
         val result = functions.getHttpsCallable("resetOrderWorkspaceCardLayout")
             .call(

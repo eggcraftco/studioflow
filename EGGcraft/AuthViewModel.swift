@@ -446,12 +446,42 @@ struct StudioStoreProductSummary: Identifiable, Equatable {
     var detail: String
 }
 
+enum StudioStoreBillingInterval: String, CaseIterable, Identifiable, Hashable {
+    case monthly = "month"
+    case yearly = "year"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .monthly: return "Monthly"
+        case .yearly: return "Yearly"
+        }
+    }
+}
+
+struct StudioStoreVerifiedPurchase {
+    let plan: StudioBillingPlan
+    let interval: StudioStoreBillingInterval
+    let productId: String
+    let signedTransactionInfo: String
+}
+
 @MainActor
 final class StudioStoreKitManager: ObservableObject {
-    static let productIdsByPlan: [StudioBillingPlan: String] = [
-        .lifetimeLite: "uk.co.eggcraft.studioflow.lite.lifetime",
-        .proMonthly: "uk.co.eggcraft.studioflow.pro.monthly",
-        .teamMonthly: "uk.co.eggcraft.studioflow.team.monthly"
+    static let productIdsByPlan: [StudioBillingPlan: [StudioStoreBillingInterval: String]] = [
+        .lifetimeLite: [
+            .monthly: "uk.co.eggcraft.studioflow.lite.monthly",
+            .yearly: "uk.co.eggcraft.studioflow.lite.yearly"
+        ],
+        .proMonthly: [
+            .monthly: "uk.co.eggcraft.studioflow.pro.monthly",
+            .yearly: "uk.co.eggcraft.studioflow.pro.yearly"
+        ],
+        .teamMonthly: [
+            .monthly: "uk.co.eggcraft.studioflow.team.monthly",
+            .yearly: "uk.co.eggcraft.studioflow.team.yearly"
+        ]
     ]
 
     @Published var products: [StudioStoreProductSummary] = []
@@ -460,21 +490,26 @@ final class StudioStoreKitManager: ObservableObject {
     @Published var message: String = ""
     @Published var errorMessage: String = ""
 
-    static func productId(for plan: StudioBillingPlan) -> String? {
-        productIdsByPlan[plan]
+    static func productId(for plan: StudioBillingPlan, interval: StudioStoreBillingInterval) -> String? {
+        productIdsByPlan[plan]?[interval]
     }
 
-    static func plan(for productId: String) -> StudioBillingPlan? {
-        productIdsByPlan.first(where: { $0.value == productId })?.key
+    static func purchaseOption(for productId: String) -> (plan: StudioBillingPlan, interval: StudioStoreBillingInterval)? {
+        for (plan, intervals) in productIdsByPlan {
+            if let interval = intervals.first(where: { $0.value == productId })?.key {
+                return (plan, interval)
+            }
+        }
+        return nil
     }
 
-    func productSummary(for plan: StudioBillingPlan) -> StudioStoreProductSummary? {
-        guard let productId = Self.productId(for: plan) else { return nil }
+    func productSummary(for plan: StudioBillingPlan, interval: StudioStoreBillingInterval) -> StudioStoreProductSummary? {
+        guard let productId = Self.productId(for: plan, interval: interval) else { return nil }
         return products.first(where: { $0.id == productId })
     }
 
-    func configuredProductId(for plan: StudioBillingPlan) -> String {
-        Self.productId(for: plan) ?? ""
+    func configuredProductId(for plan: StudioBillingPlan, interval: StudioStoreBillingInterval) -> String {
+        Self.productId(for: plan, interval: interval) ?? ""
     }
 
     func loadProducts() async {
@@ -490,7 +525,7 @@ final class StudioStoreKitManager: ObservableObject {
         }
 
         do {
-            let ids = Array(Self.productIdsByPlan.values)
+            let ids = Self.productIdsByPlan.values.flatMap { Array($0.values) }
             let storeProducts = try await Product.products(for: ids)
             products = storeProducts
                 .sorted { $0.id < $1.id }
@@ -515,11 +550,11 @@ final class StudioStoreKitManager: ObservableObject {
         #endif
     }
 
-    func purchase(_ plan: StudioBillingPlan) async -> StudioBillingPlan? {
+    func purchase(_ plan: StudioBillingPlan, interval: StudioStoreBillingInterval, appAccountToken: UUID) async -> StudioStoreVerifiedPurchase? {
         message = ""
         errorMessage = ""
 
-        guard let productId = Self.productId(for: plan) else {
+        guard let productId = Self.productId(for: plan, interval: interval) else {
             errorMessage = "Purchase unavailable."
             return nil
         }
@@ -540,13 +575,19 @@ final class StudioStoreKitManager: ObservableObject {
                 return nil
             }
 
-            let result = try await product.purchase()
+            let result = try await product.purchase(options: [.appAccountToken(appAccountToken)])
             switch result {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
+                let purchase = StudioStoreVerifiedPurchase(
+                    plan: plan,
+                    interval: interval,
+                    productId: transaction.productID,
+                    signedTransactionInfo: verification.jwsRepresentation
+                )
                 await transaction.finish()
-                message = "Purchase confirmed. Workspace plan is updating."
-                return plan
+                message = "Purchase confirmed. Verifying subscription access."
+                return purchase
             case .userCancelled:
                 message = "Purchase cancelled."
                 return nil
@@ -567,25 +608,31 @@ final class StudioStoreKitManager: ObservableObject {
         #endif
     }
 
-    func currentEntitlementPlan() async -> StudioBillingPlan? {
+    func currentEntitlementPurchase() async -> StudioStoreVerifiedPurchase? {
         #if canImport(StoreKit)
         guard #available(iOS 15.0, macOS 12.0, *) else { return nil }
 
-        var activePlan: StudioBillingPlan? = nil
+        var activePurchase: StudioStoreVerifiedPurchase? = nil
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? checkVerified(result),
-                  let plan = Self.plan(for: transaction.productID) else { continue }
-            if activePlan == nil || plan.accessLevel > activePlan!.accessLevel {
-                activePlan = plan
+                  let option = Self.purchaseOption(for: transaction.productID) else { continue }
+            let candidate = StudioStoreVerifiedPurchase(
+                plan: option.plan,
+                interval: option.interval,
+                productId: transaction.productID,
+                signedTransactionInfo: result.jwsRepresentation
+            )
+            if activePurchase == nil || option.plan.accessLevel > activePurchase!.plan.accessLevel {
+                activePurchase = candidate
             }
         }
-        return activePlan
+        return activePurchase
         #else
         return nil
         #endif
     }
 
-    func restorePurchases() async -> StudioBillingPlan? {
+    func restorePurchases() async -> StudioStoreVerifiedPurchase? {
         message = ""
         errorMessage = ""
 
@@ -600,23 +647,12 @@ final class StudioStoreKitManager: ObservableObject {
 
         do {
             try await AppStore.sync()
-            var restoredPlan: StudioBillingPlan? = nil
-
-            for await result in Transaction.currentEntitlements {
-                guard let transaction = try? checkVerified(result),
-                      let plan = Self.plan(for: transaction.productID) else { continue }
-                if restoredPlan == nil || plan.accessLevel > restoredPlan!.accessLevel {
-                    restoredPlan = plan
-                }
+            if let purchase = await currentEntitlementPurchase() {
+                message = "Purchase restored. Verifying subscription access."
+                return purchase
             }
-
-            if let restoredPlan {
-                message = "Purchase restored. Workspace plan is updating."
-                return restoredPlan
-            } else {
-                message = "No active purchase was found."
-                return nil
-            }
+            message = "No active purchase was found."
+            return nil
         } catch {
             errorMessage = error.localizedDescription
             return nil
@@ -650,6 +686,7 @@ class AuthViewModel: ObservableObject {
     @Published private(set) var currentCompanyId: String? = nil
     @Published private(set) var isWorkspaceReady: Bool = false
     @Published var currentBillingPlan: StudioBillingPlan = .demo
+    @Published var currentBillingInterval: StudioStoreBillingInterval? = nil
     @Published var billingPlanSource: String = "legacy"
     @Published var billingUpdatedAt: Date? = nil
 
@@ -2167,6 +2204,7 @@ class AuthViewModel: ObservableObject {
         currentWorkspaceRoleLabel = "Owner"
         currentWorkspaceAccess = studioDefaultMemberAccess()
         currentBillingPlan = .demo
+        currentBillingInterval = nil
         billingPlanSource = "secure_default"
         billingUpdatedAt = nil
         UserDefaults.standard.set(currentBillingPlan.rawValue, forKey: billingPlanDefaultsKey)
@@ -2451,6 +2489,8 @@ class AuthViewModel: ObservableObject {
         let rawPlan = (data["billingPlan"] as? String) ?? ""
         let resolvedPlan = StudioBillingPlan(rawValue: rawPlan) ?? .demo
         currentBillingPlan = resolvedPlan
+        let rawInterval = (data["billingInterval"] as? String) ?? ""
+        currentBillingInterval = resolvedPlan == .demo ? nil : StudioStoreBillingInterval(rawValue: rawInterval)
         billingPlanSource = (data["billingPlanSource"] as? String) ?? (rawPlan.isEmpty ? "legacy_default" : "manual")
         billingUpdatedAt = (data["billingUpdatedAt"] as? Timestamp)?.dateValue()
         UserDefaults.standard.set(resolvedPlan.rawValue, forKey: billingPlanDefaultsKey)
@@ -2460,8 +2500,49 @@ class AuthViewModel: ObservableObject {
         profileErrorMessage = "Manual plan switching is disabled. Plans are managed through secure billing."
     }
 
-    func updateWorkspaceBillingPlanFromStoreKit(_ plan: StudioBillingPlan, productId: String) {
-        profileErrorMessage = "App Store purchases will become available after secure server verification is connected."
+    func prepareAppleSubscriptionPurchaseToken() async throws -> UUID {
+        guard let companyId = currentCompanyId, !companyId.isEmpty else {
+            throw NSError(domain: "StudioFlowBilling", code: 1, userInfo: [NSLocalizedDescriptionKey: "Company ID is not configured."])
+        }
+
+        #if canImport(FirebaseFunctions)
+        let result = try await Functions.functions(region: "europe-west2")
+            .httpsCallable("prepareAppleSubscriptionPurchase")
+            .call(["companyId": companyId])
+        guard let data = result.data as? [String: Any],
+              let rawToken = data["appAccountToken"] as? String,
+              let token = UUID(uuidString: rawToken) else {
+            throw NSError(domain: "StudioFlowBilling", code: 2, userInfo: [NSLocalizedDescriptionKey: "Apple purchase account token could not be prepared."])
+        }
+        return token
+        #else
+        throw NSError(domain: "StudioFlowBilling", code: 3, userInfo: [NSLocalizedDescriptionKey: "Secure Apple billing is not available in this build."])
+        #endif
+    }
+
+    func verifyAppleSubscriptionPurchase(_ purchase: StudioStoreVerifiedPurchase) async throws -> StudioBillingPlan {
+        guard let companyId = currentCompanyId, !companyId.isEmpty else {
+            throw NSError(domain: "StudioFlowBilling", code: 4, userInfo: [NSLocalizedDescriptionKey: "Company ID is not configured."])
+        }
+
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = [
+            "companyId": companyId,
+            "signedTransactionInfo": purchase.signedTransactionInfo
+        ]
+        let result = try await Functions.functions(region: "europe-west2")
+            .httpsCallable("verifyAppleSubscriptionPurchase")
+            .call(payload)
+        guard let data = result.data as? [String: Any],
+              let rawPlan = data["plan"] as? String,
+              let plan = StudioBillingPlan(rawValue: rawPlan) else {
+            throw NSError(domain: "StudioFlowBilling", code: 5, userInfo: [NSLocalizedDescriptionKey: "Verified subscription plan was not returned by the server."])
+        }
+        profileErrorMessage = ""
+        return plan
+        #else
+        throw NSError(domain: "StudioFlowBilling", code: 6, userInfo: [NSLocalizedDescriptionKey: "Secure Apple billing is not available in this build."])
+        #endif
     }
 
     func canCreateMoreOrders(currentCount: Int) -> Bool {

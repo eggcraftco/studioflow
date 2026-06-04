@@ -12036,6 +12036,9 @@ struct AccountProfileView: View {
                     securityCard
                 case .planAccess:
                     planAndAccessCard
+                    if authVM.isCompanyOwner {
+                        storeKitPurchaseCard
+                    }
                 case .teamAccess:
                     teamAccessCard
                 }
@@ -12520,9 +12523,7 @@ struct AccountProfileView: View {
     }
 
     private func storeProductCard(_ plan: StudioBillingPlan) -> some View {
-        let product = storeKitManager.productSummary(for: plan)
         let isCurrent = authVM.currentBillingPlan == plan
-        let productId = storeKitManager.configuredProductId(for: plan)
         let accent = planAccentColor(plan)
 
         return VStack(alignment: .leading, spacing: 9) {
@@ -12534,45 +12535,25 @@ struct AccountProfileView: View {
                     .background(accent.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(t(plan.displayName, lang: seciliDil))
-                        .font(.system(size: 12, weight: .bold))
-                    Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(product == nil ? .secondary : accent)
-                }
+                Text(t(plan.displayName, lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
 
                 Spacer(minLength: 0)
+
+                if isCurrent {
+                    Text(t("Current plan", lang: seciliDil))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(accent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(accent.opacity(0.10))
+                        .clipShape(Capsule())
+                }
             }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(t("Product ID", lang: seciliDil))
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.secondary)
-                Text(productId)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-                    .textSelection(.enabled)
+            ForEach(StudioStoreBillingInterval.allCases) { interval in
+                storeProductPurchaseRow(plan: plan, interval: interval, isCurrent: isCurrent, accent: accent)
             }
-
-            if product == nil {
-                Text(t("Create this product ID in App Store Connect.", lang: seciliDil))
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Button {
-                Task { await purchaseStoreKitPlan(plan) }
-            } label: {
-                Text(t(isCurrent ? t("Current plan", lang: seciliDil) : storeKitButtonTitle(for: plan), lang: seciliDil))
-                    .font(.system(size: 10, weight: .bold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(isCurrent || !authVM.isCompanyOwner || product == nil || storeKitManager.isPurchasing || authVM.isProfileLoading)
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -12584,53 +12565,89 @@ struct AccountProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 
-    private func storeKitButtonTitle(for plan: StudioBillingPlan) -> String {
-        switch plan {
-        case .lifetimeLite:
-            return "Buy once"
-        case .proMonthly, .teamMonthly:
-            return "Subscribe"
-        case .demo:
-            return t("Current plan", lang: seciliDil)
+    private func storeProductPurchaseRow(plan: StudioBillingPlan, interval: StudioStoreBillingInterval, isCurrent: Bool, accent: Color) -> some View {
+        let product = storeKitManager.productSummary(for: plan, interval: interval)
+        let productId = storeKitManager.configuredProductId(for: plan, interval: interval)
+        let isCurrentInterval = isCurrent && authVM.currentBillingInterval == interval
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(t(interval.displayName, lang: seciliDil))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+                Spacer(minLength: 0)
+                Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(product == nil ? .secondary : accent)
+            }
+
+            Text(productId)
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            if product == nil {
+                Text(t("Create this product ID in App Store Connect.", lang: seciliDil))
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                Task { await purchaseStoreKitPlan(plan, interval: interval) }
+            } label: {
+                Text(t(isCurrentInterval ? "Current plan" : "Subscribe", lang: seciliDil))
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isCurrentInterval || !authVM.isCompanyOwner || product == nil || storeKitManager.isPurchasing || authVM.isProfileLoading)
         }
+        .padding(8)
+        .background(Color.primary.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func syncCurrentStoreKitEntitlement() async {
         guard authVM.isCompanyOwner else { return }
-        guard let activePlan = await storeKitManager.currentEntitlementPlan(),
-              let productId = StudioStoreKitManager.productId(for: activePlan) else { return }
-
-        if authVM.currentBillingPlan != activePlan {
-            authVM.updateWorkspaceBillingPlanFromStoreKit(activePlan, productId: productId)
+        guard let purchase = await storeKitManager.currentEntitlementPurchase() else { return }
+        do {
+            _ = try await authVM.verifyAppleSubscriptionPurchase(purchase)
+        } catch {
+            storeKitManager.errorMessage = error.localizedDescription
         }
     }
 
-    private func purchaseStoreKitPlan(_ plan: StudioBillingPlan) async {
+    private func purchaseStoreKitPlan(_ plan: StudioBillingPlan, interval: StudioStoreBillingInterval) async {
         guard authVM.isCompanyOwner else {
             storeKitActionAlertMessage = "Only the workspace owner can buy or restore a plan."
             showStoreKitActionAlert = true
             return
         }
 
-        if storeKitManager.productSummary(for: plan) == nil {
+        if storeKitManager.productSummary(for: plan, interval: interval) == nil {
             await storeKitManager.loadProducts()
         }
 
-        guard let productId = StudioStoreKitManager.productId(for: plan) else {
-            storeKitActionAlertMessage = "Purchase unavailable."
+        do {
+            let appAccountToken = try await authVM.prepareAppleSubscriptionPurchaseToken()
+            guard let purchase = await storeKitManager.purchase(plan, interval: interval, appAccountToken: appAccountToken) else {
+                if !storeKitManager.errorMessage.isEmpty {
+                    storeKitActionAlertMessage = storeKitManager.errorMessage
+                    showStoreKitActionAlert = true
+                } else if !storeKitManager.message.isEmpty {
+                    storeKitActionAlertMessage = storeKitManager.message
+                    showStoreKitActionAlert = true
+                }
+                return
+            }
+            _ = try await authVM.verifyAppleSubscriptionPurchase(purchase)
+            storeKitActionAlertMessage = "Purchase verified. Your workspace plan is active."
             showStoreKitActionAlert = true
-            return
-        }
-
-        if let purchasedPlan = await storeKitManager.purchase(plan) {
-            authVM.updateWorkspaceBillingPlanFromStoreKit(purchasedPlan, productId: productId)
-            storeKitActionAlertMessage = "Purchase confirmed. Workspace plan is updating."
-            showStoreKitActionAlert = true
-        } else if !storeKitManager.errorMessage.isEmpty {
-            storeKitActionAlertMessage = storeKitManager.errorMessage
-            showStoreKitActionAlert = true
-        } else if !storeKitManager.message.isEmpty {
-            storeKitActionAlertMessage = storeKitManager.message
+        } catch {
+            storeKitActionAlertMessage = error.localizedDescription
             showStoreKitActionAlert = true
         }
     }
@@ -12642,10 +12659,13 @@ struct AccountProfileView: View {
             return
         }
 
-        if let restoredPlan = await storeKitManager.restorePurchases(),
-           let productId = StudioStoreKitManager.productId(for: restoredPlan) {
-            authVM.updateWorkspaceBillingPlanFromStoreKit(restoredPlan, productId: productId)
-            storeKitActionAlertMessage = "Purchase restored. Workspace plan is updating."
+        if let purchase = await storeKitManager.restorePurchases() {
+            do {
+                _ = try await authVM.verifyAppleSubscriptionPurchase(purchase)
+                storeKitActionAlertMessage = "Purchase restored. Your workspace plan is active."
+            } catch {
+                storeKitActionAlertMessage = error.localizedDescription
+            }
         } else if !storeKitManager.errorMessage.isEmpty {
             storeKitActionAlertMessage = storeKitManager.errorMessage
         } else if !storeKitManager.message.isEmpty {
@@ -12762,16 +12782,10 @@ struct AccountProfileView: View {
 
             if authVM.isCompanyOwner && !isCurrent {
                 if plan != .demo {
-                    Button {
-                        Task { await purchaseStoreKitPlan(plan) }
-                    } label: {
-                        Text(t(storeKitButtonTitle(for: plan), lang: seciliDil))
-                            .font(.system(size: 11, weight: .bold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(storeKitManager.isPurchasing || storeKitManager.productSummary(for: plan) == nil || authVM.isProfileLoading)
+                    Text(t("Choose monthly or yearly in App Store Purchases below.", lang: seciliDil))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else if isCurrent {
                 Text(t("Your workspace is using this plan.", lang: seciliDil))

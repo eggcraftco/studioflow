@@ -12,6 +12,8 @@ const ROYALMAIL_CLIENT_ID = defineSecret("ROYALMAIL_CLIENT_ID");
 const ROYALMAIL_CLIENT_SECRET = defineSecret("ROYALMAIL_CLIENT_SECRET");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
+const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
+const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
 
 const TRACK17_BASE_URL = "https://api.17track.net/track/v2.2";
 const TRACK17_REGISTER_URL = `${TRACK17_BASE_URL}/register`;
@@ -3715,6 +3717,8 @@ Object.assign(exports, createStripeBillingFunctions({
   HttpsError,
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
+  APPLE_ROOT_CA_CERTS_PEM,
+  GOOGLE_PLAY_SERVICE_ACCOUNT,
   PLAN_ENTITLEMENTS,
   requireWorkspaceForBilling,
   workspaceOrderRole,
