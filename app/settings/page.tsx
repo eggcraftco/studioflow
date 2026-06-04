@@ -3261,7 +3261,7 @@ function PlanAccessSection({
         </div>
         <p className="muted-copy">{counts?.estimatedFileUsageMB ?? 0} MB used of {formatStorageFromMB(workspace.billingStorageLimitMB)}.</p>
         {isActiveWorkspaceOwner ? (
-          <Link className="button secondary" href="/plan">Open full Plan &amp; Billing page</Link>
+          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>Open full Plan &amp; Billing page</Link>
         ) : (
           <p className="muted-copy">This workspace plan is managed by its owner.</p>
         )}
@@ -3299,7 +3299,7 @@ function PlanAccessSection({
           Subscription access is managed through secure billing and updates automatically when a payment status changes.
         </p>
         {isActiveWorkspaceOwner ? (
-          <Link className="button secondary" href="/plan">Open Plan &amp; Billing</Link>
+          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>Open Plan &amp; Billing</Link>
         ) : (
           <p className="muted-copy">Only the workspace owner can change or manage this plan.</p>
         )}
