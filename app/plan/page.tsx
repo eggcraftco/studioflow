@@ -383,7 +383,7 @@ export default function PlanPage() {
             </p>
             <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
               {ADD_ONS.map(addon => (
-                <article key={addon.id} className="card" style={{ padding: 18, background: "rgba(255,255,255,0.62)", boxShadow: "none" }}>
+                <article key={addon.id} className="card" style={{ padding: 18, background: "var(--panel)", boxShadow: "none" }}>
                   <div className="pill">+{addon.storageGB} GB</div>
                   <h3 style={{ margin: "12px 0 6px" }}>{addon.title}</h3>
                   <p style={{ color: "var(--muted)", marginTop: 0 }}>{addon.note}</p>
@@ -407,7 +407,7 @@ export default function PlanPage() {
 
 function MiniMetric({ title, value, note }: { title: string; value: string; note: string }) {
   return (
-    <article className="card" style={{ padding: 16, background: "rgba(255,255,255,0.62)", boxShadow: "none" }}>
+    <article className="card" style={{ padding: 16, background: "var(--panel)", boxShadow: "none" }}>
       <div className="pill">{title}</div>
       <div className="metric" style={{ fontSize: 24 }}>{value}</div>
       <p style={{ color: "var(--muted)", margin: 0 }}>{note}</p>
@@ -438,7 +438,7 @@ function PlanCard({
   const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
 
   return (
-    <article className="card" style={{ padding: 20, background: active ? "var(--accent-soft)" : "rgba(255,255,255,0.62)" }}>
+    <article className="card" style={{ padding: 20, background: active ? "var(--accent-soft)" : "var(--panel)" }}>
       <div className="pill">{active ? "Current plan" : plan.purchaseModel}</div>
       <h3 style={{ margin: "12px 0 6px", fontSize: 23 }}>{plan.title}</h3>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>

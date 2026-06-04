@@ -91,7 +91,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   pro_monthly: {
     plan: "pro_monthly",
     title: "NivaDesk Pro",
-    purchaseModel: "Monthly Subscription",
+    purchaseModel: "Monthly or Annual Subscription",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 10240,
@@ -118,7 +118,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   team_monthly: {
     plan: "team_monthly",
     title: "NivaDesk Team",
-    purchaseModel: "Monthly Subscription",
+    purchaseModel: "Monthly or Annual Subscription",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 51200,
