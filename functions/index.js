@@ -12319,6 +12319,13 @@ function mapWooCommerceOrderToSiparis(order, companyId, isNew = true) {
   return mapped;
 }
 
+// Constant-time string comparison to avoid timing side channels on secret checks.
+function nvTimingSafeEqual(a, b) {
+  const ba = Buffer.from(String(a || ""));
+  const bb = Buffer.from(String(b || ""));
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+
 exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
   try {
     if (req.method !== "POST") {
@@ -12328,6 +12335,24 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
         requiredQuery: "companyId"
       });
       return;
+    }
+
+    // Authenticate the request with the WooCommerce HMAC signature when a secret is
+    // configured. Backward compatible: if WOOCOMMERCE_WEBHOOK_SECRET is unset the request
+    // is allowed (with a warning) so the existing integration keeps working; once the secret
+    // is set to match the webhook's secret in WooCommerce, unsigned/forged requests are rejected.
+    const wooSecret = String(process.env.WOOCOMMERCE_WEBHOOK_SECRET || "").trim();
+    if (wooSecret) {
+      const signature = String(req.headers["x-wc-webhook-signature"] || "");
+      const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+      const expected = crypto.createHmac("sha256", wooSecret).update(rawBody).digest("base64");
+      if (!nvTimingSafeEqual(signature, expected)) {
+        console.warn("woocommerceOrderWebhook: rejected request with invalid signature.");
+        res.status(401).json({ ok: false, error: "invalid_signature" });
+        return;
+      }
+    } else {
+      console.warn("woocommerceOrderWebhook: WOOCOMMERCE_WEBHOOK_SECRET not set — request not authenticated.");
     }
 
     const order = req.body || {};
@@ -12377,6 +12402,21 @@ exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) 
     if (req.method !== "POST") {
       res.status(200).json({ ok: true, message: "Webhook endpoint is alive. Use POST for updates." });
       return;
+    }
+
+    // Authenticate with a shared token when configured. Backward compatible: if
+    // TRACK17_WEBHOOK_TOKEN is unset the request is allowed (with a warning). Once set,
+    // add ?token=<value> to the 17TRACK webhook URL; requests without it are rejected.
+    const expectedToken = String(process.env.TRACK17_WEBHOOK_TOKEN || "").trim();
+    if (expectedToken) {
+      const provided = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+      if (!nvTimingSafeEqual(provided, expectedToken)) {
+        console.warn("track17Webhook: rejected request with invalid token.");
+        res.status(401).json({ ok: false, error: "invalid_token" });
+        return;
+      }
+    } else {
+      console.warn("track17Webhook: TRACK17_WEBHOOK_TOKEN not set — request not authenticated.");
     }
 
     const payload = req.body || {};
