@@ -19,6 +19,8 @@ struct AyarlarView: View {
     @State private var seciliAyarSekmesi: String
     @State private var phoneShowsSettingsDetail: Bool = false
     @State private var wooCommerceCopyFeedback: String = ""
+    @State private var wooCommerceDeliveryURL: String = ""
+    @State private var wooCommerceTokenLoading: Bool = false
     @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
     @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
     @AppStorage("uploadSafetyMaxFileSizeMBV1") private var uploadSafetyMaxFileSizeMB: Double = 10.0
@@ -5618,7 +5620,9 @@ struct AyarlarView: View {
     private var wooCommerceIntegrationAyari: some View {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedCompanyId = companyId.isEmpty ? "YOUR_COMPANY_ID" : companyId
-        let deliveryURL = "https://europe-west2-eggcraft-studio.cloudfunctions.net/woocommerceOrderWebhook?companyId=\(resolvedCompanyId)"
+        // The signed Delivery URL (with this workspace's webhook token) is loaded from the
+        // backend; show it once available so the copied URL authenticates correctly.
+        let deliveryURL = wooCommerceDeliveryURL
 
         return VStack(alignment: .leading, spacing: 18) {
             SettingsCard(title: t("Connect WooCommerce", lang: seciliDil), iconName: "cart.badge.plus", footerText: t("This setup only needs to be done once in WooCommerce.", lang: seciliDil)) {
@@ -5656,9 +5660,9 @@ struct AyarlarView: View {
 
                     copyableIntegrationValue(
                         title: t("Delivery URL with Company ID", lang: seciliDil),
-                        value: deliveryURL,
+                        value: deliveryURL.isEmpty ? (wooCommerceTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
                         buttonTitle: t("Copy Delivery URL", lang: seciliDil),
-                        canCopy: !companyId.isEmpty
+                        canCopy: !deliveryURL.isEmpty
                     )
 
                     if !wooCommerceCopyFeedback.isEmpty {
@@ -5686,6 +5690,24 @@ struct AyarlarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .onAppear { loadWooCommerceWebhookSetup() }
+    }
+
+    private func loadWooCommerceWebhookSetup() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty, wooCommerceDeliveryURL.isEmpty, !wooCommerceTokenLoading else { return }
+        wooCommerceTokenLoading = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("getWooCommerceWebhookToken")
+            .call(["companyId": companyId]) { result, _ in
+                DispatchQueue.main.async {
+                    wooCommerceTokenLoading = false
+                    if let data = result?.data as? [String: Any],
+                       let url = data["deliveryUrl"] as? String, !url.isEmpty {
+                        wooCommerceDeliveryURL = url
+                    }
+                }
+            }
     }
 
 
