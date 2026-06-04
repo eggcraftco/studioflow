@@ -12367,7 +12367,9 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
 
     const wooOrderId = cleanWooText(order?.id || order?.number);
     if (!wooOrderId) {
-      res.status(400).json({ ok: false, error: "Missing WooCommerce order id." });
+      // Acknowledge non-order payloads (e.g. WooCommerce's save-time test ping) with 200 so
+      // WooCommerce does not count them as failed deliveries and auto-disable the webhook.
+      res.status(200).json({ ok: true, ignored: "no_order_id" });
       return;
     }
 
