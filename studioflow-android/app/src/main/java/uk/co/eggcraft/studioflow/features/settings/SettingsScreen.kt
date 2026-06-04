@@ -1989,17 +1989,25 @@ private fun PlanAccessDetail(
             Text(t("Shared app and web plan keys"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val columns = if (maxWidth >= 760.dp) 2 else 1
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (columns == 1) 720.dp else 390.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    userScrollEnabled = false
+                // Content-sizing grid (no fixed height) so taller plan cards are never clipped.
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(StudioBillingPlan.entries.toList()) { item ->
-                        PlanComparisonCard(plan = item, current = item == plan)
+                    StudioBillingPlan.entries.toList().chunked(columns).forEach { rowPlans ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            rowPlans.forEach { item ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    PlanComparisonCard(plan = item, current = item == plan)
+                                }
+                            }
+                            repeat(columns - rowPlans.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
