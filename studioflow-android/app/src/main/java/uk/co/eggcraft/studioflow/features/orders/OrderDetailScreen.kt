@@ -55,6 +55,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Launch
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -3388,6 +3392,24 @@ private fun DesktopClientFilesCard(
     }
     var renameFileId by remember(order.id) { mutableStateOf("") }
     var renameText by remember(order.id) { mutableStateOf("") }
+    var deleteFileId by remember(order.id) { mutableStateOf("") }
+    if (deleteFileId.isNotBlank()) {
+        val target = order.clientFiles.firstOrNull { it.id == deleteFileId }
+        AlertDialog(
+            onDismissRequest = { deleteFileId = "" },
+            title = { Text(t("Delete file?")) },
+            text = { Text(target?.fileName ?: "") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteClientFile(order, deleteFileId)
+                    deleteFileId = ""
+                }) { Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteFileId = "" }) { Text(t("Cancel")) }
+            }
+        )
+    }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null && clientFilesEnabled) {
             val fileName = displayNameForUri(context, uri)
@@ -3450,43 +3472,20 @@ private fun DesktopClientFilesCard(
             if (order.clientFiles.isEmpty()) {
                 DetailListRow("No client files yet.", "Upload PDFs, images, PSD or PSB files that belong to this client order.", MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                val visibleClientFiles = order.clientFiles.take(3)
-                visibleClientFiles.forEach { file ->
-                    DetailListRow(
-                        title = file.fileName,
-                        subtitle = listOf(fileSizeLabel(file.fileSize), shortDateOrDash(file.uploadedAt)).filter { it.isNotBlank() }.joinToString(" · "),
-                        tone = StudioBlue
-                    )
-                    if (clientFilesEnabled) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                            TextButton(
-                                onClick = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
-                                enabled = file.downloadUrl.isNotBlank(),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(t("Open"), fontWeight = FontWeight.ExtraBold)
-                            }
-                            TextButton(
-                                onClick = {
-                                    if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
-                                        onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
-                                    }
-                                },
-                                enabled = isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank(),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(t("Preview"), fontWeight = FontWeight.ExtraBold)
-                            }
-                            TextButton(
-                                onClick = {
-                                    renameFileId = file.id
-                                    renameText = file.fileName
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(t("Rename"), fontWeight = FontWeight.ExtraBold)
-                            }
-                        }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    order.clientFiles.forEach { file ->
+                        ClientFileRowCard(
+                            file = file,
+                            enabled = clientFilesEnabled,
+                            onPreview = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
+                            onDownload = { downloadClientFile(context, file) },
+                            onOpenExternal = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
+                            onRename = {
+                                renameFileId = file.id
+                                renameText = file.fileName
+                            },
+                            onDelete = { deleteFileId = file.id }
+                        )
                         if (renameFileId == file.id) {
                             OutlinedTextField(
                                 value = renameText,
@@ -3507,21 +3506,22 @@ private fun DesktopClientFilesCard(
                                     Text(t("Save"), fontWeight = FontWeight.ExtraBold)
                                 }
                                 TextButton(
-                                    onClick = {
-                                        onDeleteClientFile(order, file.id)
-                                        renameFileId = ""
-                                    },
+                                    onClick = { renameFileId = "" },
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                                    Text(t("Cancel"), fontWeight = FontWeight.ExtraBold)
                                 }
                             }
                         }
                     }
                 }
-                if (order.clientFiles.size > visibleClientFiles.size) {
-                    InfoRow("More Files", "+${order.clientFiles.size - visibleClientFiles.size}")
-                }
+                Text(
+                    t("Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. The size limit follows Settings > Safety & Uploads."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
@@ -9633,6 +9633,105 @@ private fun ClientFilePreviewDialog(
                     ) {
                         Text(t("Open"), fontWeight = FontWeight.ExtraBold)
                     }
+                }
+            }
+        }
+    }
+}
+
+private fun downloadClientFile(context: Context, file: StudioClientFile) {
+    if (file.downloadUrl.isBlank()) return
+    try {
+        val request = android.app.DownloadManager.Request(android.net.Uri.parse(file.downloadUrl))
+            .setTitle(file.fileName)
+            .setDescription("NivaDesk")
+            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, file.fileName)
+        if (file.contentType.isNotBlank()) request.setMimeType(file.contentType)
+        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+        manager.enqueue(request)
+        android.widget.Toast.makeText(context, "Downloading ${file.fileName}", android.widget.Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "Download failed", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+// Mac-style client file row: thumbnail (image preview / file-type icon), name +
+// size·date + uploader, and compact action icons on the right.
+@Composable
+private fun ClientFileRowCard(
+    file: StudioClientFile,
+    enabled: Boolean,
+    onPreview: () -> Unit,
+    onDownload: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val isImage = isClientFileImage(file.contentType, file.fileName)
+    val isPdf = file.contentType.lowercase().contains("pdf") || file.fileName.lowercase().endsWith(".pdf")
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled && file.downloadUrl.isNotBlank()) { onPreview() },
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isPdf) StudioRed.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isImage && file.downloadUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = file.downloadUrl,
+                        contentDescription = file.fileName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        if (isPdf) Icons.Filled.PictureAsPdf else Icons.Filled.Description,
+                        contentDescription = null,
+                        tint = if (isPdf) StudioRed else StudioBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(file.fileName, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    listOf(fileSizeLabel(file.fileSize), shortDateOrDash(file.uploadedAt)).filter { it.isNotBlank() }.joinToString(" · "),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (file.uploadedByEmail.isNotBlank()) {
+                    Text(file.uploadedByEmail, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (enabled) {
+                IconButton(onClick = onDownload, modifier = Modifier.size(36.dp), enabled = file.downloadUrl.isNotBlank()) {
+                    Icon(Icons.Filled.Download, contentDescription = t("Download"), tint = StudioBlue, modifier = Modifier.size(19.dp))
+                }
+                IconButton(onClick = onOpenExternal, modifier = Modifier.size(36.dp), enabled = file.downloadUrl.isNotBlank()) {
+                    Icon(Icons.Filled.Launch, contentDescription = t("Open"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Edit, contentDescription = t("Rename"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = StudioRed.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
                 }
             }
         }
