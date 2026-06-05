@@ -1013,7 +1013,11 @@ private fun StudioSectionContent(
             )
             StudioSection.Schedule -> ScheduleScreen(
                 state = state,
-                onUpdateOrderFields = onUpdateOrderFields
+                onUpdateOrderFields = onUpdateOrderFields,
+                onAssignOrder = onAssignOrder,
+                onDeleteOrder = onDeleteOrder,
+                onOpenCustomerFromOrder = onOpenCustomerFromOrder,
+                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
             )
             StudioSection.Customers -> CustomersScreen(state = state, focusedCustomerName = focusedCustomerName)
             StudioSection.Notifications -> uk.co.eggcraft.studioflow.features.notifications.NotificationsScreen(

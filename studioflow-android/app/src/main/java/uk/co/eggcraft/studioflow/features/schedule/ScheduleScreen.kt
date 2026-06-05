@@ -99,7 +99,11 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 @Composable
 fun ScheduleScreen(
     state: StudioFlowUiState,
-    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onAssignOrder: (StudioOrder, uk.co.eggcraft.studioflow.data.model.StudioTeamMember?) -> Unit = { _, _ -> },
+    onDeleteOrder: (StudioOrder) -> Unit = {},
+    onOpenCustomerFromOrder: (StudioOrder) -> Unit = {},
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit = { _, _ -> }
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -139,9 +143,24 @@ fun ScheduleScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         val useDesktopTimeline = maxWidth >= 840.dp
+        val sidebarWidth = if (maxWidth >= 1360.dp) 430.dp else 390.dp
         if (useDesktopTimeline) {
-            ScheduleDesktopTimelineScreen(
-                allOrders = state.orders,
+            Row(modifier = Modifier.fillMaxSize()) {
+                uk.co.eggcraft.studioflow.features.orders.OrderListSidebarPane(
+                    state = state,
+                    selectedOrderId = selectedScheduleOrderId,
+                    onOpenOrder = { selectedScheduleOrderId = it.id },
+                    onAssignOrder = onAssignOrder,
+                    onUpdateOrderFields = onUpdateOrderFields,
+                    onDeleteOrder = onDeleteOrder,
+                    onOpenCustomerFromOrder = onOpenCustomerFromOrder,
+                    onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                    modifier = Modifier
+                        .width(sidebarWidth)
+                        .fillMaxHeight()
+                )
+                ScheduleDesktopTimelineScreen(
+                    allOrders = state.orders,
                 visibleOrders = visibleOrders,
                 range = range,
                 zoom = zoom,
@@ -176,8 +195,10 @@ fun ScheduleScreen(
                 onResizeLeading = { order, days -> resizeScheduleOrderLeading(order, days, onUpdateOrderFields) },
                 onResizeTrailing = { order, days -> resizeScheduleOrderTrailing(order, days, onUpdateOrderFields) },
                 selectedOrderId = selectedScheduleOrderId,
-                onSelectOrder = { selectedScheduleOrderId = it.id }
-            )
+                onSelectOrder = { selectedScheduleOrderId = it.id },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -452,13 +473,14 @@ private fun ScheduleDesktopTimelineScreen(
     onResizeLeading: (StudioOrder, Int) -> Unit,
     onResizeTrailing: (StudioOrder, Int) -> Unit,
     selectedOrderId: String?,
-    onSelectOrder: (StudioOrder) -> Unit
+    onSelectOrder: (StudioOrder) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
+            .fillMaxHeight()
             .background(MaterialTheme.colorScheme.background)
     ) {
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
@@ -496,153 +518,19 @@ private fun ScheduleDesktopTimelineScreen(
                 SchedulePlanNotice()
             }
         }
-        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            ScheduleOrderSidePanel(
-                orders = visibleOrders,
-                selectedOrderId = selectedOrderId,
-                onSelectOrder = onSelectOrder,
-                modifier = Modifier
-                    .width(290.dp)
-                    .fillMaxHeight()
-            )
-            ScheduleTimelineBoard(
-                range = range,
-                visibleOrders = visibleOrders,
-                zoom = zoom,
-                canEditSchedule = canEditSchedule,
-                onMoveOrder = onMoveOrder,
-                onResizeLeading = onResizeLeading,
-                onResizeTrailing = onResizeTrailing,
-                selectedOrderId = selectedOrderId,
-                onSelectOrder = onSelectOrder,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        ScheduleTimelineFooter(visibleOrders = visibleOrders, canEditSchedule = canEditSchedule)
-    }
-}
-
-@Composable
-private fun ScheduleOrderSidePanel(
-    orders: List<StudioOrder>,
-    selectedOrderId: String?,
-    onSelectOrder: (StudioOrder) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val listState = rememberLazyListState()
-    val panelOrders = remember(orders) {
-        orders.sortedWith(
-            compareBy<StudioOrder> { it.isClosed }
-                .thenBy { orderStartDate(it) }
-                .thenBy { deliveryDueDate(it) }
+        ScheduleTimelineBoard(
+            range = range,
+            visibleOrders = visibleOrders,
+            zoom = zoom,
+            canEditSchedule = canEditSchedule,
+            onMoveOrder = onMoveOrder,
+            onResizeLeading = onResizeLeading,
+            onResizeTrailing = onResizeTrailing,
+            selectedOrderId = selectedOrderId,
+            onSelectOrder = onSelectOrder,
+            modifier = Modifier.weight(1f)
         )
-    }
-    // Scroll the selected order into view when chosen from the timeline.
-    LaunchedEffect(selectedOrderId, panelOrders) {
-        val index = panelOrders.indexOfFirst { it.id == selectedOrderId }
-        if (index >= 0) listState.animateScrollToItem(index)
-    }
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, scheduleGridColor())
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                t("Orders"),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            HorizontalDivider(color = scheduleGridColor())
-            if (panelOrders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No orders in this schedule range.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    )
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(panelOrders, key = { it.id }) { order ->
-                        ScheduleOrderSideCard(
-                            order = order,
-                            isSelected = order.id == selectedOrderId,
-                            onClick = { onSelectOrder(order) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleOrderSideCard(
-    order: StudioOrder,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val tone = scheduleColor(order)
-    val statusTone = statusColorForScheduleValue(scheduleStatusLabel(order))
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val cardColor = when {
-        isSelected && isDark -> Color(0xFF1E3354)
-        isSelected -> Color(0xFFDCEBFF)
-        else -> MaterialTheme.colorScheme.surface
-    }
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        color = cardColor,
-        border = androidx.compose.foundation.BorderStroke(
-            if (isSelected) 2.dp else 1.dp,
-            if (isSelected) StudioBlue else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
-        ),
-        tonalElevation = if (isSelected) 2.dp else 0.dp
-    ) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(tone)
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 11.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Text(order.displayCustomerName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                Text("• ${order.designName.ifBlank { "-" }}", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = RoundedCornerShape(999.dp), color = statusTone.copy(alpha = 0.16f)) {
-                        Text(scheduleStatusLabel(order), modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp), color = statusTone, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
-                    }
-                    val countdown = timelineCountdownText(order)
-                    if (countdown.isNotBlank()) {
-                        Text(countdown, color = tone, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
-                Text(
-                    "${scheduleDateFormatter(uk.co.eggcraft.studioflow.language.studioLocale(lang)).format(orderStartDate(order))} → ${scheduleDateFormatter(uk.co.eggcraft.studioflow.language.studioLocale(lang)).format(deliveryDueDate(order))}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
+        ScheduleTimelineFooter(visibleOrders = visibleOrders, canEditSchedule = canEditSchedule)
     }
 }
 

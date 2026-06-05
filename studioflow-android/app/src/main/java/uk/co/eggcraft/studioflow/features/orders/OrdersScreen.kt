@@ -599,6 +599,62 @@ private fun OrderListPane(
     }
 }
 
+/**
+ * The exact same order-list sidebar used in the Orders screen, reusable from other
+ * screens (e.g. the Schedule planner) so the left cards look identical everywhere.
+ * Manages its own search/filter/sort/selection state internally.
+ */
+@Composable
+internal fun OrderListSidebarPane(
+    state: StudioFlowUiState,
+    selectedOrderId: String?,
+    onOpenOrder: (StudioOrder) -> Unit,
+    onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onDeleteOrder: (StudioOrder) -> Unit,
+    onOpenCustomerFromOrder: (StudioOrder) -> Unit,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var searchText by rememberSaveable { mutableStateOf("") }
+    var selectedFilter by rememberSaveable { mutableStateOf(OrderFilter.All) }
+    var selectedSortMode by rememberSaveable { mutableStateOf(OrderSortMode.Smart) }
+    var filterMenuOpen by remember { mutableStateOf(false) }
+    var selectedOrderIds by remember { mutableStateOf(emptySet<String>()) }
+    val currentUserId = state.user?.uid.orEmpty()
+    val currentUserEmail = state.user?.email.orEmpty()
+    val visibleOrders = remember(state.orders, state.teamMembers, searchText, selectedFilter, selectedSortMode, currentUserId, currentUserEmail) {
+        val query = searchText.trim()
+        val searched = if (query.isBlank()) state.orders else state.orders.filter { orderSearchMatches(it, state.teamMembers, query) }
+        selectedSortMode.sort(searched.filter { selectedFilter.matches(it, currentUserId, currentUserEmail) })
+    }
+    OrderListPane(
+        state = state,
+        visibleOrders = visibleOrders,
+        selectedOrderId = selectedOrderId,
+        searchText = searchText,
+        onSearchTextChange = { searchText = it },
+        selectedFilter = selectedFilter,
+        selectedSortMode = selectedSortMode,
+        filterMenuOpen = filterMenuOpen,
+        onFilterMenuOpenChange = { filterMenuOpen = it },
+        onFilterSelected = { selectedFilter = it },
+        onSortModeSelected = { selectedSortMode = it },
+        onOpenOrder = onOpenOrder,
+        selectedOrderIds = selectedOrderIds,
+        onToggleOrderSelection = { order ->
+            selectedOrderIds = if (order.id in selectedOrderIds) selectedOrderIds - order.id else selectedOrderIds + order.id
+        },
+        onAssignOrder = onAssignOrder,
+        onUpdateOrderFields = onUpdateOrderFields,
+        onDeleteOrder = onDeleteOrder,
+        onOpenCustomerFromOrder = onOpenCustomerFromOrder,
+        onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+        wideLayout = true,
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun OrderListVisibilityButton(
     visible: Boolean,
