@@ -100,6 +100,9 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -3369,6 +3372,7 @@ private fun DesktopClientFilesCard(
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val fileOpenScope = rememberCoroutineScope()
     var renameFileId by remember(order.id) { mutableStateOf("") }
     var renameText by remember(order.id) { mutableStateOf("") }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -3443,7 +3447,7 @@ private fun DesktopClientFilesCard(
                     if (clientFilesEnabled) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             TextButton(
-                                onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(maskFileUrl(file.downloadUrl)) },
+                                onClick = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
                                 enabled = file.downloadUrl.isNotBlank(),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -6759,6 +6763,7 @@ private fun OperationsCard(
     fun allowed(key: String): Boolean = access?.allows(key) != false && workspaceSettings.showsCard(key)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val fileOpenScope = rememberCoroutineScope()
     var newTaskTitle by remember(order.id) { mutableStateOf("") }
     var newTaskNote by remember(order.id) { mutableStateOf("") }
     var newTaskPriority by remember(order.id) { mutableStateOf("Normal") }
@@ -6798,7 +6803,7 @@ private fun OperationsCard(
                 TextButton(
                     onClick = {
                         val firstFile = order.clientFiles.firstOrNull { it.downloadUrl.isNotBlank() }
-                        if (firstFile != null) uriHandler.openUri(maskFileUrl(firstFile.downloadUrl))
+                        if (firstFile != null) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(firstFile.downloadUrl)) }
                     },
                     enabled = order.clientFiles.any { it.downloadUrl.isNotBlank() },
                     modifier = Modifier.weight(1f)
@@ -6817,7 +6822,7 @@ private fun OperationsCard(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         TextButton(
-                            onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(maskFileUrl(file.downloadUrl)) },
+                            onClick = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
                             enabled = file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -9504,6 +9509,28 @@ internal fun maskFileUrl(raw: String): String {
         "https://nivadesk.app/f/$segments?b=${android.net.Uri.encode(bucket)}&t=${android.net.Uri.encode(token)}"
     } catch (e: Exception) {
         raw
+    }
+}
+
+// Creates a short, clean nivadesk.app link (company id + token hidden) via a
+// server-side mapping. Falls back to the path-based masked URL on any failure.
+internal suspend fun createSharedFileLink(rawUrl: String): String {
+    if (rawUrl.isBlank()) return rawUrl
+    return try {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+            .getHttpsCallable("nvCreateFileLink")
+            .call(mapOf("url" to rawUrl))
+            .await()
+        val data = result.getData() as? Map<*, *>
+        val id = data?.get("id") as? String
+        if (!id.isNullOrBlank()) {
+            val ext = (data["ext"] as? String)?.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ""
+            "https://nivadesk.app/f/$id$ext"
+        } else {
+            maskFileUrl(rawUrl)
+        }
+    } catch (e: Exception) {
+        maskFileUrl(rawUrl)
     }
 }
 

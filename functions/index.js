@@ -16513,3 +16513,127 @@ exports.chatgptWorkspaceAction = onRequest({ region: "europe-west2", cors: true 
     res.status(httpStatus).json({ ok: false, error: code, message });
   }
 });
+
+// ----------------------------------------------------------------------------
+// NivaDesk short file links (clean, branded viewer URLs)
+//
+// nvCreateFileLink: maps a raw Firebase Storage download URL to a short id stored
+// in /fileShares. nvViewSharedFile resolves that short id and returns a tiny HTML
+// viewer; the file bytes are loaded directly by the browser from Firebase Storage
+// (they never pass through our server), while the address bar stays on nivadesk.app.
+// ----------------------------------------------------------------------------
+
+const NV_FILE_IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif", "avif"]);
+const NV_FILE_PDF_EXTS = new Set(["pdf"]);
+const NV_FILE_VIDEO_EXTS = new Set(["mp4", "mov", "webm", "m4v"]);
+const NV_FILE_AUDIO_EXTS = new Set(["mp3", "wav", "m4a", "aac", "ogg"]);
+
+function nvEscapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function nvFileErrorHtml(message) {
+  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>NivaDesk</title><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;background:#0b0b0c;color:#e6e6e6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}div{text-align:center;padding:24px}h1{font-size:18px;margin:0 0 6px}p{color:#9a9a9a;margin:0;font-size:13px}</style></head><body><div><h1>NivaDesk</h1><p>${nvEscapeHtml(message)}</p></div></body></html>`;
+}
+
+function nvFileViewerHtml(firebaseUrl, fileName) {
+  const ext = (fileName.includes(".") ? fileName.split(".").pop() : "").toLowerCase();
+  const safeUrl = nvEscapeHtml(firebaseUrl);
+  const safeName = nvEscapeHtml(fileName);
+  let body;
+  if (NV_FILE_IMAGE_EXTS.has(ext)) {
+    body = `<img src="${safeUrl}" alt="${safeName}" />`;
+  } else if (NV_FILE_PDF_EXTS.has(ext)) {
+    body = `<iframe src="${safeUrl}" title="${safeName}"></iframe>`;
+  } else if (NV_FILE_VIDEO_EXTS.has(ext)) {
+    body = `<video src="${safeUrl}" controls autoplay playsinline></video>`;
+  } else if (NV_FILE_AUDIO_EXTS.has(ext)) {
+    body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><audio src="${safeUrl}" controls></audio></div></div>`;
+  } else {
+    body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><a class="dl" href="${safeUrl}" download="${safeName}">Download file</a></div></div>`;
+  }
+  const fab = (NV_FILE_IMAGE_EXTS.has(ext) || NV_FILE_VIDEO_EXTS.has(ext))
+    ? `<a class="dl-fab" href="${safeUrl}" download="${safeName}">Download</a>` : "";
+  return `<!doctype html>
+<html><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${safeName} · NivaDesk</title>
+<style>
+html,body{height:100%;margin:0;background:#0b0b0c}
+body{display:flex;align-items:center;justify-content:center;overflow:hidden}
+img,video{max-width:100vw;max-height:100vh;object-fit:contain;display:block}
+iframe{border:0;width:100vw;height:100vh;background:#1b1b1f}
+.generic{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.filecard{text-align:center;color:#e6e6e6;padding:28px 32px;background:#161618;border:1px solid #2a2a2e;border-radius:16px}
+.filecard .name{margin:0 0 14px;font-weight:700;font-size:15px;word-break:break-all}
+.filecard .dl{display:inline-block;padding:10px 18px;border-radius:10px;background:#16a34a;color:#fff;text-decoration:none;font-weight:700;font-size:14px}
+.dl-fab{position:fixed;right:16px;bottom:16px;padding:9px 14px;border-radius:999px;background:rgba(22,163,74,.92);color:#fff;text-decoration:none;font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+</style></head><body>${body}${fab}</body></html>`;
+}
+
+function nvParseFirebaseStorageUrl(rawUrl) {
+  const parsed = new URL(rawUrl);
+  if (parsed.hostname !== "firebasestorage.googleapis.com") return null;
+  const match = parsed.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+  if (!match) return null;
+  const bucket = decodeURIComponent(match[1]);
+  const storagePath = decodeURIComponent(match[2]);
+  const token = parsed.searchParams.get("token") || "";
+  if (!bucket || !storagePath || !token) return null;
+  return { bucket, storagePath, token };
+}
+
+exports.nvCreateFileLink = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
+  const rawUrl = String((request.data && request.data.url) || "").trim();
+  let info;
+  try { info = nvParseFirebaseStorageUrl(rawUrl); } catch (_) { info = null; }
+  if (!info) throw new HttpsError("invalid-argument", "Unsupported file URL.");
+  const fileName = info.storagePath.split("/").pop() || "file";
+  const ext = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
+  const shortId = crypto.createHash("sha256").update(info.storagePath).digest("base64url").slice(0, 12);
+  await admin.firestore().collection("fileShares").doc(shortId).set({
+    bucket: info.bucket,
+    path: info.storagePath,
+    token: info.token,
+    fileName,
+    ext,
+    createdByUid: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  return { id: shortId, ext };
+});
+
+exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res) => {
+  res.set("cache-control", "no-store, no-cache, max-age=0, must-revalidate");
+  res.set("x-robots-tag", "noindex, nofollow");
+  res.set("content-type", "text/html; charset=utf-8");
+  const id = String(req.query.id || "").trim();
+  if (!/^[A-Za-z0-9_-]{6,40}$/.test(id)) {
+    res.status(400).send(nvFileErrorHtml("This file link is invalid."));
+    return;
+  }
+  try {
+    const doc = await admin.firestore().collection("fileShares").doc(id).get();
+    if (!doc.exists) {
+      res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
+      return;
+    }
+    const data = doc.data() || {};
+    if (!data.bucket || !data.path || !data.token) {
+      res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
+      return;
+    }
+    const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(data.bucket)}/o/${encodeURIComponent(data.path)}?alt=media&token=${encodeURIComponent(data.token)}`;
+    res.status(200).send(nvFileViewerHtml(firebaseUrl, String(data.fileName || "file")));
+  } catch (error) {
+    console.error("nvViewSharedFile failed:", error);
+    res.status(500).send(nvFileErrorHtml("Could not load this file right now."));
+  }
+});

@@ -7529,11 +7529,23 @@ struct SiparisDetayView: View {
             openURL(offlineURL)
             return
         }
-        if let url = URL(string: maskFileUrl(item.downloadURL)) {
-            openURL(url)
-        } else {
+        let raw = item.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else {
             uploadSafetyErrorMessage = t("Download failed: file URL is missing.", lang: seciliDil)
             showUploadSafetyError = true
+            return
+        }
+        // Create a short, branded nivadesk.app link (hides company id + token), then
+        // open it. Falls back to the path-based masked URL if the call fails.
+        Functions.functions(region: "europe-west2").httpsCallable("nvCreateFileLink").call(["url": raw]) { result, _ in
+            var target = maskFileUrl(raw)
+            if let data = result?.data as? [String: Any], let id = data["id"] as? String, !id.isEmpty {
+                let ext = (data["ext"] as? String).flatMap { $0.isEmpty ? nil : ".\($0)" } ?? ""
+                target = "https://nivadesk.app/f/\(id)\(ext)"
+            }
+            DispatchQueue.main.async {
+                if let url = URL(string: target) { openURL(url) }
+            }
         }
     }
 

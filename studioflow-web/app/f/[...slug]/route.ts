@@ -42,11 +42,34 @@ function errorPage(message: string): Response {
   });
 }
 
+const FUNCTIONS_BASE = "https://europe-west2-eggcraft-studio.cloudfunctions.net";
+
 export async function GET(request: NextRequest, context: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await context.params;
   const searchParams = request.nextUrl.searchParams;
   const bucket = (searchParams.get("b") || "").trim();
   const token = (searchParams.get("t") || "").trim();
+
+  // Short-link mode: a single clean segment like /f/aB9xK2.png (no b/t params).
+  // Resolve it through the function (it reads the /fileShares mapping and returns
+  // the viewer HTML). Company id and token are never exposed in the URL.
+  if ((slug || []).length === 1 && !bucket && !token) {
+    const id = slug[0].replace(/\.[a-z0-9]+$/i, "");
+    try {
+      const upstream = await fetch(`${FUNCTIONS_BASE}/nvViewSharedFile?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const html = await upstream.text();
+      return new Response(html, {
+        status: upstream.status,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store, no-cache, max-age=0, must-revalidate",
+          "x-robots-tag": "noindex, nofollow"
+        }
+      });
+    } catch {
+      return errorPage("Could not load this file right now.");
+    }
+  }
 
   const pathSegments = (slug || []).map(segment => decodeURIComponent(segment));
   const storagePath = pathSegments.join("/");
