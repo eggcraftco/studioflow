@@ -3246,6 +3246,9 @@ export function OrderDetailContent({
       setFinanceError("Enter a payment amount greater than zero.");
       return;
     }
+    // The optimistic patch (which includes the payments array) renders the new
+    // entry instantly. We deliberately do NOT reload here: a read straight after
+    // the write can return stale data and wipe the just-added payment.
     await saveFinancePatch(
       { recordPayment: { amount, method: paymentMethodInput, note: paymentNoteInput.trim() } },
       "Payment"
@@ -3253,12 +3256,10 @@ export function OrderDetailContent({
     setPaymentAmountInput("");
     setPaymentNoteInput("");
     setShowPaymentForm(false);
-    await onReloadOrder();
   }
 
   async function deletePaymentEntry(paymentId: string) {
     await saveFinancePatch({ deletePaymentId: paymentId }, "Payment");
-    await onReloadOrder();
   }
 
   function savePaidFinanceValue(value: string | number) {

@@ -11549,6 +11549,19 @@ body[data-studio-theme="dark"] .app-value-pill.is-empty {
   color: transparent;
 }
 
+/* Keep the Yes/No payment toggle colours visible in dark theme (the generic
+   .finance-binary-row button dark override would otherwise grey them out). */
+body[data-studio-theme="dark"] .finance-binary-row button.is-selected {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: #4ade80;
+}
+body[data-studio-theme="dark"] .finance-binary-row button.is-no {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: rgba(248, 113, 113, 0.42);
+  color: #f87171;
+}
+
 body[data-studio-theme="dark"] .app-channel-pills button,
 body[data-studio-theme="dark"] .app-channel-pills span,
 body[data-studio-theme="dark"] .app-todo-filters button,
