@@ -56,6 +56,8 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -84,6 +86,8 @@ import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -3386,6 +3390,13 @@ private fun DesktopClientFilesCard(
     clientPreviewFile?.let { pf ->
         ClientFilePreviewDialog(
             file = pf,
+            isCurrentPreview = pf.downloadUrl.isNotBlank() && pf.downloadUrl == order.designLink,
+            onUseAsPreview = {
+                if (isClientFileImage(pf.contentType, pf.fileName) && pf.downloadUrl.isNotBlank()) {
+                    onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to pf.downloadUrl)))
+                    clientPreviewFile = null
+                }
+            },
             onDismiss = { clientPreviewFile = null },
             onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
         )
@@ -3477,9 +3488,15 @@ private fun DesktopClientFilesCard(
                         ClientFileRowCard(
                             file = file,
                             enabled = clientFilesEnabled,
+                            isCurrentPreview = file.downloadUrl.isNotBlank() && file.downloadUrl == order.designLink,
                             onPreview = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
                             onDownload = { downloadClientFile(context, file) },
                             onOpenExternal = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
+                            onUseAsPreview = {
+                                if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
+                                    onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
+                                }
+                            },
                             onRename = {
                                 renameFileId = file.id
                                 renameText = file.fileName
@@ -6781,6 +6798,13 @@ private fun OperationsCard(
     clientPreviewFile?.let { pf ->
         ClientFilePreviewDialog(
             file = pf,
+            isCurrentPreview = pf.downloadUrl.isNotBlank() && pf.downloadUrl == order.designLink,
+            onUseAsPreview = {
+                if (isClientFileImage(pf.contentType, pf.fileName) && pf.downloadUrl.isNotBlank()) {
+                    onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to pf.downloadUrl)))
+                    clientPreviewFile = null
+                }
+            },
             onDismiss = { clientPreviewFile = null },
             onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
         )
@@ -9561,6 +9585,8 @@ internal suspend fun createSharedFileLink(rawUrl: String): String {
 @Composable
 private fun ClientFilePreviewDialog(
     file: StudioClientFile,
+    isCurrentPreview: Boolean = false,
+    onUseAsPreview: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onOpenExternal: () -> Unit
 ) {
@@ -9626,7 +9652,20 @@ private fun ClientFilePreviewDialog(
                     }
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
+                    if (isImage && onUseAsPreview != null) {
+                        Button(
+                            onClick = onUseAsPreview,
+                            enabled = !isCurrentPreview,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isCurrentPreview) StudioGreen else StudioBlue)
+                        ) {
+                            Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (isCurrentPreview) t("Used in Preview") else t("Use in Preview"), fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                        }
+                    }
+                    OutlinedButton(
                         onClick = onOpenExternal,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
@@ -9662,14 +9701,17 @@ private fun downloadClientFile(context: Context, file: StudioClientFile) {
 private fun ClientFileRowCard(
     file: StudioClientFile,
     enabled: Boolean,
+    isCurrentPreview: Boolean,
     onPreview: () -> Unit,
     onDownload: () -> Unit,
     onOpenExternal: () -> Unit,
+    onUseAsPreview: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var menuOpen by remember { mutableStateOf(false) }
     val isImage = isClientFileImage(file.contentType, file.fileName)
     val isPdf = file.contentType.lowercase().contains("pdf") || file.fileName.lowercase().endsWith(".pdf")
     Surface(
@@ -9727,11 +9769,30 @@ private fun ClientFileRowCard(
                 IconButton(onClick = onOpenExternal, modifier = Modifier.size(36.dp), enabled = file.downloadUrl.isNotBlank()) {
                     Icon(Icons.Filled.Launch, contentDescription = t("Open"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
-                IconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.Edit, contentDescription = t("Rename"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = StudioRed.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+                Box {
+                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = t("More"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (isImage && file.downloadUrl.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text(if (isCurrentPreview) t("Used in Preview") else t("Use in Preview"), fontWeight = FontWeight.SemiBold) },
+                                leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null, tint = if (isCurrentPreview) StudioGreen else StudioBlue) },
+                                enabled = !isCurrentPreview,
+                                onClick = { menuOpen = false; onUseAsPreview() }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(t("Rename"), fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                            onClick = { menuOpen = false; onRename() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = StudioRed) },
+                            onClick = { menuOpen = false; onDelete() }
+                        )
+                    }
                 }
             }
         }
