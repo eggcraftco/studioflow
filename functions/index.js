@@ -16642,27 +16642,3 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
     res.status(500).send(nvFileErrorHtml("Could not load this file right now."));
   }
 });
-
-// One-off helper to enable cross-origin GET on the storage bucket so the web app
-// can download client files as a blob (keeping firebasestorage out of the address
-// bar) without any file bytes flowing through our own server.
-exports.nvConfigureStorageCors = onRequest({ region: "europe-west2" }, async (req, res) => {
-  if (String(req.query.secret || "") !== "nv-cors-2026-eggcraft-9x71") {
-    res.status(403).send("Forbidden");
-    return;
-  }
-  try {
-    await admin.storage().bucket("eggcraft-studio.firebasestorage.app").setCorsConfiguration([
-      {
-        origin: ["https://nivadesk.app"],
-        method: ["GET", "HEAD"],
-        responseHeader: ["Content-Type", "Content-Disposition", "Content-Length"],
-        maxAgeSeconds: 3600
-      }
-    ]);
-    res.status(200).json({ ok: true, message: "CORS configured for nivadesk.app GET." });
-  } catch (error) {
-    console.error("nvConfigureStorageCors failed:", error);
-    res.status(500).json({ ok: false, error: String(error && error.message || error) });
-  }
-});
