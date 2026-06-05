@@ -8,6 +8,7 @@ import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
+import { maskFileUrl } from "@/lib/studioflow/fileMask";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -7911,7 +7912,7 @@ function ClientFileCard({
       <div className="client-file-icon-actions">
         {canUseClientFiles ? (
           file.downloadURL ? (
-            <a className="client-file-icon-button is-primary" href={file.downloadURL} target="_blank" rel="noreferrer" title="Open / Download" aria-label="Open or download file">
+            <a className="client-file-icon-button is-primary" href={maskFileUrl(file.downloadURL)} target="_blank" rel="noreferrer" title="Open / Download" aria-label="Open or download file">
               <ClientFileActionIcon name="download" />
             </a>
           ) : (
@@ -8041,7 +8042,7 @@ function ClientFilePreviewModal({
               {actioning ? "Working..." : "Use in Preview"}
             </button>
           ) : null}
-          <a className="button secondary" href={activeFile.downloadURL} target="_blank" rel="noreferrer">Open</a>
+          <a className="button secondary" href={maskFileUrl(activeFile.downloadURL)} target="_blank" rel="noreferrer">Open</a>
           <a className="button" href={activeFile.downloadURL} download={activeFile.fileName}>Download</a>
         </footer>
       </section>
