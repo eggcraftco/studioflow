@@ -727,7 +727,7 @@ private fun OrderListRevealRail(
 }
 
 @Composable
-private fun OrderListResizeHandle(
+internal fun OrderListResizeHandle(
     active: Boolean,
     onResizeStart: () -> Unit,
     onResizeBy: (Float) -> Unit,

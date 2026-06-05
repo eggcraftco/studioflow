@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -143,7 +144,22 @@ fun ScheduleScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         val useDesktopTimeline = maxWidth >= 840.dp
-        val sidebarWidth = if (maxWidth >= 1360.dp) 430.dp else 390.dp
+        // Share the SAME resizable sidebar width as the Orders screen. The width lives
+        // in the synced workspace setting (ordersSidebarWidth), so resizing here or in
+        // Orders — on any platform — keeps the panel the same size everywhere.
+        val density = LocalDensity.current
+        val cloudSidebarWidth = state.workspaceSettings.ordersSidebarWidth.toFloat()
+        val minSidebarWidth = 320f
+        val maxSidebarWidth = (maxWidth.value * 0.56f).coerceIn(minSidebarWidth, 760f)
+        var sidebarWidthOverride by remember { mutableStateOf(Float.NaN) }
+        var resizingSidebar by remember { mutableStateOf(false) }
+        var resizeBaseWidth by remember { mutableStateOf(0f) }
+        var resizeDeltaDp by remember { mutableStateOf(0f) }
+        LaunchedEffect(cloudSidebarWidth) {
+            if (!resizingSidebar) sidebarWidthOverride = Float.NaN
+        }
+        val sidebarWidth = (if (sidebarWidthOverride.isNaN()) cloudSidebarWidth else sidebarWidthOverride)
+            .coerceIn(minSidebarWidth, maxSidebarWidth)
         if (useDesktopTimeline) {
             Row(modifier = Modifier.fillMaxSize()) {
                 uk.co.eggcraft.studioflow.features.orders.OrderListSidebarPane(
@@ -156,8 +172,36 @@ fun ScheduleScreen(
                     onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                     modifier = Modifier
-                        .width(sidebarWidth)
+                        .width(sidebarWidth.dp)
                         .fillMaxHeight()
+                )
+                uk.co.eggcraft.studioflow.features.orders.OrderListResizeHandle(
+                    active = resizingSidebar,
+                    onResizeStart = {
+                        resizingSidebar = true
+                        resizeBaseWidth = sidebarWidth
+                        resizeDeltaDp = 0f
+                    },
+                    onResizeBy = { dragPixels ->
+                        val deltaDp = with(density) { dragPixels.toDp().value }
+                        resizeDeltaDp += deltaDp
+                        sidebarWidthOverride = (resizeBaseWidth + resizeDeltaDp).coerceIn(minSidebarWidth, maxSidebarWidth)
+                    },
+                    onResizeEnd = {
+                        resizingSidebar = false
+                        val synced = sidebarWidth.coerceIn(minSidebarWidth, maxSidebarWidth)
+                        onUpdateWorkspaceSettings(
+                            mapOf("ordersSidebarWidth" to synced.toDouble()),
+                            "Order list width synced."
+                        )
+                        resizeBaseWidth = 0f
+                        resizeDeltaDp = 0f
+                    },
+                    onResizeCancel = {
+                        resizingSidebar = false
+                        resizeBaseWidth = 0f
+                        resizeDeltaDp = 0f
+                    }
                 )
                 ScheduleDesktopTimelineScreen(
                     allOrders = state.orders,
