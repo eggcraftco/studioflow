@@ -3498,6 +3498,21 @@ export function OrderDetailContent({
       });
       applyOptimisticDetailsPatch({ designLink: downloadURL });
       setPreviewMenuOpen(false);
+      // Also add the uploaded preview image to Client Files so it's listed there too.
+      if (canManageClientFiles) {
+        try {
+          await uploadClientFileForOrder({
+            workspace,
+            orderId: order.id,
+            file,
+            uploadSafety: { policyAccepted, maxSizeMB: maxUploadSizeMB },
+            user: { uid: user.uid, email: user.email, displayName: user.displayName }
+          });
+          await onReloadOrder();
+        } catch {
+          // Preview is set; failing to mirror it into Client Files is non-fatal.
+        }
+      }
     } catch (uploadFailure) {
       await onReloadOrder();
       setInlineError(uploadFailure instanceof Error ? uploadFailure.message : "Could not upload preview image.");
