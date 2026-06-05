@@ -8,7 +8,7 @@ import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
-import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
+import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -8043,7 +8043,7 @@ function ClientFilePreviewModal({
             </button>
           ) : null}
           <a className="button secondary" href={maskFileUrl(activeFile.downloadURL)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL); }}>Open</a>
-          <a className="button" href={activeFile.downloadURL} download={activeFile.fileName}>Download</a>
+          <a className="button" href={maskFileUrl(activeFile.downloadURL)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName); }}>Download</a>
         </footer>
       </section>
     </div>

@@ -16557,8 +16557,13 @@ function nvFileViewerHtml(firebaseUrl, fileName) {
   } else {
     body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><a class="dl" href="${safeUrl}" download="${safeName}">Download file</a></div></div>`;
   }
-  const fab = (NV_FILE_IMAGE_EXTS.has(ext) || NV_FILE_VIDEO_EXTS.has(ext))
-    ? `<a class="dl-fab" href="${safeUrl}" download="${safeName}">Download</a>` : "";
+  const hasFab = NV_FILE_IMAGE_EXTS.has(ext) || NV_FILE_VIDEO_EXTS.has(ext) || NV_FILE_PDF_EXTS.has(ext);
+  const fab = hasFab
+    ? `<a class="dl-fab" href="${safeUrl}" download="${safeName}" onclick="nvDownload(event)">Download</a>` : "";
+  // Blob download keeps firebasestorage out of the address bar (needs bucket CORS
+  // for nivadesk.app). If blocked, it falls back to the direct link.
+  const script = hasFab
+    ? `<script>async function nvDownload(e){e.preventDefault();try{const r=await fetch(${JSON.stringify(firebaseUrl)},{cache:"no-store"});if(!r.ok)throw 0;const b=await r.blob();const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=${JSON.stringify(fileName)};document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},15000);}catch(_){window.location.href=${JSON.stringify(firebaseUrl)};}}</script>` : "";
   return `<!doctype html>
 <html><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -16573,7 +16578,7 @@ iframe{border:0;width:100vw;height:100vh;background:#1b1b1f}
 .filecard .name{margin:0 0 14px;font-weight:700;font-size:15px;word-break:break-all}
 .filecard .dl{display:inline-block;padding:10px 18px;border-radius:10px;background:#16a34a;color:#fff;text-decoration:none;font-weight:700;font-size:14px}
 .dl-fab{position:fixed;right:16px;bottom:16px;padding:9px 14px;border-radius:999px;background:rgba(22,163,74,.92);color:#fff;text-decoration:none;font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.35)}
-</style></head><body>${body}${fab}</body></html>`;
+</style></head><body>${body}${fab}${script}</body></html>`;
 }
 
 function nvParseFirebaseStorageUrl(rawUrl) {
@@ -16635,5 +16640,29 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
   } catch (error) {
     console.error("nvViewSharedFile failed:", error);
     res.status(500).send(nvFileErrorHtml("Could not load this file right now."));
+  }
+});
+
+// One-off helper to enable cross-origin GET on the storage bucket so the web app
+// can download client files as a blob (keeping firebasestorage out of the address
+// bar) without any file bytes flowing through our own server.
+exports.nvConfigureStorageCors = onRequest({ region: "europe-west2" }, async (req, res) => {
+  if (String(req.query.secret || "") !== "nv-cors-2026-eggcraft-9x71") {
+    res.status(403).send("Forbidden");
+    return;
+  }
+  try {
+    await admin.storage().bucket("eggcraft-studio.firebasestorage.app").setCorsConfiguration([
+      {
+        origin: ["https://nivadesk.app"],
+        method: ["GET", "HEAD"],
+        responseHeader: ["Content-Type", "Content-Disposition", "Content-Length"],
+        maxAgeSeconds: 3600
+      }
+    ]);
+    res.status(200).json({ ok: true, message: "CORS configured for nivadesk.app GET." });
+  } catch (error) {
+    console.error("nvConfigureStorageCors failed:", error);
+    res.status(500).json({ ok: false, error: String(error && error.message || error) });
   }
 });
