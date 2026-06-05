@@ -7231,11 +7231,10 @@ struct ContentView: View {
                 // the top row, and the section navigation on its own full-width row
                 // underneath so the tabs never get cramped or wrap their labels.
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 14) {
                         topLogoView
-                        Spacer(minLength: 10)
                         topStatsView
-                        Spacer(minLength: 10)
+                        Spacer(minLength: 12)
                         if canSeeFinancialData {
                             pricePrivacyButton
                         }
@@ -7249,11 +7248,13 @@ struct ContentView: View {
                         topAccountAvatarIfAvailable
                     }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
                         topNavigationView
                             .fixedSize(horizontal: true, vertical: false)
-                            .padding(.trailing, 12)
+                        Spacer(minLength: 0)
                     }
+                    .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
