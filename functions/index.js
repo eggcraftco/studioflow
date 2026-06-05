@@ -10079,7 +10079,7 @@ async function requireClientFileMutationContext(request, action) {
   };
 }
 
-function readClientFileFromOrder(orderSnap, companyId, fileId, uid = "", role = "") {
+function readClientFileFromOrder(orderSnap, companyId, fileId, uid = "", role = "", companyData = {}) {
   if (!orderSnap.exists) {
     throw new HttpsError("not-found", "Order not found.");
   }
@@ -10228,7 +10228,7 @@ exports.renameClientFile = onCall({ region: "europe-west2" }, async (request) =>
 
   const result = await db.runTransaction(async (transaction) => {
     const orderSnap = await transaction.get(context.orderRef);
-    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId, context.uid, context.role);
+    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId, context.uid, context.role, context.companyData);
     const oldFileName = clientFileDisplayName(file);
 
     files[fileIndex] = {
@@ -10262,7 +10262,7 @@ exports.deleteClientFile = onCall({ region: "europe-west2" }, async (request) =>
 
   const result = await db.runTransaction(async (transaction) => {
     const orderSnap = await transaction.get(context.orderRef);
-    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId, context.uid, context.role);
+    const { orderData, files, fileIndex, file } = readClientFileFromOrder(orderSnap, context.companyId, context.fileId, context.uid, context.role, context.companyData);
     const fileName = clientFileDisplayName(file);
     const storagePath = safeClientFileStoragePath(context.companyId, file.storagePath);
     const downloadURL = String(file.downloadURL || "").trim();
