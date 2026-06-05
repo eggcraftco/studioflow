@@ -3443,7 +3443,7 @@ private fun DesktopClientFilesCard(
                     if (clientFilesEnabled) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             TextButton(
-                                onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
+                                onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(maskFileUrl(file.downloadUrl)) },
                                 enabled = file.downloadUrl.isNotBlank(),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -6798,7 +6798,7 @@ private fun OperationsCard(
                 TextButton(
                     onClick = {
                         val firstFile = order.clientFiles.firstOrNull { it.downloadUrl.isNotBlank() }
-                        if (firstFile != null) uriHandler.openUri(firstFile.downloadUrl)
+                        if (firstFile != null) uriHandler.openUri(maskFileUrl(firstFile.downloadUrl))
                     },
                     enabled = order.clientFiles.any { it.downloadUrl.isNotBlank() },
                     modifier = Modifier.weight(1f)
@@ -6817,7 +6817,7 @@ private fun OperationsCard(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         TextButton(
-                            onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
+                            onClick = { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(maskFileUrl(file.downloadUrl)) },
                             enabled = file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -9482,6 +9482,29 @@ private fun isClientFileImage(contentType: String, fileName: String): Boolean {
     val cleanType = contentType.lowercase()
     val extension = fileName.substringAfterLast(".", "").lowercase()
     return cleanType.startsWith("image/") || extension in setOf("jpg", "jpeg", "png", "webp", "heic", "heif")
+}
+
+// Rebrands a raw Firebase Storage download URL as a nivadesk.app viewer link.
+// Use ONLY for opening/sharing links (so the address shows nivadesk.app);
+// inline previews and the "use as preview" raw URL stay unchanged.
+internal fun maskFileUrl(raw: String): String {
+    return try {
+        val uri = android.net.Uri.parse(raw)
+        if (uri.host != "firebasestorage.googleapis.com") return raw
+        val path = uri.path ?: return raw // Uri.path is percent-decoded
+        val idx = path.indexOf("/o/")
+        if (idx < 0) return raw
+        val beforeO = path.substring(0, idx)
+        val storagePath = path.substring(idx + 3)
+        if (!beforeO.startsWith("/v0/b/")) return raw
+        val bucket = beforeO.removePrefix("/v0/b/")
+        val token = uri.getQueryParameter("token") ?: return raw
+        if (bucket.isEmpty() || storagePath.isEmpty()) return raw
+        val segments = storagePath.split("/").joinToString("/") { android.net.Uri.encode(it) }
+        "https://nivadesk.app/f/$segments?b=${android.net.Uri.encode(bucket)}&t=${android.net.Uri.encode(token)}"
+    } catch (e: Exception) {
+        raw
+    }
 }
 
 private fun openDeliveryCalendarEvent(context: Context, order: StudioOrder) {

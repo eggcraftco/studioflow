@@ -39,6 +39,30 @@ private func clientFileIsImage(_ item: ClientFileItem) -> Bool {
     return [".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".gif", ".tiff", ".bmp"].contains { lowerName.hasSuffix($0) }
 }
 
+// Rebrands a raw Firebase Storage download URL as a nivadesk.app viewer link.
+// Use ONLY for opening/sharing links (so the address bar shows nivadesk.app);
+// inline image/PDF loading and direct downloads keep the raw URL.
+func maskFileUrl(_ raw: String) -> String {
+    guard let comps = URLComponents(string: raw),
+          comps.host == "firebasestorage.googleapis.com" else { return raw }
+    let fullPath = comps.path // URLComponents returns the percent-decoded path
+    guard let range = fullPath.range(of: "/o/") else { return raw }
+    let beforeO = String(fullPath[fullPath.startIndex..<range.lowerBound])
+    let storagePath = String(fullPath[range.upperBound...])
+    guard beforeO.hasPrefix("/v0/b/") else { return raw }
+    let bucket = String(beforeO.dropFirst("/v0/b/".count))
+    guard !bucket.isEmpty, !storagePath.isEmpty,
+          let token = comps.queryItems?.first(where: { $0.name == "token" })?.value else { return raw }
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-._~")
+    let segments = storagePath.split(separator: "/").map { seg in
+        String(seg).addingPercentEncoding(withAllowedCharacters: allowed) ?? String(seg)
+    }.joined(separator: "/")
+    let encBucket = bucket.addingPercentEncoding(withAllowedCharacters: allowed) ?? bucket
+    let encToken = token.addingPercentEncoding(withAllowedCharacters: allowed) ?? token
+    return "https://nivadesk.app/f/\(segments)?b=\(encBucket)&t=\(encToken)"
+}
+
 private func loadClientFilePlatformImage(from url: URL) -> PlatformImage? {
     #if os(macOS)
     return PlatformImage(contentsOf: url)
@@ -7505,7 +7529,7 @@ struct SiparisDetayView: View {
             openURL(offlineURL)
             return
         }
-        if let url = URL(string: item.downloadURL) {
+        if let url = URL(string: maskFileUrl(item.downloadURL)) {
             openURL(url)
         } else {
             uploadSafetyErrorMessage = t("Download failed: file URL is missing.", lang: seciliDil)
