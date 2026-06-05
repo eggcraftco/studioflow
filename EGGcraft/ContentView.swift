@@ -7227,14 +7227,15 @@ struct ContentView: View {
             if isPhoneLayout {
                 phoneTopHeader
             } else {
-                ViewThatFits(in: .horizontal) {
-                    // Wide layout: Mac and iPad landscape
-                    HStack(spacing: 16) {
+                // Two-row toolbar (matches the web app): logo + net stats + actions on
+                // the top row, and the section navigation on its own full-width row
+                // underneath so the tabs never get cramped or wrap their labels.
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
                         topLogoView
+                        Spacer(minLength: 10)
                         topStatsView
-                        Spacer(minLength: 12)
-                        topNavigationView
-                        Spacer(minLength: 12)
+                        Spacer(minLength: 10)
                         if canSeeFinancialData {
                             pricePrivacyButton
                         }
@@ -7247,39 +7248,16 @@ struct ContentView: View {
                         if canEditWorkflowFields { newOrderButton }
                         topAccountAvatarIfAvailable
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    // Narrow layout: iPad portrait
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 12) {
-                            topLogoView
-                            Spacer(minLength: 10)
-                            topStatsView
-                            Spacer(minLength: 10)
-                            if canSeeFinancialData {
-                                pricePrivacyButton
-                            }
-                            CloudSyncStatusBadge(
-                                state: cloudSyncState,
-                                message: cloudSyncMessage,
-                                lastSyncDate: lastCloudSyncDate
-                            )
-                            activityTopNavigationButton
-                            if canEditWorkflowFields { newOrderButton }
-                            topAccountAvatarIfAvailable
-                        }
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            topNavigationView
-                                .padding(.trailing, 12)
-                        }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        topNavigationView
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.trailing, 12)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .background(bgHeader)
