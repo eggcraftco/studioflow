@@ -47,6 +47,31 @@ export async function openSharedFile(rawUrl: string | null | undefined): Promise
   }
 }
 
+// Downloads a client file without ever showing the firebasestorage URL: the bytes
+// are fetched in the background (requires bucket CORS for nivadesk.app) and saved
+// as a blob with the original filename. Falls back to opening the branded viewer
+// if the fetch is blocked (e.g. CORS not yet enabled).
+export async function downloadSharedFile(rawUrl: string | null | undefined, fileName?: string): Promise<void> {
+  if (!rawUrl || typeof window === "undefined") return;
+  try {
+    const response = await fetch(rawUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error("fetch-failed");
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = blobUrl;
+    anchor.download = fileName || "file";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+  } catch {
+    // CORS blocked (or offline): fall back to the branded viewer so the address
+    // bar still shows nivadesk.app instead of firebasestorage.
+    await openSharedFile(rawUrl);
+  }
+}
+
 export function maskFileUrl(rawUrl: string | null | undefined): string {
   if (!rawUrl) return rawUrl ?? "";
   try {
