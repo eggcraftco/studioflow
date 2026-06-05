@@ -7221,6 +7221,9 @@ struct SiparisDetayView: View {
                         recordOrderHistoryChange(title: "Design Mockup", oldValue: "Previous image", newValue: "Updated image")
                     }
                     firebaseManager.updateSiparis(siparis)
+                    // Also mirror the uploaded preview image into Client Files (gated on
+                    // canEditClientFiles, so it is silently skipped when unavailable).
+                    requestSafeClientFileUpload(url: url)
                 } else {
                     uploadSafetyErrorMessage = firebaseManager.lastUploadSafetyMessage.isEmpty ? t("Upload blocked. Please check Upload Safety settings and try again.", lang: seciliDil) : firebaseManager.lastUploadSafetyMessage
                     showUploadSafetyError = true

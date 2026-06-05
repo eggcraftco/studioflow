@@ -423,6 +423,20 @@ class StudioFlowViewModel @JvmOverloads constructor(
             }
                 .onSuccess { message ->
                     mutableState.update { it.copy(settingsSaving = false, settingsMessage = message) }
+                    // Also mirror the uploaded preview image into Client Files so it's
+                    // listed there too (best-effort; silently skipped if unavailable).
+                    runCatching {
+                        repository.uploadClientFile(
+                            workspace = workspace,
+                            user = user,
+                            order = order,
+                            bytes = bytes,
+                            fileName = fileName,
+                            contentType = contentType,
+                            policyAccepted = true,
+                            maxSizeMb = maxMb
+                        )
+                    }
                 }
                 .onFailure { error ->
                     mutableState.update {
