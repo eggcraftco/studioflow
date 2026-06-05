@@ -1035,15 +1035,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     memberCanAccess(workspace, "settings") &&
     roleCanSetUpWorkspace(workspace.role),
   );
+  // The "add your first project" guide is only for genuinely new users: no orders
+  // yet and the guide not already completed. (Previously `firstProjectGuide === null`
+  // made it show for any existing user without local guide state.)
   const showAddProjectGuide = Boolean(
     canCreateToolbarOrder &&
     pathname.startsWith("/orders") &&
-    (
-      (firstProjectGuide &&
-        !firstProjectGuide.completed &&
-        firstProjectGuide.step === 1) ||
-      firstProjectGuide === null
-    ),
+    financeOrders.length === 0 &&
+    !firstProjectGuide?.completed &&
+    (firstProjectGuide === null || firstProjectGuide.step === 1),
   );
 
   useEffect(() => {
@@ -1093,7 +1093,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         step: 1,
         completed: false,
       };
-    if (!currentGuide.completed && currentGuide.step <= 1) {
+    // Only kick off the first-project guide on the user's very first project
+    // (no existing orders) and when it isn't already completed.
+    const isFirstEverProject = financeOrders.length === 0;
+    if (isFirstEverProject && !currentGuide.completed && currentGuide.step <= 1) {
       const nextGuide: FirstProjectGuideState = {
         ...currentGuide,
         step: 2,

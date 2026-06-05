@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
@@ -117,6 +117,7 @@ export default function OrdersPage() {
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const ordersCountRef = useRef(0);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
@@ -248,6 +249,10 @@ export default function OrdersPage() {
     [orderFilter, orderSearch, orderSortMode, visibleOrders]
   );
   useEffect(() => {
+    ordersCountRef.current = orders.length;
+  }, [orders]);
+
+  useEffect(() => {
     if (loadingOrders) return;
     if (selectedOrderId && filteredOrders.some(order => order.id === selectedOrderId)) return;
     setSelectedOrderId(filteredOrders[0]?.id || "");
@@ -260,7 +265,14 @@ export default function OrdersPage() {
     async function handleCreatedOrder(event: Event) {
       const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
       if (!orderId || !workspace) return;
-      setFirstProjectGuideState({ step: 2, orderId, completed: false });
+      // Only run the first-project guide for a genuinely new user: their very
+      // first project (no existing orders) and the guide not already completed.
+      // Otherwise creating any project would keep re-triggering the info cards.
+      const existingGuide = getFirstProjectGuideState();
+      const isFirstEverProject = ordersCountRef.current === 0;
+      if (isFirstEverProject && !existingGuide?.completed) {
+        setFirstProjectGuideState({ step: 2, orderId, completed: false });
+      }
       const loadedOrders = await loadRecentOrders(workspace.id, workspace, uid);
       setOrders(loadedOrders);
       setSelectedOrderId(orderId);
