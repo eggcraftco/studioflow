@@ -125,6 +125,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.viewinterop.AndroidView
+import coil.compose.AsyncImage
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -157,6 +161,7 @@ import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
+import uk.co.eggcraft.studioflow.data.model.StudioClientFile
 import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
@@ -3373,6 +3378,14 @@ private fun DesktopClientFilesCard(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val fileOpenScope = rememberCoroutineScope()
+    var clientPreviewFile by remember(order.id) { mutableStateOf<StudioClientFile?>(null) }
+    clientPreviewFile?.let { pf ->
+        ClientFilePreviewDialog(
+            file = pf,
+            onDismiss = { clientPreviewFile = null },
+            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
+        )
+    }
     var renameFileId by remember(order.id) { mutableStateOf("") }
     var renameText by remember(order.id) { mutableStateOf("") }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -3447,7 +3460,7 @@ private fun DesktopClientFilesCard(
                     if (clientFilesEnabled) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             TextButton(
-                                onClick = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
+                                onClick = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
                                 enabled = file.downloadUrl.isNotBlank(),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -6764,6 +6777,14 @@ private fun OperationsCard(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val fileOpenScope = rememberCoroutineScope()
+    var clientPreviewFile by remember(order.id) { mutableStateOf<StudioClientFile?>(null) }
+    clientPreviewFile?.let { pf ->
+        ClientFilePreviewDialog(
+            file = pf,
+            onDismiss = { clientPreviewFile = null },
+            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
+        )
+    }
     var newTaskTitle by remember(order.id) { mutableStateOf("") }
     var newTaskNote by remember(order.id) { mutableStateOf("") }
     var newTaskPriority by remember(order.id) { mutableStateOf("Normal") }
@@ -6803,7 +6824,7 @@ private fun OperationsCard(
                 TextButton(
                     onClick = {
                         val firstFile = order.clientFiles.firstOrNull { it.downloadUrl.isNotBlank() }
-                        if (firstFile != null) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(firstFile.downloadUrl)) }
+                        if (firstFile != null) clientPreviewFile = firstFile
                     },
                     enabled = order.clientFiles.any { it.downloadUrl.isNotBlank() },
                     modifier = Modifier.weight(1f)
@@ -6822,7 +6843,7 @@ private fun OperationsCard(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         TextButton(
-                            onClick = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
+                            onClick = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
                             enabled = file.downloadUrl.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -9531,6 +9552,90 @@ internal suspend fun createSharedFileLink(rawUrl: String): String {
         }
     } catch (e: Exception) {
         maskFileUrl(rawUrl)
+    }
+}
+
+// In-app client file viewer (matches the Mac preview sheet): images render inline
+// with Coil, PDFs via the Google Docs viewer, other types show a fallback. The
+// "Open externally" button uses the short branded nivadesk.app link.
+@Composable
+private fun ClientFilePreviewDialog(
+    file: StudioClientFile,
+    onDismiss: () -> Unit,
+    onOpenExternal: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val isImage = isClientFileImage(file.contentType, file.fileName)
+    val isPdf = file.contentType.lowercase().contains("pdf") || file.fileName.lowercase().endsWith(".pdf")
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF101012)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        file.fileName,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = t("Close"), tint = Color.White)
+                    }
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    when {
+                        isImage && file.downloadUrl.isNotBlank() -> {
+                            AsyncImage(
+                                model = file.downloadUrl,
+                                contentDescription = file.fileName,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        isPdf && file.downloadUrl.isNotBlank() -> {
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+                                factory = { ctx ->
+                                    android.webkit.WebView(ctx).apply {
+                                        settings.javaScriptEnabled = true
+                                        settings.loadWithOverviewMode = true
+                                        settings.useWideViewPort = true
+                                        webViewClient = android.webkit.WebViewClient()
+                                        loadUrl("https://docs.google.com/gview?embedded=1&url=" + android.net.Uri.encode(file.downloadUrl))
+                                    }
+                                }
+                            )
+                        }
+                        else -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(28.dp)
+                            ) {
+                                Icon(Icons.Filled.Description, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(46.dp))
+                                Text(t("Preview is not available for this file type."), color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Text(t("Use Open to view this file in another app."), color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = onOpenExternal,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(t("Open"), fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+        }
     }
 }
 
