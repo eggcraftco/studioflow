@@ -2557,14 +2557,33 @@ th {
 }
 
 .app-toolbar-native {
-  grid-template-columns: minmax(270px, auto) minmax(420px, 1fr) auto;
+  /* Logo/net strip + account actions share the top row; the section nav gets its
+     own full-width row underneath so the tabs never get cramped or need to scroll. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main account"
+    "nav nav";
   align-items: center;
+  column-gap: 14px;
+  row-gap: 8px;
   margin-bottom: 8px;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.app-toolbar-native .toolbar-main {
+  grid-area: main;
+}
+
+.app-toolbar-native .native-toolbar-actions {
+  grid-area: account;
+}
+
+.app-toolbar-native .native-toolbar-nav {
+  grid-area: nav;
 }
 
 .native-brand {
@@ -2704,10 +2723,14 @@ th {
 }
 
 .native-toolbar-nav {
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .native-nav-pill {
@@ -10159,7 +10182,9 @@ button.toolbar-icon-button,
     z-index: 70;
     width: min(360px, calc(100vw - 32px));
     padding: 10px;
+    margin-top: 0;
     border: 1px solid rgba(209, 213, 219, 0.88);
+    border-top: 1px solid rgba(209, 213, 219, 0.88);
     border-radius: 22px;
     background: rgba(255, 255, 255, 0.96);
     box-shadow: 0 22px 46px rgba(15, 23, 42, 0.18);
