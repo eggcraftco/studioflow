@@ -27,14 +27,23 @@ export async function createSharedFileLink(rawUrl: string | null | undefined): P
 }
 
 // Opens a client file in a new tab using a short branded link.
+// We pre-open a blank tab synchronously (within the click gesture) WITHOUT
+// "noopener" so we keep the window reference, then point it at the link once the
+// short URL is ready. Using "noopener" here makes window.open return null and
+// leaves an uncontrollable blank tab — which is the bug this avoids.
 export async function openSharedFile(rawUrl: string | null | undefined): Promise<void> {
-  if (!rawUrl) return;
-  const tab = typeof window !== "undefined" ? window.open("", "_blank", "noopener") : null;
-  const link = await createSharedFileLink(rawUrl);
-  if (tab) {
+  if (!rawUrl || typeof window === "undefined") return;
+  const tab = window.open("about:blank", "_blank");
+  let link = rawUrl;
+  try {
+    link = await createSharedFileLink(rawUrl);
+  } catch {
+    link = maskFileUrl(rawUrl);
+  }
+  if (tab && !tab.closed) {
     tab.location.href = link;
-  } else if (typeof window !== "undefined") {
-    window.open(link, "_blank", "noopener");
+  } else {
+    window.open(link, "_blank");
   }
 }
 
