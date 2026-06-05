@@ -888,6 +888,18 @@ class FirebaseManager: ObservableObject {
     
     @Published var siparisler: [Siparis] = []
     @Published var musteriler: [Musteri] = []
+
+    // Tracks orders the user is actively editing locally. While an order is within
+    // this grace window, incoming Firestore snapshots keep the local in-progress
+    // copy instead of overwriting it — this stops a lagging server echo of an
+    // earlier debounced save from deleting characters the user just typed.
+    private var activeOrderEditTimestamps: [String: Date] = [:]
+    private let activeOrderEditGrace: TimeInterval = 2.5
+
+    func markOrderLocallyEdited(_ orderId: String?) {
+        guard let orderId, !orderId.isEmpty else { return }
+        activeOrderEditTimestamps[orderId] = Date()
+    }
     @Published private(set) var canUndo: Bool = false
     @Published private(set) var canRedo: Bool = false
     @Published private(set) var isOnline: Bool = true
@@ -1206,7 +1218,21 @@ class FirebaseManager: ObservableObject {
                 }
                 let downloaded = querySnapshot?.documents.compactMap { self.decodeSiparisDocument($0) } ?? []
                 DispatchQueue.main.async {
-                    self.siparisler = downloaded.sorted(by: { $0.paymentDate > $1.paymentDate })
+                    let now = Date()
+                    let merged = downloaded.map { incoming -> Siparis in
+                        guard let id = incoming.id,
+                              let editedAt = self.activeOrderEditTimestamps[id],
+                              now.timeIntervalSince(editedAt) < self.activeOrderEditGrace,
+                              let localIndex = self.siparisler.firstIndex(where: { $0.id == id })
+                        else { return incoming }
+                        // The user is mid-edit on this order; keep the local copy so a
+                        // lagging server echo can't delete just-typed characters.
+                        return self.siparisler[localIndex]
+                    }
+                    self.activeOrderEditTimestamps = self.activeOrderEditTimestamps.filter {
+                        now.timeIntervalSince($0.value) < self.activeOrderEditGrace
+                    }
+                    self.siparisler = merged.sorted(by: { $0.paymentDate > $1.paymentDate })
                     self.handleServerSnapshotAcknowledgement(querySnapshot?.metadata)
                     self.saveOfflineCache()
                 }
@@ -2223,6 +2249,7 @@ class FirebaseManager: ObservableObject {
 
     func registerSiparisChange(before: Siparis, after: Siparis) {
         guard before != after else { return }
+        markOrderLocallyEdited(after.id)
         registerAction(.updatedSiparis(before: before, after: after))
     }
     

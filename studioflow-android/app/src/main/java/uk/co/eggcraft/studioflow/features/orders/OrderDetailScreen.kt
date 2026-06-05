@@ -4592,13 +4592,13 @@ private fun CustomerContactEditCard(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var customerName by remember(order.id, order.customerName) { mutableStateOf(order.displayCustomerName) }
-    var designName by remember(order.id, order.designName) { mutableStateOf(order.designName) }
-    var watchRef by remember(order.id, order.watchRef) { mutableStateOf(order.watchRef) }
-    var designLink by remember(order.id, order.designLink) { mutableStateOf(order.designLink) }
-    var email by remember(order.id, order.emailAddress) { mutableStateOf(order.emailAddress) }
-    var phone by remember(order.id, order.whatsappNumber) { mutableStateOf(order.whatsappNumber) }
-    var instagram by remember(order.id, order.instagramUsername) { mutableStateOf(order.instagramUsername) }
+    var customerName by remember(order.id) { mutableStateOf(order.displayCustomerName) }
+    var designName by remember(order.id) { mutableStateOf(order.designName) }
+    var watchRef by remember(order.id) { mutableStateOf(order.watchRef) }
+    var designLink by remember(order.id) { mutableStateOf(order.designLink) }
+    var email by remember(order.id) { mutableStateOf(order.emailAddress) }
+    var phone by remember(order.id) { mutableStateOf(order.whatsappNumber) }
+    var instagram by remember(order.id) { mutableStateOf(order.instagramUsername) }
     var address by remember(order.id, order.customFields) { mutableStateOf(customFieldValue(order, "communicationAddress")) }
     var customerNotes by remember(order.id, order.customFields) { mutableStateOf(customFieldValue(order, "communicationCustomerNotes")) }
     val channelLabels = remember(workspaceSettings.communicationChannelLabels) { communicationChannelLabels(workspaceSettings) }
@@ -4959,11 +4959,11 @@ private fun WorkflowEditCard(
         listOf("Not Yet", "In Progress", "Pending", "Ready", "Done", "Cancelled", "Design", "Painting", "Shipped")
     }
     var deliveryTime by remember(order.id, order.deliveryTime) { mutableStateOf(order.deliveryTime.coerceAtLeast(1).toString()) }
-    var courier by remember(order.id, order.courier) { mutableStateOf(order.courier) }
-    var trackingNumber by remember(order.id, order.trackingNumber) { mutableStateOf(order.trackingNumber) }
-    var notes by remember(order.id, order.notes) { mutableStateOf(order.notes) }
-    var riskReason by remember(order.id, order.riskReason) { mutableStateOf(order.riskReason.takeUnless { it == "-" }.orEmpty()) }
-    var invNotes by remember(order.id, order.invNotes) { mutableStateOf(order.invNotes) }
+    var courier by remember(order.id) { mutableStateOf(order.courier) }
+    var trackingNumber by remember(order.id) { mutableStateOf(order.trackingNumber) }
+    var notes by remember(order.id) { mutableStateOf(order.notes) }
+    var riskReason by remember(order.id) { mutableStateOf(order.riskReason.takeUnless { it == "-" }.orEmpty()) }
+    var invNotes by remember(order.id) { mutableStateOf(order.invNotes) }
     var statusNotes by remember(order.id, order.customFields) { mutableStateOf(customFieldValue(order, "status::notesSupplier")) }
     val materialLabels = materialDefaultCheckLabels(workspaceSettings)
     val extraStatusSteps = workspaceSettings.customSteps.drop(2).map { it.trim() }.filter { it.isNotBlank() }
@@ -5531,7 +5531,7 @@ private fun PriorityRiskCard(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var riskReason by remember(order.id, order.riskReason) {
+    var riskReason by remember(order.id) {
         mutableStateOf(order.riskReason.takeUnless { it == "-" }.orEmpty())
     }
     DetailCard(title = "Priority / Risk") {
@@ -5584,7 +5584,7 @@ private fun MaterialsInventoryCard(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var invNotes by remember(order.id, order.invNotes) { mutableStateOf(order.invNotes) }
+    var invNotes by remember(order.id) { mutableStateOf(order.invNotes) }
     val materialLabels = materialDefaultCheckLabels(workspaceSettings)
     val notesLabel = workspaceSettings.materialsNotesSupplierLabel.ifBlank { "Notes / Supplier" }
     LaunchedEffect(canEditWorkflow, invNotes, order.invNotes) {
@@ -6532,8 +6532,8 @@ private fun ShippingCard(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val uriHandler = LocalUriHandler.current
-    var courier by remember(order.id, order.courier) { mutableStateOf(order.courier.ifBlank { "Auto Detect" }) }
-    var trackingNumber by remember(order.id, order.trackingNumber) { mutableStateOf(order.trackingNumber) }
+    var courier by remember(order.id) { mutableStateOf(order.courier.ifBlank { "Auto Detect" }) }
+    var trackingNumber by remember(order.id) { mutableStateOf(order.trackingNumber) }
     val savedTrackingNumber = order.trackingNumber.trim()
 
     DetailCard(title = t("Shipping & Tracking")) {
