@@ -3165,6 +3165,42 @@ export function OrderDetailContent({
     });
     const netProfit = paidAmount + remainingAmount - watchPurchasePrice - paymentFee - deliveryCost - taxAmount;
 
+    let payments = order.payments;
+    if (patch.recordPayment && typeof patch.recordPayment.amount === "number" && patch.recordPayment.amount > 0) {
+      payments = [
+        {
+          id: `temp-${Date.now()}`,
+          amount: Math.max(0, patch.recordPayment.amount),
+          date: new Date(),
+          method: patch.recordPayment.method || "",
+          note: patch.recordPayment.note || "",
+          createdByUid: "",
+          createdByEmail: ""
+        },
+        ...order.payments
+      ];
+    }
+    if (patch.fullPaymentReceived) {
+      const outstanding = Math.max(0, previousOrderValue - order.paidAmount);
+      if (outstanding > 0) {
+        payments = [
+          {
+            id: `temp-${Date.now()}`,
+            amount: outstanding,
+            date: new Date(),
+            method: "Final",
+            note: "",
+            createdByUid: "",
+            createdByEmail: ""
+          },
+          ...order.payments
+        ];
+      }
+    }
+    if (typeof patch.deletePaymentId === "string") {
+      payments = order.payments.filter(entry => entry.id !== patch.deletePaymentId);
+    }
+
     onOptimisticOrderPatch?.({
       paidAmount,
       remainingAmount,
@@ -3175,7 +3211,8 @@ export function OrderDetailContent({
       taxType,
       taxAmount,
       netProfit,
-      paymentMethod
+      paymentMethod,
+      payments
     });
   }
 
