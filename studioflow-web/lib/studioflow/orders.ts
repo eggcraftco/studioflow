@@ -251,6 +251,12 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
   }
 }
 
+export async function assignInvoiceNumberFromWeb(workspace: WorkspaceContext, orderId: string): Promise<string> {
+  const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; invoiceNumber?: string }>(functions, "assignInvoiceNumber");
+  const response = await callable({ companyId: workspace.id, orderId });
+  return response.data?.invoiceNumber || "";
+}
+
 export async function requestWorkflowOrderDeletionFromWeb(workspace: WorkspaceContext, orderId: string) {
   const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
     || (workspace.memberAccess.assignedProjectsOnly === true

@@ -16650,3 +16650,35 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
     res.status(500).send(nvFileErrorHtml("Could not load this file right now."));
   }
 });
+
+// Assigns a unique, sequential invoice number (YYYY-NNNN) to an order using a
+// per-company counter in a transaction, so numbers never collide across devices
+// or platforms. Idempotent: returns the existing number if already assigned.
+exports.assignInvoiceNumber = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyRef } = await requireWorkspaceForBilling(request, false);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+  const orderRef = orderDocRef(orderId);
+  const invoiceNumber = await admin.firestore().runTransaction(async (tx) => {
+    const [companySnap, orderSnap] = await Promise.all([tx.get(companyRef), tx.get(orderRef)]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+    const orderData = orderSnap.data() || {};
+    if (orderCompanyId(orderData) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+    const existing = String(orderData.invoiceNumber || "").trim();
+    if (existing) return existing;
+    const companyData = companySnap.exists ? companySnap.data() || {} : {};
+    const year = new Date().getFullYear();
+    let counter = Number(companyData.invoiceCounter || 0);
+    let counterYear = Number(companyData.invoiceCounterYear || 0);
+    if (counterYear !== year) { counter = 0; counterYear = year; }
+    counter += 1;
+    const next = `${year}-${String(counter).padStart(4, "0")}`;
+    tx.set(companyRef, { invoiceCounter: counter, invoiceCounterYear: counterYear }, { merge: true });
+    tx.update(orderRef, { invoiceNumber: next });
+    return next;
+  });
+  console.log("assignInvoiceNumber", { companyId, orderId, uid, invoiceNumber });
+  return { ok: true, invoiceNumber };
+});
