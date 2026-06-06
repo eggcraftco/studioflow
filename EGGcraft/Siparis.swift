@@ -119,6 +119,7 @@ struct Siparis: Identifiable, Codable {
     var todoItems: [OrderToDoItem]?
     var workSessions: [OrderWorkSessionItem]?
     var payments: [PaymentEntry]?
+    var invoiceNumber: String = ""
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
     // 🌟 OTOMATİK NET KAR HESAPLAYICI 🌟
@@ -161,6 +162,7 @@ extension Siparis {
         self.todoItems = []
         self.workSessions = []
         self.payments = []
+        self.invoiceNumber = ""
         self.assignedToUid = ""
         self.assignedToEmail = ""
     }

@@ -123,6 +123,7 @@ struct AyarlarView: View {
     @AppStorage("appSubtitle") private var appSubtitle: String = "Bespoke Hand-Painted Dials"
     @AppStorage("companyNumbersJSON") private var companyNumbersJSON: String = ""
     @State private var companyNumbers: [CompanyNumberSettingDTO] = []
+    @AppStorage("invoiceFooterNote") private var invoiceFooterNote: String = ""
     @AppStorage("appTheme") private var appTheme: String = "System"
     @AppStorage("feePercentage") private var feePercentage: Double = 3.0
     @AppStorage("defaultTaxRate") private var defaultTaxRate: Double = 20.0
@@ -279,7 +280,8 @@ struct AyarlarView: View {
             String(pdfShowShipping),
             String(pdfShowMaterials),
             String(pdfShowPriority),
-            companyNumbersJSON
+            companyNumbersJSON,
+            invoiceFooterNote
         ].joined(separator: "||")
     }
 
@@ -3099,6 +3101,7 @@ struct AyarlarView: View {
                 // Theme and language are personal interface preferences.
                 // They are loaded from personalInterfaceSettings instead of shared workspace settings.
                 applyString("appSubtitle", { appSubtitle = $0 }, appSubtitle)
+                applyString("invoiceFooterNote", { invoiceFooterNote = $0 }, invoiceFooterNote)
 
                 applyString("seciliParaBirimi", { seciliParaBirimi = $0 }, seciliParaBirimi)
                 applyString("seciliOndalik", { seciliOndalik = $0 }, seciliOndalik)
@@ -3232,6 +3235,7 @@ struct AyarlarView: View {
         let latestLanguage = seciliDil
         let latestAppTheme = appTheme
         let latestAppSubtitle = appSubtitle
+        let latestInvoiceFooterNote = invoiceFooterNote
         let latestCustomProductsJSON = customProductsJSON
         let latestCustomRulesJSON = customRulesJSON
         let latestCurrency = seciliParaBirimi
@@ -3337,6 +3341,7 @@ struct AyarlarView: View {
                     // savePersonalInterfaceSettings instead so each member keeps
                     // their own language/theme even when joined to the same workspace.
                     "appSubtitle": latestAppSubtitle,
+                    "invoiceFooterNote": latestInvoiceFooterNote,
                     "seciliParaBirimi": latestCurrency,
                     "seciliOndalik": latestDecimalSeparator,
                     "feePercentage": latestFeePercentage,
@@ -3654,11 +3659,26 @@ struct AyarlarView: View {
                             }
                         }
                     }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("Invoice Footer / Payment Terms", lang: seciliDil))
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(t("Shown at the bottom of the customer Invoice PDF (e.g. bank details, payment terms, thank-you note).", lang: seciliDil))
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray)
+                        TextEditor(text: $invoiceFooterNote)
+                            .font(.system(size: 13))
+                            .frame(minHeight: 70)
+                            .padding(6)
+                            .background(Color.primary.opacity(0.05))
+                            .cornerRadius(8)
+                    }
+                    .padding(.top, 4)
                 }
             }
         }
     }
-    
+
     private var businessTypeMenu: some View {
         Menu {
             ForEach(businessTypes, id: \.self) { type in
@@ -5960,7 +5980,7 @@ struct AyarlarView: View {
     }
 
     private func hazirlaVeDisariAktar() {
-        let sTransfer = firebaseManager.siparisler.map { s in SiparisTransfer(customerName: s.customerName, paymentDate: s.paymentDate, paidAmount: s.paidAmount, remainingAmount: s.remainingAmount, watchPurchasePrice: s.watchPurchasePrice, watchRef: s.watchRef, deliveryTime: s.deliveryTime, designName: s.designName, designLink: s.designLink, communication: s.communication, emailAddress: s.emailAddress, instagramUsername: s.instagramUsername, whatsappNumber: s.whatsappNumber, notes: s.notes, designStatus: s.designStatus, status: s.status, isDispatched: s.isDispatched, trackingNumber: s.trackingNumber, courier: s.courier, isDelivered: s.isDelivered, paymentFee: s.paymentFee, deliveryCost: s.deliveryCost, extraStatuses: s.extraStatuses, paymentMethod: s.paymentMethod, taxRate: s.taxRate, taxAmount: s.taxAmount, taxType: s.taxType, invBool1: s.invBool1, invBool2: s.invBool2, invBool3: s.invBool3, invBool4: s.invBool4, invNotes: s.invNotes, priority: s.priority, risk: s.risk, riskReason: s.riskReason, customFields: s.customFields, customToggles: s.customToggles, historyLog: s.historyLog, clientFiles: s.clientFiles, todoItems: s.todoItems, workSessions: s.workSessions, payments: s.payments) }
+        let sTransfer = firebaseManager.siparisler.map { s in SiparisTransfer(customerName: s.customerName, paymentDate: s.paymentDate, paidAmount: s.paidAmount, remainingAmount: s.remainingAmount, watchPurchasePrice: s.watchPurchasePrice, watchRef: s.watchRef, deliveryTime: s.deliveryTime, designName: s.designName, designLink: s.designLink, communication: s.communication, emailAddress: s.emailAddress, instagramUsername: s.instagramUsername, whatsappNumber: s.whatsappNumber, notes: s.notes, designStatus: s.designStatus, status: s.status, isDispatched: s.isDispatched, trackingNumber: s.trackingNumber, courier: s.courier, isDelivered: s.isDelivered, paymentFee: s.paymentFee, deliveryCost: s.deliveryCost, extraStatuses: s.extraStatuses, paymentMethod: s.paymentMethod, taxRate: s.taxRate, taxAmount: s.taxAmount, taxType: s.taxType, invBool1: s.invBool1, invBool2: s.invBool2, invBool3: s.invBool3, invBool4: s.invBool4, invNotes: s.invNotes, priority: s.priority, risk: s.risk, riskReason: s.riskReason, customFields: s.customFields, customToggles: s.customToggles, historyLog: s.historyLog, clientFiles: s.clientFiles, todoItems: s.todoItems, workSessions: s.workSessions, payments: s.payments, invoiceNumber: s.invoiceNumber) }
         let mTransfer = firebaseManager.musteriler.map { m in MusteriTransfer(name: m.name, phone: m.phone, email: m.email, address: m.address, streetAddress: m.streetAddress, city: m.city, postalCode: m.postalCode, country: m.country, notes: m.notes) }
         let backup = AppBackup(
             siparisler: sTransfer,
@@ -6205,6 +6225,7 @@ struct AyarlarView: View {
         businessDescriptionPrompt = settings.strings["businessDescriptionPrompt"] ?? businessDescriptionPrompt
         appLogoUrl = settings.strings["appLogoUrl"] ?? appLogoUrl
         appSubtitle = settings.strings["appSubtitle"] ?? appSubtitle
+        invoiceFooterNote = settings.strings["invoiceFooterNote"] ?? invoiceFooterNote
         activeStatusesJSON = settings.strings["activeStatusesJSON"] ?? activeStatusesJSON
         customFieldsJSON = settings.strings["customFieldsJSON"] ?? customFieldsJSON
         customTogglesJSON = settings.strings["customTogglesJSON"] ?? customTogglesJSON
@@ -6301,10 +6322,10 @@ struct AyarlarView: View {
                     applyBackupSettings(settings)
                     importedSettings = true
                 }
-                for t in backup.siparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; firebaseManager.addSiparis(yeni); importedOrders += 1 }
+                for t in backup.siparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; yeni.invoiceNumber = t.invoiceNumber ?? ""; firebaseManager.addSiparis(yeni); importedOrders += 1 }
                 if let musteriler = backup.musteriler { for m in musteriler { var yeni = Musteri(); yeni.name = m.name; yeni.phone = m.phone; yeni.email = m.email; yeni.address = m.address; yeni.streetAddress = m.streetAddress; yeni.city = m.city; yeni.postalCode = m.postalCode; yeni.country = m.country; yeni.notes = m.notes; firebaseManager.addMusteri(yeni); importedCustomers += 1 } }
             } else if let eskiSiparisler = try? JSONDecoder().decode([SiparisTransfer].self, from: data) {
-                for t in eskiSiparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; firebaseManager.addSiparis(yeni); importedOrders += 1 }
+                for t in eskiSiparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; yeni.invoiceNumber = t.invoiceNumber ?? ""; firebaseManager.addSiparis(yeni); importedOrders += 1 }
             } else {
                 importSonucMesaji = "This file could not be imported. Please choose a valid NivaDesk backup JSON file."
                 importSonucGosteriliyor = true
@@ -6451,7 +6472,7 @@ private struct GeneralSettingsDivider: View {
 struct TemplateRow: View { @Binding var title: String; @Binding var desc: String; var titlePlaceholder: String; var descPlaceholder: String; var body: some View { HStack(spacing: 10) { TextField(titlePlaceholder, text: $title).textFieldStyle(.plain).font(.system(size: 13, weight: .bold)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6).frame(width: 150); TextField(descPlaceholder, text: $desc).textFieldStyle(.plain).font(.system(size: 13)).foregroundColor(.primary).padding(8).background(Color.primary.opacity(0.05)).cornerRadius(6) } } }
 
 struct MusteriTransfer: Codable { var name: String; var phone: String; var email: String; var address: String; var streetAddress: String?; var city: String?; var postalCode: String?; var country: String?; var notes: String }
-struct SiparisTransfer: Codable { var customerName: String; var paymentDate: Date; var paidAmount: Double; var remainingAmount: Double; var watchPurchasePrice: Double; var watchRef: String; var deliveryTime: Int; var designName: String; var designLink: String; var communication: [String]; var emailAddress: String; var instagramUsername: String; var whatsappNumber: String; var notes: String; var designStatus: String; var status: String; var isDispatched: Bool; var trackingNumber: String; var courier: String; var isDelivered: Bool; var paymentFee: Double; var deliveryCost: Double; var extraStatuses: [String: String]?; var paymentMethod: String?; var taxRate: Double?; var taxAmount: Double?; var taxType: String?; var invBool1: Bool?; var invBool2: Bool?; var invBool3: Bool?; var invBool4: Bool?; var invNotes: String?; var priority: String?; var risk: String?; var riskReason: String?; var customFields: [String: String]?; var customToggles: [String: Bool]?; var historyLog: [OrderHistoryLogItem]?; var clientFiles: [ClientFileItem]?; var todoItems: [OrderToDoItem]?; var workSessions: [OrderWorkSessionItem]?; var payments: [PaymentEntry]? }
+struct SiparisTransfer: Codable { var customerName: String; var paymentDate: Date; var paidAmount: Double; var remainingAmount: Double; var watchPurchasePrice: Double; var watchRef: String; var deliveryTime: Int; var designName: String; var designLink: String; var communication: [String]; var emailAddress: String; var instagramUsername: String; var whatsappNumber: String; var notes: String; var designStatus: String; var status: String; var isDispatched: Bool; var trackingNumber: String; var courier: String; var isDelivered: Bool; var paymentFee: Double; var deliveryCost: Double; var extraStatuses: [String: String]?; var paymentMethod: String?; var taxRate: Double?; var taxAmount: Double?; var taxType: String?; var invBool1: Bool?; var invBool2: Bool?; var invBool3: Bool?; var invBool4: Bool?; var invNotes: String?; var priority: String?; var risk: String?; var riskReason: String?; var customFields: [String: String]?; var customToggles: [String: Bool]?; var historyLog: [OrderHistoryLogItem]?; var clientFiles: [ClientFileItem]?; var todoItems: [OrderToDoItem]?; var workSessions: [OrderWorkSessionItem]?; var payments: [PaymentEntry]?; var invoiceNumber: String? }
 struct BackupSettings: Codable {
     var strings: [String: String]
     var bools: [String: Bool]

@@ -586,6 +586,9 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
     var workSessions: [OrderWorkSessionItem]?
     var payments: [PaymentEntry]?
 
+    var invoiceNumber: String = ""
+
+
     init(_ siparis: Siparis) {
         documentId = siparis.id
         companyId = siparis.companyId
@@ -631,6 +634,7 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
         todoItems = siparis.todoItems
         workSessions = siparis.workSessions
         payments = siparis.payments
+        invoiceNumber = siparis.invoiceNumber
     }
 
     var restoredOrder: Siparis {
@@ -679,6 +683,7 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
         restored.todoItems = todoItems
         restored.workSessions = workSessions
         restored.payments = payments
+        restored.invoiceNumber = invoiceNumber
         return restored
     }
 }

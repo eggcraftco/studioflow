@@ -1322,6 +1322,10 @@ struct SiparisDetayView: View {
     
     @AppStorage("appLogoUrl") private var appLogoUrl: String = ""
     @AppStorage("appSubtitle") private var appSubtitle = "Bespoke Hand-Painted Dials"
+    @AppStorage("companyNumbersJSON") private var companyNumbersJSON: String = ""
+    @AppStorage("invoiceCounter") private var invoiceCounter: Int = 0
+    @AppStorage("invoiceCounterYear") private var invoiceCounterYear: Int = 0
+    @AppStorage("invoiceFooterNote") private var invoiceFooterNote: String = ""
     @AppStorage("customStepsJSON") private var customStepsJSON = ""
     @AppStorage("financialExpenseItemsJSON") private var financialExpenseItemsJSON: String = ""
     @AppStorage("financialRemainingItemsJSON") private var financialRemainingItemsJSON: String = ""
@@ -1744,6 +1748,12 @@ struct SiparisDetayView: View {
                 exportToPDF()
             } label: {
                 Label(t("Export PDF", lang: seciliDil), systemImage: "doc.badge.plus")
+            }
+
+            Button {
+                exportToInvoicePDF()
+            } label: {
+                Label(t("Invoice PDF", lang: seciliDil), systemImage: "doc.text.fill")
             }
         } label: {
             if isPhoneLayout {
@@ -10139,6 +10149,62 @@ struct SiparisDetayView: View {
         #endif
     }
 
+    @MainActor private func exportToInvoicePDF() {
+        // Assign a date-based invoice number on first export (per-year sequence).
+        if siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let year = Calendar.current.component(.year, from: Date())
+            if invoiceCounterYear != year { invoiceCounterYear = year; invoiceCounter = 0 }
+            invoiceCounter += 1
+            siparis.invoiceNumber = "\(year)-\(String(format: "%04d", invoiceCounter))"
+            firebaseManager.updateSiparis(siparis)
+        }
+
+        var logoImage: PlatformImage? = nil
+        if !appLogoUrl.isEmpty,
+           let lUrl = URL(string: appLogoUrl),
+           let lData = try? Data(contentsOf: lUrl) {
+            logoImage = PlatformImage(data: lData)
+        }
+
+        let nums = (try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: Data(companyNumbersJSON.utf8))) ?? []
+        let invoiceView = OrderInvoicePDFView(
+            siparis: siparis,
+            logoImage: logoImage,
+            businessName: appSubtitle,
+            companyNumbers: nums,
+            invoiceNumber: siparis.invoiceNumber,
+            sembol: seciliParaBirimi,
+            ondalik: seciliOndalik,
+            seciliDil: seciliDil,
+            footerNote: invoiceFooterNote
+        )
+
+        let safeName = safePDFFileName("Invoice_\(siparis.invoiceNumber)")
+        let renderer = ImageRenderer(content: invoiceView)
+
+        #if os(macOS)
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.isExtensionHidden = false
+        savePanel.title = t("Save Invoice PDF", lang: seciliDil)
+        savePanel.nameFieldStringValue = safeName
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                renderPDF(renderer: renderer, to: url)
+            }
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(safeName)
+            .appendingPathExtension("pdf")
+        renderPDF(renderer: renderer, to: url)
+        DispatchQueue.main.async {
+            self.pdfShareItem = ShareableFileURL(url: url)
+        }
+        #endif
+    }
+
     @MainActor private func exportHistoryLogPDF() {
         var logoImage: PlatformImage? = nil
         if !appLogoUrl.isEmpty,
@@ -10232,7 +10298,7 @@ struct SiparisDetayView: View {
         return name.isEmpty ? "Order_Export" : name
     }
 
-    private func renderPDF(renderer: ImageRenderer<OrderPDFView>, to url: URL) {
+    private func renderPDF<Content: View>(renderer: ImageRenderer<Content>, to url: URL) {
         renderer.render { size, context in
             var box = CGRect(origin: .zero, size: size)
             guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
@@ -11908,6 +11974,101 @@ struct DetayKarti<Content: View>: View {
                     )
             }
         }
+    }
+}
+
+// Clean, customer-facing invoice. Shows only VAT (never internal Corporation Tax,
+// costs or profit). Margin-scheme orders show a single TOTAL; zero-rated/export
+// orders show "VAT (Zero-rated / Export) 0%".
+struct OrderInvoicePDFView: View {
+    let siparis: Siparis
+    var logoImage: PlatformImage?
+    var businessName: String
+    var companyNumbers: [CompanyNumberSettingDTO]
+    var invoiceNumber: String
+    var sembol: String
+    var ondalik: String
+    var seciliDil: String
+    var footerNote: String
+
+    private var orderValue: Double { siparis.paidAmount + siparis.remainingAmount }
+    private var isMarginScheme: Bool { siparis.taxType == "Profit" }
+    private var isZeroRated: Bool { siparis.taxRate <= 0.0001 }
+    private var vatAmount: Double { siparis.taxAmount }
+    private var subtotal: Double { isMarginScheme ? orderValue : orderValue - vatAmount }
+    private func money(_ v: Double) -> String { "\(sembol)\(formatFiyat(v, ondalik: ondalik))" }
+
+    private func totalRow(_ label: String, _ value: String, bold: Bool = false, color: Color = .primary) -> some View {
+        HStack {
+            Text(label).font(.system(size: bold ? 14 : 11, weight: bold ? .bold : .regular)).foregroundColor(bold ? .primary : .gray)
+            Spacer()
+            Text(value).font(.system(size: bold ? 16 : 12, weight: bold ? .bold : .semibold)).foregroundColor(color)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let logo = logoImage { Image(platformImage: logo).resizable().scaledToFit().frame(maxHeight: 54, alignment: .leading) }
+                    Text(businessName).font(.system(size: 15, weight: .bold))
+                    ForEach(companyNumbers) { num in
+                        if !num.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("\(num.title): \(num.value)").font(.system(size: 10)).foregroundColor(.gray)
+                        }
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text(t("INVOICE", lang: seciliDil)).font(.system(size: 32, weight: .heavy)).foregroundColor(.gray.opacity(0.35))
+                    Text("\(t("Invoice No", lang: seciliDil)): \(invoiceNumber)").font(.system(size: 12, weight: .semibold))
+                    Text("\(t("Date", lang: seciliDil)): \(siparis.paymentDate.formatted(date: .abbreviated, time: .omitted))").font(.system(size: 12)).foregroundColor(.gray)
+                }
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t("BILL TO", lang: seciliDil).uppercased()).font(.system(size: 10, weight: .bold)).foregroundColor(.gray).tracking(1)
+                Text(siparis.customerName.isEmpty ? "-" : siparis.customerName).font(.system(size: 13, weight: .semibold))
+                if !siparis.emailAddress.isEmpty { Text(siparis.emailAddress).font(.system(size: 11)).foregroundColor(.gray) }
+            }
+            VStack(spacing: 0) {
+                HStack { Text(t("Description", lang: seciliDil)).font(.system(size: 11, weight: .bold)); Spacer(); Text(t("Amount", lang: seciliDil)).font(.system(size: 11, weight: .bold)) }
+                    .padding(.vertical, 9).padding(.horizontal, 12).background(Color.black.opacity(0.06))
+                HStack {
+                    Text(siparis.designName.isEmpty ? (siparis.customerName.isEmpty ? t("Order", lang: seciliDil) : siparis.customerName) : siparis.designName)
+                        .font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Text(money(subtotal)).font(.system(size: 12))
+                }.padding(.vertical, 11).padding(.horizontal, 12)
+                Divider()
+            }
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.black.opacity(0.08), lineWidth: 1))
+            HStack {
+                Spacer()
+                VStack(alignment: .trailing, spacing: 7) {
+                    totalRow(t("Subtotal", lang: seciliDil), money(subtotal))
+                    if isMarginScheme {
+                        Text(t("VAT under margin scheme (not shown separately)", lang: seciliDil)).font(.system(size: 9)).foregroundColor(.gray)
+                    } else if isZeroRated {
+                        totalRow(t("VAT (Zero-rated / Export)", lang: seciliDil), money(0))
+                    } else {
+                        totalRow("\(t("VAT", lang: seciliDil)) (\(Int(siparis.taxRate))%)", money(vatAmount))
+                    }
+                    Divider().frame(width: 240)
+                    totalRow(t("TOTAL", lang: seciliDil), money(orderValue), bold: true)
+                    Spacer().frame(height: 4)
+                    totalRow(t("Paid", lang: seciliDil), money(siparis.paidAmount), color: .green)
+                    totalRow(t("Balance Due", lang: seciliDil), money(siparis.remainingAmount), color: siparis.remainingAmount > 0.005 ? .red : .green)
+                }.frame(width: 270)
+            }
+            Spacer()
+            if !footerNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider()
+                Text(footerNote).font(.system(size: 10)).foregroundColor(.gray).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(t("Generated with NivaDesk", lang: seciliDil)).font(.system(size: 9)).foregroundColor(.gray.opacity(0.6)).frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(40).frame(width: 595, height: 842).background(Color.white)
     }
 }
 
