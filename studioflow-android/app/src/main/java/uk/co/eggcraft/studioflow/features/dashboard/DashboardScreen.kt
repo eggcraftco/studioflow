@@ -113,8 +113,8 @@ fun DashboardScreen(
         DashboardStats.from(state.orders, period, advancedFinanceEnabled, locale)
     }
     val compareEnabled = advancedFinanceEnabled && compareMode != DashboardCompareMode.None && period.supportsYearCompare
-    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled) {
-        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled)
+    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled, state.workspaceSettings.corporationTaxEnabled, state.workspaceSettings.corporationTaxRate) {
+        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled, state.workspaceSettings.corporationTaxEnabled, state.workspaceSettings.corporationTaxRate)
     }
 
     LazyColumn(
@@ -881,7 +881,9 @@ private fun dashboardSummaryCards(
     decimalSeparator: String,
     visibility: DashboardWidgetVisibility,
     hideNumbers: Boolean,
-    advancedFinanceEnabled: Boolean
+    advancedFinanceEnabled: Boolean,
+    corporationTaxEnabled: Boolean = false,
+    corporationTaxRate: Double = 19.0
 ): List<DashboardSummaryCardSpec> {
     if (!advancedFinanceEnabled) {
         return listOf(
@@ -915,7 +917,12 @@ private fun dashboardSummaryCards(
             add(DashboardSummaryCardSpec("Tax Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
         }
         if (visibility.dashShowProfit) {
-            add(DashboardSummaryCardSpec("Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
+            add(DashboardSummaryCardSpec(if (corporationTaxEnabled) "Profit after VAT" else "Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
+        }
+        if (visibility.dashShowProfit && corporationTaxEnabled) {
+            val corporationTax = maxOf(0.0, stats.netProfit) * corporationTaxRate / 100.0
+            add(DashboardSummaryCardSpec("Corporation Tax (${corporationTaxRate.toInt()}%)", money(corporationTax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
+            add(DashboardSummaryCardSpec("Profit after CT", money(stats.netProfit - corporationTax, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
         }
     }
 }
