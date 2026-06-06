@@ -6085,7 +6085,24 @@ private fun FinancialCard(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                    FinanceFinalProfitRow(finalProfit = finalProfit)
+                    if (workspaceSettings.corporationTaxEnabled) {
+                        val corporationTax = maxOf(0.0, finalProfit) * workspaceSettings.corporationTaxRate / 100.0
+                        FinanceDisplayInlineRow(
+                            label = t("Profit after VAT"),
+                            value = money(finalProfit),
+                            valueColor = MaterialTheme.colorScheme.onSurface,
+                            muted = false
+                        )
+                        FinanceDisplayInlineRow(
+                            label = "${t("Corporation Tax")} (${workspaceSettings.corporationTaxRate.toInt()}%, ${t("est.")})",
+                            value = money(corporationTax),
+                            valueColor = StudioRed,
+                            muted = true
+                        )
+                        FinanceFinalProfitRow(finalProfit = finalProfit - corporationTax, label = t("Net Profit (after CT)"))
+                    } else {
+                        FinanceFinalProfitRow(finalProfit = finalProfit)
+                    }
                 }
             }
         }
@@ -6495,12 +6512,12 @@ private fun FinanceBinaryChip(
 }
 
 @Composable
-private fun FinanceFinalProfitRow(finalProfit: Double) {
+private fun FinanceFinalProfitRow(finalProfit: Double, label: String? = null) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "Final Profit",
+            label ?: t("Final Profit"),
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 15.sp,
