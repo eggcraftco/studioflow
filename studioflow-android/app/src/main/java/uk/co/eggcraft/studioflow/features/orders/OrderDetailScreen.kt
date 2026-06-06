@@ -341,6 +341,10 @@ fun OrderDetailScreen(
     } == true
     val canAssignTasks = workspace?.billingPlan == StudioBillingPlan.TeamMonthly && teamMembers.isNotEmpty()
     val financeAdvancedEnabled = workspace?.billingPlan == StudioBillingPlan.ProMonthly || workspace?.billingPlan == StudioBillingPlan.TeamMonthly
+    // Mirror the Mac rule for who can manage Client Files: Pro/Team plan AND an
+    // order-edit role (with Orders access) AND the Client Files member-access flag.
+    // (Android previously only checked the plan, so it was too permissive.)
+    val canManageClientFiles = financeAdvancedEnabled && canEditWorkflow && (access?.allows("clientFiles") != false)
     val canManageCardLayout = workspace?.let {
         it.isOwner || (it.role in setOf("admin", "member", "workflow") && it.memberAccess.orders)
     } == true
@@ -541,6 +545,7 @@ fun OrderDetailScreen(
                             canSeeFinancial = canSeeFinancial,
                             canAssignTasks = canAssignTasks,
                             financeAdvancedEnabled = financeAdvancedEnabled,
+                            canManageClientFiles = canManageClientFiles,
                             onUpdateOrderFields = onUpdateOrderFields,
                             onUploadClientFile = onUploadClientFile,
                             onUploadPreviewImage = onUploadPreviewImage,
@@ -882,6 +887,7 @@ private fun DesktopOrderDetailBoard(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val access = workspace?.memberAccess
+    val canManageClientFiles = financeAdvancedEnabled && canEditWorkflow && (access?.allows("clientFiles") != false)
     fun allowed(key: String): Boolean = access?.allows(key) != false && workspaceSettings.showsCard(key)
     fun allowedCard(cardId: OrderDetailCardId): Boolean {
         return when (cardId) {
@@ -1166,6 +1172,7 @@ private fun DesktopOrderDetailBoard(
                                             canSeeFinancial = canSeeFinancial,
                                             canAssignTasks = canAssignTasks,
                                             financeAdvancedEnabled = financeAdvancedEnabled,
+                                            canManageClientFiles = canManageClientFiles,
                                             onUpdateOrderFields = onUpdateOrderFields,
                                             onUploadClientFile = onUploadClientFile,
                                             onUploadPreviewImage = onUploadPreviewImage,
@@ -2839,6 +2846,7 @@ private fun OrderDetailCardContent(
     canSeeFinancial: Boolean,
     canAssignTasks: Boolean,
     financeAdvancedEnabled: Boolean,
+    canManageClientFiles: Boolean,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit,
     onUploadPreviewImage: (StudioOrder, ByteArray, String, String) -> Unit,
@@ -2895,7 +2903,7 @@ private fun OrderDetailCardContent(
         )
         OrderDetailCardId.ClientFiles -> DesktopClientFilesCard(
             order = order,
-            clientFilesEnabled = financeAdvancedEnabled,
+            clientFilesEnabled = canManageClientFiles,
             onUpdateOrderFields = onUpdateOrderFields,
             onUploadClientFile = onUploadClientFile,
             onRenameClientFile = onRenameClientFile,
