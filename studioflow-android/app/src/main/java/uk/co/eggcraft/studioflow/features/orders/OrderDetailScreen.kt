@@ -10383,39 +10383,61 @@ ${if (footer.isNotBlank()) "<footer>${escapeInvoiceHtml(footer)}</footer>" else 
 private var invoicePrintWebViewHolder: android.webkit.WebView? = null
 
 private fun printInvoiceHtml(context: Context, html: String, name: String) {
-    val webView = android.webkit.WebView(context)
-    webView.settings.javaScriptEnabled = false
-    webView.settings.loadsImagesAutomatically = true
-    webView.webViewClient = object : android.webkit.WebViewClient() {
-        override fun onPageFinished(view: android.webkit.WebView, url: String?) {
-            // Give remote images a moment to load before printing.
-            view.postDelayed({
-                val printManager = context.getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
-                val adapter = view.createPrintDocumentAdapter("Invoice_$name")
-                printManager.print("Invoice $name", adapter, android.print.PrintAttributes.Builder().build())
-                invoicePrintWebViewHolder = null
-            }, 600)
+    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    mainHandler.post {
+        try {
+            val webView = android.webkit.WebView(context.applicationContext)
+            webView.settings.javaScriptEnabled = false
+            webView.settings.loadsImagesAutomatically = true
+            webView.webViewClient = object : android.webkit.WebViewClient() {
+                override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+                    // Give remote images a moment to load before printing.
+                    view.postDelayed({
+                        try {
+                            val printManager = context.getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
+                            val adapter = view.createPrintDocumentAdapter("Invoice_$name")
+                            printManager.print(
+                                "Invoice $name",
+                                adapter,
+                                android.print.PrintAttributes.Builder().build()
+                            )
+                            // Keep the WebView referenced until printing is well under way.
+                            view.postDelayed({ invoicePrintWebViewHolder = null }, 30000)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Invoice print failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            invoicePrintWebViewHolder = null
+                        }
+                    }, 700)
+                }
+            }
+            // Hold a strong reference so the WebView is not garbage collected mid-print.
+            invoicePrintWebViewHolder = webView
+            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
-    invoicePrintWebViewHolder = webView
-    webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
 }
 
 private suspend fun generateAndPrintInvoice(context: Context, order: StudioOrder, settings: StudioWorkspaceSettings) {
-    var number = order.invoiceNumber
-    if (number.isBlank()) {
-        number = try {
-            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
-                .getHttpsCallable("assignInvoiceNumber")
-                .call(mapOf("companyId" to order.companyId, "orderId" to order.id))
-                .await()
-            ((result.getData() as? Map<*, *>)?.get("invoiceNumber") as? String).orEmpty()
-        } catch (e: Exception) {
-            ""
+    try {
+        var number = order.invoiceNumber
+        if (number.isBlank()) {
+            number = try {
+                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                    .getHttpsCallable("assignInvoiceNumber")
+                    .call(mapOf("companyId" to order.companyId, "orderId" to order.id))
+                    .await()
+                ((result.getData() as? Map<*, *>)?.get("invoiceNumber") as? String).orEmpty()
+            } catch (e: Exception) {
+                ""
+            }
         }
+        val html = buildInvoiceHtml(order, settings, number)
+        printInvoiceHtml(context, html, number.ifBlank { order.id })
+    } catch (e: Exception) {
+        Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
     }
-    val html = buildInvoiceHtml(order, settings, number)
-    printInvoiceHtml(context, html, number.ifBlank { order.id })
 }
 
 private fun shareOrderPdf(
