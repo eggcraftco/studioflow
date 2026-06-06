@@ -10380,47 +10380,9 @@ ${if (footer.isNotBlank()) "<footer>${escapeInvoiceHtml(footer)}</footer>" else 
 </div></body></html>"""
 }
 
-private var invoicePrintWebViewHolder: android.webkit.WebView? = null
-
-private fun printInvoiceHtml(context: Context, html: String, name: String) {
-    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    mainHandler.post {
-        try {
-            val webView = android.webkit.WebView(context.applicationContext)
-            webView.settings.javaScriptEnabled = false
-            webView.settings.loadsImagesAutomatically = true
-            webView.webViewClient = object : android.webkit.WebViewClient() {
-                override fun onPageFinished(view: android.webkit.WebView, url: String?) {
-                    // Give remote images a moment to load before printing.
-                    view.postDelayed({
-                        try {
-                            val printManager = context.getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
-                            val adapter = view.createPrintDocumentAdapter("Invoice_$name")
-                            printManager.print(
-                                "Invoice $name",
-                                adapter,
-                                android.print.PrintAttributes.Builder().build()
-                            )
-                            // Keep the WebView referenced until printing is well under way.
-                            view.postDelayed({ invoicePrintWebViewHolder = null }, 30000)
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Invoice print failed: ${e.message}", Toast.LENGTH_LONG).show()
-                            invoicePrintWebViewHolder = null
-                        }
-                    }, 700)
-                }
-            }
-            // Hold a strong reference so the WebView is not garbage collected mid-print.
-            invoicePrintWebViewHolder = webView
-            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-}
-
 private suspend fun generateAndPrintInvoice(context: Context, order: StudioOrder, settings: StudioWorkspaceSettings) {
     try {
+        // 1) Assign / fetch the invoice number from the server counter.
         var number = order.invoiceNumber
         if (number.isBlank()) {
             number = try {
@@ -10433,10 +10395,200 @@ private suspend fun generateAndPrintInvoice(context: Context, order: StudioOrder
                 ""
             }
         }
-        val html = buildInvoiceHtml(order, settings, number)
-        printInvoiceHtml(context, html, number.ifBlank { order.id })
+
+        // 2) Download the workspace logo (off the main thread) if present.
+        val logoBitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val url = settings.appLogoUrl.trim()
+            if (url.isBlank()) null else runCatching {
+                val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    instanceFollowRedirects = true
+                }
+                conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+            }.getOrNull()
+        }
+
+        // 3) Render the invoice PDF and open the share sheet.
+        val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            createInvoicePdfFile(context, order, settings, number, logoBitmap)
+        }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_SUBJECT, "Invoice ${number.ifBlank { order.displayCustomerName }}")
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "Invoice PDF"))
     } catch (e: Exception) {
         Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun createInvoicePdfFile(
+    context: Context,
+    order: StudioOrder,
+    settings: StudioWorkspaceSettings,
+    invoiceNumber: String,
+    logo: android.graphics.Bitmap?
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 42f
+    val document = PdfDocument()
+    val page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create())
+    val canvas = page.canvas
+    canvas.drawColor(0xFFFFFFFF.toInt())
+
+    val rightX = pageWidth - margin
+    val currency = settings.selectedCurrency.ifBlank { "£" }
+    fun money(v: Double) = pdfMoney(v, settings)
+
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x59000000; textSize = 30f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF111827.toInt(); textSize = 16f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF6B7280.toInt(); textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF6B7280.toInt(); textSize = 11f }
+    val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF111827.toInt(); textSize = 12f }
+    val bodyBold = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF111827.toInt(); textSize = 12f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val totalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF111827.toInt(); textSize = 16f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE5E7EB.toInt(); strokeWidth = 1f }
+    val rightAlign = Paint.Align.RIGHT
+
+    fun drawRight(text: String, x: Float, yy: Float, paint: Paint) {
+        val old = paint.textAlign
+        paint.textAlign = rightAlign
+        canvas.drawText(text, x, yy, paint)
+        paint.textAlign = old
+    }
+
+    var y = margin + 6f
+    val headerTop = y
+
+    // Logo + business name (left column)
+    if (logo != null && logo.width > 0 && logo.height > 0) {
+        val maxW = 150f
+        val maxH = 56f
+        val scale = minOf(maxW / logo.width, maxH / logo.height)
+        val w = logo.width * scale
+        val h = logo.height * scale
+        canvas.drawBitmap(
+            logo,
+            null,
+            android.graphics.RectF(margin, y, margin + w, y + h),
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        )
+        y += h + 10f
+    }
+    canvas.drawText(settings.appSubtitle.ifBlank { "NivaDesk" }, margin, y + 4f, namePaint)
+    y += 18f
+    settings.companyNumbers
+        .filter { it.title.isNotBlank() && it.value.isNotBlank() }
+        .forEach { num ->
+            canvas.drawText("${num.title}: ${num.value}", margin, y + 8f, mutedPaint)
+            y += 14f
+        }
+
+    // INVOICE title + meta (right column)
+    drawRight("INVOICE", rightX, headerTop + 26f, titlePaint)
+    drawRight("Invoice No: ${invoiceNumber.ifBlank { "-" }}", rightX, headerTop + 46f, mutedPaint)
+    val dateStr = order.paymentDate?.let { pdfDate(it) } ?: pdfDate(Date())
+    drawRight("Date: $dateStr", rightX, headerTop + 62f, mutedPaint)
+
+    y = maxOf(y, headerTop + 80f)
+    canvas.drawLine(margin, y, rightX, y, linePaint)
+    y += 26f
+
+    // Bill to
+    canvas.drawText("BILL TO", margin, y, labelPaint)
+    y += 16f
+    canvas.drawText(order.displayCustomerName.ifBlank { "Customer" }, margin, y, bodyBold)
+    y += 16f
+    if (order.emailAddress.isNotBlank()) {
+        canvas.drawText(order.emailAddress, margin, y, mutedPaint)
+        y += 16f
+    }
+    y += 12f
+
+    // Line item table
+    val isMargin = order.taxType == "Profit"
+    val isZero = order.taxRate <= 0.0001
+    val orderValue = order.paidAmount + order.remainingAmount
+    val vat = order.taxAmount
+    val subtotal = if (isMargin) orderValue else orderValue - vat
+
+    val tableHeaderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF3F4F6.toInt() }
+    canvas.drawRect(margin, y, rightX, y + 24f, tableHeaderBg)
+    canvas.drawText("Description", margin + 10f, y + 16f, labelPaint)
+    drawRight("Amount", rightX - 10f, y + 16f, labelPaint)
+    y += 24f
+    val desc = order.designName.ifBlank { order.displayCustomerName.ifBlank { "Order" } }
+    canvas.drawText(desc, margin + 10f, y + 18f, bodyPaint)
+    drawRight(money(subtotal), rightX - 10f, y + 18f, bodyPaint)
+    y += 28f
+    canvas.drawLine(margin, y, rightX, y, linePaint)
+    y += 22f
+
+    // Totals (right block)
+    val totalsLeft = rightX - 250f
+    fun totalRow(label: String, value: String, valuePaint: Paint, labelPaintUse: Paint = bodyPaint) {
+        canvas.drawText(label, totalsLeft, y, labelPaintUse)
+        drawRight(value, rightX, y, valuePaint)
+        y += 20f
+    }
+    totalRow("Subtotal", money(subtotal), bodyPaint)
+    when {
+        isMargin -> { canvas.drawText("VAT under margin scheme (not shown separately)", totalsLeft, y, mutedPaint); y += 18f }
+        isZero -> totalRow("VAT (Zero-rated / Export)", money(0.0), bodyPaint)
+        else -> totalRow("VAT (${order.taxRate.toInt()}%)", money(vat), bodyPaint)
+    }
+    canvas.drawLine(totalsLeft, y - 4f, rightX, y - 4f, linePaint)
+    y += 8f
+    totalRow("TOTAL", money(orderValue), totalPaint, totalPaint)
+    y += 4f
+    val paidPaint = Paint(bodyBold).apply { color = 0xFF16A34A.toInt() }
+    totalRow("Paid", money(order.paidAmount), paidPaint)
+    val duePaint = Paint(bodyBold).apply {
+        color = if (order.remainingAmount > 0.005) 0xFFDC2626.toInt() else 0xFF16A34A.toInt()
+    }
+    totalRow("Balance Due", money(order.remainingAmount), duePaint)
+    y += 18f
+
+    // Footer note
+    val footer = settings.invoiceFooterNote.trim()
+    if (footer.isNotBlank()) {
+        canvas.drawLine(margin, y, rightX, y, linePaint)
+        y += 18f
+        pdfWrappedLines(footer, mutedPaint, rightX - margin).forEach { line ->
+            canvas.drawText(line, margin, y, mutedPaint)
+            y += 15f
+        }
+    }
+
+    val creditPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF9CA3AF.toInt(); textSize = 9f; textAlign = Paint.Align.CENTER
+    }
+    canvas.drawText("Generated with NivaDesk", pageWidth / 2f, pageHeight - margin, creditPaint)
+
+    document.finishPage(page)
+    val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+    val safeNo = pdfSafeFileName(invoiceNumber.ifBlank { order.displayCustomerName })
+    val file = File(exportDir, "Invoice_${safeNo}.pdf")
+    try {
+        file.outputStream().use { document.writeTo(it) }
+        return file
+    } finally {
+        document.close()
     }
 }
 
