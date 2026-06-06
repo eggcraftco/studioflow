@@ -10498,8 +10498,17 @@ private fun rememberOrderPdfExporter(
     return { order ->
         scope.launch {
             try {
+                val logoBitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val url = settings.appLogoUrl.trim()
+                    if (url.isBlank()) null else runCatching {
+                        val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 8000; readTimeout = 8000; instanceFollowRedirects = true
+                        }
+                        conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+                    }.getOrNull()
+                }
                 val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    createOrderPdfFile(context, order, settings, canSeeFinancial, advancedFinanceEnabled)
+                    createOrderPdfFile(context, order, settings, canSeeFinancial, advancedFinanceEnabled, logoBitmap)
                 }
                 pendingFile = file
                 try {
@@ -10715,266 +10724,226 @@ private fun createOrderPdfFile(
     order: StudioOrder,
     settings: StudioWorkspaceSettings,
     canSeeFinancial: Boolean,
-    advancedFinanceEnabled: Boolean
+    advancedFinanceEnabled: Boolean,
+    logo: android.graphics.Bitmap? = null
 ): File {
-    val document = PdfDocument()
     val pageWidth = 595
     val pageHeight = 842
-    val margin = 42f
-    var pageNumber = 1
-    var page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
-    var canvas = page.canvas
-    var y = margin
+    val margin = 40f
+    val gap = 30f
+    val colW = (pageWidth - margin * 2 - gap) / 2f
+    val rightColX = margin + colW + gap
 
-    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF111827.toInt()
-        textSize = 24f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    }
-    val sectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF111827.toInt()
-        textSize = 15f
+    val document = PdfDocument()
+    val page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create())
+    val canvas = page.canvas
+    canvas.drawColor(0xFFFFFFFF.toInt())
+
+    val cPrimary = 0xFF1C1C1E.toInt()
+    val cGreen = 0xFF16A34A.toInt()
+    val cRed = 0xFFDC2626.toInt()
+    val cOrange = 0xFFF59E0B.toInt()
+    val cGray = 0xFF8E8E93.toInt()
+
+    val sectionTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = cGray; textSize = 11f; letterSpacing = 0.08f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF6B7280.toInt()
-        textSize = 10.5f
+        color = cPrimary; textSize = 11.5f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-    val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF111827.toInt()
-        textSize = 12f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+    val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = cPrimary; textSize = 11.5f }
+    val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = cGray; textSize = 12f }
+    val jobSheetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x4D8E8E93; textSize = 28f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-    val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF9CA3AF.toInt()
-        textSize = 10f
-    }
-    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFE5E7EB.toInt()
-        strokeWidth = 1f
+    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE5E7EB.toInt(); strokeWidth = 1f }
+    val cardBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF3F3F5.toInt() }
+
+    fun money(v: Double) = pdfMoney(v, settings)
+    fun drawRight(text: String, x: Float, yy: Float, paint: Paint) {
+        val old = paint.textAlign
+        paint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(text, x, yy, paint)
+        paint.textAlign = old
     }
 
-    fun paintPageBackground() {
-        canvas.drawColor(0xFFFFFFFF.toInt())
+    // ---------- Header ----------
+    var headerBottom = margin + 18f
+    if (logo != null && logo.width > 0 && logo.height > 0) {
+        val h = 50f
+        val w = logo.width * (h / logo.height)
+        canvas.drawBitmap(
+            logo, null,
+            android.graphics.RectF(margin, margin, margin + w, margin + h),
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        )
+        canvas.drawText(settings.appSubtitle.ifBlank { "NivaDesk" }, margin, margin + h + 14f, mutedPaint)
+        headerBottom = margin + h + 20f
+    } else {
+        canvas.drawText(settings.appSubtitle.ifBlank { "NivaDesk" }, margin, margin + 16f, mutedPaint)
+        headerBottom = margin + 26f
     }
+    drawRight("JOB SHEET", pageWidth - margin, margin + 30f, jobSheetPaint)
+    val dividerY = headerBottom + 10f
+    canvas.drawLine(margin, dividerY, pageWidth - margin, dividerY, linePaint)
+    val bodyTop = dividerY + 22f
 
-    fun newPage() {
-        document.finishPage(page)
-        pageNumber += 1
-        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
-        canvas = page.canvas
-        y = margin
-        paintPageBackground()
-        canvas.drawText("NivaDesk order export", margin, y, mutedPaint)
-        y += 24f
-    }
+    // ---------- Card renderer ----------
+    val innerPad = 14f
+    val labelW = 108f
+    val rowGap = 8f
+    val lineH = 15f
+    val valueW = colW - innerPad * 2 - labelW - 4f
 
-    fun ensureSpace(height: Float) {
-        if (y + height > pageHeight - margin) newPage()
-    }
-
-    fun drawKeyValue(label: String, value: String) {
-        val cleanValue = value.trim().ifBlank { "-" }
-        val labelWidth = 132f
-        val valueX = margin + labelWidth
-        val maxValueWidth = pageWidth - margin * 2 - labelWidth
-        val lines = pdfWrappedLines(cleanValue, bodyPaint, maxValueWidth)
-        val rowHeight = maxOf(26f, 10f + lines.size * 16f)
-        ensureSpace(rowHeight)
-        canvas.drawText(label.trim(), margin, y + 13f, labelPaint)
-        lines.forEachIndexed { index, line ->
-            canvas.drawText(line, valueX, y + 13f + index * 16f, bodyPaint)
+    fun drawCard(colX: Float, startY: Float, title: String, rows: List<Triple<String, String, Int>>): Float {
+        if (rows.isEmpty()) return startY
+        canvas.drawText(title.uppercase(Locale.UK), colX, startY + 9f, sectionTitlePaint)
+        val cardTop = startY + 16f
+        val wrapped = rows.map { r ->
+            r to pdfWrappedLines(r.second.ifBlank { "-" }, valuePaint, valueW)
         }
-        y += rowHeight
+        var contentH = 0f
+        wrapped.forEachIndexed { i, (_, lines) ->
+            contentH += maxOf(lineH, lines.size * lineH)
+            if (i < wrapped.size - 1) contentH += rowGap
+        }
+        val cardH = contentH + innerPad * 2
+        canvas.drawRoundRect(
+            android.graphics.RectF(colX, cardTop, colX + colW, cardTop + cardH), 8f, 8f, cardBg
+        )
+        var ty = cardTop + innerPad + 10f
+        wrapped.forEach { (r, lines) ->
+            canvas.drawText(r.first, colX + innerPad, ty, labelPaint)
+            val vp = Paint(valuePaint).apply { color = r.third }
+            lines.forEachIndexed { idx, line -> canvas.drawText(line, colX + innerPad + labelW, ty + idx * lineH, vp) }
+            ty += maxOf(lineH, lines.size * lineH) + rowGap
+        }
+        return cardTop + cardH + 22f
     }
 
-    fun drawSection(title: String, rows: List<Pair<String, String>>) {
-        val cleanRows = rows
-            .map { it.first.trim() to it.second.trim() }
-            .filter { it.first.isNotBlank() }
-        if (cleanRows.isEmpty()) return
-        ensureSpace(48f)
-        y += 10f
-        canvas.drawText(title, margin, y, sectionPaint)
-        y += 20f
-        cleanRows.forEach { (label, value) -> drawKeyValue(label, value) }
-        canvas.drawLine(margin, y + 4f, pageWidth - margin, y + 4f, linePaint)
-        y += 14f
-    }
-
-    paintPageBackground()
-    canvas.drawText("NivaDesk Order", margin, y, titlePaint)
-    y += 28f
-    canvas.drawText(order.displayCustomerName, margin, y, sectionPaint)
-    y += 18f
-    canvas.drawText(order.designName.ifBlank { order.watchRef.ifBlank { "New Project" } }, margin, y, mutedPaint)
-    y += 16f
-    canvas.drawText("Generated ${pdfDate(Date())}", margin, y, mutedPaint)
-    y += 14f
+    // ---------- Left column ----------
+    var leftY = bodyTop
 
     if (settings.pdfShowCustomer) {
-        val customRows = orderedCustomFieldsForDisplay(order.customFields, settings.customFields)
-            .filter { (key, value) ->
-                key.isNotBlank() &&
-                    value.isNotBlank() &&
-                    !key.startsWith("communication", ignoreCase = true) &&
-                    !key.startsWith("financial", ignoreCase = true) &&
-                    !key.startsWith("specialNote", ignoreCase = true)
-            }
-            .take(10)
-        drawSection(
-            "Customer & Design",
-            listOf(
-                "Customer" to order.displayCustomerName,
-                "Design" to order.designName.ifBlank { "-" },
-                "Watch Ref" to order.watchRef.ifBlank { "-" },
-                "Placed On" to pdfDate(order.paymentDate),
-                "Delivery Due" to pdfDate(dueDate(order)),
-                "Delivery In" to deliveryLabel(order)
-            ) + customRows
+        val rows = mutableListOf(
+            Triple("Customer Name:", order.displayCustomerName.ifBlank { "-" }, cPrimary),
+            Triple("Design Name:", order.designName.ifBlank { "-" }, cPrimary)
         )
-    }
-
-    if (settings.pdfShowContact) {
-        val channelRows = communicationChannelLabels(settings).mapNotNull { label ->
-            val value = communicationChannelDisplayValue(order, label)
-            if (value.isBlank()) null else label to value
+        settings.customFields.map { it.trim() }.filter { it.isNotBlank() }.forEach { title ->
+            rows.add(Triple("$title:", order.customFields[title]?.ifBlank { "-" } ?: "-", cPrimary))
         }
-        val noteRows = normalizedSpecialNoteSections(settings.specialNoteSections).mapNotNull { section ->
-            val value = specialNoteValue(order, section)
-            if (value.isBlank()) null else section.title to value
-        }
-        drawSection(
-            "Contact & Notes",
-            listOf(
-                "Email" to order.emailAddress,
-                "Instagram" to order.instagramUsername,
-                "WhatsApp" to order.whatsappNumber,
-                "Communication" to order.communication.joinToString(", ")
-            ) + channelRows + noteRows
-        )
-    }
-
-    if (settings.pdfShowPreview) {
-        val previewFile = order.clientFiles.firstOrNull {
-            isClientFileImage(it.contentType, it.fileName) && it.downloadUrl.isNotBlank()
-        }
-        drawSection(
-            "Preview Image",
-            listOf(
-                "Preview URL" to order.designLink,
-                "Client File" to (previewFile?.fileName ?: "-")
-            )
-        )
-    }
-
-    if (settings.pdfShowMaterials) {
-        val materialRows = materialDefaultCheckLabels(settings).mapIndexed { index, label ->
-            label to yesNo(materialDefaultToggleValue(order, index, label))
-        }
-        val extraMaterialRows = settings.materialsToggles
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { label -> label to yesNo(order.customToggles["materials::$label"] == true) }
-        val notesRow = if (settings.showMaterialsNotesSupplier && order.invNotes.isNotBlank()) {
-            listOf(settings.materialsNotesSupplierLabel.ifBlank { "Notes / Supplier" } to order.invNotes)
-        } else {
-            emptyList()
-        }
-        drawSection("Materials & Inventory", materialRows + extraMaterialRows + notesRow)
+        rows.add(Triple("Placed On:", pdfDate(order.paymentDate), cPrimary))
+        leftY = drawCard(margin, leftY, "Customer & Design", rows)
     }
 
     if (settings.pdfShowPriority) {
-        drawSection(
-            "Priority / Risk",
-            listOf(
-                "Priority" to order.priority.ifBlank { "Normal" },
-                "Risk" to order.risk.ifBlank { "None" },
-                "Risk Reason" to order.riskReason.takeUnless { it == "-" }.orEmpty()
-            )
+        val rows = mutableListOf(
+            Triple("Priority:", order.priority.ifBlank { "Normal" }, cPrimary),
+            Triple("Risk:", order.risk.ifBlank { "None" }, cPrimary)
         )
-    }
-
-    if (canSeeFinancial && settings.pdfShowFinCustomer) {
-        drawSection(
-            "Financials: Paid & Remaining",
-            listOf(
-                "Order Value" to pdfMoney(order.orderValue, settings),
-                "Paid" to pdfMoney(order.paidAmount, settings),
-                "Remaining" to pdfMoney(order.remainingAmount, settings)
-            )
-        )
-    }
-
-    if (canSeeFinancial && settings.pdfShowPaymentMethod) {
-        drawSection(
-            "Payment Method",
-            listOf(
-                "Method" to order.paymentMethod.ifBlank { "Card" },
-                "Full Payment Received" to yesNo(order.remainingAmount <= 0.0)
-            )
-        )
-    }
-
-    if (canSeeFinancial && advancedFinanceEnabled && settings.pdfShowFinInternal) {
-        val remainingItems = normalizedFinancialItems(settings.financialRemainingItems, "Pending")
-        val expenseItems = normalizedFinancialItems(settings.financialExpenseItems, "Cost")
-        val remainingRows = remainingItems.map { item ->
-            item.title to pdfMoney(financialCustomValue(order, "financialRemaining::", item.title), settings)
+        if (order.risk != "None" && order.riskReason.isNotBlank() && order.riskReason != "-") {
+            rows.add(Triple("Reason:", order.riskReason, cPrimary))
         }
-        val expenseRows = expenseItems.map { item ->
-            item.title to pdfMoney(financialCustomValue(order, "financialExpense::", item.title), settings)
+        leftY = drawCard(margin, leftY, "Priority / Risk", rows)
+    }
+
+    if (settings.pdfShowMaterials) {
+        val rows = mutableListOf<Triple<String, String, Int>>()
+        materialDefaultCheckLabels(settings).forEachIndexed { index, label ->
+            rows.add(Triple("$label:", yesNo(materialDefaultToggleValue(order, index, label)), cPrimary))
         }
-        drawSection(
-            "Internal Financials",
-            listOf(
-                settings.financialBaseCostLabel.ifBlank { "Cost (Base)" } to pdfMoney(order.watchPurchasePrice, settings),
-                "Delivery Cost" to pdfMoney(order.deliveryCost, settings),
-                "Platform Fee" to pdfMoney(order.paymentFee, settings),
-                "Tax" to pdfMoney(order.taxAmount, settings),
-                "Net Profit" to pdfMoney(financialFinalProfit(order, settings), settings)
-            ) + remainingRows + expenseRows
+        settings.materialsToggles.map { it.trim() }.filter { it.isNotBlank() }.forEach { label ->
+            rows.add(Triple("$label:", yesNo(order.customToggles["materials::$label"] == true), cPrimary))
+        }
+        if (settings.showMaterialsNotesSupplier && order.invNotes.isNotBlank()) {
+            rows.add(Triple(settings.materialsNotesSupplierLabel.ifBlank { "Notes / Supplier" } + ":", order.invNotes, cPrimary))
+        }
+        leftY = drawCard(margin, leftY, "Materials & Inventory", rows)
+    }
+
+    if (settings.pdfShowContact) {
+        val rows = mutableListOf(
+            Triple("Email:", order.emailAddress.ifBlank { "-" }, cPrimary)
         )
+        communicationChannelLabels(settings).forEach { label ->
+            val value = communicationChannelDisplayValue(order, label)
+            if (value.isNotBlank()) rows.add(Triple("$label:", value, cPrimary))
+        }
+        normalizedSpecialNoteSections(settings.specialNoteSections).forEach { section ->
+            val value = specialNoteValue(order, section)
+            if (value.isNotBlank()) rows.add(Triple(section.title + ":", value, cPrimary))
+        }
+        leftY = drawCard(margin, leftY, "Contact & Notes", rows)
+    }
+
+    // ---------- Right column ----------
+    var rightY = bodyTop
+
+    val showFinCustomer = canSeeFinancial && settings.pdfShowFinCustomer
+    val showFinInternal = canSeeFinancial && advancedFinanceEnabled && settings.pdfShowFinInternal
+    if (showFinCustomer || showFinInternal) {
+        val rows = mutableListOf<Triple<String, String, Int>>()
+        if (showFinCustomer) {
+            rows.add(Triple("Paid:", money(order.paidAmount), cGreen))
+            rows.add(Triple("Remaining:", money(order.remainingAmount), cOrange))
+            if (settings.pdfShowPaymentMethod) {
+                rows.add(Triple("Payment Method:", order.paymentMethod.ifBlank { "Card" }, cPrimary))
+            }
+        }
+        if (showFinInternal) {
+            rows.add(Triple("Platform Fee:", money(order.paymentFee), cRed))
+            rows.add(Triple("Watch Cost:", money(order.watchPurchasePrice), cRed))
+            rows.add(Triple("Shipping Cost:", money(order.deliveryCost), cRed))
+            rows.add(Triple("Tax Amount:", money(order.taxAmount), cRed))
+            val profitAfterVat = financialFinalProfit(order, settings)
+            if (settings.corporationTaxEnabled) {
+                val ct = maxOf(0.0, profitAfterVat) * settings.corporationTaxRate / 100.0
+                rows.add(Triple("Profit after VAT:", money(profitAfterVat), cPrimary))
+                rows.add(Triple("Corp. Tax (${settings.corporationTaxRate.toInt()}%):", money(ct), cRed))
+                rows.add(Triple("Net Profit (CT):", money(profitAfterVat - ct), cGreen))
+            } else {
+                rows.add(Triple("Final Profit:", money(profitAfterVat), cGreen))
+            }
+        }
+        rightY = drawCard(rightColX, rightY, "Financial Info", rows)
     }
 
     if (settings.pdfShowStatus) {
-        val statusRows = settings.customSteps
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { step -> step to statusStepValue(order, step) }
-        val toggleRows = settings.customToggles
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { label -> label to yesNo(order.customToggles[label] == true) }
-        drawSection(
-            "Production Status",
-            listOf(
-                "Design" to order.designStatus,
-                "Painting" to order.status
-            ) + statusRows + toggleRows
+        val rows = mutableListOf(
+            Triple("Delivery Time:", "${order.deliveryTime} days", cPrimary)
         )
+        settings.customSteps.map { it.trim() }.filter { it.isNotBlank() }.forEachIndexed { index, step ->
+            val value = when (index) {
+                0 -> order.designStatus
+                1 -> order.status
+                else -> order.extraStatuses[step] ?: "Not Yet"
+            }
+            rows.add(Triple("$step:", value, cPrimary))
+        }
+        settings.customToggles.map { it.trim() }.filter { it.isNotBlank() }.forEach { label ->
+            rows.add(Triple("$label:", yesNo(order.customToggles[label] == true), cPrimary))
+        }
+        rightY = drawCard(rightColX, rightY, "Production Status", rows)
     }
 
     if (settings.pdfShowShipping) {
-        drawSection(
-            "Shipping & Tracking",
-            listOf(
-                "Dispatched" to yesNo(order.isDispatched),
-                "Delivered" to yesNo(order.isDelivered),
-                "Courier" to order.courier.ifBlank { "Auto Detect" },
-                "Tracking No." to order.trackingNumber
-            )
+        val rows = listOf(
+            Triple("Dispatched:", yesNo(order.isDispatched), cPrimary),
+            Triple("Courier:", order.courier.ifBlank { "-" }, cPrimary),
+            Triple("Tracking No.:", order.trackingNumber.ifBlank { "-" }, cPrimary)
         )
+        rightY = drawCard(rightColX, rightY, "Shipping & Tracking", rows)
     }
 
-    val invoiceRows = settings.companyNumbers
-        .filter { it.title.isNotBlank() && it.value.isNotBlank() }
-        .map { it.title to it.value }
-    drawSection("Company Invoice Numbers", invoiceRows)
+    // ---------- Footer ----------
+    val creditPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = cGray; textSize = 10f; textAlign = Paint.Align.CENTER
+    }
+    canvas.drawText("Generated automatically from NivaDesk", pageWidth / 2f, pageHeight - margin + 6f, creditPaint)
 
-    ensureSpace(28f)
-    canvas.drawText("NivaDesk Android export respects the PDF settings for this workspace.", margin, y + 12f, mutedPaint)
     document.finishPage(page)
 
     val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
