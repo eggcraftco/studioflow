@@ -58,6 +58,12 @@ internal fun normalizeLang(raw: String?): String {
 private val TRANSLATIONS: Map<String, Map<String, String>> by lazy { TR_1 + TR_2 + TR_3 + TR_4 }
 
 private val TR_1: Map<String, Map<String, String>> by lazy { mapOf(
+    // ============================ CORPORATION TAX ============================
+    "Corporation Tax" to mapOf("Türkçe" to "Kurumlar Vergisi"),
+    "Profit after VAT" to mapOf("Türkçe" to "KDV Sonrası Kâr"),
+    "Net Profit (after CT)" to mapOf("Türkçe" to "Net Kâr (KV sonrası)"),
+    "Profit after CT" to mapOf("Türkçe" to "KV Sonrası Kâr"),
+    "est." to mapOf("Türkçe" to "tah."),
     // ============================ NOTES MODULE ============================
     "Notes" to mapOf(
         "Türkçe" to "Notlar", "Deutsch" to "Notizen", "Français" to "Notes", "Italiano" to "Note",
