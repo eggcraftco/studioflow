@@ -51,6 +51,9 @@ export type FinancialSettingsInput = {
   taxCalculationType: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
+  corporationTaxEnabled?: boolean;
+  corporationTaxRate?: number;
+  invoiceFooterNote?: string;
 };
 
 export type FinancialSettingsResult = {
