@@ -131,7 +131,9 @@ struct AyarlarView: View {
     @AppStorage("taxMilestoneDate") private var taxMilestoneDate: Double = Date().timeIntervalSince1970
     @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard Tax (Services/New)"
     @AppStorage("taxRuleNameProfit") private var taxRuleNameProfit: String = "Margin Scheme (2nd Hand)"
-    
+    @AppStorage("corporationTaxEnabled") private var corporationTaxEnabled: Bool = false
+    @AppStorage("corporationTaxRate") private var corporationTaxRate: Double = 19.0
+
     @AppStorage("invLabel1") private var invLabel1: String = "Dial Sourced"
     @AppStorage("invLabel2") private var invLabel2: String = "Dial Received"
     @AppStorage("invLabel3") private var invLabel3: String = "Watch Received"
@@ -291,7 +293,9 @@ struct AyarlarView: View {
             String(taxMilestoneEnabled),
             String(taxMilestoneDate),
             taxRuleNameRevenue,
-            taxRuleNameProfit
+            taxRuleNameProfit,
+            String(corporationTaxEnabled),
+            String(corporationTaxRate)
         ].joined(separator: "||")
     }
 
@@ -3105,6 +3109,8 @@ struct AyarlarView: View {
                 applyDouble("taxMilestoneDate", { taxMilestoneDate = $0 }, taxMilestoneDate)
                 applyString("taxRuleNameRevenue", { taxRuleNameRevenue = $0 }, taxRuleNameRevenue)
                 applyString("taxRuleNameProfit", { taxRuleNameProfit = $0 }, taxRuleNameProfit)
+                applyBool("corporationTaxEnabled", { corporationTaxEnabled = $0 }, corporationTaxEnabled)
+                applyDouble("corporationTaxRate", { corporationTaxRate = min(max($0, 0), 100) }, corporationTaxRate)
                 applyString("specialNoteSectionsJSON", { specialNoteSectionsJSON = $0 }, specialNoteSectionsJSON)
 
                 applyString("businessType", { businessType = $0 }, businessType)
@@ -3237,6 +3243,8 @@ struct AyarlarView: View {
         let latestTaxMilestoneDate = taxMilestoneDate
         let latestTaxRuleNameRevenue = taxRuleNameRevenue
         let latestTaxRuleNameProfit = taxRuleNameProfit
+        let latestCorporationTaxEnabled = corporationTaxEnabled
+        let latestCorporationTaxRate = min(max(corporationTaxRate, 0), 100)
 
         let latestBusinessType = businessType
         let latestBusinessPrompt = businessDescriptionPrompt
@@ -3338,6 +3346,8 @@ struct AyarlarView: View {
                     "taxMilestoneDate": latestTaxMilestoneDate,
                     "taxRuleNameRevenue": latestTaxRuleNameRevenue,
                     "taxRuleNameProfit": latestTaxRuleNameProfit,
+                    "corporationTaxEnabled": latestCorporationTaxEnabled,
+                    "corporationTaxRate": latestCorporationTaxRate,
 
                     "businessType": latestBusinessType,
                     "businessDescriptionPrompt": latestBusinessPrompt,
@@ -5463,6 +5473,31 @@ struct AyarlarView: View {
 
                 Divider().background(Color.primary.opacity(0.1))
 
+                financialSettingsSectionTitle(t("Corporation Tax", lang: seciliDil))
+
+                financialSettingsRow(t("Enable Corporation Tax", lang: seciliDil)) {
+                    Toggle(t("Enable Corporation Tax", lang: seciliDil), isOn: $corporationTaxEnabled)
+                        .labelsHidden()
+                        .tint(.blue)
+                }
+
+                if corporationTaxEnabled {
+                    financialSettingsRow(t("Corporation Tax Rate (%)", lang: seciliDil)) {
+                        TextField("19.0", value: $corporationTaxRate, format: .number)
+                            .frame(maxWidth: isPhoneLayout ? .infinity : 420)
+                            .financialSettingsControlStyle()
+                            .onChange(of: corporationTaxRate) { _, newValue in
+                                corporationTaxRate = min(max(newValue, 0), 100)
+                            }
+                    }
+                    Text(t("Estimated tax on profit after VAT and all costs. Shown per order and on the dashboard.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Divider().background(Color.primary.opacity(0.1))
+
                 Button(action: tumVergileriYenidenHesapla) {
                     HStack(spacing: 10) {
                         if isRecalculating {
@@ -6125,6 +6160,7 @@ struct AyarlarView: View {
             ("pdfShowPriority", true),
             ("financialShowBaseCost", true),
             ("taxMilestoneEnabled", false),
+            ("corporationTaxEnabled", false),
             ("hideSensitiveNumbers", false),
             ("ordersSidebarShowPreviewImages", true),
             ("ordersSidebarVisible", true),
@@ -6135,6 +6171,7 @@ struct AyarlarView: View {
         let doubleKeys: [(String, Double)] = [
             ("feePercentage", 3.0),
             ("defaultTaxRate", 20.0),
+            ("corporationTaxRate", 19.0),
             ("taxMilestoneDate", Date().timeIntervalSince1970),
             ("ordersSidebarWidth", 380),
             ("colWLeftV3", 350),
@@ -6228,9 +6265,11 @@ struct AyarlarView: View {
         pdfShowPriority = settings.bools["pdfShowPriority"] ?? pdfShowPriority
         financialShowBaseCost = settings.bools["financialShowBaseCost"] ?? financialShowBaseCost
         taxMilestoneEnabled = settings.bools["taxMilestoneEnabled"] ?? taxMilestoneEnabled
+        corporationTaxEnabled = settings.bools["corporationTaxEnabled"] ?? corporationTaxEnabled
 
         feePercentage = settings.doubles["feePercentage"] ?? feePercentage
         defaultTaxRate = settings.doubles["defaultTaxRate"] ?? defaultTaxRate
+        corporationTaxRate = settings.doubles["corporationTaxRate"] ?? corporationTaxRate
         taxMilestoneDate = settings.doubles["taxMilestoneDate"] ?? taxMilestoneDate
 
         defaults.synchronize()

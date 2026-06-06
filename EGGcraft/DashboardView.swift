@@ -126,6 +126,8 @@ struct DashboardView: View {
     @AppStorage("dashShowShipping") private var dashShowShipping = true
     @AppStorage("dashShowTax") private var dashShowTax = true // Yeni Tax Kartı
     @AppStorage("dashShowProfit") private var dashShowProfit = true
+    @AppStorage("corporationTaxEnabled") private var corporationTaxEnabled = false
+    @AppStorage("corporationTaxRate") private var corporationTaxRate = 19.0
     @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan = StudioBillingPlan.teamMonthly.rawValue
 
     private var canSeeAdvancedFinance: Bool {
@@ -472,6 +474,12 @@ struct DashboardView: View {
     var toplamKargo: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.deliveryCost } }
     var toplamVergi: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.taxAmount } }
     var netKar: Double { filtrelenmisSiparisler.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
+    // Estimated Corporation Tax across the period: per-order tax on profit after VAT.
+    var kurumlarVergisi: Double {
+        guard corporationTaxEnabled else { return 0 }
+        return filtrelenmisSiparisler.reduce(0) { $0 + max(0, adjustedNetProfit(for: $1)) * corporationTaxRate / 100.0 }
+    }
+    var netKarSonrasiCT: Double { netKar - kurumlarVergisi }
     
     var bilesen: Calendar.Component { (seciliFiltre == .buYil || seciliFiltre == .tumZamanlar) ? .month : .day }
 
@@ -1059,7 +1067,9 @@ struct DashboardView: View {
             if dashShowFee { OzetKart(title: t("Platform Fee", lang: seciliDil), value: toplamKesinti, iconName: "percent", color: .red, sembol: seciliParaBirimi) }
             if dashShowShipping { OzetKart(title: t("Shipping", lang: seciliDil), value: toplamKargo, iconName: "shippingbox", color: .red, sembol: seciliParaBirimi) }
             if dashShowTax { OzetKart(title: t("Tax Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
-            if dashShowProfit { OzetKart(title: t("Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+            if dashShowProfit { OzetKart(title: t(corporationTaxEnabled ? "Profit after VAT" : "Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+            if dashShowProfit && corporationTaxEnabled { OzetKart(title: "\(t("Corporation Tax", lang: seciliDil)) (\(Int(corporationTaxRate))%)", value: kurumlarVergisi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
+            if dashShowProfit && corporationTaxEnabled { OzetKart(title: t("Profit after CT", lang: seciliDil), value: netKarSonrasiCT, iconName: "checkmark.seal.fill", color: .green, sembol: seciliParaBirimi) }
         } else {
             OzetKart(title: t("Received", lang: seciliDil), value: toplamReceived, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi)
             OzetKart(title: t("Base Cost", lang: seciliDil), value: toplamBaseCost, iconName: "cart", color: .red, sembol: seciliParaBirimi)
