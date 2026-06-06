@@ -728,7 +728,16 @@ function orderPdfHtml(
     financeRows.push({ title: "Watch Cost", value: formatMoney(order.watchPurchasePrice), tone: "red" });
     financeRows.push({ title: "Shipping Cost", value: formatMoney(order.deliveryCost), tone: "red" });
     financeRows.push({ title: `Tax Amount (${taxRuleName})`, value: formatMoney(order.taxAmount), tone: "red" });
-    financeRows.push({ title: "Final Profit", value: formatMoney(order.netProfit), tone: "green" });
+    const profitAfterVat = order.netProfit;
+    if (settings?.corporationTaxEnabled) {
+      const ctRate = settings?.corporationTaxRate ?? 19;
+      const corporationTax = Math.max(0, profitAfterVat) * ctRate / 100;
+      financeRows.push({ title: "Profit after VAT", value: formatMoney(profitAfterVat) });
+      financeRows.push({ title: `Corporation Tax (${Math.round(ctRate)}%)`, value: formatMoney(corporationTax), tone: "red" });
+      financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: "green" });
+    } else {
+      financeRows.push({ title: "Final Profit", value: formatMoney(profitAfterVat), tone: "green" });
+    }
   }
   const financeSection = financeRows.length > 0 ? orderPdfSectionHtml("Financial Info", financeRows.map(row => (
     row.value === "__divider__" ? `<div class="pdf-divider"></div>` : orderPdfRowHtml(row)
