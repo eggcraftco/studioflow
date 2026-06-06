@@ -10099,7 +10099,9 @@ function readClientFileFromOrder(orderSnap, companyId, fileId, uid = "", role = 
 }
 
 function safeClientFileStoragePath(companyId, storagePath) {
-  const path = String(storagePath || "").trim();
+  // Android's StorageReference.getPath() returns a leading slash ("/companies/...")
+  // while web's fullPath does not — normalise so both pass the prefix check.
+  const path = String(storagePath || "").trim().replace(/^\/+/, "");
   const prefix = `companies/${companyId}/client_files/`;
   if (!path.startsWith(prefix)) return "";
   if (path.includes("..") || path.includes("//")) return "";

@@ -621,7 +621,7 @@ class StudioFlowRepository(
                         "id" to fileId,
                         "fileName" to cleanName,
                         "downloadURL" to downloadUrl,
-                        "storagePath" to ref.path,
+                        "storagePath" to ref.path.trimStart('/'),
                         "contentType" to cleanType,
                         "fileSize" to bytes.size,
                         "uploadedByUid" to user.uid,
