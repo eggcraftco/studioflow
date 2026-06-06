@@ -10149,6 +10149,23 @@ struct SiparisDetayView: View {
         #endif
     }
 
+    // Robust remote image loader for PDFs: tries a direct read, then a URLSession
+    // fetch (handles redirects / slower endpoints) so the workspace logo reliably
+    // renders into the invoice.
+    private func loadRemoteImageForPDF(_ urlString: String) -> PlatformImage? {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
+        if let data = try? Data(contentsOf: url), let image = PlatformImage(data: data) { return image }
+        var result: PlatformImage? = nil
+        let semaphore = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            if let data = data, let image = PlatformImage(data: data) { result = image }
+            semaphore.signal()
+        }.resume()
+        _ = semaphore.wait(timeout: .now() + 8)
+        return result
+    }
+
     @MainActor private func exportToInvoicePDF() {
         // Assign a date-based invoice number on first export (per-year sequence).
         if siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -10159,12 +10176,7 @@ struct SiparisDetayView: View {
             firebaseManager.updateSiparis(siparis)
         }
 
-        var logoImage: PlatformImage? = nil
-        if !appLogoUrl.isEmpty,
-           let lUrl = URL(string: appLogoUrl),
-           let lData = try? Data(contentsOf: lUrl) {
-            logoImage = PlatformImage(data: lData)
-        }
+        let logoImage: PlatformImage? = loadRemoteImageForPDF(appLogoUrl)
 
         let nums = (try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: Data(companyNumbersJSON.utf8))) ?? []
         let invoiceView = OrderInvoicePDFView(
