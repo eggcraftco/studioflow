@@ -12010,7 +12010,12 @@ struct OrderInvoicePDFView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    if let logo = logoImage { Image(platformImage: logo).resizable().scaledToFit().frame(maxHeight: 54, alignment: .leading) }
+                    if let logo = logoImage {
+                        Image(platformImage: logo)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 240, maxHeight: 64, alignment: .leading)
+                    }
                     Text(businessName).font(.system(size: 15, weight: .bold))
                     ForEach(companyNumbers) { num in
                         if !num.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
