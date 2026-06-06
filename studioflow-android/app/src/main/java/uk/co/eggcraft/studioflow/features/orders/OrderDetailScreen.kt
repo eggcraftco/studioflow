@@ -611,6 +611,7 @@ private fun DetailTopBar(
     val headerDetails = rememberOrderHeaderDetailsState()
     var actionsOpen by remember { mutableStateOf(false) }
     val exportInvoice = rememberInvoiceExporter(workspaceSettings)
+    val exportOrderPdf = rememberOrderPdfExporter(workspaceSettings, canSeeFinancial, financeAdvancedEnabled)
 
     @Composable
     fun ActionsMenuButton() {
@@ -628,13 +629,7 @@ private fun DetailTopBar(
                 },
                 onExportPdf = {
                     actionsOpen = false
-                    shareOrderPdf(
-                        context = context,
-                        order = order,
-                        settings = workspaceSettings,
-                        canSeeFinancial = canSeeFinancial,
-                        advancedFinanceEnabled = financeAdvancedEnabled
-                    )
+                    exportOrderPdf(order)
                 },
                 onInvoicePdf = {
                     actionsOpen = false
@@ -738,13 +733,7 @@ private fun DetailTopBar(
                         },
                         onExportPdf = {
                             actionsOpen = false
-                            shareOrderPdf(
-                                context = context,
-                                order = order,
-                                settings = workspaceSettings,
-                                canSeeFinancial = canSeeFinancial,
-                                advancedFinanceEnabled = financeAdvancedEnabled
-                            )
+                            exportOrderPdf(order)
                         },
                         onInvoicePdf = {
                             actionsOpen = false
@@ -1304,6 +1293,7 @@ private fun DesktopOrderHeader(
     @Composable
     fun HeaderActions() {
         val exportInvoice = rememberInvoiceExporter(workspaceSettings)
+        val exportOrderPdf = rememberOrderPdfExporter(workspaceSettings, canSeeFinancial, financeAdvancedEnabled)
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1327,13 +1317,7 @@ private fun DesktopOrderHeader(
                     },
                     onExportPdf = {
                         actionsOpen = false
-                        shareOrderPdf(
-                            context = context,
-                            order = order,
-                            settings = workspaceSettings,
-                            canSeeFinancial = canSeeFinancial,
-                            advancedFinanceEnabled = financeAdvancedEnabled
-                        )
+                        exportOrderPdf(order)
                     },
                     onInvoicePdf = {
                         actionsOpen = false
@@ -10468,6 +10452,69 @@ private fun rememberInvoiceExporter(settings: StudioWorkspaceSettings): (StudioO
                 }
             } catch (e: Exception) {
                 Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+}
+
+/**
+ * Returns a callback that builds the order PDF and opens the system "Save as" document
+ * picker so it can be saved to the computer (Downloads, Drive, a Chromebook folder, etc.).
+ * Falls back to the share sheet if no document picker is available.
+ */
+@Composable
+private fun rememberOrderPdfExporter(
+    settings: StudioWorkspaceSettings,
+    canSeeFinancial: Boolean,
+    advancedFinanceEnabled: Boolean
+): (StudioOrder) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingFile by remember { mutableStateOf<File?>(null) }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        val file = pendingFile
+        pendingFile = null
+        if (uri == null || file == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    }
+                }.isSuccess
+            }
+            Toast.makeText(
+                context,
+                if (ok) "PDF saved." else "Could not save PDF.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    return { order ->
+        scope.launch {
+            try {
+                val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    createOrderPdfFile(context, order, settings, canSeeFinancial, advancedFinanceEnabled)
+                }
+                pendingFile = file
+                try {
+                    saveLauncher.launch(file.name)
+                } catch (e: Exception) {
+                    pendingFile = null
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Export PDF"))
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "PDF export failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
