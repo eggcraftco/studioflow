@@ -44,6 +44,7 @@ import {
   canEditOrderFullyForRole,
   canEditOrderStatusForRole,
   ORDER_PREVIEW_IMAGE_ACCEPT,
+  assignInvoiceNumberFromWeb,
   updateOrderFromWeb,
   uploadOrderPreviewImage,
   type CreateOrderInput,
@@ -833,6 +834,106 @@ function openOrderPdfPrint(
   popup.document.close();
   popup.focus();
   window.setTimeout(() => popup.print(), 250);
+}
+
+function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
+  const money = (value: number) => orderPdfMoney(value, settings, false);
+  const orderValue = order.paidAmount + order.remainingAmount;
+  const isMarginScheme = order.taxType === "Profit";
+  const isZeroRated = (order.taxRate ?? 0) <= 0.0001;
+  const vatAmount = order.taxAmount;
+  const subtotal = isMarginScheme ? orderValue : orderValue - vatAmount;
+  const businessName = settings?.appSubtitle || "NivaDesk";
+  const logoUrl = settings?.appLogoUrl || "";
+  const footerNote = settings?.invoiceFooterNote || "";
+  const numbers = (settings?.companyNumbers || [])
+    .filter(n => (n.value || "").trim())
+    .map(n => `<div>${escapeHtml(n.title)}: ${escapeHtml(n.value)}</div>`).join("");
+  const orderDate = order.paymentDate ? order.paymentDate.toLocaleDateString() : "";
+  const description = order.designName?.trim() || order.customerName?.trim() || "Order";
+
+  let vatRow = "";
+  if (isMarginScheme) {
+    vatRow = `<div class="muted-note">VAT under margin scheme (not shown separately)</div>`;
+  } else if (isZeroRated) {
+    vatRow = `<div class="trow"><span>VAT (Zero-rated / Export)</span><strong>${money(0)}</strong></div>`;
+  } else {
+    vatRow = `<div class="trow"><span>VAT (${Math.round(order.taxRate || 0)}%)</span><strong>${money(vatAmount)}</strong></div>`;
+  }
+
+  return `<!doctype html><html><head><meta charset="utf-8"/><title>Invoice ${escapeHtml(order.invoiceNumber || "")}</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1e; margin: 0; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+    .biz img { max-width: 240px; max-height: 64px; object-fit: contain; display: block; margin-bottom: 8px; }
+    .biz .name { font-weight: 800; font-size: 16px; }
+    .biz .nums { color: #6b7280; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+    .inv { text-align: right; }
+    .inv .title { font-size: 30px; font-weight: 900; color: rgba(0,0,0,0.35); letter-spacing: 1px; }
+    .inv .meta { font-size: 12px; margin-top: 4px; color: #374151; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 18px 0; }
+    .bill .label { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #6b7280; }
+    .bill .who { font-weight: 700; font-size: 13px; margin-top: 4px; }
+    .bill .email { color: #6b7280; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+    th { text-align: left; font-size: 11px; background: #f3f4f6; padding: 9px 12px; }
+    th.r, td.r { text-align: right; }
+    td { padding: 11px 12px; font-size: 12px; border-bottom: 1px solid #eee; }
+    .totals { margin-top: 14px; margin-left: auto; width: 280px; }
+    .trow { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; }
+    .trow.total { border-top: 1px solid #d1d5db; margin-top: 4px; padding-top: 8px; font-size: 15px; font-weight: 800; }
+    .trow strong { font-weight: 700; }
+    .muted-note { font-size: 10px; color: #6b7280; padding: 4px 0; }
+    .due { color: #dc2626; }
+    .paid { color: #16a34a; }
+    footer { margin-top: 28px; border-top: 1px solid #e5e7eb; padding-top: 12px; color: #6b7280; font-size: 11px; white-space: pre-wrap; }
+    .credit { text-align: center; color: #9ca3af; font-size: 9px; margin-top: 18px; }
+  </style></head><body><div class="wrap">
+    <header>
+      <div class="biz">
+        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" />` : ""}
+        <div class="name">${escapeHtml(businessName)}</div>
+        <div class="nums">${numbers}</div>
+      </div>
+      <div class="inv">
+        <div class="title">INVOICE</div>
+        <div class="meta">Invoice No: ${escapeHtml(order.invoiceNumber || "-")}</div>
+        <div class="meta">Date: ${escapeHtml(orderDate)}</div>
+      </div>
+    </header>
+    <hr/>
+    <div class="bill">
+      <div class="label">BILL TO</div>
+      <div class="who">${escapeHtml(order.customerName || "-")}</div>
+      ${order.emailAddress ? `<div class="email">${escapeHtml(order.emailAddress)}</div>` : ""}
+    </div>
+    <table>
+      <thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
+      <tbody><tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr></tbody>
+    </table>
+    <div class="totals">
+      <div class="trow"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
+      ${vatRow}
+      <div class="trow total"><span>TOTAL</span><strong>${money(orderValue)}</strong></div>
+      <div class="trow"><span>Paid</span><strong class="paid">${money(order.paidAmount)}</strong></div>
+      <div class="trow"><span>Balance Due</span><strong class="${order.remainingAmount > 0.005 ? "due" : "paid"}">${money(order.remainingAmount)}</strong></div>
+    </div>
+    ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
+    <div class="credit">Generated with NivaDesk</div>
+  </div></body></html>`;
+}
+
+function openInvoicePrint(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
+  const popup = window.open("", "_blank", "width=900,height=1100");
+  if (!popup) throw new Error("The Invoice window could not be opened. Please allow pop-ups for this page.");
+  popup.opener = null;
+  popup.document.open();
+  popup.document.write(invoiceHtml(order, settings));
+  popup.document.close();
+  popup.focus();
+  window.setTimeout(() => popup.print(), 300);
 }
 
 function isoDateFromToday(daysFromToday: number) {
@@ -4107,6 +4208,19 @@ export function OrderDetailContent({
     }
   }
 
+  async function handleExportInvoice() {
+    try {
+      let invoiceNumber = order.invoiceNumber;
+      if (!invoiceNumber) {
+        invoiceNumber = await assignInvoiceNumberFromWeb(workspace, order.id);
+        void onReloadOrder();
+      }
+      openInvoicePrint({ ...order, invoiceNumber }, moneySettings);
+    } catch (invoiceError) {
+      setInlineError(invoiceError instanceof Error ? invoiceError.message : "Invoice could not be generated.");
+    }
+  }
+
   function renderCardMenu(cardId: OrderDetailCardId) {
     const menuOpen = openCardMenuId === cardId;
     const locked = !canEditCardLayout || !layoutReady;
@@ -6313,6 +6427,17 @@ export function OrderDetailContent({
                 >
                   Export PDF
                 </button>
+                {canSeeFinance ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderActionsOpen(false);
+                      void handleExportInvoice();
+                    }}
+                  >
+                    Invoice PDF
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {

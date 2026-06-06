@@ -445,6 +445,7 @@ export type OrderDetail = {
   workSessions: WorkSessionDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
+  invoiceNumber: string;
 };
 
 const ACTIVE_CLOSED_STATUSES = new Set(["done", "completed", "cancelled", "canceled"]);
@@ -1589,7 +1590,8 @@ function mapOrderDetailSnapshot(
     todoItems: mapTodoItems(data.todoItems),
     workSessions: mapWorkSessions(data.workSessions),
     historyLog: mapHistoryLog(data.historyLog),
-    payments: mapPayments(data.payments)
+    payments: mapPayments(data.payments),
+    invoiceNumber: stringValue(data.invoiceNumber, "")
   };
 }
 
