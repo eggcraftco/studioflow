@@ -1313,6 +1313,9 @@ private fun FinancialSettingsDetail(
     var taxCalculationType by rememberSaveable(settings.taxCalculationType) { mutableStateOf(settings.taxCalculationType) }
     var taxMilestoneEnabled by rememberSaveable(settings.taxMilestoneEnabled) { mutableStateOf(settings.taxMilestoneEnabled) }
     var taxMilestoneDate by rememberSaveable(settings.taxMilestoneDate) { mutableStateOf(settingsDateInput(settings.taxMilestoneDate)) }
+    var corporationTaxEnabled by rememberSaveable(settings.corporationTaxEnabled) { mutableStateOf(settings.corporationTaxEnabled) }
+    var corporationTaxRate by rememberSaveable(settings.corporationTaxRate) { mutableStateOf(settingsNumberText(settings.corporationTaxRate)) }
+    var invoiceFooterNote by rememberSaveable(settings.invoiceFooterNote) { mutableStateOf(settings.invoiceFooterNote) }
     var financialShowBaseCost by rememberSaveable(settings.financialShowBaseCost) { mutableStateOf(settings.financialShowBaseCost) }
     var financialBaseCostLabel by rememberSaveable(settings.financialBaseCostLabel) { mutableStateOf(settings.financialBaseCostLabel) }
     var financialRemainingItems by remember(settings.financialRemainingItems) { mutableStateOf(normalizeHeadingItems(settings.financialRemainingItems)) }
@@ -1329,6 +1332,9 @@ private fun FinancialSettingsDetail(
             "taxCalculationType" to if (taxCalculationType == "Profit") "Profit" else "Revenue",
             "taxMilestoneEnabled" to taxMilestoneEnabled,
             "taxMilestoneDate" to settingsDateSeconds(taxMilestoneDate, settings.taxMilestoneDate),
+            "corporationTaxEnabled" to corporationTaxEnabled,
+            "corporationTaxRate" to parseSettingsNumber(corporationTaxRate, settings.corporationTaxRate).coerceIn(0.0, 100.0),
+            "invoiceFooterNote" to invoiceFooterNote.trim(),
             "financialShowBaseCost" to financialShowBaseCost,
             "financialBaseCostLabel" to financialBaseCostLabel.trim().ifBlank { "Cost (Base)" },
             "financialRemainingItemsJSON" to genericHeadingItemsJson(financialRemainingItems.filter { isUsableFinancialTitle(it.title, t("Pending")) }),
@@ -1403,6 +1409,26 @@ private fun FinancialSettingsDetail(
                     enabled = !state.settingsSaving,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
+                )
+            }
+            HorizontalDivider()
+            SettingsSectionTitle(t("Corporation Tax"))
+            SettingSwitch(t("Enable Corporation Tax"), corporationTaxEnabled) { corporationTaxEnabled = it }
+            if (corporationTaxEnabled) {
+                PercentTextField(
+                    label = t("Corporation Tax Rate (%)"),
+                    value = corporationTaxRate,
+                    enabled = !state.settingsSaving,
+                    onValueChange = { corporationTaxRate = cleanSettingsNumberInput(it) }
+                )
+                OutlinedTextField(
+                    value = invoiceFooterNote,
+                    onValueChange = { invoiceFooterNote = it },
+                    label = { Text(t("Invoice Footer / Payment Terms")) },
+                    enabled = !state.settingsSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
                 )
             }
             HorizontalDivider()

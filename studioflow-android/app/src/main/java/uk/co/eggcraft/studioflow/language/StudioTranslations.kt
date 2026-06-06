@@ -64,6 +64,9 @@ private val TR_1: Map<String, Map<String, String>> by lazy { mapOf(
     "Net Profit (after CT)" to mapOf("Türkçe" to "Net Kâr (KV sonrası)"),
     "Profit after CT" to mapOf("Türkçe" to "KV Sonrası Kâr"),
     "est." to mapOf("Türkçe" to "tah."),
+    "Enable Corporation Tax" to mapOf("Türkçe" to "Kurumlar Vergisini Etkinleştir"),
+    "Corporation Tax Rate (%)" to mapOf("Türkçe" to "Kurumlar Vergisi Oranı (%)"),
+    "Invoice Footer / Payment Terms" to mapOf("Türkçe" to "Fatura Altbilgisi / Ödeme Koşulları"),
     // ============================ NOTES MODULE ============================
     "Notes" to mapOf(
         "Türkçe" to "Notlar", "Deutsch" to "Notizen", "Français" to "Notes", "Italiano" to "Note",
