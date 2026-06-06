@@ -5584,7 +5584,10 @@ function financialSettingsFromData(data = {}) {
     defaultTaxRate: cleanPercentageNumber(data.defaultTaxRate, 20),
     taxCalculationType: cleanTaxCalculationType(data.taxCalculationType, "Revenue"),
     taxMilestoneEnabled: typeof data.taxMilestoneEnabled === "boolean" ? data.taxMilestoneEnabled : false,
-    taxMilestoneDate: cleanTaxMilestoneDate(data.taxMilestoneDate, Date.now() / 1000)
+    taxMilestoneDate: cleanTaxMilestoneDate(data.taxMilestoneDate, Date.now() / 1000),
+    corporationTaxEnabled: typeof data.corporationTaxEnabled === "boolean" ? data.corporationTaxEnabled : false,
+    corporationTaxRate: cleanPercentageNumber(data.corporationTaxRate, 19),
+    invoiceFooterNote: typeof data.invoiceFooterNote === "string" ? data.invoiceFooterNote : ""
   };
 }
 
@@ -5712,6 +5715,9 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
     taxCalculationType: cleanTaxCalculationType(incoming.taxCalculationType, "Revenue"),
     taxMilestoneEnabled: typeof incoming.taxMilestoneEnabled === "boolean" ? incoming.taxMilestoneEnabled : false,
     taxMilestoneDate: cleanTaxMilestoneDate(incoming.taxMilestoneDate, Date.now() / 1000),
+    corporationTaxEnabled: typeof incoming.corporationTaxEnabled === "boolean" ? incoming.corporationTaxEnabled : false,
+    corporationTaxRate: cleanPercentageNumber(incoming.corporationTaxRate, 19),
+    invoiceFooterNote: cleanQuickReplyText(incoming.invoiceFooterNote || "", 2000),
     financialSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
 

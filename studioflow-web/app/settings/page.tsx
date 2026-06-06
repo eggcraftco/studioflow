@@ -2646,7 +2646,7 @@ function FinancialSettingsSection({
   }
 
   function updateString(
-    key: "selectedCurrency" | "selectedDecimalSeparator" | "taxRuleNameRevenue" | "taxRuleNameProfit" | "taxCalculationType",
+    key: "selectedCurrency" | "selectedDecimalSeparator" | "taxRuleNameRevenue" | "taxRuleNameProfit" | "taxCalculationType" | "invoiceFooterNote",
     value: string
   ) {
     setDraft(current => current ? { ...current, [key]: value } : current);
@@ -2654,13 +2654,13 @@ function FinancialSettingsSection({
     setError("");
   }
 
-  function updateNumber(key: "feePercentage" | "defaultTaxRate" | "taxMilestoneDate", value: number) {
+  function updateNumber(key: "feePercentage" | "defaultTaxRate" | "taxMilestoneDate" | "corporationTaxRate", value: number) {
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
   }
 
-  function updateBoolean(key: "taxMilestoneEnabled", value: boolean) {
+  function updateBoolean(key: "taxMilestoneEnabled" | "corporationTaxEnabled", value: boolean) {
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
@@ -2681,7 +2681,10 @@ function FinancialSettingsSection({
         defaultTaxRate: draft.defaultTaxRate,
         taxCalculationType: draft.taxCalculationType,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
-        taxMilestoneDate: draft.taxMilestoneDate
+        taxMilestoneDate: draft.taxMilestoneDate,
+        corporationTaxEnabled: draft.corporationTaxEnabled,
+        corporationTaxRate: draft.corporationTaxRate,
+        invoiceFooterNote: draft.invoiceFooterNote
       });
       const savedSettings = { ...draft, ...(result.settings ?? {}) };
       setDraft(savedSettings);
@@ -2711,7 +2714,10 @@ function FinancialSettingsSection({
         defaultTaxRate: draft.defaultTaxRate,
         taxCalculationType: draft.taxCalculationType,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
-        taxMilestoneDate: draft.taxMilestoneDate
+        taxMilestoneDate: draft.taxMilestoneDate,
+        corporationTaxEnabled: draft.corporationTaxEnabled,
+        corporationTaxRate: draft.corporationTaxRate,
+        invoiceFooterNote: draft.invoiceFooterNote
       });
       const savedSettings = { ...draft, ...(saved.settings ?? {}) };
       setDraft(savedSettings);
@@ -2880,6 +2886,51 @@ function FinancialSettingsSection({
                 onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
               />
             </label>
+          ) : null}
+
+          <label className="financial-settings-row">
+            <span>{t("Enable Corporation Tax")}</span>
+            <span className="financial-checkbox-line">
+              <input
+                type="checkbox"
+                checked={Boolean(draft.corporationTaxEnabled)}
+                disabled={!canEdit || saving}
+                onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
+              />
+              <strong>{t("Enable Corporation Tax")}</strong>
+            </span>
+          </label>
+
+          {draft.corporationTaxEnabled ? (
+            <>
+              <label className="financial-settings-row wide-control">
+                <span>{t("Corporation Tax Rate (%)")}</span>
+                <span className="financial-percent-control is-vat-rate">
+                  <input
+                    className="input financial-control"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={draft.corporationTaxRate ?? 19}
+                    disabled={!canEdit || saving}
+                    onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))}
+                  />
+                  <em>%</em>
+                </span>
+              </label>
+              <label className="financial-settings-row wide-control">
+                <span>{t("Invoice Footer / Payment Terms")}</span>
+                <textarea
+                  className="input financial-control"
+                  rows={3}
+                  value={draft.invoiceFooterNote ?? ""}
+                  disabled={!canEdit || saving}
+                  placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
+                  onChange={event => updateString("invoiceFooterNote", event.target.value)}
+                />
+              </label>
+            </>
           ) : null}
         </div>
 
