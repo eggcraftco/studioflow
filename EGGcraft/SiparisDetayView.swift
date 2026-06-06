@@ -10075,20 +10075,27 @@ struct SiparisDetayView: View {
     }
 
     @MainActor private func exportToPDF() {
+        // Pre-load preview + workspace logo asynchronously (a synchronous fetch can
+        // fail/return before the image is ready, leaving them missing in the PDF).
+        let previewURLString = siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        let logoURLString = appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let group = DispatchGroup()
         var loadedImage: PlatformImage? = nil
-        if !siparis.designLink.isEmpty,
-           let imgUrl = URL(string: siparis.designLink),
-           let data = try? Data(contentsOf: imgUrl) {
-            loadedImage = PlatformImage(data: data)
-        }
-
         var logoImage: PlatformImage? = nil
-        if !appLogoUrl.isEmpty,
-           let lUrl = URL(string: appLogoUrl),
-           let lData = try? Data(contentsOf: lUrl) {
-            logoImage = PlatformImage(data: lData)
+        if let u = URL(string: previewURLString), !previewURLString.isEmpty {
+            group.enter()
+            URLSession.shared.dataTask(with: u) { d, _, _ in loadedImage = d.flatMap { PlatformImage(data: $0) }; group.leave() }.resume()
         }
+        if let u = URL(string: logoURLString), !logoURLString.isEmpty {
+            group.enter()
+            URLSession.shared.dataTask(with: u) { d, _, _ in logoImage = d.flatMap { PlatformImage(data: $0) }; group.leave() }.resume()
+        }
+        group.notify(queue: .main) {
+            self.finishOrderPDFExport(previewImage: loadedImage, logoImage: logoImage)
+        }
+    }
 
+    @MainActor private func finishOrderPDFExport(previewImage loadedImage: PlatformImage?, logoImage: PlatformImage?) {
         let pdfView = OrderPDFView(
             siparis: siparis,
             previewImage: loadedImage,
@@ -10149,23 +10156,6 @@ struct SiparisDetayView: View {
         #endif
     }
 
-    // Robust remote image loader for PDFs: tries a direct read, then a URLSession
-    // fetch (handles redirects / slower endpoints) so the workspace logo reliably
-    // renders into the invoice.
-    private func loadRemoteImageForPDF(_ urlString: String) -> PlatformImage? {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
-        if let data = try? Data(contentsOf: url), let image = PlatformImage(data: data) { return image }
-        var result: PlatformImage? = nil
-        let semaphore = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            if let data = data, let image = PlatformImage(data: data) { result = image }
-            semaphore.signal()
-        }.resume()
-        _ = semaphore.wait(timeout: .now() + 8)
-        return result
-    }
-
     @MainActor private func exportToInvoicePDF() {
         // Assign a date-based invoice number on first export (per-year sequence).
         if siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -10176,8 +10166,21 @@ struct SiparisDetayView: View {
             firebaseManager.updateSiparis(siparis)
         }
 
-        let logoImage: PlatformImage? = loadRemoteImageForPDF(appLogoUrl)
+        // Pre-load the workspace logo asynchronously (same path AsyncImage uses in the
+        // toolbar), THEN render — a synchronous fetch can fail/return before the
+        // image is ready, leaving the logo missing.
+        let logoURLString = appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let logoURL = URL(string: logoURLString), !logoURLString.isEmpty {
+            URLSession.shared.dataTask(with: logoURL) { data, _, _ in
+                let image = data.flatMap { PlatformImage(data: $0) }
+                DispatchQueue.main.async { self.finishInvoiceExport(logoImage: image) }
+            }.resume()
+        } else {
+            finishInvoiceExport(logoImage: nil)
+        }
+    }
 
+    @MainActor private func finishInvoiceExport(logoImage: PlatformImage?) {
         let nums = (try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: Data(companyNumbersJSON.utf8))) ?? []
         let invoiceView = OrderInvoicePDFView(
             siparis: siparis,
