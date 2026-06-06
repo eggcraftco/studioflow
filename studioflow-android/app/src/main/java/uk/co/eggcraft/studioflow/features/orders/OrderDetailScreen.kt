@@ -3075,7 +3075,7 @@ private fun DesktopPreviewCard(
                         enabled = canEditPreview,
                         onClick = {
                             actionMenuOpen = false
-                            previewImagePicker.launch("image/*")
+                            uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); previewImagePicker.launch("image/*")
                         }
                     )
                     DropdownMenuItem(
@@ -3398,7 +3398,7 @@ private fun DesktopClientFilesCard(
                 }
             },
             onDismiss = { clientPreviewFile = null },
-            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
+            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
         )
     }
     var renameFileId by remember(order.id) { mutableStateOf("") }
@@ -3446,7 +3446,7 @@ private fun DesktopClientFilesCard(
 
             if (clientFilesEnabled) {
                 Button(
-                    onClick = { filePicker.launch(arrayOf("*/*")) },
+                    onClick = { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); filePicker.launch(arrayOf("*/*")) },
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(t("Upload File"), fontWeight = FontWeight.ExtraBold)
@@ -3491,7 +3491,7 @@ private fun DesktopClientFilesCard(
                             isCurrentPreview = file.downloadUrl.isNotBlank() && file.downloadUrl == order.designLink,
                             onPreview = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
                             onDownload = { downloadClientFile(context, file) },
-                            onOpenExternal = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
+                            onOpenExternal = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
                             onUseAsPreview = {
                                 if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
                                     onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
@@ -6806,7 +6806,7 @@ private fun OperationsCard(
                 }
             },
             onDismiss = { clientPreviewFile = null },
-            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
+            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
         )
     }
     var newTaskTitle by remember(order.id) { mutableStateOf("") }
@@ -6839,7 +6839,7 @@ private fun OperationsCard(
             Text(t("Client Files"), fontWeight = FontWeight.ExtraBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { filePicker.launch(arrayOf("*/*")) },
+                    onClick = { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); filePicker.launch(arrayOf("*/*")) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp)
                 ) {

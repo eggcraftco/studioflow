@@ -67,6 +67,16 @@ private const val RequireLocalUnlockKey = "studioflow_require_local_unlock"
 object AppLockGuard {
     @Volatile
     var userLeft: Boolean = false
+
+    // Set to true right before we intentionally launch an in-app activity (file
+    // picker, image picker, external open, etc.). The very next background event
+    // will be skipped so returning from that activity does not show the lock.
+    @Volatile
+    var suppressNextLock: Boolean = false
+
+    fun suppressNextLockOnce() {
+        suppressNextLock = true
+    }
 }
 
 @Composable
@@ -249,7 +259,9 @@ private fun StudioFlowAppContent(
                 // as the file picker (which would otherwise lock on every file add).
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                 val screenOff = powerManager?.isInteractive == false
-                if (AppLockGuard.userLeft || screenOff) {
+                val suppress = AppLockGuard.suppressNextLock
+                AppLockGuard.suppressNextLock = false
+                if (!suppress && (AppLockGuard.userLeft || screenOff)) {
                     localUnlockSatisfied = false
                     localUnlockMessage = ""
                 }
