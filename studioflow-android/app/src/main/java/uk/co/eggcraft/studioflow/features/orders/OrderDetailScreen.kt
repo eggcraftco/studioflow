@@ -610,7 +610,7 @@ private fun DetailTopBar(
     val context = LocalContext.current
     val headerDetails = rememberOrderHeaderDetailsState()
     var actionsOpen by remember { mutableStateOf(false) }
-    val invoiceScope = rememberCoroutineScope()
+    val exportInvoice = rememberInvoiceExporter(workspaceSettings)
 
     @Composable
     fun ActionsMenuButton() {
@@ -638,7 +638,7 @@ private fun DetailTopBar(
                 },
                 onInvoicePdf = {
                     actionsOpen = false
-                    invoiceScope.launch { generateAndPrintInvoice(context, order, workspaceSettings) }
+                    exportInvoice(order)
                 }
             )
         }
@@ -748,7 +748,7 @@ private fun DetailTopBar(
                         },
                         onInvoicePdf = {
                             actionsOpen = false
-                            invoiceScope.launch { generateAndPrintInvoice(context, order, workspaceSettings) }
+                            exportInvoice(order)
                         }
                     )
                 }
@@ -1303,7 +1303,7 @@ private fun DesktopOrderHeader(
 
     @Composable
     fun HeaderActions() {
-        val invoiceScope = rememberCoroutineScope()
+        val exportInvoice = rememberInvoiceExporter(workspaceSettings)
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1337,7 +1337,7 @@ private fun DesktopOrderHeader(
                     },
                     onInvoicePdf = {
                         actionsOpen = false
-                        invoiceScope.launch { generateAndPrintInvoice(context, order, workspaceSettings) }
+                        exportInvoice(order)
                     }
                 )
             }
@@ -10380,49 +10380,96 @@ ${if (footer.isNotBlank()) "<footer>${escapeInvoiceHtml(footer)}</footer>" else 
 </div></body></html>"""
 }
 
-private suspend fun generateAndPrintInvoice(context: Context, order: StudioOrder, settings: StudioWorkspaceSettings) {
-    try {
-        // 1) Assign / fetch the invoice number from the server counter.
-        var number = order.invoiceNumber
-        if (number.isBlank()) {
-            number = try {
-                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
-                    .getHttpsCallable("assignInvoiceNumber")
-                    .call(mapOf("companyId" to order.companyId, "orderId" to order.id))
-                    .await()
-                ((result.getData() as? Map<*, *>)?.get("invoiceNumber") as? String).orEmpty()
+/** Builds the invoice PDF (assigns number from server, downloads logo, renders) and returns the file. */
+private suspend fun buildInvoiceFile(context: Context, order: StudioOrder, settings: StudioWorkspaceSettings): File {
+    // 1) Assign / fetch the invoice number from the server counter.
+    var number = order.invoiceNumber
+    if (number.isBlank()) {
+        number = try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                .getHttpsCallable("assignInvoiceNumber")
+                .call(mapOf("companyId" to order.companyId, "orderId" to order.id))
+                .await()
+            ((result.getData() as? Map<*, *>)?.get("invoiceNumber") as? String).orEmpty()
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    // 2) Download the workspace logo (off the main thread) if present.
+    val logoBitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val url = settings.appLogoUrl.trim()
+        if (url.isBlank()) null else runCatching {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 8000
+                instanceFollowRedirects = true
+            }
+            conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+    }
+
+    // 3) Render the invoice PDF to a cache file.
+    return withContext(kotlinx.coroutines.Dispatchers.IO) {
+        createInvoicePdfFile(context, order, settings, number, logoBitmap)
+    }
+}
+
+/**
+ * Returns a callback that builds the invoice PDF and opens the system "Save as" document
+ * picker so the user can store it anywhere (Downloads, Drive, a Chromebook folder, etc.).
+ * Falls back to the share sheet if no document picker is available.
+ */
+@Composable
+private fun rememberInvoiceExporter(settings: StudioWorkspaceSettings): (StudioOrder) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingFile by remember { mutableStateOf<File?>(null) }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        val file = pendingFile
+        pendingFile = null
+        if (uri == null || file == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    }
+                }.isSuccess
+            }
+            Toast.makeText(
+                context,
+                if (ok) "Invoice saved." else "Could not save invoice.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    return { order ->
+        scope.launch {
+            try {
+                val file = buildInvoiceFile(context, order, settings)
+                pendingFile = file
+                try {
+                    saveLauncher.launch(file.name)
+                } catch (e: Exception) {
+                    // No document picker (rare) -> fall back to sharing.
+                    pendingFile = null
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Invoice PDF"))
+                }
             } catch (e: Exception) {
-                ""
+                Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
-
-        // 2) Download the workspace logo (off the main thread) if present.
-        val logoBitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val url = settings.appLogoUrl.trim()
-            if (url.isBlank()) null else runCatching {
-                val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    instanceFollowRedirects = true
-                }
-                conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
-            }.getOrNull()
-        }
-
-        // 3) Render the invoice PDF and open the share sheet.
-        val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
-            createInvoicePdfFile(context, order, settings, number, logoBitmap)
-        }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_SUBJECT, "Invoice ${number.ifBlank { order.displayCustomerName }}")
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(shareIntent, "Invoice PDF"))
-    } catch (e: Exception) {
-        Toast.makeText(context, "Invoice failed: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
 
