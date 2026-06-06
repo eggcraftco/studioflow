@@ -44,6 +44,7 @@ type FinanceTotals = {
   shipping: number;
   tax: number;
   netProfit: number;
+  corporationTax: number;
 };
 
 type ChartPoint = {
@@ -134,8 +135,11 @@ function totalsForOrders(
     fee: totals.fee + order.paymentFee,
     shipping: totals.shipping + order.deliveryCost,
     tax: totals.tax + order.taxAmount,
-    netProfit: totals.netProfit + adjustedDashboardNetProfit(order, settings)
-  }), { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0 });
+    netProfit: totals.netProfit + adjustedDashboardNetProfit(order, settings),
+    corporationTax: totals.corporationTax + (settings?.corporationTaxEnabled
+      ? Math.max(0, adjustedDashboardNetProfit(order, settings)) * (settings.corporationTaxRate ?? 19) / 100
+      : 0)
+  }), { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0, corporationTax: 0 });
 }
 
 function startOfDay(date: Date) {
@@ -543,7 +547,9 @@ export default function DashboardPage() {
                     {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("Tax Amount")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t("Net Profit")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit after VAT" : "Net Profit")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
                   </>
                 ) : (
                   <>
