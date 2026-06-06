@@ -10438,6 +10438,7 @@ private fun rememberInvoiceExporter(settings: StudioWorkspaceSettings): (StudioO
                 val file = buildInvoiceFile(context, order, settings)
                 pendingFile = file
                 try {
+                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
                     saveLauncher.launch(file.name)
                 } catch (e: Exception) {
                     // No document picker (rare) -> fall back to sharing.
@@ -10502,6 +10503,7 @@ private fun rememberOrderPdfExporter(
                 }
                 pendingFile = file
                 try {
+                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
                     saveLauncher.launch(file.name)
                 } catch (e: Exception) {
                     pendingFile = null
