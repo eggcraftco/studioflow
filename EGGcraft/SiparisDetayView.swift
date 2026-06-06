@@ -10157,15 +10157,23 @@ struct SiparisDetayView: View {
     }
 
     @MainActor private func exportToInvoicePDF() {
-        // Assign a date-based invoice number on first export (per-year sequence).
-        if siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let year = Calendar.current.component(.year, from: Date())
-            if invoiceCounterYear != year { invoiceCounterYear = year; invoiceCounter = 0 }
-            invoiceCounter += 1
-            siparis.invoiceNumber = "\(year)-\(String(format: "%04d", invoiceCounter))"
-            firebaseManager.updateSiparis(siparis)
+        // Assign a unique invoice number via the shared server counter (so numbers
+        // never collide across devices/platforms), then continue the export.
+        if siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let orderId = siparis.id, !orderId.isEmpty {
+            Functions.functions(region: "europe-west2").httpsCallable("assignInvoiceNumber")
+                .call(["companyId": siparis.companyId, "orderId": orderId]) { result, _ in
+                    if let data = result?.data as? [String: Any], let number = data["invoiceNumber"] as? String, !number.isEmpty {
+                        DispatchQueue.main.async { self.siparis.invoiceNumber = number }
+                    }
+                    DispatchQueue.main.async { self.continueInvoiceExportLogo() }
+                }
+            return
         }
+        continueInvoiceExportLogo()
+    }
 
+    @MainActor private func continueInvoiceExportLogo() {
         // Pre-load the workspace logo asynchronously (same path AsyncImage uses in the
         // toolbar), THEN render — a synchronous fetch can fail/return before the
         // image is ready, leaving the logo missing.
