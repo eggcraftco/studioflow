@@ -8984,6 +8984,45 @@ struct SiparisDetayView: View {
         firebaseManager.updateSiparis(updatedOrder)
     }
 
+    // When the user enters the initial "Paid" amount and there are no ledger
+    // entries yet, seed the payment ledger with that amount so it shows up under
+    // "Payments" and is written to the history log. paidAmount already holds the
+    // entered value, so this only mirrors it into the ledger (no re-aggregation).
+    private func seedInitialPaymentFromPaidIfNeeded() {
+        guard (siparis.payments ?? []).isEmpty else { return }
+        let amount = (siparis.paidAmount * 100).rounded() / 100
+        guard amount > 0.005 else { return }
+
+        var updatedOrder = siparis
+        let entry = PaymentEntry(
+            id: UUID(),
+            amount: amount,
+            date: Date(),
+            method: siparis.paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines),
+            note: "",
+            createdByUid: authVM.currentUserId ?? "",
+            createdByEmail: authVM.accountEmail
+        )
+        updatedOrder.payments = [entry]
+
+        var logs = updatedOrder.historyLog ?? []
+        logs.insert(
+            OrderHistoryLogItem(
+                id: UUID(),
+                createdAt: Date(),
+                title: "Payment received",
+                oldValue: cleanHistoryValue("Payment #1"),
+                newValue: cleanHistoryValue(amountHistoryValue(amount))
+            ),
+            at: 0
+        )
+        if logs.count > 120 { logs = Array(logs.prefix(120)) }
+        updatedOrder.historyLog = logs
+
+        siparis = updatedOrder
+        firebaseManager.updateSiparis(updatedOrder)
+    }
+
     private func deletePayment(_ entry: PaymentEntry) {
         var updatedOrder = siparis
         var ledger = updatedOrder.payments ?? []
@@ -9260,7 +9299,7 @@ struct SiparisDetayView: View {
             onColorChange: { setKartColor(kart: .financial, color: $0) },
             onEditHeadings: { headingEditorTarget = .financial }
         ) {
-            CurrencyField(label: t("Paid", lang: seciliDil), value: $siparis.paidAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+            CurrencyField(label: t("Paid", lang: seciliDil), value: $siparis.paidAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik, onCommit: { seedInitialPaymentFromPaidIfNeeded() })
                 .onChange(of: siparis.paidAmount) { _, _ in otomatikKesintiHesapla() }
 
             if !isBasicFinancialLimited {
@@ -14174,6 +14213,7 @@ struct CurrencyField: View {
     var isReadOnly: Bool = false
     var sembol: String = "£"
     var ondalik: String = "."
+    var onCommit: (() -> Void)? = nil
     @State private var textValue: String = ""
     @FocusState private var isFocused: Bool
     @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
@@ -14210,7 +14250,7 @@ struct CurrencyField: View {
                 }
             }
             .onChange(of: isFocused) { _, focused in
-                if !focused { textValue = formatFiyat(value, ondalik: ondalik) }
+                if !focused { textValue = formatFiyat(value, ondalik: ondalik); onCommit?() }
                 else {
                     let str = String(format: "%.2f", value).replacingOccurrences(of: ".", with: ondalik)
                     textValue = value == 0.0 ? "" : (value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : str)
