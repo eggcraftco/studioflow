@@ -180,6 +180,9 @@ export type WorkspaceSettingsOverview = {
   financialShowBaseCost: boolean;
   taxRuleNameRevenue: string;
   taxRuleNameProfit: string;
+  corporationTaxEnabled: boolean;
+  corporationTaxRate: number;
+  invoiceFooterNote: string;
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
@@ -929,6 +932,9 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     financialShowBaseCost: booleanValue(data.financialShowBaseCost, true),
     taxRuleNameRevenue: stringValue(data.taxRuleNameRevenue, "Standard Tax (Services/New)"),
     taxRuleNameProfit: stringValue(data.taxRuleNameProfit, "Margin Scheme (2nd Hand)"),
+    corporationTaxEnabled: booleanValue(data.corporationTaxEnabled, false),
+    corporationTaxRate: numberValue(data.corporationTaxRate, 19),
+    invoiceFooterNote: stringValue(data.invoiceFooterNote, ""),
     uploadSafetyRequirePolicyAcceptance: booleanValue(
       data.uploadSafetyRequirePolicyAcceptanceV1,
       booleanValue(data.uploadSafetyRequirePolicyAcceptance, true)

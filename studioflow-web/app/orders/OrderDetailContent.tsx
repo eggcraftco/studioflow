@@ -1696,6 +1696,10 @@ export function OrderDetailContent({
   const canEditOrderStatus = Boolean(canAccessOrders && canEditOrderStatusForRole(workspace.role));
   const canEditWorkflowFields = canEditOrderStatus;
   const money = (value: number, hidden = false) => orderMoney(value, hidden, moneySettings);
+  const corporationTaxEnabled = Boolean(moneySettings?.corporationTaxEnabled);
+  const corporationTaxRate = moneySettings?.corporationTaxRate ?? 19;
+  const corporationTaxAmount = corporationTaxEnabled ? Math.max(0, order.netProfit) * corporationTaxRate / 100 : 0;
+  const netProfitAfterCT = order.netProfit - corporationTaxAmount;
   const canInlineEditFinance = Boolean(canSeeFinance && canEditOrderFully);
   const canInlineEditFullDetails = canEditOrderDetailsForRole(workspace.role);
   const canEditToDoItems = canEditWorkflowFields;
@@ -4812,7 +4816,15 @@ export function OrderDetailContent({
                       <span>Order Value</span>
                       <strong>{money(order.paidAmount + order.remainingAmount, hideNumbers)}</strong>
                     </div>
-                    <DetailRow label="Final Profit" value={money(order.netProfit, hideNumbers)} tone="positive" emphasis />
+                    {corporationTaxEnabled ? (
+                      <>
+                        <DetailRow label="Profit after VAT" value={money(order.netProfit, hideNumbers)} />
+                        <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={money(corporationTaxAmount, hideNumbers)} tone="negative" />
+                        <DetailRow label="Net Profit (after CT)" value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
+                      </>
+                    ) : (
+                      <DetailRow label="Final Profit" value={money(order.netProfit, hideNumbers)} tone="positive" emphasis />
+                    )}
                   </>
                 ) : (
                   <>
