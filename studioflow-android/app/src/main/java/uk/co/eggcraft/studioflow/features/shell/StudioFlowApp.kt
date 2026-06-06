@@ -61,6 +61,14 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 private const val LocalSecurityPrefs = "studioflow_android_local_security"
 private const val RequireLocalUnlockKey = "studioflow_require_local_unlock"
 
+// Set by MainActivity.onUserLeaveHint() when the user genuinely leaves the app
+// (home / recents / call). It is NOT set when we launch an in-app activity such as
+// the file picker, so returning from a picker no longer triggers the lock screen.
+object AppLockGuard {
+    @Volatile
+    var userLeft: Boolean = false
+}
+
 @Composable
 fun StudioFlowApp(
     viewModel: StudioFlowViewModel = viewModel()
@@ -236,8 +244,16 @@ private fun StudioFlowAppContent(
                 viewModel.refreshPersonalInterfaceSettings()
             }
             if (event == Lifecycle.Event.ON_STOP && state.user != null && requireDeviceUnlock) {
-                localUnlockSatisfied = false
-                localUnlockMessage = ""
+                // Only re-lock when the user actually left the app (home/recents/call)
+                // or the screen turned off — NOT when we opened an in-app activity such
+                // as the file picker (which would otherwise lock on every file add).
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                val screenOff = powerManager?.isInteractive == false
+                if (AppLockGuard.userLeft || screenOff) {
+                    localUnlockSatisfied = false
+                    localUnlockMessage = ""
+                }
+                AppLockGuard.userLeft = false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

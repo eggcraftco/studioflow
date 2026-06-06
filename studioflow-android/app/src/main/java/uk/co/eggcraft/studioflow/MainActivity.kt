@@ -38,6 +38,14 @@ class MainActivity : ComponentActivity() {
         handleStudioIntent(intent)
     }
 
+    // Fires only when the user genuinely leaves the app (home / recents / call) — not
+    // when we launch an in-app activity like the file picker. Used to decide whether
+    // the app-lock screen should appear on return.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        uk.co.eggcraft.studioflow.features.shell.AppLockGuard.userLeft = true
+    }
+
     private fun handleStudioIntent(intent: Intent?) {
         val threadId = intent?.getStringExtra("studio_thread_id").orEmpty()
         if (threadId.isNotBlank()) {
