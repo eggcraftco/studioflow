@@ -717,6 +717,15 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "File renamed."
     }
 
+    suspend fun assignInvoiceNumber(workspace: StudioWorkspace, order: StudioOrder): String {
+        if (order.invoiceNumber.isNotBlank()) return order.invoiceNumber
+        val result = functions.getHttpsCallable("assignInvoiceNumber")
+            .call(mapOf("companyId" to workspace.id, "orderId" to order.id))
+            .await()
+        val data = result.getData() as? Map<*, *>
+        return (data?.get("invoiceNumber") as? String).orEmpty()
+    }
+
     suspend fun deleteClientFile(workspace: StudioWorkspace, order: StudioOrder, fileId: String): String {
         val result = functions.getHttpsCallable("deleteClientFile")
             .call(

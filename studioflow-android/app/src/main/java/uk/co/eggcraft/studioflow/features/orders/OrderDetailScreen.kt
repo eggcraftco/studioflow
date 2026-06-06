@@ -610,6 +610,7 @@ private fun DetailTopBar(
     val context = LocalContext.current
     val headerDetails = rememberOrderHeaderDetailsState()
     var actionsOpen by remember { mutableStateOf(false) }
+    val invoiceScope = rememberCoroutineScope()
 
     @Composable
     fun ActionsMenuButton() {
@@ -634,6 +635,10 @@ private fun DetailTopBar(
                         canSeeFinancial = canSeeFinancial,
                         advancedFinanceEnabled = financeAdvancedEnabled
                     )
+                },
+                onInvoicePdf = {
+                    actionsOpen = false
+                    invoiceScope.launch { generateAndPrintInvoice(context, order, workspaceSettings) }
                 }
             )
         }
@@ -740,6 +745,10 @@ private fun DetailTopBar(
                                 canSeeFinancial = canSeeFinancial,
                                 advancedFinanceEnabled = financeAdvancedEnabled
                             )
+                        },
+                        onInvoicePdf = {
+                            actionsOpen = false
+                            invoiceScope.launch { generateAndPrintInvoice(context, order, workspaceSettings) }
                         }
                     )
                 }
@@ -1294,6 +1303,7 @@ private fun DesktopOrderHeader(
 
     @Composable
     fun HeaderActions() {
+        val invoiceScope = rememberCoroutineScope()
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1324,6 +1334,10 @@ private fun DesktopOrderHeader(
                             canSeeFinancial = canSeeFinancial,
                             advancedFinanceEnabled = financeAdvancedEnabled
                         )
+                    },
+                    onInvoicePdf = {
+                        actionsOpen = false
+                        invoiceScope.launch { generateAndPrintInvoice(context, order, workspaceSettings) }
                     }
                 )
             }
@@ -1623,6 +1637,7 @@ private fun OrderHeaderActionsMenu(
     headerDetails: OrderHeaderDetailsState,
     onCustomize: () -> Unit,
     onExportPdf: () -> Unit,
+    onInvoicePdf: () -> Unit = {},
     showHeaderDetailToggles: Boolean = true
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -1667,6 +1682,13 @@ private fun OrderHeaderActionsMenu(
             leadingIcon = { Icon(Icons.Filled.Description, contentDescription = null) },
             onClick = onExportPdf
         )
+        if (canSeeFinancial) {
+            DropdownMenuItem(
+                text = { Text(t("Invoice PDF")) },
+                leadingIcon = { Icon(Icons.Filled.PictureAsPdf, contentDescription = null) },
+                onClick = onInvoicePdf
+            )
+        }
     }
 }
 
@@ -10264,6 +10286,137 @@ private fun statusColor(status: String): Color {
 }
 
 private fun yesNo(value: Boolean): String = if (value) "Yes" else "No"
+
+private fun invoiceMoney(value: Double, currency: String, decimalSeparator: String): String {
+    val formatted = String.format(java.util.Locale.UK, "%,.2f", value)
+    val out = if (decimalSeparator == ",") formatted.replace(",", "_").replace(".", ",").replace("_", ".") else formatted
+    return "$currency$out"
+}
+
+private fun escapeInvoiceHtml(value: String): String =
+    value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")
+
+// Customer-facing invoice (VAT only; never Corporation Tax/costs/profit). Mirrors
+// the web/Mac invoice. Margin scheme hides the VAT line; zero-rated shows Export.
+private fun buildInvoiceHtml(order: StudioOrder, settings: StudioWorkspaceSettings, invoiceNumber: String): String {
+    val currency = settings.selectedCurrency.ifBlank { "£" }
+    val dec = settings.selectedDecimalSeparator
+    fun m(v: Double) = invoiceMoney(v, currency, dec)
+    val orderValue = order.paidAmount + order.remainingAmount
+    val isMargin = order.taxType == "Profit"
+    val isZero = order.taxRate <= 0.0001
+    val vat = order.taxAmount
+    val subtotal = if (isMargin) orderValue else orderValue - vat
+    val business = escapeInvoiceHtml(settings.appSubtitle.ifBlank { "NivaDesk" })
+    val logo = settings.appLogoUrl.trim()
+    val footer = settings.invoiceFooterNote.trim()
+    val nums = settings.companyNumbers.filter { it.value.isNotBlank() }
+        .joinToString("") { "<div>${escapeInvoiceHtml(it.title)}: ${escapeInvoiceHtml(it.value)}</div>" }
+    val date = order.paymentDate?.let { java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(it) } ?: ""
+    val desc = escapeInvoiceHtml(order.designName.ifBlank { order.displayCustomerName })
+    val vatRow = when {
+        isMargin -> "<div class=\"muted-note\">VAT under margin scheme (not shown separately)</div>"
+        isZero -> "<div class=\"trow\"><span>VAT (Zero-rated / Export)</span><strong>${m(0.0)}</strong></div>"
+        else -> "<div class=\"trow\"><span>VAT (${order.taxRate.toInt()}%)</span><strong>${m(vat)}</strong></div>"
+    }
+    val dueClass = if (order.remainingAmount > 0.005) "due" else "paid"
+    return """<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<style>
+@page { size: A4; margin: 14mm; }
+body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1c1c1e; margin: 0; }
+.wrap { padding: 16px; }
+header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.biz img { max-width: 220px; max-height: 60px; object-fit: contain; display: block; margin-bottom: 6px; }
+.biz .name { font-weight: 800; font-size: 16px; }
+.biz .nums { color: #6b7280; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+.inv { text-align: right; }
+.inv .title { font-size: 28px; font-weight: 900; color: rgba(0,0,0,0.35); letter-spacing: 1px; }
+.inv .meta { font-size: 12px; margin-top: 4px; color: #374151; }
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
+.bill .label { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #6b7280; }
+.bill .who { font-weight: 700; font-size: 13px; margin-top: 4px; }
+.bill .email { color: #6b7280; font-size: 11px; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+th { text-align: left; font-size: 11px; background: #f3f4f6; padding: 9px 12px; }
+th.r, td.r { text-align: right; }
+td { padding: 11px 12px; font-size: 12px; border-bottom: 1px solid #eee; }
+.totals { margin-top: 14px; margin-left: auto; width: 280px; }
+.trow { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; }
+.trow.total { border-top: 1px solid #d1d5db; margin-top: 4px; padding-top: 8px; font-size: 15px; font-weight: 800; }
+.muted-note { font-size: 10px; color: #6b7280; padding: 4px 0; }
+.due { color: #dc2626; } .paid { color: #16a34a; }
+footer { margin-top: 26px; border-top: 1px solid #e5e7eb; padding-top: 12px; color: #6b7280; font-size: 11px; white-space: pre-wrap; }
+.credit { text-align: center; color: #9ca3af; font-size: 9px; margin-top: 16px; }
+</style></head><body><div class="wrap">
+<header>
+  <div class="biz">
+    ${if (logo.isNotBlank()) "<img src=\"${escapeInvoiceHtml(logo)}\" alt=\"\" />" else ""}
+    <div class="name">$business</div>
+    <div class="nums">$nums</div>
+  </div>
+  <div class="inv">
+    <div class="title">INVOICE</div>
+    <div class="meta">Invoice No: ${escapeInvoiceHtml(invoiceNumber.ifBlank { "-" })}</div>
+    <div class="meta">Date: ${escapeInvoiceHtml(date)}</div>
+  </div>
+</header>
+<hr/>
+<div class="bill">
+  <div class="label">BILL TO</div>
+  <div class="who">${escapeInvoiceHtml(order.displayCustomerName)}</div>
+  ${if (order.emailAddress.isNotBlank()) "<div class=\"email\">${escapeInvoiceHtml(order.emailAddress)}</div>" else ""}
+</div>
+<table><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
+<tbody><tr><td>$desc</td><td class="r">${m(subtotal)}</td></tr></tbody></table>
+<div class="totals">
+  <div class="trow"><span>Subtotal</span><strong>${m(subtotal)}</strong></div>
+  $vatRow
+  <div class="trow total"><span>TOTAL</span><strong>${m(orderValue)}</strong></div>
+  <div class="trow"><span>Paid</span><strong class="paid">${m(order.paidAmount)}</strong></div>
+  <div class="trow"><span>Balance Due</span><strong class="$dueClass">${m(order.remainingAmount)}</strong></div>
+</div>
+${if (footer.isNotBlank()) "<footer>${escapeInvoiceHtml(footer)}</footer>" else ""}
+<div class="credit">Generated with NivaDesk</div>
+</div></body></html>"""
+}
+
+private var invoicePrintWebViewHolder: android.webkit.WebView? = null
+
+private fun printInvoiceHtml(context: Context, html: String, name: String) {
+    val webView = android.webkit.WebView(context)
+    webView.settings.javaScriptEnabled = false
+    webView.settings.loadsImagesAutomatically = true
+    webView.webViewClient = object : android.webkit.WebViewClient() {
+        override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+            // Give remote images a moment to load before printing.
+            view.postDelayed({
+                val printManager = context.getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
+                val adapter = view.createPrintDocumentAdapter("Invoice_$name")
+                printManager.print("Invoice $name", adapter, android.print.PrintAttributes.Builder().build())
+                invoicePrintWebViewHolder = null
+            }, 600)
+        }
+    }
+    invoicePrintWebViewHolder = webView
+    webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+}
+
+private suspend fun generateAndPrintInvoice(context: Context, order: StudioOrder, settings: StudioWorkspaceSettings) {
+    var number = order.invoiceNumber
+    if (number.isBlank()) {
+        number = try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                .getHttpsCallable("assignInvoiceNumber")
+                .call(mapOf("companyId" to order.companyId, "orderId" to order.id))
+                .await()
+            ((result.getData() as? Map<*, *>)?.get("invoiceNumber") as? String).orEmpty()
+        } catch (e: Exception) {
+            ""
+        }
+    }
+    val html = buildInvoiceHtml(order, settings, number)
+    printInvoiceHtml(context, html, number.ifBlank { order.id })
+}
 
 private fun shareOrderPdf(
     context: Context,
