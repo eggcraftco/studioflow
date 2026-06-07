@@ -2,7 +2,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 
 admin.initializeApp();
@@ -7016,6 +7016,77 @@ exports.syncWorkflowSafeOrderView = onDocumentWritten(
       return;
     }
     await writeWorkflowSafeOrderView(orderId, afterData);
+  }
+);
+
+// Number of days to keep an order's client files in Storage after the order is
+// deleted, before they are permanently removed.
+const ORDER_FILE_RETENTION_DAYS = 30;
+
+// When an order document is deleted (from any platform — Mac direct delete, web,
+// Android, or workflow approval), schedule its client files for cleanup after a
+// grace period instead of deleting them immediately. This protects against
+// accidental deletions while still preventing orphaned blobs from piling up.
+exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
+  { document: "siparisler/{orderId}", region: "europe-west2" },
+  async (event) => {
+    const orderId = String(event.params.orderId || "").trim();
+    const orderData = event.data?.data() || {};
+    const companyId = orderCompanyId(orderData);
+    if (!companyId) return;
+
+    const clientFiles = Array.isArray(orderData.clientFiles) ? orderData.clientFiles : [];
+    const paths = [];
+    for (const file of clientFiles) {
+      if (!file || typeof file !== "object") continue;
+      const path = safeClientFileStoragePath(companyId, file.storagePath || file.path);
+      if (path && !paths.includes(path)) paths.push(path);
+    }
+    if (paths.length === 0) return;
+
+    const deleteAfter = new Date(Date.now() + ORDER_FILE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    await admin.firestore().collection("pendingFileDeletions").add({
+      companyId,
+      orderId,
+      paths,
+      deleteAfter: admin.firestore.Timestamp.fromDate(deleteAfter),
+      createdAt: admin.firestore.Timestamp.now()
+    }).catch((error) => {
+      console.warn("scheduleDeletedOrderFileCleanup failed:", orderId, error?.message || error);
+    });
+  }
+);
+
+// Runs daily and permanently deletes the Storage blobs for orders whose grace
+// period has elapsed, then removes the bookkeeping record.
+exports.cleanupExpiredOrderFiles = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
+  async () => {
+    const db = admin.firestore();
+    const bucket = admin.storage().bucket();
+    const now = admin.firestore.Timestamp.now();
+    const snap = await db.collection("pendingFileDeletions")
+      .where("deleteAfter", "<=", now)
+      .limit(200)
+      .get();
+    if (snap.empty) return;
+
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      const paths = Array.isArray(data.paths) ? data.paths : [];
+      let allDeleted = true;
+      for (const path of paths) {
+        try {
+          await bucket.file(String(path)).delete({ ignoreNotFound: true });
+        } catch (error) {
+          allDeleted = false;
+          console.warn("cleanupExpiredOrderFiles delete failed:", path, error?.message || error);
+        }
+      }
+      if (allDeleted) {
+        await doc.ref.delete().catch(() => undefined);
+      }
+    }
   }
 );
 
