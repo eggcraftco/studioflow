@@ -1087,7 +1087,9 @@ function workspaceOrderDoc(companyId: string, orderId: string, workspace?: Works
 
 export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderListItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
-  const snapshot = await getDocs(query(workspaceOrderQuery(companyId, workspace, uid), limit(100)));
+  // No limit: load every order in the workspace scope so the web list matches
+  // the Mac and Android apps (which load the full set).
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
   const orders = snapshot.docs.map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
