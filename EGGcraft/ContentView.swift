@@ -9687,6 +9687,7 @@ struct ContentView: View {
         case "Dashboard": return canAccessDashboard
         case "Schedule": return canAccessSchedule
         case "Customers": return canAccessCustomers
+        case "Files": return canAccessFiles
         case "QuickReply": return canAccessQuickReply
         case "Messages": return canAccessMessages
         case "Notes": return canAccessNotes
