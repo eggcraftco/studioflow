@@ -16877,11 +16877,19 @@ struct ClientFilesHubView: View {
             var req = URLRequest(url: comps.url!)
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             req.timeoutInterval = 300
-            URLSession.shared.dataTask(with: req) { data, resp, _ in
+            URLSession.shared.dataTask(with: req) { data, resp, err in
                 DispatchQueue.main.async {
                     self.downloadingScope = nil
-                    guard let data = data, let http = resp as? HTTPURLResponse, http.statusCode == 200, !data.isEmpty else {
-                        self.statusMessage = self.lt("Could not download files."); return
+                    if let err = err {
+                        self.statusMessage = "Download error: \(err.localizedDescription)"
+                        return
+                    }
+                    let http = resp as? HTTPURLResponse
+                    let code = http?.statusCode ?? -1
+                    guard let data = data, code == 200, !data.isEmpty else {
+                        let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                        self.statusMessage = "Download failed (HTTP \(code)): \(body.prefix(200))"
+                        return
                     }
                     self.zipData = data
                     self.zipName = scope == "order" ? "order-files.zip" : "workspace-files.zip"
