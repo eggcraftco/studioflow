@@ -104,11 +104,16 @@ export const WORKSPACE_SCOPE_ACCESS_OPTIONS = [
   { key: "manageProjectAssignments", label: "Change Project Assignments", description: "Allow this role to assign and reassign projects from the order card menu." }
 ] as const;
 
+export const WORKSPACE_FILE_ACCESS_OPTIONS = [
+  { key: "deleteClientFiles", label: "Delete client files", description: "Allow this role to delete client files. Uploading and viewing follow Client Files access above." }
+] as const;
+
 export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
   ...WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
   ...WORKSPACE_SETTINGS_ACCESS_OPTIONS,
   ...WORKSPACE_CARD_ACCESS_OPTIONS,
-  ...WORKSPACE_SCOPE_ACCESS_OPTIONS
+  ...WORKSPACE_SCOPE_ACCESS_OPTIONS,
+  ...WORKSPACE_FILE_ACCESS_OPTIONS
 ] as const;
 
 export type WorkspaceMemberAccessKey = (typeof WORKSPACE_MEMBER_ACCESS_OPTIONS)[number]["key"];

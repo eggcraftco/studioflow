@@ -324,6 +324,7 @@ export default function FilesPage() {
     : null;
   const canManageClientFiles = Boolean(workspace && canUseClientFiles && canManageClientFilesForRole(workspace.role));
   const canUploadClientFiles = canManageClientFiles;
+  const canDeleteClientFiles = Boolean(canManageClientFiles && workspace?.memberAccess?.deleteClientFiles !== false);
   const maxUploadSizeMB = Math.min(Math.max(Math.round(uploadSafetySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
   const requireUploadPolicyAcceptance = uploadSafetySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
 
@@ -629,7 +630,7 @@ export default function FilesPage() {
                       {downloadingOrderId === group.orderId ? "Preparing…" : "⬇ ZIP"}
                     </button>
                   ) : null}
-                  {canManageClientFiles ? (
+                  {canDeleteClientFiles ? (
                     <button
                       className="button secondary"
                       type="button"
@@ -685,15 +686,17 @@ export default function FilesPage() {
                               <button className="button secondary" type="button" onClick={() => handleRename(file)} disabled={Boolean(actioningFileId)}>
                                 {actioningFileId === file.id ? "..." : "Rename"}
                               </button>
-                              <button
-                                className="button secondary"
-                                type="button"
-                                onClick={() => handleDelete(file)}
-                                disabled={Boolean(actioningFileId)}
-                                style={{ color: "var(--danger)" }}
-                              >
-                                Delete
-                              </button>
+                              {canDeleteClientFiles ? (
+                                <button
+                                  className="button secondary"
+                                  type="button"
+                                  onClick={() => handleDelete(file)}
+                                  disabled={Boolean(actioningFileId)}
+                                  style={{ color: "var(--danger)" }}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
                             </>
                           ) : null}
                         </div>
