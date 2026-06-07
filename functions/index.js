@@ -7019,9 +7019,10 @@ exports.syncWorkflowSafeOrderView = onDocumentWritten(
   }
 );
 
-// Number of days to keep an order's client files in Storage after the order is
+// How long to keep an order's client files in Storage after the order is
 // deleted, before they are permanently removed.
-const ORDER_FILE_RETENTION_DAYS = 30;
+// TESTING: shortened to 10 minutes. Restore to 30 days (43200) once verified.
+const ORDER_FILE_RETENTION_MINUTES = 10;
 
 // When an order document is deleted (from any platform — Mac direct delete, web,
 // Android, or workflow approval), schedule its client files for cleanup after a
@@ -7044,7 +7045,7 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
     }
     if (paths.length === 0) return;
 
-    const deleteAfter = new Date(Date.now() + ORDER_FILE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const deleteAfter = new Date(Date.now() + ORDER_FILE_RETENTION_MINUTES * 60 * 1000);
     await admin.firestore().collection("pendingFileDeletions").add({
       companyId,
       orderId,
@@ -7060,7 +7061,7 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
 // Runs daily and permanently deletes the Storage blobs for orders whose grace
 // period has elapsed, then removes the bookkeeping record.
 exports.cleanupExpiredOrderFiles = onSchedule(
-  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
+  { schedule: "every 5 minutes", timeZone: "Europe/London", region: "europe-west2" },
   async () => {
     const db = admin.firestore();
     const bucket = admin.storage().bucket();
