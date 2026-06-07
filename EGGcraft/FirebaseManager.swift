@@ -1136,10 +1136,17 @@ class FirebaseManager: ObservableObject {
     func configure(companyId: String, workspaceRole: String = "owner", assignedProjectsOnly: Bool = false, manageProjectAssignments: Bool = false) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let previousAssignedScope = usesRestrictedAssignedProjectScope
+        let previousStrictWorkflow = normalizedWorkspaceRole(currentWorkspaceRole) == "workflowOnly"
         currentWorkspaceRole = workspaceRole
         currentWorkspaceAssignedProjectsOnly = assignedProjectsOnly
         currentWorkspaceManageProjectAssignments = manageProjectAssignments
+        let newStrictWorkflow = normalizedWorkspaceRole(currentWorkspaceRole) == "workflowOnly"
+        // Restart the order listener whenever the assigned-project scope OR the
+        // underlying collection changes. Strict workflow uses /workflowOrders while
+        // a custom "Assigned Projects Only" role uses /siparisler — both are
+        // "assigned scope", so we must also watch the strict-workflow flag itself.
         let assignedScopeChanged = previousAssignedScope != usesRestrictedAssignedProjectScope
+            || previousStrictWorkflow != newStrictWorkflow
         guard !cleanCompanyId.isEmpty else {
             resetForLogout()
             return
@@ -1213,17 +1220,27 @@ class FirebaseManager: ObservableObject {
     func fetchSiparisler() {
         guard !currentCompanyId.isEmpty else { siparisler = []; return }
         let companyId = currentCompanyId
-        let usesAssignedView = usesRestrictedAssignedProjectScope
+        // Match the web client exactly:
+        //  • Strict "Workflow Only" reads the finance-free /workflowOrders view.
+        //  • Custom-role "Assigned Projects Only" members read /siparisler directly,
+        //    filtered to their own assignedToUid (they keep full member-tier access
+        //    to their assigned orders). They must NOT use /workflowOrders.
+        //  • Everyone else reads the whole company in /siparisler.
+        let isStrictWorkflow = normalizedWorkspaceRole(currentWorkspaceRole) == "workflowOnly"
+        let requiresAssignedFilter = usesRestrictedAssignedProjectScope
+        let uid = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         func startOrderListener() {
-            let collectionRef: CollectionReference = usesAssignedView
-                ? self.db.collection("companies").document(companyId).collection("workflowOrders")
-                : self.db.collection("siparisler")
-            var orderQuery: Query = usesAssignedView
-                ? collectionRef
-                : collectionRef.whereField("companyId", isEqualTo: companyId)
-            if usesAssignedView, let uid = Auth.auth().currentUser?.uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                orderQuery = orderQuery.whereField("assignedToUid", isEqualTo: uid)
+            var orderQuery: Query
+            if isStrictWorkflow {
+                let collectionRef = self.db.collection("companies").document(companyId).collection("workflowOrders")
+                orderQuery = uid.isEmpty ? collectionRef : collectionRef.whereField("assignedToUid", isEqualTo: uid)
+            } else if requiresAssignedFilter && !uid.isEmpty {
+                orderQuery = self.db.collection("siparisler")
+                    .whereField("companyId", isEqualTo: companyId)
+                    .whereField("assignedToUid", isEqualTo: uid)
+            } else {
+                orderQuery = self.db.collection("siparisler").whereField("companyId", isEqualTo: companyId)
             }
             self.listenerRegistration?.remove()
             self.listenerRegistration = orderQuery.addSnapshotListener(includeMetadataChanges: true) { querySnapshot, error in
@@ -1255,7 +1272,7 @@ class FirebaseManager: ObservableObject {
             }
         }
 
-        if usesAssignedView {
+        if isStrictWorkflow {
 #if canImport(FirebaseFunctions)
             Functions.functions(region: "europe-west2")
                 .httpsCallable("ensureWorkflowAssignedOrderViews")
