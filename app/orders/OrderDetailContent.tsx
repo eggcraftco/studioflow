@@ -3315,6 +3315,22 @@ export function OrderDetailContent({
     if (typeof patch.deletePaymentId === "string") {
       payments = order.payments.filter(entry => entry.id !== patch.deletePaymentId);
     }
+    // Mirror the server-side seed: the first Paid amount entered on an empty
+    // ledger becomes Payment #1, so it shows up instantly under Payments.
+    if (typeof patch.paidAmount === "number" && order.payments.length === 0 && paidAmount > 0.005) {
+      payments = [
+        {
+          id: `temp-${Date.now()}`,
+          amount: paidAmount,
+          date: new Date(),
+          method: paymentMethod || "",
+          note: "",
+          createdByUid: "",
+          createdByEmail: ""
+        },
+        ...payments
+      ];
+    }
 
     onOptimisticOrderPatch?.({
       paidAmount,
