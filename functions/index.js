@@ -7021,8 +7021,7 @@ exports.syncWorkflowSafeOrderView = onDocumentWritten(
 
 // How long to keep an order's client files in Storage after the order is
 // deleted, before they are permanently removed.
-// TESTING: shortened to 10 minutes. Restore to 30 days (43200) once verified.
-const ORDER_FILE_RETENTION_MINUTES = 10;
+const ORDER_FILE_RETENTION_MINUTES = 30 * 24 * 60; // 30 days
 
 // When an order document is deleted (from any platform — Mac direct delete, web,
 // Android, or workflow approval), schedule its client files for cleanup after a
@@ -7043,7 +7042,6 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
       const path = safeClientFileStoragePath(companyId, file.storagePath || file.path);
       if (path && !paths.includes(path)) paths.push(path);
     }
-    console.log(`[fileCleanup] order ${orderId} deleted: ${clientFiles.length} clientFiles, ${paths.length} valid paths scheduled`, paths);
     if (paths.length === 0) return;
 
     const deleteAfter = new Date(Date.now() + ORDER_FILE_RETENTION_MINUTES * 60 * 1000);
@@ -7062,7 +7060,7 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
 // Runs daily and permanently deletes the Storage blobs for orders whose grace
 // period has elapsed, then removes the bookkeeping record.
 exports.cleanupExpiredOrderFiles = onSchedule(
-  { schedule: "every 5 minutes", timeZone: "Europe/London", region: "europe-west2" },
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
   async () => {
     const db = admin.firestore();
     const bucket = admin.storage().bucket();
@@ -7071,7 +7069,6 @@ exports.cleanupExpiredOrderFiles = onSchedule(
       .where("deleteAfter", "<=", now)
       .limit(200)
       .get();
-    console.log(`[fileCleanup] cleanup run: ${snap.size} expired record(s) due`);
     if (snap.empty) return;
 
     for (const doc of snap.docs) {
@@ -7081,7 +7078,6 @@ exports.cleanupExpiredOrderFiles = onSchedule(
       for (const path of paths) {
         try {
           await bucket.file(String(path)).delete({ ignoreNotFound: true });
-          console.log(`[fileCleanup] deleted blob: ${path}`);
         } catch (error) {
           allDeleted = false;
           console.warn("cleanupExpiredOrderFiles delete failed:", path, error?.message || error);
