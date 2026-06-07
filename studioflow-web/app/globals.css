@@ -3630,6 +3630,21 @@ button.toolbar-icon-button,
   background: rgba(17, 24, 39, 0.10);
 }
 
+body[data-studio-theme="dark"] .order-filter-mobile-menu {
+  background: rgba(31, 31, 31, 0.97);
+  border-color: var(--border);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+}
+
+body[data-studio-theme="dark"] .order-filter-menu-row:hover,
+body[data-studio-theme="dark"] .order-filter-menu-row[aria-checked="true"] {
+  background: rgba(96, 165, 250, 0.18);
+}
+
+body[data-studio-theme="dark"] .order-filter-menu-divider {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .order-list-card {
   width: 100%;
   text-align: left;
