@@ -2191,6 +2191,7 @@ const WORKSPACE_MEMBER_ACCESS_DEFAULTS = Object.freeze({
   cardShipping: true,
   cardSchedule: true,
   cardHistoryLog: true,
+  deleteClientFiles: true,
   assignedProjectsOnly: false,
   manageProjectAssignments: false
 });
@@ -6916,6 +6917,16 @@ function uidCanManageClientFiles(companyData = {}, uid = "") {
   return ["owner", "admin", "member", "workflowOnly"].includes(role);
 }
 
+// Deleting a client file additionally requires the per-member "deleteClientFiles"
+// access (default true). Owners can always delete.
+function uidCanDeleteClientFiles(companyData = {}, uid = "") {
+  const normalizedUid = String(uid || "").trim();
+  if (!normalizedUid) return false;
+  if (uidIsCompanyOwner(companyData, normalizedUid)) return true;
+  if (!uidCanManageClientFiles(companyData, normalizedUid)) return false;
+  return workspaceMemberAccess(companyData, normalizedUid).deleteClientFiles !== false;
+}
+
 function findClientFileIndex(files = [], fileId = "") {
   const target = String(fileId || "").trim();
   if (!target) return -1;
@@ -10357,6 +10368,9 @@ exports.renameClientFile = onCall({ region: "europe-west2" }, async (request) =>
 
 exports.deleteClientFile = onCall({ region: "europe-west2" }, async (request) => {
   const context = await requireClientFileMutationContext(request, "delete_client_file");
+  if (!uidCanDeleteClientFiles(context.companyData, context.uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot delete Client Files.");
+  }
   const db = admin.firestore();
 
   const result = await db.runTransaction(async (transaction) => {
