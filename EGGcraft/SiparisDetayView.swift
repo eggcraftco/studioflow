@@ -9023,6 +9023,38 @@ struct SiparisDetayView: View {
         firebaseManager.updateSiparis(updatedOrder)
     }
 
+    // Logs the initial "Remaining" amount once, the first time it is set to a
+    // positive value. A marker in customFields prevents repeat log lines on
+    // later edits. Remaining is not a payment, so this only touches the log.
+    private func seedInitialRemainingLogIfNeeded() {
+        let marker = "initialRemainingLogged"
+        guard (siparis.customFields?[marker] ?? "") != "1" else { return }
+        let amount = (siparis.remainingAmount * 100).rounded() / 100
+        guard amount > 0.005 else { return }
+
+        var updatedOrder = siparis
+        var fields = updatedOrder.customFields ?? [:]
+        fields[marker] = "1"
+        updatedOrder.customFields = fields
+
+        var logs = updatedOrder.historyLog ?? []
+        logs.insert(
+            OrderHistoryLogItem(
+                id: UUID(),
+                createdAt: Date(),
+                title: "Remaining set",
+                oldValue: "-",
+                newValue: cleanHistoryValue(amountHistoryValue(amount))
+            ),
+            at: 0
+        )
+        if logs.count > 120 { logs = Array(logs.prefix(120)) }
+        updatedOrder.historyLog = logs
+
+        siparis = updatedOrder
+        firebaseManager.updateSiparis(updatedOrder)
+    }
+
     private func deletePayment(_ entry: PaymentEntry) {
         var updatedOrder = siparis
         var ledger = updatedOrder.payments ?? []
@@ -9303,7 +9335,7 @@ struct SiparisDetayView: View {
                 .onChange(of: siparis.paidAmount) { _, _ in otomatikKesintiHesapla() }
 
             if !isBasicFinancialLimited {
-                CurrencyField(label: t("Remaining", lang: seciliDil), value: $siparis.remainingAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+                CurrencyField(label: t("Remaining", lang: seciliDil), value: $siparis.remainingAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik, onCommit: { seedInitialRemainingLogIfNeeded() })
                     .onChange(of: siparis.remainingAmount) { _, _ in otomatikKesintiHesapla() }
 
                 if !financialRemainingItems.isEmpty {
