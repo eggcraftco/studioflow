@@ -1135,9 +1135,11 @@ class FirebaseManager: ObservableObject {
 
     func configure(companyId: String, workspaceRole: String = "owner", assignedProjectsOnly: Bool = false, manageProjectAssignments: Bool = false) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousAssignedScope = usesRestrictedAssignedProjectScope
         currentWorkspaceRole = workspaceRole
         currentWorkspaceAssignedProjectsOnly = assignedProjectsOnly
         currentWorkspaceManageProjectAssignments = manageProjectAssignments
+        let assignedScopeChanged = previousAssignedScope != usesRestrictedAssignedProjectScope
         guard !cleanCompanyId.isEmpty else {
             resetForLogout()
             return
@@ -1147,6 +1149,15 @@ class FirebaseManager: ObservableObject {
            listenerRegistration != nil,
            musteriListenerRegistration != nil,
            messageThreadsListenerRegistration != nil {
+            // The role/scope can resolve AFTER the first configure (e.g. the default
+            // "owner" is replaced by "workflow" once membership loads). When the
+            // assigned-project scope flips we must restart the order listener so it
+            // queries the correct collection (workflowOrders vs siparisler);
+            // otherwise a workflow member keeps the denied siparisler query and sees
+            // no assigned orders.
+            if assignedScopeChanged {
+                fetchSiparisler()
+            }
             return
         }
 
