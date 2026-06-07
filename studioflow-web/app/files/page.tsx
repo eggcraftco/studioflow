@@ -47,6 +47,10 @@ function isFilePdf(file: Pick<ClientFileListItem, "contentType" | "fileName">) {
   return (file.contentType || "").toLowerCase().includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
 }
 
+function uploaderLabel(file: Pick<ClientFileListItem, "uploadedBy" | "uploadedByEmail">) {
+  return (file.uploadedBy || "").trim() || (file.uploadedByEmail || "").trim();
+}
+
 function fileBadgeLabel(file: Pick<ClientFileListItem, "contentType" | "fileName">) {
   if (isFilePdf(file)) return "PDF";
   if (isClientFileImage(file)) return "IMG";
@@ -118,7 +122,10 @@ function FilesPreviewModal({
         <header className="client-file-preview-header">
           <div>
             <h2>{activeFile.fileName}</h2>
-            <p>{currentIndex + 1} / {files.length} · {clientFileSizeLabel(activeFile.fileSize)}</p>
+            <p>
+              {currentIndex + 1} / {files.length} · {clientFileSizeLabel(activeFile.fileSize)}
+              {uploaderLabel(activeFile) ? ` · Added by ${uploaderLabel(activeFile)}` : ""}
+            </p>
           </div>
           <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label="Close file preview">
             ×
@@ -657,6 +664,9 @@ export default function FilesPage() {
                             <p className="muted-copy">
                               {clientFileTypeLabel(file)} · {clientFileSizeLabel(file.fileSize)} · {formatDate(file.uploadedAt)}
                             </p>
+                            {uploaderLabel(file) ? (
+                              <p className="muted-copy">Added by {uploaderLabel(file)}</p>
+                            ) : null}
                           </div>
                         </button>
 
