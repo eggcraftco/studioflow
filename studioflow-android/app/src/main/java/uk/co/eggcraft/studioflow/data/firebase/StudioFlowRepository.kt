@@ -113,8 +113,16 @@ class StudioFlowRepository(
             companyId = user.uid
             companyDoc = db.collection("companies").document(companyId).get().await()
         }
-        val data = companyDoc.data.orEmpty()
         val userData = userDoc.data.orEmpty()
+        return buildWorkspace(companyId, companyDoc.data.orEmpty(), userData, user)
+    }
+
+    private fun buildWorkspace(
+        companyId: String,
+        data: Map<String, Any>,
+        userData: Map<String, Any>,
+        user: FirebaseUser
+    ): StudioWorkspace {
         val ownerUid = stringValue(data["ownerUid"], companyId)
         val ownerEmail = stringValue(data["ownerEmail"], user.email.orEmpty())
         val customRoles = customRoles(data)
@@ -145,6 +153,24 @@ class StudioFlowRepository(
             ownerEmail = ownerEmail
         )
     }
+
+    /**
+     * Live workspace stream for a fixed company: re-emits the resolved StudioWorkspace
+     * whenever the company document changes (role, access, plan, custom roles), so a
+     * role change made on another device syncs without a re-login.
+     */
+    fun workspaceFlow(user: FirebaseUser, companyId: String): kotlinx.coroutines.flow.Flow<StudioWorkspace> =
+        kotlinx.coroutines.flow.callbackFlow {
+            val userData = runCatching { db.collection("users").document(user.uid).get().await().data }
+                .getOrNull().orEmpty()
+            val registration = db.collection("companies").document(companyId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) return@addSnapshotListener
+                    val data = snapshot?.data ?: return@addSnapshotListener
+                    trySend(buildWorkspace(companyId, data, userData, user))
+                }
+            awaitClose { registration.remove() }
+        }
 
     suspend fun loadWorkspaceOptions(user: FirebaseUser, currentCompanyId: String): List<StudioWorkspaceOption> {
         val accessDocs = db.collection("users").document(user.uid).collection("workspaceAccess").get().await()

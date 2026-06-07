@@ -198,6 +198,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     val state: StateFlow<StudioFlowUiState> = mutableState.asStateFlow()
     private var workspaceJob: Job? = null
+    private var liveWorkspaceJob: Job? = null
     private var ordersJob: Job? = null
     private var teamJob: Job? = null
     private var joinRequestsJob: Job? = null
@@ -218,6 +219,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             repository.authState().collect { user ->
                 workspaceJob?.cancel()
                 ordersJob?.cancel()
+                liveWorkspaceJob?.cancel()
                 teamJob?.cancel()
                 joinRequestsJob?.cancel()
                 settingsJob?.cancel()
@@ -977,10 +979,34 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     StudioMessageRouteHolder.setCurrentCompanyId(getApplication(), workspace.id)
                     observeWorkspace(workspace, user)
                     observePendingThreadRoute()
+                    startLiveWorkspaceListener(user, workspace.id)
                 }
                 .onFailure { error ->
                     mutableState.update {
                         it.copy(loading = false, errorMessage = error.message ?: "Could not load workspace.")
+                    }
+                }
+        }
+    }
+
+    // Live-syncs the current member's role / access / plan from the company document
+    // so a role change made on another device takes effect without a re-login.
+    private fun startLiveWorkspaceListener(user: FirebaseUser, companyId: String) {
+        liveWorkspaceJob?.cancel()
+        liveWorkspaceJob = viewModelScope.launch {
+            repository.workspaceFlow(user, companyId)
+                .catch { }
+                .collect { updated ->
+                    if (updated.id != mutableState.value.workspace?.id && mutableState.value.workspace != null) return@collect
+                    val current = mutableState.value.workspace
+                    mutableState.update { it.copy(workspace = updated) }
+                    val roleRelevantChange = current == null ||
+                        current.role != updated.role ||
+                        current.memberAccess != updated.memberAccess ||
+                        current.billingPlan != updated.billingPlan ||
+                        current.shouldShowOnlyAssignedProjects != updated.shouldShowOnlyAssignedProjects
+                    if (roleRelevantChange) {
+                        observeWorkspace(updated, user)
                     }
                 }
         }
