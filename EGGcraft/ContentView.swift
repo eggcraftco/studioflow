@@ -6670,6 +6670,7 @@ struct ContentView: View {
     private var canAccessDashboard: Bool { workspaceAccessAllows("dashboard") && canSeeFinancialData }
     private var canAccessSchedule: Bool { workspaceAccessAllows("schedule") }
     private var canAccessCustomers: Bool { workspaceAccessAllows("customers") }
+    private var canAccessFiles: Bool { workspaceAccessAllows("clientFiles") }
     private var canAccessQuickReply: Bool { workspaceAccessAllows("quickReply") }
     private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("messages") }
     private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
@@ -7669,6 +7670,9 @@ struct ContentView: View {
             if canAccessCustomers {
                 UstMenuButonu(title: t("Customers", lang: seciliDil), icon: "person.2.fill", isSelected: aktifSekme == "Customers") { aktifSekme = "Customers" }
             }
+            if canAccessFiles {
+                UstMenuButonu(title: t("Files", lang: seciliDil), icon: "folder.fill", isSelected: aktifSekme == "Files") { aktifSekme = "Files" }
+            }
             if canAccessQuickReply {
                 UstMenuButonu(title: t("Quick Reply", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
             }
@@ -8040,6 +8044,12 @@ struct ContentView: View {
                     MusterilerView(seciliSiparis: $seciliSiparis, aktifSekme: $aktifSekme, seciliMusteri: $seciliMusteri).frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
                 } else {
                     restrictedAccessView(title: t("Customers hidden", lang: seciliDil), message: t("Your current workspace role does not include customer access.", lang: seciliDil))
+                }
+            } else if aktifSekme == "Files" {
+                if canAccessFiles {
+                    ClientFilesHubView(aktifSekme: $aktifSekme, seciliSiparis: $seciliSiparis).frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Files hidden", lang: seciliDil), message: t("Your current workspace role does not include Client Files access.", lang: seciliDil))
                 }
             } else if aktifSekme == "Messages" {
                 if canAccessMessages {
@@ -16539,5 +16549,366 @@ private extension Calendar {
     func sfStartOfYear(for date: Date) -> Date {
         let components = self.dateComponents([.year], from: date)
         return self.date(from: components) ?? self.startOfDay(for: date)
+    }
+}
+
+// MARK: - Client Files Hub (all workspace files, grouped by order)
+
+private struct ZipFileDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip] }
+    var data: Data
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+struct ClientFilesHubView: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @Environment(\.openURL) private var openURL
+    @Binding var aktifSekme: String
+    @Binding var seciliSiparis: Siparis?
+
+    @State private var previewItems: [ClientFileItem] = []
+    @State private var previewInitialID: UUID? = nil
+    @State private var showPreview = false
+    @State private var statusMessage: String = ""
+    @State private var downloadingScope: String? = nil
+    @State private var deletingOrderId: String? = nil
+    @State private var pendingDeleteGroup: OrderFileGroup? = nil
+    @State private var zipData: Data? = nil
+    @State private var zipName: String = "files.zip"
+    @State private var showZipExporter = false
+
+    struct OrderFileGroup: Identifiable, Equatable {
+        let id: String
+        let customerName: String
+        let designName: String
+        let files: [ClientFileItem]
+        static func == (lhs: OrderFileGroup, rhs: OrderFileGroup) -> Bool { lhs.id == rhs.id }
+    }
+
+    private func lt(_ key: String) -> String { t(key, lang: seciliDil) }
+
+    private var groups: [OrderFileGroup] {
+        firebaseManager.siparisler.compactMap { order in
+            guard let oid = order.id else { return nil }
+            let files = (order.clientFiles ?? []).filter { !$0.isPendingUpload }
+            guard !files.isEmpty else { return nil }
+            return OrderFileGroup(
+                id: oid,
+                customerName: order.customerName,
+                designName: order.designName,
+                files: files.sorted { $0.uploadedAt > $1.uploadedAt }
+            )
+        }
+        .sorted { $0.customerName.localizedCaseInsensitiveCompare($1.customerName) == .orderedAscending }
+    }
+
+    private var totalCount: Int { groups.reduce(0) { $0 + $1.files.count } }
+    private var totalBytes: Int64 { groups.reduce(0) { $0 + $1.files.reduce(0) { $0 + $1.fileSize } } }
+
+    private var clientFilesEnabled: Bool { authVM.currentPlanEntitlements.clientFilesEnabled }
+    private var canAccessFiles: Bool { authVM.currentWorkspaceAccess["clientFiles"] ?? true }
+    private var canEditAll: Bool {
+        (authVM.isCompanyOwner || studioOrderDetailRoleCanEdit(authVM.currentWorkspaceRole)) && (authVM.currentWorkspaceAccess["orders"] ?? true)
+    }
+    private func canDelete(_ item: ClientFileItem) -> Bool {
+        clientFilesEnabled && canAccessFiles && (canEditAll || item.uploadedByUid == (authVM.currentUserId ?? ""))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                if !statusMessage.isEmpty {
+                    Text(statusMessage).font(.system(size: 12, weight: .semibold)).foregroundColor(.secondary)
+                }
+                if !clientFilesEnabled {
+                    Text(lt("Client Files is available on NivaDesk Pro and Team."))
+                        .foregroundColor(.secondary).padding(.top, 20)
+                } else if groups.isEmpty {
+                    Text(lt("No client files found for this workspace yet."))
+                        .foregroundColor(.secondary).padding(.top, 40)
+                } else {
+                    ForEach(groups) { group in
+                        groupView(group)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $showPreview) {
+            if let initial = previewInitialID {
+                ClientFilePreviewSheet(
+                    items: previewItems,
+                    initialItemID: initial,
+                    language: seciliDil,
+                    isAvailableOffline: { _ in false },
+                    offlineURLProvider: { _ in nil },
+                    onDownload: { item in if let url = URL(string: item.downloadURL) { openURL(url) } },
+                    onMakeOffline: { _ in },
+                    onOpenExternal: { item in if let url = URL(string: item.downloadURL) { openURL(url) } }
+                )
+                .frame(minWidth: 680, minHeight: 560)
+            }
+        }
+        .confirmationDialog(
+            lt("Delete all files for this order? This cannot be undone."),
+            isPresented: Binding(get: { pendingDeleteGroup != nil }, set: { if !$0 { pendingDeleteGroup = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(lt("Delete all"), role: .destructive) {
+                if let group = pendingDeleteGroup { performDeleteAll(group) }
+                pendingDeleteGroup = nil
+            }
+            Button(lt("Cancel"), role: .cancel) { pendingDeleteGroup = nil }
+        }
+        .fileExporter(
+            isPresented: $showZipExporter,
+            document: ZipFileDocument(data: zipData ?? Data()),
+            contentType: .zip,
+            defaultFilename: zipName
+        ) { _ in
+            zipData = nil
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(lt("Client Files")).font(.system(size: 22, weight: .heavy))
+                Text("\(totalCount) \(lt("files")) • \(sizeLabel(totalBytes))")
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.secondary)
+            }
+            Spacer()
+            if clientFilesEnabled && !groups.isEmpty {
+                Button {
+                    downloadZip(scope: "workspace", orderId: nil)
+                } label: {
+                    Label(downloadingScope == "workspace" ? lt("Preparing…") : lt("Download all (ZIP)"), systemImage: "arrow.down.circle")
+                }
+                .disabled(downloadingScope != nil)
+            }
+        }
+    }
+
+    private func groupView(_ group: OrderFileGroup) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Button {
+                    if let order = firebaseManager.siparisler.first(where: { $0.id == group.id }) {
+                        seciliSiparis = order
+                        aktifSekme = "Orders"
+                    }
+                } label: {
+                    Text(group.designName.isEmpty ? group.customerName : "\(group.customerName) · \(group.designName)")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+
+                Text("\(group.files.count) \(lt("files"))")
+                    .font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    downloadZip(scope: "order", orderId: group.id)
+                } label: {
+                    Label(downloadingScope == group.id ? lt("Preparing…") : "ZIP", systemImage: "arrow.down.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .disabled(downloadingScope != nil)
+
+                if canEditAll {
+                    Button {
+                        pendingDeleteGroup = group
+                    } label: {
+                        Text(deletingOrderId == group.id ? lt("Deleting…") : lt("Delete all"))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(deletingOrderId != nil)
+                }
+            }
+            .padding(.bottom, 6)
+            .overlay(Rectangle().frame(height: 1).foregroundColor(.gray.opacity(0.18)), alignment: .bottom)
+
+            ForEach(group.files) { file in
+                fileRow(file, group: group)
+            }
+        }
+    }
+
+    private func fileRow(_ file: ClientFileItem, group: OrderFileGroup) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                previewItems = group.files
+                previewInitialID = file.id
+                showPreview = true
+            } label: {
+                HStack(spacing: 12) {
+                    thumbnail(file)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(file.fileName).font(.system(size: 13, weight: .bold)).lineLimit(1).truncationMode(.middle)
+                        Text("\(typeLabel(file)) · \(sizeLabel(file.fileSize)) · \(dateLabel(file.uploadedAt))")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                        if !file.uploadedByEmail.isEmpty {
+                            Text("\(lt("Added by")) \(file.uploadedByEmail)")
+                                .font(.system(size: 10)).foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if let url = URL(string: file.downloadURL) {
+                Button { openURL(url) } label: { Image(systemName: "arrow.down.to.line") }
+                    .buttonStyle(.plain).foregroundColor(.accentColor).help(lt("Open / Download"))
+            }
+            if canDelete(file) {
+                Button { deleteFile(file, orderId: group.id) } label: { Image(systemName: "trash") }
+                    .buttonStyle(.plain).foregroundColor(.red).help(lt("Delete"))
+            }
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.06))
+        .cornerRadius(10)
+    }
+
+    @ViewBuilder
+    private func thumbnail(_ file: ClientFileItem) -> some View {
+        if isImage(file), let url = URL(string: file.downloadURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    ZStack { Color.gray.opacity(0.12); Image(systemName: "photo").foregroundColor(.secondary) }
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.14))
+                Text(badge(file)).font(.system(size: 11, weight: .heavy)).foregroundColor(.secondary)
+            }
+            .frame(width: 44, height: 44)
+        }
+    }
+
+    // MARK: helpers
+
+    private func isImage(_ item: ClientFileItem) -> Bool {
+        let lower = item.fileName.lowercased()
+        if lower.hasSuffix(".psd") || lower.hasSuffix(".psb") || lower.hasSuffix(".pdf") { return false }
+        if item.contentType.lowercased().hasPrefix("image/") { return true }
+        return [".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"].contains { lower.hasSuffix($0) }
+    }
+
+    private func badge(_ item: ClientFileItem) -> String {
+        let lower = item.fileName.lowercased()
+        if lower.hasSuffix(".pdf") || item.contentType.lowercased().contains("pdf") { return "PDF" }
+        if isImage(item) { return "IMG" }
+        let ext = (item.fileName as NSString).pathExtension
+        return ext.isEmpty ? "FILE" : String(ext.uppercased().prefix(4))
+    }
+
+    private func typeLabel(_ item: ClientFileItem) -> String {
+        if !item.contentType.isEmpty { return item.contentType }
+        let ext = (item.fileName as NSString).pathExtension
+        return ext.isEmpty ? "File" : ext.uppercased()
+    }
+
+    private func sizeLabel(_ bytes: Int64) -> String {
+        if bytes >= 1024 * 1024 { return String(format: "%.1f MB", Double(bytes) / 1024.0 / 1024.0) }
+        if bytes >= 1024 { return "\(bytes / 1024) KB" }
+        return "\(bytes) B"
+    }
+
+    private func dateLabel(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM yyyy"
+        return f.string(from: date)
+    }
+
+    private func downloadZip(scope: String, orderId: String?) {
+        guard downloadingScope == nil else { return }
+        guard let companyId = authVM.currentCompanyId, !companyId.isEmpty else {
+            statusMessage = lt("Could not download files."); return
+        }
+        downloadingScope = orderId ?? "workspace"
+        statusMessage = ""
+        Auth.auth().currentUser?.getIDToken { token, _ in
+            guard let token = token else {
+                DispatchQueue.main.async { self.downloadingScope = nil; self.statusMessage = self.lt("Could not download files.") }
+                return
+            }
+            var comps = URLComponents(string: "https://europe-west2-eggcraft-studio.cloudfunctions.net/downloadClientFilesZip")!
+            var q = [URLQueryItem(name: "companyId", value: companyId), URLQueryItem(name: "scope", value: scope)]
+            if scope == "order", let orderId { q.append(URLQueryItem(name: "orderId", value: orderId)) }
+            comps.queryItems = q
+            var req = URLRequest(url: comps.url!)
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            req.timeoutInterval = 300
+            URLSession.shared.dataTask(with: req) { data, resp, _ in
+                DispatchQueue.main.async {
+                    self.downloadingScope = nil
+                    guard let data = data, let http = resp as? HTTPURLResponse, http.statusCode == 200, !data.isEmpty else {
+                        self.statusMessage = self.lt("Could not download files."); return
+                    }
+                    self.zipData = data
+                    self.zipName = scope == "order" ? "order-files.zip" : "workspace-files.zip"
+                    self.showZipExporter = true
+                }
+            }.resume()
+        }
+    }
+
+    private func deleteFile(_ item: ClientFileItem, orderId: String) {
+        firebaseManager.deleteUploadedFile(downloadURLString: item.downloadURL, source: "client_file_delete") { success in
+            DispatchQueue.main.async {
+                if success, var order = firebaseManager.siparisler.first(where: { $0.id == orderId }) {
+                    order.clientFiles?.removeAll { $0.id == item.id }
+                    firebaseManager.updateSiparis(order)
+                    self.statusMessage = self.lt("File deleted")
+                } else if !success {
+                    self.statusMessage = self.lt("Delete failed")
+                }
+            }
+        }
+    }
+
+    private func performDeleteAll(_ group: OrderFileGroup) {
+        deletingOrderId = group.id
+        let dispatch = DispatchGroup()
+        var anyFail = false
+        for item in group.files {
+            dispatch.enter()
+            firebaseManager.deleteUploadedFile(downloadURLString: item.downloadURL, source: "client_file_delete") { ok in
+                if !ok { anyFail = true }
+                dispatch.leave()
+            }
+        }
+        dispatch.notify(queue: .main) {
+            if var order = firebaseManager.siparisler.first(where: { $0.id == group.id }) {
+                let ids = Set(group.files.map { $0.id })
+                order.clientFiles?.removeAll { ids.contains($0.id) }
+                firebaseManager.updateSiparis(order)
+            }
+            self.deletingOrderId = nil
+            self.statusMessage = anyFail ? self.lt("Some files could not be deleted.") : self.lt("Deleted all files.")
+        }
     }
 }

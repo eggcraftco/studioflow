@@ -176,7 +176,7 @@ private struct ClientFilePreviewContentView: View {
     }
 }
 
-private struct ClientFilePreviewSheet: View {
+struct ClientFilePreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let items: [ClientFileItem]
@@ -561,7 +561,7 @@ private func studioOrderDetailRoleKey(_ role: String, fallback: String = "member
     }
 }
 
-private func studioOrderDetailRoleCanEdit(_ role: String) -> Bool {
+func studioOrderDetailRoleCanEdit(_ role: String) -> Bool {
     ["owner", "admin", "member", "workflow"].contains(studioOrderDetailRoleKey(role))
 }
 
