@@ -2420,9 +2420,15 @@ class AuthViewModel: ObservableObject {
                         if self.currentWorkspaceRole != newRole {
                             self.currentWorkspaceRole = newRole
                         }
-                    } else {
-                        self.handleActiveWorkspaceAccessLost(for: user, message: "Your workspace access was removed. Switched to your own workspace.")
                     }
+                    // NOTE: We intentionally do NOT switch the user to their own
+                    // workspace when the active company is missing from the
+                    // users/{uid}/workspaceAccess index. That index can be stale or
+                    // not yet synced for a freshly added member, which previously
+                    // kicked valid members (e.g. Workflow Only) out to an empty
+                    // personal workspace. The authoritative access check lives in
+                    // startActiveCompanyListener, which reads the company document
+                    // directly and handles genuine access removal.
                 }
             }
     }
