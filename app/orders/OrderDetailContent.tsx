@@ -15,6 +15,7 @@ import {
   clientFileSizeLabel,
   clientFileTypeLabel,
   deleteClientFileForOrder,
+  downloadClientFilesZip,
   isClientFileImage,
   renameClientFileForOrder,
   uploadClientFileForOrder
@@ -1568,6 +1569,22 @@ export function OrderDetailContent({
   const [fileActionStatus, setFileActionStatus] = useState<string | null>(null);
   const [fileActionError, setFileActionError] = useState<string | null>(null);
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
+  const [downloadingOrderFiles, setDownloadingOrderFiles] = useState(false);
+
+  async function handleDownloadOrderFiles() {
+    if (downloadingOrderFiles) return;
+    setFileActionError(null);
+    setFileActionStatus(null);
+    setDownloadingOrderFiles(true);
+    try {
+      await downloadClientFilesZip({ workspaceId: workspace.id, scope: "order", orderId: order.id });
+      setFileActionStatus("Download started.");
+    } catch (downloadError) {
+      setFileActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
+    } finally {
+      setDownloadingOrderFiles(false);
+    }
+  }
   const [previewingClientFileId, setPreviewingClientFileId] = useState<string | null>(null);
   const [isClientFileDropTargeted, setIsClientFileDropTargeted] = useState(false);
   const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
@@ -5853,6 +5870,16 @@ export function OrderDetailContent({
                       {actioningFileId === "upload" ? "Uploading..." : "⇧ Upload File"}
                     </button>
                   </>
+                ) : null}
+                {canUseClientFiles && clientFileItems.length > 0 ? (
+                  <button
+                    className="button secondary app-upload-button"
+                    type="button"
+                    disabled={downloadingOrderFiles}
+                    onClick={handleDownloadOrderFiles}
+                  >
+                    {downloadingOrderFiles ? "Preparing…" : "⬇ Download all"}
+                  </button>
                 ) : null}
               </div>
               {canManageClientFiles && canUseClientFiles ? (

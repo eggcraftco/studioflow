@@ -1,10 +1,45 @@
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { db, functions, storage } from "@/lib/firebase/client";
+import { auth, db, functions, storage } from "@/lib/firebase/client";
 import { requireWorkspacePlanAction } from "@/lib/studioflow/planActions";
 import { normalizeWorkspaceRole, type ClientFileDetail, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+
+const DOWNLOAD_ZIP_ENDPOINT = "https://europe-west2-eggcraft-studio.cloudfunctions.net/downloadClientFilesZip";
+
+/**
+ * Downloads a ZIP of client files. scope "order" zips a single order's files;
+ * "workspace" zips every order's files. Triggers a browser download.
+ */
+export async function downloadClientFilesZip(params: {
+  workspaceId: string;
+  scope: "workspace" | "order";
+  orderId?: string;
+}) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("You must be signed in to download files.");
+  const token = await user.getIdToken();
+  const url = new URL(DOWNLOAD_ZIP_ENDPOINT);
+  url.searchParams.set("companyId", params.workspaceId);
+  url.searchParams.set("scope", params.scope);
+  if (params.scope === "order" && params.orderId) url.searchParams.set("orderId", params.orderId);
+
+  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || "Could not prepare the download.");
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = params.scope === "order" ? "order-files.zip" : "workspace-files.zip";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+}
 
 const ALLOWED_CLIENT_FILE_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png", "heic", "heif", "webp", "psd", "psb"]);
 
