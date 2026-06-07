@@ -1813,6 +1813,7 @@ export function OrderDetailContent({
   const canAccessOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
   const canUseClientFiles = Boolean(workspace.entitlements.features.client_files);
   const canManageClientFiles = Boolean(canUseClientFiles && workspaceAccessAllows(workspace.memberAccess, "clientFiles") && canManageClientFilesForRole(workspace.role));
+  const canDeleteClientFiles = Boolean(canManageClientFiles && workspace.memberAccess?.deleteClientFiles !== false);
   const clientFileMaxUploadSizeMB = Math.min(Math.max(Math.round(moneySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
   const clientFileRequiresPolicyAcceptance = moneySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
   const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
@@ -5916,6 +5917,7 @@ export function OrderDetailContent({
                       file={file}
                       canUseClientFiles={canUseClientFiles}
                       canManageClientFiles={canManageClientFiles}
+                      canDeleteFile={canDeleteClientFiles}
                       actioning={actioningFileId === file.id}
                       actionDisabled={Boolean(actioningFileId)}
                       onPreview={() => setPreviewingClientFileId(file.id)}
@@ -8065,6 +8067,7 @@ function ClientFileCard({
   file,
   canUseClientFiles,
   canManageClientFiles,
+  canDeleteFile,
   actioning,
   actionDisabled,
   onPreview,
@@ -8075,6 +8078,7 @@ function ClientFileCard({
   file: ClientFileDetail;
   canUseClientFiles: boolean;
   canManageClientFiles: boolean;
+  canDeleteFile: boolean;
   actioning: boolean;
   actionDisabled: boolean;
   onPreview: () => void;
@@ -8136,16 +8140,18 @@ function ClientFileCard({
             <button className="client-file-icon-button" type="button" onClick={onRename} disabled={actionDisabled} title="Rename" aria-label="Rename file">
               {actioning ? <span className="client-file-action-loading">...</span> : <ClientFileActionIcon name="rename" />}
             </button>
-            <button
-              className="client-file-icon-button is-danger"
-              type="button"
-              onClick={onDelete}
-              disabled={actionDisabled}
-              title="Delete"
-              aria-label="Delete file"
-            >
-              <ClientFileActionIcon name="delete" />
-            </button>
+            {canDeleteFile ? (
+              <button
+                className="client-file-icon-button is-danger"
+                type="button"
+                onClick={onDelete}
+                disabled={actionDisabled}
+                title="Delete"
+                aria-label="Delete file"
+              >
+                <ClientFileActionIcon name="delete" />
+              </button>
+            ) : null}
           </>
         ) : canUseClientFiles ? (
           <span className="client-file-locked-pill">Edit locked</span>

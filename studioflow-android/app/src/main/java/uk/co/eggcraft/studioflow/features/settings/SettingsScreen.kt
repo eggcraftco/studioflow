@@ -127,6 +127,7 @@ import uk.co.eggcraft.studioflow.features.shell.SectionHeader
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
+import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -2530,6 +2531,17 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
             accent = StudioOrange,
             onChange = onChange
         )
+        HorizontalDivider()
+        AccessSectionBlock(
+            title = t("File Permissions"),
+            note = "Controls whether this role can delete client files. Uploading and viewing follow Client Files access above.",
+            options = listOf(
+                AccessOption("deleteClientFiles", "Delete client files")
+            ),
+            access = access,
+            accent = StudioRed,
+            onChange = onChange
+        )
     }
 }
 
@@ -2651,6 +2663,7 @@ private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): Work
         "cardShipping" -> copy(cardShipping = value)
         "cardSchedule" -> copy(cardSchedule = value)
         "cardHistoryLog" -> copy(cardHistoryLog = value)
+        "deleteClientFiles" -> copy(deleteClientFiles = value)
         else -> this
     }
 }

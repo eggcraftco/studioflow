@@ -7,6 +7,7 @@ import {
   WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
   WORKSPACE_SETTINGS_ACCESS_OPTIONS,
   WORKSPACE_SCOPE_ACCESS_OPTIONS,
+  WORKSPACE_FILE_ACCESS_OPTIONS,
   type WorkspaceMemberAccess,
   type WorkspaceMemberAccessKey
 } from "@/lib/studioflow/firestore";
@@ -105,6 +106,15 @@ export function MemberAccessEditor({
       options: WORKSPACE_SCOPE_ACCESS_OPTIONS,
       onLabel: "Only assigned projects",
       offLabel: "All projects"
+    },
+    {
+      id: "files",
+      eyebrow: "Files",
+      title: "File permissions",
+      note: "Controls whether this role can delete client files. Uploading and viewing follow Client Files access above.",
+      options: WORKSPACE_FILE_ACCESS_OPTIONS,
+      onLabel: "Can delete",
+      offLabel: "View only (no delete)"
     }
   ];
 
