@@ -990,11 +990,15 @@ class AuthViewModel: ObservableObject {
               !companyId.isEmpty else { return }
         profileErrorMessage = ""
 
-        db.collection("companies").document(companyId).getDocument { [weak self] snapshot, error in
+        // Read from the server so a stale local cache (for example, a company
+        // document fetched before this user was added as a member) cannot make us
+        // think access was lost and bounce a valid member to their own workspace.
+        db.collection("companies").document(companyId).getDocument(source: .server) { [weak self] snapshot, error in
             Task { @MainActor in
                 guard let self else { return }
 
                 if let error = error {
+                    // Network failure: keep the current workspace, do not bounce out.
                     self.profileErrorMessage = error.localizedDescription
                     return
                 }
@@ -2361,15 +2365,22 @@ class AuthViewModel: ObservableObject {
                     return
                 }
 
+                // Cached snapshots can be stale (for example, fetched before this
+                // user was added as a member). Never bounce a member to their own
+                // workspace based on cache — only act on confirmed server data.
+                let isFromCache = snapshot?.metadata.isFromCache ?? false
+
                 guard let data = snapshot?.data(), snapshot?.exists == true else {
-                    if cleanCompanyId != user.uid {
+                    if cleanCompanyId != user.uid && !isFromCache {
                         self.handleActiveWorkspaceAccessLost(for: user, message: "This workspace is no longer available. Switched to your own workspace.")
                     }
                     return
                 }
 
-                guard self.accessibleWorkspaceRole(from: data, companyId: cleanCompanyId, currentUid: user.uid) != nil else {
-                    self.handleActiveWorkspaceAccessLost(for: user, message: "Your access to this workspace has been removed. Switched to your own workspace.")
+                if self.accessibleWorkspaceRole(from: data, companyId: cleanCompanyId, currentUid: user.uid) == nil {
+                    if !isFromCache {
+                        self.handleActiveWorkspaceAccessLost(for: user, message: "Your access to this workspace has been removed. Switched to your own workspace.")
+                    }
                     return
                 }
 
