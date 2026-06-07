@@ -14,6 +14,7 @@ import {
   clientFileTypeLabel,
   deleteClientFileForOrder,
   downloadClientFilesZip,
+  isClientFileImage,
   renameClientFileForOrder,
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
@@ -42,6 +43,130 @@ function uploadSafetyAcceptanceKey(workspaceId: string) {
   return `studioflow-upload-policy-accepted:${workspaceId}`;
 }
 
+function isFilePdf(file: Pick<ClientFileListItem, "contentType" | "fileName">) {
+  return (file.contentType || "").toLowerCase().includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
+}
+
+function fileBadgeLabel(file: Pick<ClientFileListItem, "contentType" | "fileName">) {
+  if (isFilePdf(file)) return "PDF";
+  if (isClientFileImage(file)) return "IMG";
+  const ext = file.fileName.split(".").pop();
+  return ext && ext !== file.fileName ? ext.toUpperCase().slice(0, 4) : "FILE";
+}
+
+type FilesByOrder = {
+  orderId: string;
+  customerName: string;
+  designName: string;
+  orderStatus: string;
+  files: ClientFileListItem[];
+};
+
+function groupFilesByOrder(files: ClientFileListItem[]): FilesByOrder[] {
+  const groups = new Map<string, FilesByOrder>();
+  for (const file of files) {
+    let group = groups.get(file.orderId);
+    if (!group) {
+      group = {
+        orderId: file.orderId,
+        customerName: file.customerName,
+        designName: file.designName,
+        orderStatus: file.orderStatus,
+        files: []
+      };
+      groups.set(file.orderId, group);
+    }
+    group.files.push(file);
+  }
+  return Array.from(groups.values());
+}
+
+function FilesPreviewModal({
+  files,
+  activeFile,
+  onClose,
+  onSelect
+}: {
+  files: ClientFileListItem[];
+  activeFile: ClientFileListItem;
+  onClose: () => void;
+  onSelect: (fileId: string) => void;
+}) {
+  const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
+  const isImage = isClientFileImage(activeFile);
+  const isPdf = isFilePdf(activeFile);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft" && currentIndex > 0) onSelect(files[currentIndex - 1].id);
+      if (event.key === "ArrowRight" && currentIndex < files.length - 1) onSelect(files[currentIndex + 1].id);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [currentIndex, files, onClose, onSelect]);
+
+  return (
+    <div className="modal-backdrop client-file-preview-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="client-file-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Client file preview"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <header className="client-file-preview-header">
+          <div>
+            <h2>{activeFile.fileName}</h2>
+            <p>{currentIndex + 1} / {files.length} · {clientFileSizeLabel(activeFile.fileSize)}</p>
+          </div>
+          <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label="Close file preview">
+            ×
+          </button>
+        </header>
+
+        <div className="client-file-preview-stage">
+          {isImage ? (
+            <img src={activeFile.downloadURL} alt={activeFile.fileName} />
+          ) : isPdf ? (
+            <iframe src={activeFile.downloadURL} title={activeFile.fileName} />
+          ) : (
+            <div className="client-file-preview-unavailable">
+              <span>{fileBadgeLabel(activeFile)}</span>
+              <strong>Preview is not available for this file type.</strong>
+              <p>Use Open / Download to view this file in another app.</p>
+            </div>
+          )}
+        </div>
+
+        <footer className="client-file-preview-actions">
+          <button
+            className="button secondary"
+            type="button"
+            disabled={currentIndex <= 0}
+            onClick={() => onSelect(files[currentIndex - 1].id)}
+          >
+            Previous
+          </button>
+          {activeFile.downloadURL ? (
+            <a className="button secondary" href={activeFile.downloadURL} target="_blank" rel="noreferrer">
+              Open / Download
+            </a>
+          ) : null}
+          <button
+            className="button secondary"
+            type="button"
+            disabled={currentIndex >= files.length - 1}
+            onClick={() => onSelect(files[currentIndex + 1].id)}
+          >
+            Next
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export default function FilesPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -62,6 +187,7 @@ export default function FilesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [previewingFileId, setPreviewingFileId] = useState<string | null>(null);
 
   async function handleDownloadAll() {
     if (!workspace || downloadingAll) return;
@@ -125,7 +251,15 @@ export default function FilesPage() {
   }, [user]);
 
   const totalSize = useMemo(() => files.reduce((sum, file) => sum + Math.max(file.fileSize, 0), 0), [files]);
+  const groupedFiles = useMemo(() => groupFilesByOrder(files), [files]);
   const canUseClientFiles = Boolean(workspace?.entitlements.features.client_files);
+  const previewFiles = useMemo(
+    () => files.filter(file => canUseClientFiles && Boolean(file.downloadURL)),
+    [files, canUseClientFiles]
+  );
+  const activePreview = previewingFileId
+    ? previewFiles.find(file => file.id === previewingFileId) ?? null
+    : null;
   const canManageClientFiles = Boolean(workspace && canUseClientFiles && canManageClientFilesForRole(workspace.role));
   const canUploadClientFiles = canManageClientFiles;
   const maxUploadSizeMB = Math.min(Math.max(Math.round(uploadSafetySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
@@ -400,78 +534,99 @@ export default function FilesPage() {
         {files.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>No client files found for this workspace yet.</p>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Filename</th>
-                  <th>Type</th>
-                  <th>Size</th>
-                  <th>Uploaded</th>
-                  <th>Order</th>
-                  <th>Customer</th>
-                  <th>Design</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {files.map(file => (
-                  <tr key={file.id}>
-                    <td style={{ fontWeight: 900 }}>{file.fileName}</td>
-                    <td>{clientFileTypeLabel(file)}</td>
-                    <td>{clientFileSizeLabel(file.fileSize)}</td>
-                    <td>{formatDate(file.uploadedAt)}</td>
-                    <td>
-                      <Link href={`/orders/${file.orderId}`} style={{ fontWeight: 800 }}>
-                        Open order
-                      </Link>
-                      <div style={{ marginTop: 6 }}>
-                        <span className="pill">{file.orderStatus}</span>
-                      </div>
-                    </td>
-                    <td>{file.customerName}</td>
-                    <td>{file.designName}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {canUseClientFiles ? (
-                          file.downloadURL ? (
-                            <a className="button secondary" href={file.downloadURL} target="_blank" rel="noreferrer">
-                              Open / Download
-                            </a>
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+            {groupedFiles.map(group => (
+              <div key={group.orderId}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    paddingBottom: 8,
+                    marginBottom: 10,
+                    borderBottom: "1px solid var(--border, rgba(0,0,0,0.08))"
+                  }}
+                >
+                  <Link href={`/orders/${group.orderId}`} style={{ fontWeight: 900, fontSize: 14 }}>
+                    {group.customerName || "Order"}{group.designName ? ` · ${group.designName}` : ""}
+                  </Link>
+                  {group.orderStatus ? <span className="pill">{group.orderStatus}</span> : null}
+                  <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>
+                    {group.files.length} file{group.files.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="app-client-files-list compact-list-grid is-static">
+                  {group.files.map(file => {
+                    const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL);
+                    const showThumb = canUseClientFiles && Boolean(file.downloadURL) && isClientFileImage(file);
+                    return (
+                      <article key={file.id} className="client-file-list-row">
+                        <button
+                          className="client-file-preview-trigger"
+                          type="button"
+                          disabled={!canOpenPreview}
+                          onClick={() => setPreviewingFileId(file.id)}
+                          title={canOpenPreview ? "Preview file" : "Preview is locked for this plan."}
+                        >
+                          {showThumb ? (
+                            <img src={file.downloadURL} alt={file.fileName} className="file-preview compact-file-preview" />
                           ) : (
-                            <span className="pill">No download URL</span>
-                          )
-                        ) : (
-                          <span className="pill">Locked</span>
-                        )}
+                            <div className="file-token compact-file-preview">{fileBadgeLabel(file)}</div>
+                          )}
+                          <div className="client-file-main">
+                            <strong>{file.fileName}</strong>
+                            <p className="muted-copy">
+                              {clientFileTypeLabel(file)} · {clientFileSizeLabel(file.fileSize)} · {formatDate(file.uploadedAt)}
+                            </p>
+                          </div>
+                        </button>
 
-                        {canManageClientFiles ? (
-                          <>
-                            <button className="button secondary" type="button" onClick={() => handleRename(file)} disabled={Boolean(actioningFileId)}>
-                              {actioningFileId === file.id ? "Working..." : "Rename"}
-                            </button>
-                            <button
-                              className="button secondary"
-                              type="button"
-                              onClick={() => handleDelete(file)}
-                              disabled={Boolean(actioningFileId)}
-                              style={{ color: "var(--danger)" }}
-                            >
-                              Delete
-                            </button>
-                          </>
-                        ) : canUseClientFiles ? (
-                          <span className="pill">Edit locked</span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        <div className="client-file-icon-actions">
+                          {canUseClientFiles ? (
+                            file.downloadURL ? (
+                              <a className="button secondary" href={file.downloadURL} target="_blank" rel="noreferrer">Open</a>
+                            ) : (
+                              <span className="pill">No URL</span>
+                            )
+                          ) : (
+                            <span className="pill">Locked</span>
+                          )}
+                          {canManageClientFiles ? (
+                            <>
+                              <button className="button secondary" type="button" onClick={() => handleRename(file)} disabled={Boolean(actioningFileId)}>
+                                {actioningFileId === file.id ? "..." : "Rename"}
+                              </button>
+                              <button
+                                className="button secondary"
+                                type="button"
+                                onClick={() => handleDelete(file)}
+                                disabled={Boolean(actioningFileId)}
+                                style={{ color: "var(--danger)" }}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
+
+      {activePreview ? (
+        <FilesPreviewModal
+          files={previewFiles}
+          activeFile={activePreview}
+          onClose={() => setPreviewingFileId(null)}
+          onSelect={setPreviewingFileId}
+        />
+      ) : null}
     </AppShell>
   );
 }
