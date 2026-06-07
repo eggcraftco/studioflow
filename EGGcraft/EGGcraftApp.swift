@@ -119,6 +119,9 @@ struct StudioManagerApp: App {
             .onChange(of: authVM.currentWorkspaceRole) { _, _ in
                 syncFirebaseWorkspace()
             }
+            .onChange(of: authVM.currentWorkspaceAccess) { _, _ in
+                syncFirebaseWorkspace()
+            }
             .onOpenURL { url in
                 #if canImport(GoogleSignIn)
                 GIDSignIn.sharedInstance.handle(url)
@@ -133,7 +136,12 @@ struct StudioManagerApp: App {
            authVM.isWorkspaceReady,
            let companyId = authVM.currentCompanyId,
            !companyId.isEmpty {
-            firebaseManager.configure(companyId: companyId, workspaceRole: authVM.currentWorkspaceRole)
+            firebaseManager.configure(
+                companyId: companyId,
+                workspaceRole: authVM.currentWorkspaceRole,
+                assignedProjectsOnly: authVM.currentWorkspaceAccess["assignedProjectsOnly"] == true,
+                manageProjectAssignments: authVM.currentWorkspaceAccess["manageProjectAssignments"] == true
+            )
             #if os(iOS)
             PushNotificationManager.shared.configure(companyId: companyId)
             #endif
