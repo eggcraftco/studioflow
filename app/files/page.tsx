@@ -188,6 +188,8 @@ export default function FilesPage() {
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [previewingFileId, setPreviewingFileId] = useState<string | null>(null);
+  const [downloadingOrderId, setDownloadingOrderId] = useState<string | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   async function handleDownloadAll() {
     if (!workspace || downloadingAll) return;
@@ -201,6 +203,59 @@ export default function FilesPage() {
       setActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
     } finally {
       setDownloadingAll(false);
+    }
+  }
+
+  async function handleDownloadOrderGroup(orderId: string) {
+    if (!workspace || downloadingOrderId) return;
+    setActionError(null);
+    setActionStatus(null);
+    setDownloadingOrderId(orderId);
+    try {
+      await downloadClientFilesZip({ workspaceId: workspace.id, scope: "order", orderId });
+      setActionStatus("Download started.");
+    } catch (downloadError) {
+      setActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
+    } finally {
+      setDownloadingOrderId(null);
+    }
+  }
+
+  async function handleDeleteOrderGroup(group: FilesByOrder) {
+    if (!workspace || deletingOrderId) return;
+    setActionError(null);
+    setActionStatus(null);
+    if (!canManageClientFiles) {
+      setActionError("Client Files delete is available to editable Pro and Team workspace members.");
+      return;
+    }
+    const label = group.customerName || "this order";
+    const confirmed = window.confirm(
+      `Delete all ${group.files.length} file${group.files.length === 1 ? "" : "s"} for ${label}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingOrderId(group.orderId);
+    setActionStatus(`Deleting ${group.files.length} file${group.files.length === 1 ? "" : "s"}...`);
+    let failures = 0;
+    for (const file of group.files) {
+      try {
+        await deleteClientFileForOrder({ workspace, orderId: file.orderId, fileId: file.fileId });
+      } catch {
+        failures += 1;
+      }
+    }
+    try {
+      await refreshFiles(workspace);
+    } catch {
+      /* refresh best-effort */
+    }
+    setDeletingOrderId(null);
+    if (failures > 0) {
+      setActionStatus(null);
+      setActionError(`${failures} file${failures === 1 ? "" : "s"} could not be deleted. Please try again.`);
+    } else {
+      setActionStatus(`Deleted all files for ${label}.`);
     }
   }
 
@@ -555,6 +610,29 @@ export default function FilesPage() {
                   <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>
                     {group.files.length} file{group.files.length === 1 ? "" : "s"}
                   </span>
+                  <span style={{ flex: 1 }} />
+                  {canUseClientFiles ? (
+                    <button
+                      className="button secondary"
+                      type="button"
+                      style={{ padding: "4px 10px", fontSize: 12 }}
+                      disabled={downloadingOrderId === group.orderId}
+                      onClick={() => handleDownloadOrderGroup(group.orderId)}
+                    >
+                      {downloadingOrderId === group.orderId ? "Preparing…" : "⬇ ZIP"}
+                    </button>
+                  ) : null}
+                  {canManageClientFiles ? (
+                    <button
+                      className="button secondary"
+                      type="button"
+                      style={{ padding: "4px 10px", fontSize: 12, color: "var(--danger)" }}
+                      disabled={deletingOrderId === group.orderId}
+                      onClick={() => handleDeleteOrderGroup(group)}
+                    >
+                      {deletingOrderId === group.orderId ? "Deleting…" : "Delete all"}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="app-client-files-list compact-list-grid is-static">
                   {group.files.map(file => {
