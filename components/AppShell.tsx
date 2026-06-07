@@ -1280,7 +1280,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 </div>
               ) : (
                 <div className="toolbar-role-strip" aria-label="Workspace role">
-                  <span>{t("Workflow Only")}</span>
+                  <span>{workspace?.roleLabel?.trim() || t("Workflow Only")}</span>
                 </div>
               )}
             </div>
