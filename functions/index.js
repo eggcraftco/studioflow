@@ -7043,6 +7043,7 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
       const path = safeClientFileStoragePath(companyId, file.storagePath || file.path);
       if (path && !paths.includes(path)) paths.push(path);
     }
+    console.log(`[fileCleanup] order ${orderId} deleted: ${clientFiles.length} clientFiles, ${paths.length} valid paths scheduled`, paths);
     if (paths.length === 0) return;
 
     const deleteAfter = new Date(Date.now() + ORDER_FILE_RETENTION_MINUTES * 60 * 1000);
@@ -7070,6 +7071,7 @@ exports.cleanupExpiredOrderFiles = onSchedule(
       .where("deleteAfter", "<=", now)
       .limit(200)
       .get();
+    console.log(`[fileCleanup] cleanup run: ${snap.size} expired record(s) due`);
     if (snap.empty) return;
 
     for (const doc of snap.docs) {
@@ -7079,6 +7081,7 @@ exports.cleanupExpiredOrderFiles = onSchedule(
       for (const path of paths) {
         try {
           await bucket.file(String(path)).delete({ ignoreNotFound: true });
+          console.log(`[fileCleanup] deleted blob: ${path}`);
         } catch (error) {
           allDeleted = false;
           console.warn("cleanupExpiredOrderFiles delete failed:", path, error?.message || error);
