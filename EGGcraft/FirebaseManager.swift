@@ -1157,12 +1157,15 @@ class FirebaseManager: ObservableObject {
            musteriListenerRegistration != nil,
            messageThreadsListenerRegistration != nil {
             // The role/scope can resolve AFTER the first configure (e.g. the default
-            // "owner" is replaced by "workflow" once membership loads). When the
+            // "owner" is replaced by "workflow" once membership loads), or change live
+            // when an owner edits this member's role on another device. When the
             // assigned-project scope flips we must restart the order listener so it
-            // queries the correct collection (workflowOrders vs siparisler);
-            // otherwise a workflow member keeps the denied siparisler query and sees
-            // no assigned orders.
+            // queries the correct collection/filter (workflowOrders vs siparisler vs
+            // siparisler+assignedToUid). We also clear the previously loaded orders so
+            // a broader-scope set cached from the old role cannot linger on screen.
             if assignedScopeChanged {
+                siparisler = []
+                saveOfflineCache()
                 fetchSiparisler()
             }
             return
