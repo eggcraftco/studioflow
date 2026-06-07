@@ -2837,7 +2837,8 @@ private fun accessFromMap(value: Map<*, *>, forceFullAccess: Boolean = false): W
         cardStatus = boolValue(value["cardStatus"], true),
         cardShipping = boolValue(value["cardShipping"], true),
         cardSchedule = boolValue(value["cardSchedule"], true),
-        cardHistoryLog = boolValue(value["cardHistoryLog"], true)
+        cardHistoryLog = boolValue(value["cardHistoryLog"], true),
+        deleteClientFiles = boolValue(value["deleteClientFiles"], true)
     )
 }
 

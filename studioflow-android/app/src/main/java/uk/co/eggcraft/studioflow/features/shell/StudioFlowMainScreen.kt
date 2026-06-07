@@ -49,6 +49,7 @@ import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -129,6 +130,7 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
     Customers("Customers", Icons.Filled.People, "customers"),
+    Files("Files", Icons.Filled.Folder, "clientFiles"),
     Messages("Messages", Icons.AutoMirrored.Filled.Chat, "messages"),
     Notifications("Notifications", Icons.Filled.Notifications, "notifications"),
     Notes("Notes", Icons.AutoMirrored.Filled.Note, "notes"),
@@ -254,6 +256,7 @@ fun StudioFlowMainScreen(
         StudioSection.Dashboard,
         StudioSection.Schedule,
         StudioSection.Customers,
+        StudioSection.Files,
         StudioSection.Messages,
         StudioSection.Notes,
         StudioSection.QuickReply,
@@ -1020,6 +1023,10 @@ private fun StudioSectionContent(
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
             )
             StudioSection.Customers -> CustomersScreen(state = state, focusedCustomerName = focusedCustomerName)
+            StudioSection.Files -> uk.co.eggcraft.studioflow.features.files.ClientFilesScreen(
+                state = state,
+                onDeleteClientFile = onDeleteClientFile
+            )
             StudioSection.Notifications -> uk.co.eggcraft.studioflow.features.notifications.NotificationsScreen(
                 state = state,
                 onSetSearch = onSetActivityNotificationSearch,

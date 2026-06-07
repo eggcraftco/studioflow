@@ -62,7 +62,8 @@ data class WorkspaceMemberAccess(
     val cardStatus: Boolean = true,
     val cardShipping: Boolean = true,
     val cardSchedule: Boolean = true,
-    val cardHistoryLog: Boolean = true
+    val cardHistoryLog: Boolean = true,
+    val deleteClientFiles: Boolean = true
 ) {
     fun allows(key: String): Boolean {
         return when (key) {
@@ -106,6 +107,7 @@ data class WorkspaceMemberAccess(
             "cardShipping" -> cardShipping
             "cardSchedule" -> cardSchedule
             "cardHistoryLog" -> cardHistoryLog
+            "deleteClientFiles" -> deleteClientFiles
             else -> true
         }
     }

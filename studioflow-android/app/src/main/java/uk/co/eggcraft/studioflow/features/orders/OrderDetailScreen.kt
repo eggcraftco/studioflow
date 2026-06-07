@@ -9621,7 +9621,7 @@ internal suspend fun createSharedFileLink(rawUrl: String): String {
 // with Coil, PDFs via the Google Docs viewer, other types show a fallback. The
 // "Open externally" button uses the short branded nivadesk.app link.
 @Composable
-private fun ClientFilePreviewDialog(
+internal fun ClientFilePreviewDialog(
     file: StudioClientFile,
     isCurrentPreview: Boolean = false,
     onUseAsPreview: (() -> Unit)? = null,
