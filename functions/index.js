@@ -7454,24 +7454,32 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     taxType
   });
 
-  const setMoneyUpdate = (field, title, previousValue, nextValue) => {
+  // First-time finance setup of a brand-new order (no prior value, no payments).
+  // We suppress the automatic recalculation log lines (order value, paid amount,
+  // remaining, platform fee, VAT) so the history shows only the meaningful seed
+  // entries ("Payment received", "Remaining set") instead of a confusing flood.
+  const hadNoPayments = !(Array.isArray(orderData.payments) && orderData.payments.length > 0);
+  const isInitialFinanceSetup = previousOrderValue <= 0.005 && hadNoPayments;
+
+  const setMoneyUpdate = (field, title, previousValue, nextValue, silent = false) => {
     const previous = roundMoneyValue(previousValue);
     const next = roundMoneyValue(nextValue);
     if (previous === next) return;
     updates[field] = next;
+    if (silent) return;
     pushHistoryChange(historyEntries, title, amountHistoryValue(previous), amountHistoryValue(next), uid, email);
   };
 
-  if (previousOrderValue !== orderValue) {
+  if (previousOrderValue !== orderValue && !isInitialFinanceSetup) {
     pushHistoryChange(historyEntries, "Order value changed", amountHistoryValue(previousOrderValue), amountHistoryValue(orderValue), uid, email);
   }
-  setMoneyUpdate("paidAmount", "Paid amount changed", orderData.paidAmount, paidAmount);
-  setMoneyUpdate("remainingAmount", "Remaining amount recalculated", orderData.remainingAmount, remainingAmount);
+  setMoneyUpdate("paidAmount", "Paid amount changed", orderData.paidAmount, paidAmount, isInitialFinanceSetup);
+  setMoneyUpdate("remainingAmount", "Remaining amount recalculated", orderData.remainingAmount, remainingAmount, isInitialFinanceSetup);
   setMoneyUpdate("watchPurchasePrice", "Base cost changed", orderData.watchPurchasePrice, watchPurchasePrice);
-  setMoneyUpdate("paymentFee", "Platform fee changed", orderData.paymentFee, paymentFee);
+  setMoneyUpdate("paymentFee", "Platform fee changed", orderData.paymentFee, paymentFee, isInitialFinanceSetup);
   setMoneyUpdate("deliveryCost", "Shipping cost changed", orderData.deliveryCost, deliveryCost);
   if (shouldRecalculateTax) {
-    setMoneyUpdate("taxAmount", "VAT amount recalculated", orderData.taxAmount, taxAmount);
+    setMoneyUpdate("taxAmount", "VAT amount recalculated", orderData.taxAmount, taxAmount, isInitialFinanceSetup);
   }
 
   if (entitlements?.advancedFinanceEnabled === true && cleanTaxRate(orderData.taxRate) !== taxRate) {

@@ -5875,10 +5875,17 @@ private fun FinancialCard(
     }
 
     fun saveFinance(markFullPayment: Boolean = false) {
+        val parsedPaid = parseDecimal(paidAmount, order.paidAmount)
+        val currentOrderValue = order.paidAmount + order.remainingAmount
         val finance = mutableMapOf<String, Any?>(
-            "paidAmount" to parseDecimal(paidAmount, order.paidAmount),
+            "paidAmount" to parsedPaid,
             "watchPurchasePrice" to parseDecimal(baseCost, order.watchPurchasePrice)
         )
+        // Raise the order value when the paid amount exceeds it, so the backend
+        // does not clamp paidAmount back down (mirrors the web client).
+        if (parsedPaid > currentOrderValue) {
+            finance["orderValue"] = parsedPaid
+        }
         if (advancedEnabled) {
             finance["remainingAmount"] = parseDecimal(remainingAmount, order.remainingAmount)
             finance["deliveryCost"] = parseDecimal(deliveryCost, order.deliveryCost)
