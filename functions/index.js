@@ -7525,6 +7525,23 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     updates.customFields = currentFields;
   }
 
+  // Seed the payment ledger from the initial "Paid" amount the first time it is
+  // entered (ledger still empty), so it shows up under Payments and is logged.
+  // paidAmount already holds the value, so we only mirror it into the ledger.
+  if (hasOwnField(patch, "paidAmount") && nextPayments.length === 0 && paidAmount > 0.005) {
+    appendPaymentEntry(paidAmount, paymentMethod, "");
+    pushHistoryChange(historyEntries, "Payment received", "Payment #1", amountHistoryValue(paidAmount), uid, email);
+  }
+
+  // Log the initial "Remaining" amount once (not a payment, log only).
+  const initialRemainingLoggedKey = "initialRemainingLogged";
+  const alreadyLoggedRemaining = String(customFieldValueForKey(initialRemainingLoggedKey) || "") === "1";
+  if (hasOwnField(patch, "remainingAmount") && !alreadyLoggedRemaining && remainingAmount > 0.005) {
+    currentFields[initialRemainingLoggedKey] = "1";
+    updates.customFields = currentFields;
+    pushHistoryChange(historyEntries, "Remaining set", "-", amountHistoryValue(remainingAmount), uid, email);
+  }
+
   if (paymentsChanged) {
     updates.payments = nextPayments;
   }
