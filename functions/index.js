@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+const archiver = require("archiver");
 const { defineSecret } = require("firebase-functions/params");
 
 admin.initializeApp();
@@ -10416,6 +10417,107 @@ exports.deleteClientFile = onCall({ region: "europe-west2" }, async (request) =>
     message: storageCleanupError ? "File removed, but Storage cleanup could not complete automatically." : "File deleted."
   };
 });
+
+// Streams a ZIP of client files for download. Scope "order" zips one order's
+// files; otherwise zips every order's files in the workspace, namespaced by
+// customer. Auth via Firebase ID token (Authorization: Bearer <token> or
+// ?token=). Used by web, Mac and Android from one endpoint.
+exports.downloadClientFilesZip = onRequest(
+  { region: "europe-west2", cors: true, timeoutSeconds: 300, memory: "512MiB" },
+  async (req, res) => {
+    try {
+      const token = String(req.query.token || (req.headers.authorization || "").replace(/^Bearer\s+/i, "")).trim();
+      if (!token) { res.status(401).send("Missing auth token."); return; }
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(token);
+      } catch (e) {
+        res.status(401).send("Invalid auth token.");
+        return;
+      }
+      const uid = decoded.uid;
+
+      const companyId = String(req.query.companyId || "").trim();
+      if (!companyId) { res.status(400).send("companyId is required."); return; }
+
+      const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+      if (!companySnap.exists) { res.status(404).send("Workspace not found."); return; }
+      const companyData = companySnap.data() || {};
+      if (!uidHasCompanyAccess(companyData, uid)) { res.status(403).send("No access to this workspace."); return; }
+      if (!uidCanAccessWorkspaceArea(companyData, uid, "clientFiles")) { res.status(403).send("No Client Files access."); return; }
+
+      const scope = String(req.query.scope || "workspace");
+      const orderId = String(req.query.orderId || "").trim();
+
+      let orderDocs = [];
+      if (scope === "order") {
+        if (!orderId) { res.status(400).send("orderId is required."); return; }
+        const snap = await admin.firestore().collection("siparisler").doc(orderId).get();
+        if (snap.exists && orderCompanyId(snap.data() || {}) === companyId) orderDocs = [snap];
+      } else {
+        const snap = await admin.firestore().collection("siparisler").where("companyId", "==", companyId).get();
+        orderDocs = snap.docs;
+      }
+
+      const usedNames = new Set();
+      const entries = [];
+      for (const doc of orderDocs) {
+        const data = doc.data() || {};
+        const orderLabel = (cleanOrderText(data.customerName, "Order", 80) || "Order").replace(/[\\/:*?"<>|]+/g, "_");
+        const files = Array.isArray(data.clientFiles) ? data.clientFiles : [];
+        for (const f of files) {
+          if (!f || typeof f !== "object") continue;
+          const path = safeClientFileStoragePath(companyId, f.storagePath || f.path);
+          if (!path) continue;
+          const baseName = (cleanClientFileName(f.fileName || f.originalFileName || f.name) || "file").replace(/[\\/:*?"<>|]+/g, "_");
+          let name = scope === "order" ? baseName : `${orderLabel}/${baseName}`;
+          let candidate = name;
+          let i = 1;
+          while (usedNames.has(candidate)) {
+            const dot = name.lastIndexOf(".");
+            candidate = dot > 0 ? `${name.slice(0, dot)} (${i})${name.slice(dot)}` : `${name} (${i})`;
+            i += 1;
+          }
+          usedNames.add(candidate);
+          entries.push({ path, name: candidate });
+        }
+      }
+
+      if (entries.length === 0) { res.status(404).send("No files to download."); return; }
+
+      const bucket = admin.storage().bucket();
+      // Skip blobs that no longer exist so one missing file cannot abort the zip.
+      const existing = [];
+      await Promise.all(entries.map(async (entry) => {
+        try {
+          const [exists] = await bucket.file(entry.path).exists();
+          if (exists) existing.push(entry);
+        } catch (e) {
+          // ignore unreachable blob
+        }
+      }));
+      if (existing.length === 0) { res.status(404).send("No files to download."); return; }
+
+      const zipName = scope === "order" ? "order-files.zip" : "workspace-files.zip";
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      archive.on("error", (err) => {
+        console.error("downloadClientFilesZip archive error:", err?.message || err);
+        try { res.destroy(); } catch (e) { /* noop */ }
+      });
+      archive.pipe(res);
+      for (const entry of existing) {
+        archive.append(bucket.file(entry.path).createReadStream(), { name: entry.name });
+      }
+      await archive.finalize();
+    } catch (error) {
+      console.error("downloadClientFilesZip failed:", error?.message || error);
+      if (!res.headersSent) res.status(500).send("Could not build the download.");
+    }
+  }
+);
 
 function normalizeTeamRoleForWrite(value, companyData = {}) {
   const customId = customRoleId(value);
