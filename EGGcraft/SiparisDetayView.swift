@@ -7321,7 +7321,8 @@ struct SiparisDetayView: View {
 
     private func canDeleteClientFile(_ item: ClientFileItem) -> Bool {
         let currentUid = authVM.currentUserId ?? ""
-        return canAccessClientFiles && (canEditOrderDetails || item.uploadedByUid == currentUid)
+        let deleteAllowed = authVM.isCompanyOwner || (authVM.currentWorkspaceAccess["deleteClientFiles"] != false)
+        return deleteAllowed && canAccessClientFiles && (canEditOrderDetails || item.uploadedByUid == currentUid)
     }
 
     private var allowedClientFileContentTypes: [UTType] {

@@ -14192,6 +14192,17 @@ private struct StudioRoleAccessEditor: View {
                 tint: .purple,
                 allowBulk: false
             )
+
+            accessSection(
+                eyebrow: "Files",
+                title: "File permissions",
+                note: "Controls whether this role can delete client files. Uploading and viewing follow Client Files access above.",
+                options: studioFilePermissionAccessOptions,
+                onLabel: "Can delete",
+                offLabel: "View only (no delete)",
+                tint: .red,
+                allowBulk: false
+            )
         }
     }
 
@@ -16618,8 +16629,11 @@ struct ClientFilesHubView: View {
     private var canEditAll: Bool {
         (authVM.isCompanyOwner || studioOrderDetailRoleCanEdit(authVM.currentWorkspaceRole)) && (authVM.currentWorkspaceAccess["orders"] ?? true)
     }
+    private var canDeleteFilesAccess: Bool {
+        authVM.isCompanyOwner || (authVM.currentWorkspaceAccess["deleteClientFiles"] != false)
+    }
     private func canDelete(_ item: ClientFileItem) -> Bool {
-        clientFilesEnabled && canAccessFiles && (canEditAll || item.uploadedByUid == (authVM.currentUserId ?? ""))
+        canDeleteFilesAccess && clientFilesEnabled && canAccessFiles && (canEditAll || item.uploadedByUid == (authVM.currentUserId ?? ""))
     }
 
     var body: some View {
@@ -16727,7 +16741,7 @@ struct ClientFilesHubView: View {
                 }
                 .disabled(downloadingScope != nil)
 
-                if canEditAll {
+                if canEditAll && canDeleteFilesAccess {
                     Button {
                         pendingDeleteGroup = group
                     } label: {

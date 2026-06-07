@@ -98,7 +98,11 @@ let studioScopeAccessOptions: [(key: String, label: String)] = [
     ("manageProjectAssignments", "Change Project Assignments")
 ]
 
-let studioMemberAccessOptions = studioNavigationAccessOptions + studioSettingsAccessOptions + studioCardAccessOptions + studioScopeAccessOptions
+let studioFilePermissionAccessOptions: [(key: String, label: String)] = [
+    ("deleteClientFiles", "Delete client files")
+]
+
+let studioMemberAccessOptions = studioNavigationAccessOptions + studioSettingsAccessOptions + studioCardAccessOptions + studioScopeAccessOptions + studioFilePermissionAccessOptions
 
 func studioDefaultMemberAccess() -> [String: Bool] {
     Dictionary(uniqueKeysWithValues: studioMemberAccessOptions.map { ($0.key, ["assignedProjectsOnly", "manageProjectAssignments"].contains($0.key) ? false : true) })
