@@ -13,6 +13,7 @@ import {
   clientFileSizeLabel,
   clientFileTypeLabel,
   deleteClientFileForOrder,
+  downloadClientFilesZip,
   renameClientFileForOrder,
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
@@ -60,6 +61,22 @@ export default function FilesPage() {
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
+  async function handleDownloadAll() {
+    if (!workspace || downloadingAll) return;
+    setActionError(null);
+    setActionStatus(null);
+    setDownloadingAll(true);
+    try {
+      await downloadClientFilesZip({ workspaceId: workspace.id, scope: "workspace" });
+      setActionStatus("Download started.");
+    } catch (downloadError) {
+      setActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -370,7 +387,14 @@ export default function FilesPage() {
             {actionStatus ? <p style={{ color: "var(--muted)", margin: "10px 0 0", fontWeight: 800 }}>{actionStatus}</p> : null}
             {actionError ? <p style={{ color: "var(--danger)", margin: "10px 0 0", fontWeight: 800 }}>{actionError}</p> : null}
           </div>
-          <Link className="button secondary" href="/orders">Open orders</Link>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {canUseClientFiles && files.length > 0 ? (
+              <button className="button" onClick={handleDownloadAll} disabled={downloadingAll}>
+                {downloadingAll ? "Preparing…" : "Download all (ZIP)"}
+              </button>
+            ) : null}
+            <Link className="button secondary" href="/orders">Open orders</Link>
+          </div>
         </div>
 
         {files.length === 0 ? (

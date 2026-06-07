@@ -62,6 +62,7 @@ type NavIconName =
   | "dashboard"
   | "schedule"
   | "customers"
+  | "files"
   | "messages"
   | "notes"
   | "reply"
@@ -75,6 +76,7 @@ const NAV_ITEMS: Array<
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
   { href: "/customers", label: "Customers", icon: "customers" },
+  { href: "/files", label: "Files", icon: "files" },
   { href: "/messages", label: "Messages", icon: "messages" },
   { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/quick-reply", label: "Quick Reply", icon: "reply" },
@@ -330,6 +332,9 @@ function NavIcon({ name }: { name: NavIconName }) {
       "M3 21a7 7 0 0 1 14 0",
       "M20 8v6",
       "M23 11h-6",
+    ],
+    files: [
+      "M4 5h5l2 2h9a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z",
     ],
     reply: ["M4 5h16v10H8l-4 4V5Z", "M8 9h8M8 12h5"],
     messages: [
