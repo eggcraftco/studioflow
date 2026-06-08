@@ -11,7 +11,9 @@ export type StripeBillingItemKey =
   | "additional_team_seat_monthly"
   | "additional_team_seat_yearly"
   | "storage_100gb"
-  | "storage_200gb";
+  | "storage_100gb_yearly"
+  | "storage_200gb"
+  | "storage_200gb_yearly";
 
 export type StripeBillingActionResult = {
   ok?: boolean;
