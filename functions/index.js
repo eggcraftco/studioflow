@@ -2008,6 +2008,17 @@ function activeAdditionalTeamSeats(companyData = {}) {
   return Math.min(TEAM_SELF_SERVICE_MAX_SEATS - TEAM_INCLUDED_SEATS, Math.floor(rawCount));
 }
 
+// Additive storage from an active storage add-on subscription (in MB).
+// The add-on is stored separately from the base plan limit and must be
+// summed into the effective storage allowance.
+function activeStorageAddonMB(companyData = {}) {
+  const rawMB = Number(companyData.billingStorageAddonMB || 0);
+  const status = String(companyData.billingStorageAddonStatus || "").trim().toLowerCase();
+  if (!["active", "trialing", "past_due"].includes(status)) return 0;
+  if (!Number.isFinite(rawMB) || rawMB <= 0) return 0;
+  return Math.floor(rawMB);
+}
+
 function effectiveTeamSeatLimit(entitlements = {}, companyData = {}) {
   if (String(entitlements.plan || "") !== "team_monthly") {
     return numericLimit(entitlements.teamMemberLimit) || 1;
@@ -2400,11 +2411,13 @@ async function workspaceBillingUsage(companyId, companyData = {}) {
 
 function planLimitsFromEntitlements(entitlements = {}, companyData = {}) {
   const teamMemberLimit = effectiveTeamSeatLimit(entitlements, companyData);
+  const baseStorageMB = numericLimit(entitlements.storageLimitMB) || 0;
+  const effectiveStorageMB = baseStorageMB + activeStorageAddonMB(companyData);
   return {
     orderLimit: numericLimit(entitlements.orderLimit),
     customerLimit: numericLimit(entitlements.customerLimit),
-    storageLimitMB: numericLimit(entitlements.storageLimitMB) || 0,
-    storageLimitBytes: (numericLimit(entitlements.storageLimitMB) || 0) * 1024 * 1024,
+    storageLimitMB: effectiveStorageMB,
+    storageLimitBytes: effectiveStorageMB * 1024 * 1024,
     teamMemberLimit,
     teamMemberIncludedSeats: String(entitlements.plan || "") === "team_monthly" ? TEAM_INCLUDED_SEATS : teamMemberLimit,
     teamMemberAdditionalSeatCount: String(entitlements.plan || "") === "team_monthly" ? activeAdditionalTeamSeats(companyData) : 0,

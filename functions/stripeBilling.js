@@ -95,7 +95,7 @@ const STRIPE_BILLING_ITEMS = {
     type: "storage_addon",
     mode: "subscription",
     interval: "month",
-    availableForCheckout: false,
+    availableForCheckout: true,
     priceEnv: "STRIPE_PRICE_ADDON_100GB",
     storageAddonMB: 100 * 1024
   },
@@ -104,7 +104,7 @@ const STRIPE_BILLING_ITEMS = {
     type: "storage_addon",
     mode: "subscription",
     interval: "month",
-    availableForCheckout: false,
+    availableForCheckout: true,
     priceEnv: "STRIPE_PRICE_ADDON_200GB",
     storageAddonMB: 200 * 1024
   }

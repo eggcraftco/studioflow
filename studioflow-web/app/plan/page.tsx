@@ -401,25 +401,45 @@ export default function PlanPage() {
 
           <section className="card" style={{ padding: 22 }}>
             <div className="pill">Storage add-ons</div>
-            <h2 style={{ margin: "12px 0 6px" }}>Future 100 GB / 200 GB packages</h2>
+            <h2 style={{ margin: "12px 0 6px" }}>100 GB / 200 GB packages</h2>
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              These packages are placeholders for the web billing phase. They should increase storage on top of the base plan instead of changing the whole plan.
+              Storage add-ons increase your Client Files allowance on top of the base plan without changing your plan. They require a plan that includes Client Files (Pro or Team).
             </p>
             <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
-              {ADD_ONS.map(addon => (
-                <article key={addon.id} className="card" style={{ padding: 18, background: "var(--panel)", boxShadow: "none" }}>
-                  <div className="pill">+{addon.storageGB} GB</div>
-                  <h3 style={{ margin: "12px 0 6px" }}>{addon.title}</h3>
-                  <p style={{ color: "var(--muted)", marginTop: 0 }}>{addon.note}</p>
-                  <button className="button secondary" disabled>
-                    Billing setup coming soon
-                  </button>
-                </article>
-              ))}
+              {ADD_ONS.map(addon => {
+                const addonKey = addon.id as StripeBillingItemKey;
+                const canBuyAddon =
+                  isWorkspaceOwner(workspace.role) &&
+                  workspace.entitlements.features.client_files;
+                return (
+                  <article key={addon.id} className="card" style={{ padding: 18, background: "var(--panel)", boxShadow: "none" }}>
+                    <div className="pill">+{addon.storageGB} GB</div>
+                    <h3 style={{ margin: "12px 0 6px" }}>{addon.title}</h3>
+                    <p style={{ color: "var(--muted)", marginTop: 0 }}>{addon.note}</p>
+                    {allowInternalBillingTests ? (
+                      <button
+                        className="button"
+                        disabled={!canBuyAddon || checkoutLoadingKey !== null}
+                        onClick={() => handleTestCheckout(addonKey)}
+                      >
+                        {checkoutLoadingKey === addonKey ? "Opening checkout..." : `Test add ${addon.storageGB} GB`}
+                      </button>
+                    ) : (
+                      <button className="button secondary" disabled>
+                        Billing setup coming soon
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
             </div>
             {!isWorkspaceOwner(workspace.role) ? (
               <p style={{ color: "var(--muted)", marginBottom: 0 }}>
                 Only the workspace owner can manage billing or add-ons.
+              </p>
+            ) : !workspace.entitlements.features.client_files ? (
+              <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                Upgrade to Pro or Team (which include Client Files) to add extra storage.
               </p>
             ) : null}
           </section>
