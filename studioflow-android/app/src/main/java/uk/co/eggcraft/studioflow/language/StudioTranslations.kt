@@ -58,6 +58,10 @@ internal fun normalizeLang(raw: String?): String {
 private val TRANSLATIONS: Map<String, Map<String, String>> by lazy { TR_1 + TR_2 + TR_3 + TR_4 }
 
 private val TR_1: Map<String, Map<String, String>> by lazy { mapOf(
+    // ============================ STORAGE ADD-ONS ============================
+    "Storage add-ons" to mapOf("Türkçe" to "Depolama eklentileri"),
+    "Current add-on" to mapOf("Türkçe" to "Mevcut eklenti"),
+    "Extra Client Files storage on top of your plan. You can switch tier or billing period anytime." to mapOf("Türkçe" to "Planınıza ek Müşteri Dosyaları depolama alanı. İstediğiniz zaman katman veya faturalama dönemini değiştirebilirsiniz."),
     // ============================ LEGAL / POLICY ============================
     "Legal" to mapOf("Türkçe" to "Yasal"),
     "Privacy, terms and policy documents." to mapOf("Türkçe" to "Gizlilik, koşullar ve politika belgeleri."),

@@ -12028,6 +12028,9 @@ struct AccountProfileView: View {
                     planAndAccessCard
                     if authVM.isCompanyOwner {
                         storeKitPurchaseCard
+                        if authVM.currentPlanEntitlements.clientFilesEnabled {
+                            storageAddonCard
+                        }
                         subscriptionLegalFooter
                     }
                 case .teamAccess:
@@ -12625,6 +12628,65 @@ struct AccountProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    @ViewBuilder
+    private var storageAddonCard: some View {
+        let grouped = Dictionary(grouping: StudioStoreKitManager.storageAddonOptions) { $0.storageGB }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "externaldrive.badge.plus")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 36, height: 36)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Storage add-ons", lang: seciliDil))
+                        .font(.system(size: 15, weight: .bold))
+                    Text(t("Extra Client Files storage on top of your plan.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+            ForEach(grouped.keys.sorted(), id: \.self) { gb in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("+\(gb) GB")
+                        .font(.system(size: 12, weight: .heavy))
+                    ForEach((grouped[gb] ?? []).sorted { $0.interval == .monthly && $1.interval == .yearly }) { option in
+                        storageAddonPurchaseRow(option)
+                    }
+                }
+                .padding(8)
+                .background(Color.primary.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .padding(14)
+        .background(Color.primary.opacity(0.02))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func storageAddonPurchaseRow(_ option: StudioStorageAddonOption) -> some View {
+        let product = storeKitManager.storageProductSummary(for: option.productId)
+        let isCurrent = authVM.currentStorageAddonKey == option.itemKey
+        return HStack(spacing: 8) {
+            Text(t(option.interval.displayName, lang: seciliDil))
+                .font(.system(size: 11, weight: .bold))
+            Spacer(minLength: 0)
+            Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(product == nil ? .secondary : .blue)
+            Button {
+                Task { await purchaseStoreKitStorageAddon(option) }
+            } label: {
+                Text(t(isCurrent ? "Current add-on" : "Subscribe", lang: seciliDil))
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isCurrent || !authVM.isCompanyOwner || product == nil || storeKitManager.isPurchasing)
+        }
+    }
+
     private func syncCurrentStoreKitEntitlement() async {
         guard authVM.isCompanyOwner else { return }
         guard let purchase = await storeKitManager.currentEntitlementPurchase() else { return }
@@ -12660,6 +12722,33 @@ struct AccountProfileView: View {
             }
             _ = try await authVM.verifyAppleSubscriptionPurchase(purchase)
             storeKitActionAlertMessage = "Purchase verified. Your workspace plan is active."
+            showStoreKitActionAlert = true
+        } catch {
+            storeKitActionAlertMessage = error.localizedDescription
+            showStoreKitActionAlert = true
+        }
+    }
+
+    private func purchaseStoreKitStorageAddon(_ option: StudioStorageAddonOption) async {
+        guard authVM.isCompanyOwner else {
+            storeKitActionAlertMessage = "Only the workspace owner can buy storage add-ons."
+            showStoreKitActionAlert = true
+            return
+        }
+        if storeKitManager.storageProductSummary(for: option.productId) == nil {
+            await storeKitManager.loadProducts()
+        }
+        do {
+            let appAccountToken = try await authVM.prepareAppleSubscriptionPurchaseToken()
+            guard let jws = await storeKitManager.purchaseStorageAddon(option.productId, appAccountToken: appAccountToken) else {
+                if !storeKitManager.errorMessage.isEmpty {
+                    storeKitActionAlertMessage = storeKitManager.errorMessage
+                    showStoreKitActionAlert = true
+                }
+                return
+            }
+            _ = try await authVM.verifyAppleStorageAddonPurchase(signedTransactionInfo: jws)
+            storeKitActionAlertMessage = "Storage add-on verified. Your extra storage is active."
             showStoreKitActionAlert = true
         } catch {
             storeKitActionAlertMessage = error.localizedDescription

@@ -471,6 +471,14 @@ struct StudioStoreVerifiedPurchase {
     let signedTransactionInfo: String
 }
 
+struct StudioStorageAddonOption: Identifiable {
+    let storageGB: Int
+    let interval: StudioStoreBillingInterval
+    let productId: String
+    let itemKey: String
+    var id: String { productId }
+}
+
 @MainActor
 final class StudioStoreKitManager: ObservableObject {
     static let productIdsByPlan: [StudioBillingPlan: [StudioStoreBillingInterval: String]] = [
@@ -488,11 +496,24 @@ final class StudioStoreKitManager: ObservableObject {
         ]
     ]
 
+    // Storage add-on subscriptions (additive Client Files storage, not a plan).
+    // itemKey mirrors the backend STRIPE_BILLING_ITEMS / APPLE_PLAN_PRODUCTS keys.
+    static let storageAddonOptions: [StudioStorageAddonOption] = [
+        StudioStorageAddonOption(storageGB: 100, interval: .monthly, productId: "uk.co.eggcraft.studioflow.storage.100gb.monthly", itemKey: "storage_100gb"),
+        StudioStorageAddonOption(storageGB: 100, interval: .yearly, productId: "uk.co.eggcraft.studioflow.storage.100gb.yearly", itemKey: "storage_100gb_yearly"),
+        StudioStorageAddonOption(storageGB: 200, interval: .monthly, productId: "uk.co.eggcraft.studioflow.storage.200gb.monthly", itemKey: "storage_200gb"),
+        StudioStorageAddonOption(storageGB: 200, interval: .yearly, productId: "uk.co.eggcraft.studioflow.storage.200gb.yearly", itemKey: "storage_200gb_yearly")
+    ]
+
     @Published var products: [StudioStoreProductSummary] = []
     @Published var isLoadingProducts: Bool = false
     @Published var isPurchasing: Bool = false
     @Published var message: String = ""
     @Published var errorMessage: String = ""
+
+    func storageProductSummary(for productId: String) -> StudioStoreProductSummary? {
+        products.first(where: { $0.id == productId })
+    }
 
     static func productId(for plan: StudioBillingPlan, interval: StudioStoreBillingInterval) -> String? {
         productIdsByPlan[plan]?[interval]
@@ -530,6 +551,7 @@ final class StudioStoreKitManager: ObservableObject {
 
         do {
             let ids = Self.productIdsByPlan.values.flatMap { Array($0.values) }
+                + Self.storageAddonOptions.map { $0.productId }
             let storeProducts = try await Product.products(for: ids)
             products = storeProducts
                 .sorted { $0.id < $1.id }
@@ -592,6 +614,51 @@ final class StudioStoreKitManager: ObservableObject {
                 await transaction.finish()
                 message = "Purchase confirmed. Verifying subscription access."
                 return purchase
+            case .userCancelled:
+                message = "Purchase cancelled."
+                return nil
+            case .pending:
+                message = "Purchase pending approval."
+                return nil
+            @unknown default:
+                errorMessage = "Purchase unavailable."
+                return nil
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+        #else
+        errorMessage = "StoreKit is not available on this device."
+        return nil
+        #endif
+    }
+
+    // Purchases a storage add-on subscription and returns the signed JWS for
+    // server verification. Not tied to a plan tier.
+    func purchaseStorageAddon(_ productId: String, appAccountToken: UUID) async -> String? {
+        message = ""
+        errorMessage = ""
+        #if canImport(StoreKit)
+        guard #available(iOS 15.0, macOS 12.0, *) else {
+            errorMessage = "StoreKit is not available on this device."
+            return nil
+        }
+        isPurchasing = true
+        defer { isPurchasing = false }
+        do {
+            let matches = try await Product.products(for: [productId])
+            guard let product = matches.first else {
+                errorMessage = "Product not loaded."
+                return nil
+            }
+            let result = try await product.purchase(options: [.appAccountToken(appAccountToken)])
+            switch result {
+            case .success(let verification):
+                let transaction = try checkVerified(verification)
+                await transaction.finish()
+                message = "Purchase confirmed. Verifying storage add-on."
+                return verification.jwsRepresentation
             case .userCancelled:
                 message = "Purchase cancelled."
                 return nil
@@ -690,6 +757,7 @@ class AuthViewModel: ObservableObject {
     @Published private(set) var currentCompanyId: String? = nil
     @Published private(set) var isWorkspaceReady: Bool = false
     @Published var currentBillingPlan: StudioBillingPlan = .demo
+    @Published var currentStorageAddonKey: String = ""
     @Published var currentBillingInterval: StudioStoreBillingInterval? = nil
     @Published var billingPlanSource: String = "legacy"
     @Published var billingUpdatedAt: Date? = nil
@@ -2514,6 +2582,10 @@ class AuthViewModel: ObservableObject {
         currentBillingInterval = resolvedPlan == .demo ? nil : StudioStoreBillingInterval(rawValue: rawInterval)
         billingPlanSource = (data["billingPlanSource"] as? String) ?? (rawPlan.isEmpty ? "legacy_default" : "manual")
         billingUpdatedAt = (data["billingUpdatedAt"] as? Timestamp)?.dateValue()
+        let addonStatus = ((data["billingStorageAddonStatus"] as? String) ?? "").lowercased()
+        currentStorageAddonKey = ["active", "trialing", "past_due"].contains(addonStatus)
+            ? ((data["billingStorageAddonKey"] as? String) ?? "")
+            : ""
         UserDefaults.standard.set(resolvedPlan.rawValue, forKey: billingPlanDefaultsKey)
     }
 
@@ -2561,6 +2633,33 @@ class AuthViewModel: ObservableObject {
         }
         profileErrorMessage = ""
         return plan
+        #else
+        throw NSError(domain: "StudioFlowBilling", code: 6, userInfo: [NSLocalizedDescriptionKey: "Secure Apple billing is not available in this build."])
+        #endif
+    }
+
+    // Verifies a storage add-on purchase. Same callable as plans, but the server
+    // returns an `addon` key (no plan), so the workspace listener applies the new
+    // storage limit rather than changing the plan.
+    @discardableResult
+    func verifyAppleStorageAddonPurchase(signedTransactionInfo: String) async throws -> String {
+        guard let companyId = currentCompanyId, !companyId.isEmpty else {
+            throw NSError(domain: "StudioFlowBilling", code: 4, userInfo: [NSLocalizedDescriptionKey: "Company ID is not configured."])
+        }
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = [
+            "companyId": companyId,
+            "signedTransactionInfo": signedTransactionInfo
+        ]
+        let result = try await Functions.functions(region: "europe-west2")
+            .httpsCallable("verifyAppleSubscriptionPurchase")
+            .call(payload)
+        guard let data = result.data as? [String: Any],
+              let addon = data["addon"] as? String, !addon.isEmpty else {
+            throw NSError(domain: "StudioFlowBilling", code: 7, userInfo: [NSLocalizedDescriptionKey: "Storage add-on was not confirmed by the server."])
+        }
+        profileErrorMessage = ""
+        return addon
         #else
         throw NSError(domain: "StudioFlowBilling", code: 6, userInfo: [NSLocalizedDescriptionKey: "Secure Apple billing is not available in this build."])
         #endif
