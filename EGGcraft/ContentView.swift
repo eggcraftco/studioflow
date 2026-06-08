@@ -12404,7 +12404,7 @@ struct AccountProfileView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: isPhoneLayout ? 140 : 180), spacing: 10)], alignment: .leading, spacing: 10) {
                     planFeaturePill(title: planOrderLimitText(entitlements), icon: "shippingbox.fill", enabled: true)
                     planFeaturePill(title: planCustomerLimitText(entitlements), icon: "person.crop.circle.fill", enabled: true)
-                    planFeaturePill(title: planStorageLimitText(entitlements), icon: "externaldrive.fill", enabled: entitlements.clientFilesEnabled)
+                    planFeaturePill(title: currentPlanStorageLimitText, icon: "externaldrive.fill", enabled: entitlements.clientFilesEnabled)
                     planFeaturePill(title: planTeamLimitText(entitlements), icon: "person.2.fill", enabled: entitlements.teamAccessEnabled)
                     planFeaturePill(title: "Client Files", icon: "folder.fill", enabled: entitlements.clientFilesEnabled)
                     planFeaturePill(title: t("Share Sheet", lang: seciliDil), icon: "square.and.arrow.down.on.square.fill", enabled: entitlements.shareSheetEnabled)
@@ -12814,7 +12814,7 @@ struct AccountProfileView: View {
 
                 HStack(spacing: 8) {
                     compactPlanMetric(planOrderLimitText(entitlements), icon: "shippingbox.fill")
-                    compactPlanMetric(planStorageLimitText(entitlements), icon: "externaldrive.fill")
+                    compactPlanMetric(currentPlanStorageLimitText, icon: "externaldrive.fill")
                     compactPlanMetric(planTeamLimitText(entitlements), icon: "person.2.fill")
                 }
             }
@@ -12978,6 +12978,11 @@ struct AccountProfileView: View {
 
     private func planStorageLimitText(_ entitlements: StudioPlanEntitlements) -> String {
         String(format: t("Storage: %@", lang: seciliDil), entitlements.storageLimitText)
+    }
+
+    // Storage for the CURRENT workspace plan, including any active add-on.
+    private var currentPlanStorageLimitText: String {
+        String(format: t("Storage: %@", lang: seciliDil), authVM.effectiveStorageLimitText)
     }
 
     private func planTeamLimitText(_ entitlements: StudioPlanEntitlements) -> String {
