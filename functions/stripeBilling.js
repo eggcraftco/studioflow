@@ -9,7 +9,11 @@ const APPLE_PLAN_PRODUCTS = {
   "uk.co.eggcraft.studioflow.pro.monthly": "pro_monthly",
   "uk.co.eggcraft.studioflow.pro.yearly": "pro_yearly",
   "uk.co.eggcraft.studioflow.team.monthly": "team_monthly",
-  "uk.co.eggcraft.studioflow.team.yearly": "team_yearly"
+  "uk.co.eggcraft.studioflow.team.yearly": "team_yearly",
+  "uk.co.eggcraft.studioflow.storage.100gb.monthly": "storage_100gb",
+  "uk.co.eggcraft.studioflow.storage.100gb.yearly": "storage_100gb_yearly",
+  "uk.co.eggcraft.studioflow.storage.200gb.monthly": "storage_200gb",
+  "uk.co.eggcraft.studioflow.storage.200gb.yearly": "storage_200gb_yearly"
 };
 
 // Google Play subscriptions use a subscription product id + a base plan id.
@@ -22,7 +26,11 @@ const GOOGLE_PLAY_PRODUCTS = {
   "nivadesk_pro|pro-monthly": "pro_monthly",
   "nivadesk_pro|pro-yearly": "pro_yearly",
   "nivadesk_team|team-monthly": "team_monthly",
-  "nivadesk_team|team-yearly": "team_yearly"
+  "nivadesk_team|team-yearly": "team_yearly",
+  "nivadesk_storage_100gb|storage-100gb-monthly": "storage_100gb",
+  "nivadesk_storage_100gb|storage-100gb-yearly": "storage_100gb_yearly",
+  "nivadesk_storage_200gb|storage-200gb-monthly": "storage_200gb",
+  "nivadesk_storage_200gb|storage-200gb-yearly": "storage_200gb_yearly"
 };
 
 const STRIPE_BILLING_ITEMS = {
@@ -570,6 +578,79 @@ function createStripeBillingFunctions({
       triggerEventType: String(eventType || "apple.verify"),
       triggerProviderStatus: providerStatus
     });
+  }
+
+  // App Store storage add-on. Writes the additive billingStorageAddon* fields
+  // (same schema as the Stripe/Google handlers) rather than changing the plan.
+  async function persistAppleStorageAddon(workspace, transaction, {
+    environmentName = "Sandbox",
+    eventType = "client.verify",
+    notificationStatus = null
+  } = {}) {
+    const item = appleItemForProductId(transaction?.productId);
+    const originalTransactionId = String(transaction?.originalTransactionId || "").trim();
+    const transactionId = String(transaction?.transactionId || "").trim();
+    if (!item || item.type !== "storage_addon" || !originalTransactionId || !transactionId) {
+      throw new HttpsError("failed-precondition", "This App Store purchase is not a supported NivaDesk storage add-on.");
+    }
+
+    const expirationMilliseconds = Number(transaction?.expiresDate || 0);
+    const revoked = Number(transaction?.revocationDate || 0) > 0;
+    const activeByDate = expirationMilliseconds > Date.now();
+    const statusNumber = Number(notificationStatus || 0);
+    const addonActive = !revoked && activeByDate && ![2, 5].includes(statusNumber);
+    const providerStatus = revoked || statusNumber === 5
+      ? "revoked"
+      : addonActive
+        ? (statusNumber === 4 ? "grace_period" : "active")
+        : "expired";
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(appleLedgerId(originalTransactionId));
+    const existing = await ledgerRef.get();
+
+    await ledgerRef.set({
+      provider: "apple",
+      subscriptionType: "storage_addon",
+      itemKey: item.key,
+      interval: item.interval || "",
+      storageAddonMB: item.storageAddonMB || 0,
+      originalTransactionId,
+      latestTransactionId: transactionId,
+      externalSubscriptionId: originalTransactionId,
+      workspaceId: workspace.id,
+      appAccountToken: String(transaction?.appAccountToken || "").trim(),
+      productId: String(transaction?.productId || "").trim(),
+      providerStatus,
+      activeForEntitlement: addonActive,
+      autoRenew: addonActive,
+      currentPeriodEnd: timestampFromAppleMillis(expirationMilliseconds),
+      environment: String(environmentName || "Sandbox").toLowerCase(),
+      lastProviderEventType: String(eventType || ""),
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(existing.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
+    }, { merge: true });
+
+    await workspace.ref.set({
+      billingStorageAddonMB: addonActive ? item.storageAddonMB : 0,
+      billingStorageAddonKey: addonActive ? item.key : "",
+      billingStorageAddonStatus: addonActive ? "active" : "cancelled",
+      billingStorageAddonProvider: addonActive ? "apple" : "",
+      billingStorageAddonOriginalTransactionId: addonActive ? originalTransactionId : "",
+      billingStorageAddonCurrentPeriodEnd: timestampFromAppleMillis(expirationMilliseconds),
+      billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      billingUpdatedBy: "apple_verification",
+      billingExportAccessPreserved: true
+    }, { merge: true });
+
+    return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive };
+  }
+
+  async function persistApplePurchase(workspace, transaction, options = {}) {
+    const item = appleItemForProductId(transaction?.productId);
+    if (item && item.type === "storage_addon") {
+      return persistAppleStorageAddon(workspace, transaction, options);
+    }
+    return persistApplePlanSubscription(workspace, transaction, options);
   }
 
   async function recomputeEffectiveWorkspaceEntitlement(workspace, {
@@ -1271,14 +1352,15 @@ function createStripeBillingFunctions({
     if (String(transaction.bundleId || "").trim() !== appleBundleId()) {
       throw new HttpsError("permission-denied", "Apple purchase app identifier does not match NivaDesk.");
     }
-    const result = await persistApplePlanSubscription({ id: companyId, ref: companyRef }, transaction, {
+    const result = await persistApplePurchase({ id: companyId, ref: companyRef }, transaction, {
       environmentName: verified.environmentName,
       eventType: "client.verified_purchase"
     });
     return {
       ok: true,
       workspaceId: companyId,
-      plan: result.plan,
+      plan: result.plan || null,
+      addon: result.addon || null,
       provider: "apple",
       productId: String(transaction.productId || ""),
       currentPeriodEnd: Number(transaction.expiresDate || 0) || null
@@ -1322,7 +1404,7 @@ function createStripeBillingFunctions({
         response.status(200).json({ received: true, skipped: "workspace_token_mismatch" });
         return;
       }
-      await persistApplePlanSubscription({ id: workspaceId, ref: companyRef }, transaction, {
+      await persistApplePurchase({ id: workspaceId, ref: companyRef }, transaction, {
         environmentName: transactionVerified.environmentName,
         eventType: `notification.${String(notification.notificationType || "unknown")}`,
         notificationStatus: notification.data?.status
@@ -1531,6 +1613,79 @@ function createStripeBillingFunctions({
     });
   }
 
+  // Google Play storage add-on. Unlike a plan, this does not change the
+  // effective plan tier; it writes the additive billingStorageAddon* fields
+  // (the same schema the Stripe storage handler uses), which
+  // planLimitsFromEntitlements sums onto the base plan allowance.
+  async function persistGoogleStorageAddon(workspace, purchase, {
+    eventType = "client.verify"
+  } = {}) {
+    const item = googleItemForProduct(purchase?.productId, purchase?.basePlanId);
+    const purchaseToken = String(purchase?.purchaseToken || "").trim();
+    if (!item || item.type !== "storage_addon" || !purchaseToken) {
+      throw new HttpsError("failed-precondition", "This Google Play purchase is not a supported NivaDesk storage add-on.");
+    }
+
+    const inactiveStates = [
+      "SUBSCRIPTION_STATE_EXPIRED",
+      "SUBSCRIPTION_STATE_ON_HOLD",
+      "SUBSCRIPTION_STATE_PAUSED",
+      "SUBSCRIPTION_STATE_PENDING"
+    ];
+    const activeByDate = Number(purchase?.expiryMillis || 0) > Date.now();
+    const addonActive = activeByDate && !inactiveStates.includes(String(purchase?.state || "").trim());
+    const providerStatus = googleProviderStatusFor(purchase?.state, addonActive);
+
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(googleLedgerId(purchaseToken));
+    const existing = await ledgerRef.get();
+    await ledgerRef.set({
+      provider: "google",
+      subscriptionType: "storage_addon",
+      itemKey: item.key,
+      interval: item.interval || "",
+      storageAddonMB: item.storageAddonMB || 0,
+      purchaseToken,
+      purchaseTokenHash: crypto.createHash("sha256").update(purchaseToken).digest("hex"),
+      externalSubscriptionId: purchaseToken,
+      linkedPurchaseToken: String(purchase?.linkedPurchaseToken || ""),
+      workspaceId: workspace.id,
+      obfuscatedAccountId: String(purchase?.obfuscatedAccountId || ""),
+      productId: String(purchase?.productId || ""),
+      basePlanId: String(purchase?.basePlanId || ""),
+      providerStatus,
+      activeForEntitlement: addonActive,
+      autoRenew: addonActive && purchase?.autoRenewing === true,
+      currentPeriodEnd: timestampFromAppleMillis(purchase?.expiryMillis),
+      environment: "production",
+      lastProviderEventType: String(eventType || ""),
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(existing.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
+    }, { merge: true });
+
+    await workspace.ref.set({
+      billingStorageAddonMB: addonActive ? item.storageAddonMB : 0,
+      billingStorageAddonKey: addonActive ? item.key : "",
+      billingStorageAddonStatus: addonActive ? "active" : "cancelled",
+      billingStorageAddonProvider: addonActive ? "google" : "",
+      billingStorageAddonPurchaseToken: addonActive ? purchaseToken : "",
+      billingStorageAddonCurrentPeriodEnd: timestampFromAppleMillis(purchase?.expiryMillis),
+      billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      billingUpdatedBy: "google_verification",
+      billingExportAccessPreserved: true
+    }, { merge: true });
+
+    return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive };
+  }
+
+  async function persistGooglePurchase(workspace, purchase, options = {}) {
+    const item = googleItemForProduct(purchase?.productId, purchase?.basePlanId);
+    if (item && item.type === "storage_addon") {
+      return persistGoogleStorageAddon(workspace, purchase, options);
+    }
+    return persistGooglePlanSubscription(workspace, purchase, options);
+  }
+
   async function workspaceForGoogleAccountToken(token) {
     const clean = String(token || "").trim();
     if (!clean) return null;
@@ -1580,13 +1735,14 @@ function createStripeBillingFunctions({
       throw new HttpsError("permission-denied", "This Google Play purchase is not linked to the current NivaDesk workspace.");
     }
 
-    const result = await persistGooglePlanSubscription({ id: companyId, ref: companyRef }, purchase, {
+    const result = await persistGooglePurchase({ id: companyId, ref: companyRef }, purchase, {
       eventType: "client.verified_purchase"
     });
     return {
       ok: true,
       workspaceId: companyId,
-      plan: result.plan,
+      plan: result.plan || null,
+      addon: result.addon || null,
       provider: "google",
       productId: purchase.productId,
       currentPeriodEnd: Number(purchase.expiryMillis || 0) || null
@@ -1622,7 +1778,7 @@ function createStripeBillingFunctions({
         response.status(200).json({ received: true, skipped: "unknown_account_token" });
         return;
       }
-      await persistGooglePlanSubscription({ id: workspace.id, ref: workspace.ref }, purchase, {
+      await persistGooglePurchase({ id: workspace.id, ref: workspace.ref }, purchase, {
         eventType: `notification.${String(sub.notificationType || "unknown")}`
       });
       response.status(200).json({ received: true, processed: true });
