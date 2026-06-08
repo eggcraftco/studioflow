@@ -99,6 +99,15 @@ const STRIPE_BILLING_ITEMS = {
     priceEnv: "STRIPE_PRICE_ADDON_100GB",
     storageAddonMB: 100 * 1024
   },
+  storage_100gb_yearly: {
+    key: "storage_100gb_yearly",
+    type: "storage_addon",
+    mode: "subscription",
+    interval: "year",
+    availableForCheckout: true,
+    priceEnv: "STRIPE_PRICE_ADDON_100GB_YEARLY",
+    storageAddonMB: 100 * 1024
+  },
   storage_200gb: {
     key: "storage_200gb",
     type: "storage_addon",
@@ -106,6 +115,15 @@ const STRIPE_BILLING_ITEMS = {
     interval: "month",
     availableForCheckout: true,
     priceEnv: "STRIPE_PRICE_ADDON_200GB",
+    storageAddonMB: 200 * 1024
+  },
+  storage_200gb_yearly: {
+    key: "storage_200gb_yearly",
+    type: "storage_addon",
+    mode: "subscription",
+    interval: "year",
+    availableForCheckout: true,
+    priceEnv: "STRIPE_PRICE_ADDON_200GB_YEARLY",
     storageAddonMB: 200 * 1024
   }
 };
@@ -193,7 +211,9 @@ function createStripeBillingFunctions({
     if (compact === "additional_team_seat_monthly" || compact === "team_seat_monthly") return "additional_team_seat_monthly";
     if (compact === "additional_team_seat_yearly" || compact === "team_seat_yearly") return "additional_team_seat_yearly";
     if (compact === "100gb" || compact === "storage_100gb") return "storage_100gb";
+    if (compact === "storage_100gb_yearly" || compact === "100gb_yearly") return "storage_100gb_yearly";
     if (compact === "200gb" || compact === "storage_200gb") return "storage_200gb";
+    if (compact === "storage_200gb_yearly" || compact === "200gb_yearly") return "storage_200gb_yearly";
     return "";
   }
 

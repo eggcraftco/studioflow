@@ -88,12 +88,23 @@ Plans:
   - Includes Team Access, role management, and To Do assignment.
   - Team-only features should stay Team-only.
 
-Future storage add-ons:
+Storage add-ons (confirmed pricing, VAT-inclusive — customer pays the same on every platform):
 
-- 100 GB
-- 200 GB
+| Add-on | Monthly (VAT incl.) | Yearly (VAT incl.) | Net monthly | Net yearly |
+|--------|---------------------|--------------------|-------------|------------|
+| +100 GB Extra Storage | £9 | £90 | £7.50 | £75 |
+| +200 GB Extra Storage | £15 | £150 | £12.50 | £125 |
 
-Storage add-ons should increase workspace storage without changing the base plan. They should be additive entitlements tied to the same central workspace billing state.
+VAT handling (mirrors plan products):
+- Apple: prices are VAT-inclusive automatically → enter £9 / £90 / £15 / £150 tiers.
+- Google Play: Google adds 20% VAT on top of net → enter net (£7.50 / £75 / £12.50 / £125).
+- Stripe (web): enter £9 / £90 / £15 / £150 with tax behavior = inclusive.
+
+Stripe price env vars (functions/.env):
+`STRIPE_PRICE_ADDON_100GB`, `STRIPE_PRICE_ADDON_100GB_YEARLY`,
+`STRIPE_PRICE_ADDON_200GB`, `STRIPE_PRICE_ADDON_200GB_YEARLY`.
+
+Storage add-ons increase workspace storage without changing the base plan. They are additive entitlements (`billingStorageAddonMB`) summed onto the base plan limit in `planLimitsFromEntitlements`, tied to the same central workspace billing state. They require a base plan that includes Client Files (Pro or Team).
 
 ## 6. Signup/login flow
 

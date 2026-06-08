@@ -45,18 +45,26 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   messages: "Messages"
 };
 
-const ADD_ONS = [
+const ADD_ONS: {
+  title: string;
+  storageGB: number;
+  note: string;
+  monthly: { itemKey: StripeBillingItemKey; label: string };
+  yearly: { itemKey: StripeBillingItemKey; label: string };
+}[] = [
   {
-    id: "storage_100gb",
-    title: "100 GB Storage Add-on",
+    title: "100 GB Extra Storage",
     storageGB: 100,
-    note: "For studios uploading larger client file libraries."
+    note: "For studios uploading larger client file libraries.",
+    monthly: { itemKey: "storage_100gb", label: "£9 / month" },
+    yearly: { itemKey: "storage_100gb_yearly", label: "£90 / year" }
   },
   {
-    id: "storage_200gb",
-    title: "200 GB Storage Add-on",
+    title: "200 GB Extra Storage",
     storageGB: 200,
-    note: "For heavier teams and long-term archive use."
+    note: "For heavier teams and long-term archive use.",
+    monthly: { itemKey: "storage_200gb", label: "£15 / month" },
+    yearly: { itemKey: "storage_200gb_yearly", label: "£150 / year" }
   }
 ];
 
@@ -407,23 +415,34 @@ export default function PlanPage() {
             </p>
             <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
               {ADD_ONS.map(addon => {
-                const addonKey = addon.id as StripeBillingItemKey;
                 const canBuyAddon =
                   isWorkspaceOwner(workspace.role) &&
                   workspace.entitlements.features.client_files;
                 return (
-                  <article key={addon.id} className="card" style={{ padding: 18, background: "var(--panel)", boxShadow: "none" }}>
+                  <article key={addon.storageGB} className="card" style={{ padding: 18, background: "var(--panel)", boxShadow: "none" }}>
                     <div className="pill">+{addon.storageGB} GB</div>
                     <h3 style={{ margin: "12px 0 6px" }}>{addon.title}</h3>
                     <p style={{ color: "var(--muted)", marginTop: 0 }}>{addon.note}</p>
+                    <p style={{ margin: "0 0 12px", fontWeight: 600 }}>
+                      {addon.monthly.label} · {addon.yearly.label}
+                    </p>
                     {allowInternalBillingTests ? (
-                      <button
-                        className="button"
-                        disabled={!canBuyAddon || checkoutLoadingKey !== null}
-                        onClick={() => handleTestCheckout(addonKey)}
-                      >
-                        {checkoutLoadingKey === addonKey ? "Opening checkout..." : `Test add ${addon.storageGB} GB`}
-                      </button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <button
+                          className="button"
+                          disabled={!canBuyAddon || checkoutLoadingKey !== null}
+                          onClick={() => handleTestCheckout(addon.monthly.itemKey)}
+                        >
+                          {checkoutLoadingKey === addon.monthly.itemKey ? "Opening checkout..." : `Test ${addon.monthly.label}`}
+                        </button>
+                        <button
+                          className="button secondary"
+                          disabled={!canBuyAddon || checkoutLoadingKey !== null}
+                          onClick={() => handleTestCheckout(addon.yearly.itemKey)}
+                        >
+                          {checkoutLoadingKey === addon.yearly.itemKey ? "Opening checkout..." : `Test ${addon.yearly.label}`}
+                        </button>
+                      </div>
                     ) : (
                       <button className="button secondary" disabled>
                         Billing setup coming soon
