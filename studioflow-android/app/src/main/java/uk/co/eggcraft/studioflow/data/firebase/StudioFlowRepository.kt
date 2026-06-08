@@ -142,6 +142,10 @@ class StudioFlowRepository(
             roleLabel = customRoles.firstOrNull { it.id == rawRole }?.name ?: roleLabel(role),
             billingPlan = plan,
             billingInterval = stringValue(data["billingInterval"], ""),
+            storageAddonKey = run {
+                val status = stringValue(data["billingStorageAddonStatus"], "").lowercase()
+                if (status in setOf("active", "trialing", "past_due")) stringValue(data["billingStorageAddonKey"], "") else ""
+            },
             memberAccess = memberAccess(data, user.uid, role == "owner", rawRole, customRoles),
             accountDisplayName = stringValue(
                 member?.get("displayName"),

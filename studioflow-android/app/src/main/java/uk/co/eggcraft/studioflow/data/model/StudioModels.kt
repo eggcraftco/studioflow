@@ -129,6 +129,7 @@ data class StudioWorkspace(
     val roleLabel: String,
     val billingPlan: StudioBillingPlan,
     val billingInterval: String = "",
+    val storageAddonKey: String = "",
     val memberAccess: WorkspaceMemberAccess,
     val accountDisplayName: String = "",
     val accountPhotoUrl: String = "",

@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer
+import uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer
 import uk.co.eggcraft.studioflow.billing.StudioGooglePlayBillingManager
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Job
@@ -604,8 +605,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 repository.verifyGooglePlayPurchase(workspace, result.subscriptionId, result.purchaseToken)
             },
             onPlanResolved = { planKey ->
-                val resolved = StudioBillingPlan.fromRaw(planKey)
-                mutableState.update { it.copy(workspace = it.workspace?.copy(billingPlan = resolved)) }
+                // Storage add-on verifications return an empty plan key; don't let that
+                // downgrade the displayed plan to Demo. The live workspace listener
+                // refreshes the add-on storage either way.
+                if (planKey.isNotBlank()) {
+                    val resolved = StudioBillingPlan.fromRaw(planKey)
+                    mutableState.update { it.copy(workspace = it.workspace?.copy(billingPlan = resolved)) }
+                }
             },
             onMessage = { message ->
                 mutableState.update { it.copy(settingsMessage = message, errorMessage = "") }
@@ -617,6 +623,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
     }
 
     val googlePlanOffers: StateFlow<List<StudioGooglePlanOffer>> by lazy { billingManager.offers }
+    val googleStorageOffers: StateFlow<List<StudioGoogleStorageOffer>> by lazy { billingManager.storageOffers }
     val googleBillingLoading: StateFlow<Boolean> by lazy { billingManager.isLoading }
     val googleBillingPurchasing: StateFlow<Boolean> by lazy { billingManager.isPurchasing }
 
@@ -625,6 +632,23 @@ class StudioFlowViewModel @JvmOverloads constructor(
     }
 
     fun purchaseGooglePlan(activity: Activity, offer: StudioGooglePlanOffer) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            runCatching { repository.prepareGooglePlayPurchase(workspace) }
+                .onSuccess { token ->
+                    if (token.isEmpty()) {
+                        mutableState.update { it.copy(errorMessage = "Could not start Google Play purchase.") }
+                    } else {
+                        billingManager.purchase(activity, offer.subscriptionId, offer.basePlanId, token)
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not start Google Play purchase.") }
+                }
+        }
+    }
+
+    fun purchaseGoogleStorageAddon(activity: Activity, offer: StudioGoogleStorageOffer) {
         val workspace = mutableState.value.workspace ?: return
         viewModelScope.launch {
             runCatching { repository.prepareGooglePlayPurchase(workspace) }

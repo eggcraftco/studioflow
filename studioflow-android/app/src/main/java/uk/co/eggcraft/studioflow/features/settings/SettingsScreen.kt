@@ -156,9 +156,11 @@ fun SettingsScreen(
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
     googlePlanOffers: List<uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer> = emptyList(),
+    googleStorageOffers: List<uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer> = emptyList(),
     googleBillingPurchasing: Boolean = false,
     onLoadGooglePlayProducts: () -> Unit = {},
     onPurchaseGooglePlan: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onPurchaseGoogleStorageAddon: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer) -> Unit = { _, _ -> },
     onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
@@ -251,9 +253,11 @@ fun SettingsScreen(
                         onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                         onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
                         googlePlanOffers = googlePlanOffers,
+                        googleStorageOffers = googleStorageOffers,
                         googleBillingPurchasing = googleBillingPurchasing,
                         onLoadGooglePlayProducts = onLoadGooglePlayProducts,
                         onPurchaseGooglePlan = onPurchaseGooglePlan,
+                        onPurchaseGoogleStorageAddon = onPurchaseGoogleStorageAddon,
                         onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                         onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                         onUpdateAccountProfile = onUpdateAccountProfile,
@@ -292,9 +296,11 @@ fun SettingsScreen(
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                 onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
                 googlePlanOffers = googlePlanOffers,
+                googleStorageOffers = googleStorageOffers,
                 googleBillingPurchasing = googleBillingPurchasing,
                 onLoadGooglePlayProducts = onLoadGooglePlayProducts,
                 onPurchaseGooglePlan = onPurchaseGooglePlan,
+                onPurchaseGoogleStorageAddon = onPurchaseGoogleStorageAddon,
                 onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                 onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                 onUpdateAccountProfile = onUpdateAccountProfile,
@@ -444,9 +450,11 @@ private fun SettingsDetailScreen(
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
     googlePlanOffers: List<uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer> = emptyList(),
+    googleStorageOffers: List<uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer> = emptyList(),
     googleBillingPurchasing: Boolean = false,
     onLoadGooglePlayProducts: () -> Unit = {},
     onPurchaseGooglePlan: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onPurchaseGoogleStorageAddon: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer) -> Unit = { _, _ -> },
     onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
@@ -524,9 +532,11 @@ private fun SettingsDetailScreen(
                     state = state,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
                     googlePlanOffers = googlePlanOffers,
+                    googleStorageOffers = googleStorageOffers,
                     googleBillingPurchasing = googleBillingPurchasing,
                     onLoadGooglePlayProducts = onLoadGooglePlayProducts,
                     onPurchaseGooglePlan = onPurchaseGooglePlan,
+                    onPurchaseGoogleStorageAddon = onPurchaseGoogleStorageAddon,
                     onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases
                 )
                 "team" -> TeamAccessDetail(
@@ -1943,9 +1953,11 @@ private fun PlanAccessDetail(
     state: StudioFlowUiState,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
     googlePlanOffers: List<uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer> = emptyList(),
+    googleStorageOffers: List<uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer> = emptyList(),
     googleBillingPurchasing: Boolean = false,
     onLoadGooglePlayProducts: () -> Unit = {},
     onPurchaseGooglePlan: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onPurchaseGoogleStorageAddon: (android.app.Activity, uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer) -> Unit = { _, _ -> },
     onRestoreGooglePlayPurchases: () -> Unit = {}
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -2022,6 +2034,43 @@ private fun PlanAccessDetail(
                     )
                 }
                 SubscriptionLegalFooter()
+            }
+        }
+        if (isOwner && plan.hasClientFiles && googleStorageOffers.isNotEmpty()) {
+            DetailCard(title = t("Storage add-ons"), icon = Icons.Filled.Storage) {
+                Text(
+                    t("Extra Client Files storage on top of your plan. You can switch tier or billing period anytime."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
+                googleStorageOffers.groupBy { it.storageGB }.forEach { (gb, offersForTier) ->
+                    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("+$gb GB", fontWeight = FontWeight.ExtraBold)
+                            offersForTier.forEach { offer ->
+                                val itemKey = "storage_${offer.storageGB}gb" + if (offer.interval == "year") "_yearly" else ""
+                                val isCurrent = workspace?.storageAddonKey == itemKey
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        if (offer.interval == "year") t("Yearly") else t("Monthly"),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        offer.formattedPrice ?: t("Product not loaded"),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Button(
+                                    onClick = { activity?.let { onPurchaseGoogleStorageAddon(it, offer) } },
+                                    enabled = !googleBillingPurchasing && offer.formattedPrice != null && activity != null && !isCurrent,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (isCurrent) t("Current add-on") else t("Subscribe")) }
+                            }
+                        }
+                    }
+                }
             }
         }
         DetailCard(title = t("Available now"), icon = Icons.Filled.CheckCircle) {

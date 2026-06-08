@@ -38,6 +38,15 @@ data class StudioGooglePurchaseResult(
     val purchaseToken: String
 )
 
+/** A storage add-on offer (additive Client Files storage, does not change the plan). */
+data class StudioGoogleStorageOffer(
+    val storageGB: Int,
+    val interval: String,
+    val subscriptionId: String,
+    val basePlanId: String,
+    val formattedPrice: String?
+)
+
 /**
  * Wraps Google Play Billing for NivaDesk subscriptions. The actual entitlement is
  * always resolved by the backend after verification — this class never grants a plan
@@ -64,7 +73,17 @@ class StudioGooglePlayBillingManager(
             Triple(StudioBillingPlan.TeamMonthly, "year", "nivadesk_team" to "team-yearly")
         )
 
-        private val SUBSCRIPTION_IDS: List<String> = PLAN_OFFERS.map { it.third.first }.distinct()
+        // Storage add-on subscriptions. Mirror of the backend GOOGLE_PLAY_PRODUCTS
+        // storage entries: Triple<storageGB, interval, subscriptionId to basePlanId>.
+        val STORAGE_OFFERS: List<Triple<Int, String, Pair<String, String>>> = listOf(
+            Triple(100, "month", "nivadesk_storage_100gb" to "storage-100gb-monthly"),
+            Triple(100, "year", "nivadesk_storage_100gb" to "storage-100gb-yearly"),
+            Triple(200, "month", "nivadesk_storage_200gb" to "storage-200gb-monthly"),
+            Triple(200, "year", "nivadesk_storage_200gb" to "storage-200gb-yearly")
+        )
+
+        private val SUBSCRIPTION_IDS: List<String> =
+            (PLAN_OFFERS.map { it.third.first } + STORAGE_OFFERS.map { it.third.first }).distinct()
     }
 
     private val purchasesListener = PurchasesUpdatedListener { result, purchases ->
@@ -88,6 +107,9 @@ class StudioGooglePlayBillingManager(
 
     private val _offers = MutableStateFlow<List<StudioGooglePlanOffer>>(emptyList())
     val offers: StateFlow<List<StudioGooglePlanOffer>> = _offers.asStateFlow()
+
+    private val _storageOffers = MutableStateFlow<List<StudioGoogleStorageOffer>>(emptyList())
+    val storageOffers: StateFlow<List<StudioGoogleStorageOffer>> = _storageOffers.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -152,6 +174,17 @@ class StudioGooglePlayBillingManager(
             val price = offerToken(subscriptionId, basePlanId)?.second
             StudioGooglePlanOffer(
                 plan = plan,
+                interval = interval,
+                subscriptionId = subscriptionId,
+                basePlanId = basePlanId,
+                formattedPrice = price
+            )
+        }
+        _storageOffers.value = STORAGE_OFFERS.map { (gb, interval, ids) ->
+            val (subscriptionId, basePlanId) = ids
+            val price = offerToken(subscriptionId, basePlanId)?.second
+            StudioGoogleStorageOffer(
+                storageGB = gb,
                 interval = interval,
                 subscriptionId = subscriptionId,
                 basePlanId = basePlanId,

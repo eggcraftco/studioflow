@@ -106,6 +106,7 @@ import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer
+import uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
@@ -175,9 +176,11 @@ fun StudioFlowMainScreen(
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
     googlePlanOffers: List<StudioGooglePlanOffer> = emptyList(),
+    googleStorageOffers: List<StudioGoogleStorageOffer> = emptyList(),
     googleBillingPurchasing: Boolean = false,
     onLoadGooglePlayProducts: () -> Unit = {},
     onPurchaseGooglePlan: (android.app.Activity, StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onPurchaseGoogleStorageAddon: (android.app.Activity, StudioGoogleStorageOffer) -> Unit = { _, _ -> },
     onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
@@ -427,9 +430,11 @@ fun StudioFlowMainScreen(
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
                     googlePlanOffers = googlePlanOffers,
+                    googleStorageOffers = googleStorageOffers,
                     googleBillingPurchasing = googleBillingPurchasing,
                     onLoadGooglePlayProducts = onLoadGooglePlayProducts,
                     onPurchaseGooglePlan = onPurchaseGooglePlan,
+                    onPurchaseGoogleStorageAddon = onPurchaseGoogleStorageAddon,
                     onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                     onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                     onUpdateAccountProfile = onUpdateAccountProfile,
@@ -549,9 +554,11 @@ fun StudioFlowMainScreen(
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
                     googlePlanOffers = googlePlanOffers,
+                    googleStorageOffers = googleStorageOffers,
                     googleBillingPurchasing = googleBillingPurchasing,
                     onLoadGooglePlayProducts = onLoadGooglePlayProducts,
                     onPurchaseGooglePlan = onPurchaseGooglePlan,
+                    onPurchaseGoogleStorageAddon = onPurchaseGoogleStorageAddon,
                     onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                     onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                     onUpdateAccountProfile = onUpdateAccountProfile,
@@ -921,9 +928,11 @@ private fun StudioSectionContent(
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
     googlePlanOffers: List<StudioGooglePlanOffer> = emptyList(),
+    googleStorageOffers: List<StudioGoogleStorageOffer> = emptyList(),
     googleBillingPurchasing: Boolean = false,
     onLoadGooglePlayProducts: () -> Unit = {},
     onPurchaseGooglePlan: (android.app.Activity, StudioGooglePlanOffer) -> Unit = { _, _ -> },
+    onPurchaseGoogleStorageAddon: (android.app.Activity, StudioGoogleStorageOffer) -> Unit = { _, _ -> },
     onRestoreGooglePlayPurchases: () -> Unit = {},
     onRecalculateFinancialSettings: (Map<String, Any?>) -> Unit,
     onUpdateAccountProfile: (String, String) -> Unit,
@@ -1092,9 +1101,11 @@ private fun StudioSectionContent(
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                 onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
                 googlePlanOffers = googlePlanOffers,
+                googleStorageOffers = googleStorageOffers,
                 googleBillingPurchasing = googleBillingPurchasing,
                 onLoadGooglePlayProducts = onLoadGooglePlayProducts,
                 onPurchaseGooglePlan = onPurchaseGooglePlan,
+                onPurchaseGoogleStorageAddon = onPurchaseGoogleStorageAddon,
                 onRestoreGooglePlayPurchases = onRestoreGooglePlayPurchases,
                 onRecalculateFinancialSettings = onRecalculateFinancialSettings,
                 onUpdateAccountProfile = onUpdateAccountProfile,
