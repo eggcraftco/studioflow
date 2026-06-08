@@ -1978,7 +1978,7 @@ private fun PlanAccessDetail(
                         Text(if (plan == StudioBillingPlan.TeamMonthly) "Monthly Subscription" else "Workspace plan", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             MiniPill(planOrderLimitText(plan), Icons.Filled.Backup)
-                            MiniPill(planStorageLimitText(plan), Icons.Filled.Storage)
+                            MiniPill("Storage: ${workspace?.effectiveStorageLimitText ?: planStorageLimitText(plan).removePrefix("Storage: ")}", Icons.Filled.Storage)
                             MiniPill("Up to ${plan.teamMemberLimit}", Icons.Filled.People)
                         }
                     }
@@ -2075,7 +2075,7 @@ private fun PlanAccessDetail(
         }
         DetailCard(title = t("Available now"), icon = Icons.Filled.CheckCircle) {
             Text(t("Current plan access"), fontWeight = FontWeight.ExtraBold)
-            PlanFeatureGrid(plan = plan)
+            PlanFeatureGrid(plan = plan, storageText = workspace?.let { "Storage: ${it.effectiveStorageLimitText}" } ?: planStorageLimitText(plan))
         }
         DetailCard(title = t("Plan Matrix"), icon = Icons.Filled.TableChart) {
             Text(t("Shared app and web plan keys"), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -4038,13 +4038,13 @@ private fun MiniPill(label: String, icon: ImageVector) {
 }
 
 @Composable
-private fun PlanFeatureGrid(plan: StudioBillingPlan) {
+private fun PlanFeatureGrid(plan: StudioBillingPlan, storageText: String = planStorageLimitText(plan)) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val features = listOf(
         planOrderLimitText(plan) to true,
         planCustomerLimitText(plan) to true,
-        planStorageLimitText(plan) to plan.hasClientFiles,
+        storageText to plan.hasClientFiles,
         "Up to ${plan.teamMemberLimit} team" to plan.hasTeamAccess,
         "Client Files" to plan.hasClientFiles,
         t("Export Data") to true,

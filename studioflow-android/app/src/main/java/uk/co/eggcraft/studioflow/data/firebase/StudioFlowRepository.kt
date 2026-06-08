@@ -146,6 +146,10 @@ class StudioFlowRepository(
                 val status = stringValue(data["billingStorageAddonStatus"], "").lowercase()
                 if (status in setOf("active", "trialing", "past_due")) stringValue(data["billingStorageAddonKey"], "") else ""
             },
+            storageAddonMB = run {
+                val status = stringValue(data["billingStorageAddonStatus"], "").lowercase()
+                if (status in setOf("active", "trialing", "past_due")) (data["billingStorageAddonMB"] as? Number)?.toLong() ?: 0L else 0L
+            },
             memberAccess = memberAccess(data, user.uid, role == "owner", rawRole, customRoles),
             accountDisplayName = stringValue(
                 member?.get("displayName"),

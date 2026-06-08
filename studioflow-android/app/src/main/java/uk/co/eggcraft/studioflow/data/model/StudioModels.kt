@@ -130,6 +130,7 @@ data class StudioWorkspace(
     val billingPlan: StudioBillingPlan,
     val billingInterval: String = "",
     val storageAddonKey: String = "",
+    val storageAddonMB: Long = 0,
     val memberAccess: WorkspaceMemberAccess,
     val accountDisplayName: String = "",
     val accountPhotoUrl: String = "",
@@ -137,6 +138,15 @@ data class StudioWorkspace(
 ) {
     val isOwner: Boolean get() = role == "owner"
     val canSeeFinancialData: Boolean get() = memberAccess.financialInfo
+    // Base plan storage + any active add-on.
+    val effectiveStorageLimitMB: Long get() = billingPlan.storageLimitMb.toLong() + storageAddonMB
+    val effectiveStorageLimitText: String get() {
+        val mb = effectiveStorageLimitMB
+        return if (mb >= 1024) {
+            val gb = mb / 1024.0
+            if (gb == gb.toLong().toDouble()) "${gb.toLong()} GB" else String.format("%.1f GB", gb)
+        } else "$mb MB"
+    }
     val shouldShowOnlyAssignedProjects: Boolean get() =
         memberAccess.assignedProjectsOnly && !memberAccess.manageProjectAssignments
 }
