@@ -1371,12 +1371,23 @@ function createStripeBillingFunctions({
     }
   }
 
+  function googlePlayBillingEnabled() {
+    return String(process.env.GOOGLE_PLAY_BILLING_ENABLED || "").trim().toLowerCase() === "true";
+  }
+
   function googlePlayConfigStatus() {
     const credentials = googlePlayServiceAccount();
-    if (!credentials || !credentials.client_email || !credentials.private_key) {
-      return { configured: false, message: "Google Play billing setup coming soon." };
+    if (credentials && credentials.client_email && credentials.private_key) {
+      return { configured: true, credentials, packageName: googlePackageName() };
     }
-    return { configured: true, credentials, packageName: googlePackageName() };
+    // Keyless mode: when no service-account JSON is provided but billing is
+    // explicitly enabled, authenticate with Application Default Credentials
+    // (the function's runtime service account). This avoids downloading a
+    // service-account key, which an org policy may block.
+    if (googlePlayBillingEnabled()) {
+      return { configured: true, credentials: null, packageName: googlePackageName() };
+    }
+    return { configured: false, message: "Google Play billing setup coming soon." };
   }
 
   function googleLedgerId(purchaseToken) {
@@ -1393,7 +1404,9 @@ function createStripeBillingFunctions({
   function androidPublisherClient(credentials) {
     const { google } = require("googleapis");
     const auth = new google.auth.GoogleAuth({
-      credentials,
+      // When credentials are omitted, GoogleAuth falls back to Application
+      // Default Credentials (the function's runtime service account).
+      ...(credentials ? { credentials } : {}),
       scopes: ["https://www.googleapis.com/auth/androidpublisher"]
     });
     return google.androidpublisher({ version: "v3", auth });
