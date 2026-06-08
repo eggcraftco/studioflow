@@ -13,7 +13,7 @@ import { auth } from "@/lib/firebase/client";
 import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
-import { PLAN_ENTITLEMENTS, storageLimitLabel, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
+import { PLAN_ENTITLEMENTS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
 import {
   loadDashboardCounts,
   loadQuickReplySettings,
@@ -3266,11 +3266,15 @@ function PlanAccessSection({
   storagePercent: number;
 }) {
   const currentPlan = workspace.entitlements;
+  // Effective storage for the current workspace = base plan + active add-on.
+  const effectiveStorageLabel = workspace.billingStorageLimitMB >= 1024
+    ? `${Math.round((workspace.billingStorageLimitMB / 1024) * 10) / 10} GB`
+    : `${workspace.billingStorageLimitMB} MB`;
   const isActiveWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const featurePills = [
     { title: planOrderLimitText(currentPlan), enabled: true },
     { title: planCustomerLimitText(currentPlan), enabled: true },
-    { title: `Storage: ${storageLimitLabel(currentPlan)}`, enabled: currentPlan.features.client_files },
+    { title: `Storage: ${effectiveStorageLabel}`, enabled: currentPlan.features.client_files },
     { title: planTeamLimitText(currentPlan), enabled: currentPlan.features.team_access },
     { title: "Client Files", enabled: currentPlan.features.client_files },
     { title: "Export Data", enabled: currentPlan.features.export_data },
@@ -3296,7 +3300,7 @@ function PlanAccessSection({
             <p>{planSummaryText(currentPlan.plan)}</p>
             <div className="plan-access-compact-metrics">
               <span>{planOrderLimitText(currentPlan)}</span>
-              <span>{`Storage: ${storageLimitLabel(currentPlan)}`}</span>
+              <span>{`Storage: ${effectiveStorageLabel}`}</span>
               <span>{planTeamLimitText(currentPlan)}</span>
             </div>
           </div>
