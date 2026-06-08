@@ -12630,66 +12630,137 @@ struct AccountProfileView: View {
 
     @ViewBuilder
     private var storageAddonCard: some View {
-        let grouped = Dictionary(grouping: StudioStoreKitManager.storageAddonOptions) { $0.storageGB }
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        let tiers = Array(Set(StudioStoreKitManager.storageAddonOptions.map { $0.storageGB })).sorted()
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "externaldrive.badge.plus")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundColor(.blue)
                     .frame(width: 36, height: 36)
                     .background(Color.blue.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
+
+                VStack(alignment: .leading, spacing: 4) {
                     Text(t("Storage add-ons", lang: seciliDil))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                     Text(t("Extra Client Files storage on top of your plan.", lang: seciliDil))
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            if authVM.currentStorageAddonMB > 0 {
-                Text(String(format: t("Current total storage: %@", lang: seciliDil), authVM.effectiveStorageLimitText))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.blue)
-            }
-            ForEach(grouped.keys.sorted(), id: \.self) { gb in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("+\(gb) GB")
-                        .font(.system(size: 12, weight: .heavy))
-                    ForEach((grouped[gb] ?? []).sorted { $0.interval == .monthly && $1.interval == .yearly }) { option in
-                        storageAddonPurchaseRow(option)
+
+                Spacer(minLength: 0)
+
+                if authVM.currentStorageAddonMB > 0 {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(t("Total storage", lang: seciliDil))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Text(authVM.effectiveStorageLimitText)
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundColor(.blue)
                     }
                 }
-                .padding(8)
-                .background(Color.primary.opacity(0.03))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: isPhoneLayout ? 210 : 235), spacing: 10)], alignment: .leading, spacing: 10) {
+                ForEach(tiers, id: \.self) { gb in
+                    storageProductCard(gb)
+                }
             }
         }
         .padding(14)
-        .background(Color.primary.opacity(0.02))
+        .background(Color.secondary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func storageAddonPurchaseRow(_ option: StudioStorageAddonOption) -> some View {
+    private func storageProductCard(_ gb: Int) -> some View {
+        let options = StudioStoreKitManager.storageAddonOptions
+            .filter { $0.storageGB == gb }
+            .sorted { $0.interval == .monthly && $1.interval == .yearly }
+        let isCurrentTier = options.contains { authVM.currentStorageAddonKey == $0.itemKey }
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: "externaldrive.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.blue)
+                    .frame(width: 26, height: 26)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text("+\(gb) GB")
+                    .font(.system(size: 12, weight: .bold))
+
+                Spacer(minLength: 0)
+
+                if isCurrentTier {
+                    Text(t("Active", lang: seciliDil))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+            }
+
+            ForEach(options) { option in
+                storageProductPurchaseRow(option)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(isCurrentTier ? Color.blue.opacity(0.50) : Color.primary.opacity(0.08), lineWidth: isCurrentTier ? 1.1 : 0.8)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+    }
+
+    private func storageProductPurchaseRow(_ option: StudioStorageAddonOption) -> some View {
         let product = storeKitManager.storageProductSummary(for: option.productId)
         let isCurrent = authVM.currentStorageAddonKey == option.itemKey
-        return HStack(spacing: 8) {
-            Text(t(option.interval.displayName, lang: seciliDil))
-                .font(.system(size: 11, weight: .bold))
-            Spacer(minLength: 0)
-            Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(product == nil ? .secondary : .blue)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(t(option.interval.displayName, lang: seciliDil))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+                Spacer(minLength: 0)
+                Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(product == nil ? .secondary : .blue)
+            }
+
+            Text(option.productId)
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            if product == nil {
+                Text(t("Create this product ID in App Store Connect.", lang: seciliDil))
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button {
                 Task { await purchaseStoreKitStorageAddon(option) }
             } label: {
                 Text(t(isCurrent ? "Current add-on" : "Subscribe", lang: seciliDil))
                     .font(.system(size: 10, weight: .bold))
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(isCurrent || !authVM.isCompanyOwner || product == nil || storeKitManager.isPurchasing)
         }
+        .padding(8)
+        .background(Color.primary.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func syncCurrentStoreKitEntitlement() async {
