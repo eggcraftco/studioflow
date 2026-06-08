@@ -65,7 +65,7 @@ struct AyarlarView: View {
         default:
             mappedSection = startSection
         }
-        let allowedForReadOnly = ["General", "Plan & Access", "Team Access", "Support"]
+        let allowedForReadOnly = ["General", "Plan & Access", "Team Access", "Support", "Legal"]
         let initialSection = canEditWorkspace || allowedForReadOnly.contains(mappedSection) ? mappedSection : "General"
         _seciliAyarSekmesi = State(initialValue: initialSection)
         _selectedGeneralSection = State(initialValue: initialGeneralSubsection)
@@ -340,6 +340,10 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settingsGeneral")
         case "Support":
             return workspaceAccessAllows("settingsSupport")
+        case "Legal":
+            // Legal/policy links are always available to every signed-in user
+            // (App Store / Play Store compliance requirement).
+            return true
         default:
             return false
         }
@@ -358,7 +362,8 @@ struct AyarlarView: View {
             ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill"),
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
-            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill")
+            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
+            ("Legal", t("Legal", lang: seciliDil), "doc.text.fill")
         ]
 
         return allSections.filter { canShowSettingsSection($0.key) }
@@ -564,6 +569,8 @@ struct AyarlarView: View {
             return t("Members, roles and workspace requests.", lang: seciliDil)
         case "Message Settings":
             return t("Direct messages, group chats and attachment permissions.", lang: seciliDil)
+        case "Legal":
+            return t("Privacy, terms and policy documents.", lang: seciliDil)
         default:
             return ""
         }
@@ -594,6 +601,61 @@ struct AyarlarView: View {
             else if seciliAyarSekmesi == "Team Access" { AccountProfileView(sectionMode: .teamAccess) }
             else if seciliAyarSekmesi == "Message Settings" { messageWorkspaceSettingsAyari }
             else if seciliAyarSekmesi == "Support" { supportTicketsAyari }
+            else if seciliAyarSekmesi == "Legal" { legalLinksAyari }
+        }
+    }
+
+    // MARK: - Legal / policy links
+
+    private var legalLinks: [(key: String, title: String, icon: String, path: String)] {
+        [
+            ("privacy", t("Privacy Policy", lang: seciliDil), "hand.raised.fill", "/privacy"),
+            ("terms", t("Terms of Service", lang: seciliDil), "doc.plaintext.fill", "/terms"),
+            ("refund", t("Refund & Cancellation", lang: seciliDil), "arrow.uturn.backward.circle.fill", "/refund-cancellation"),
+            ("cookies", t("Cookie Policy", lang: seciliDil), "circle.grid.2x2.fill", "/cookies"),
+            ("acceptable", t("Acceptable Use", lang: seciliDil), "checkmark.shield.fill", "/acceptable-use"),
+            ("deletion", t("Account Deletion", lang: seciliDil), "trash.fill", "/account-deletion"),
+            ("contact", t("Support & Contact", lang: seciliDil), "envelope.fill", "/contact")
+        ]
+    }
+
+    @ViewBuilder
+    private var legalLinksAyari: some View {
+        VStack(alignment: .leading, spacing: isPhoneLayout ? 16 : 20) {
+            SettingsCard(title: t("Legal", lang: seciliDil), iconName: "doc.text.fill") {
+                VStack(spacing: 0) {
+                    ForEach(Array(legalLinks.enumerated()), id: \.element.key) { index, item in
+                        if let url = URL(string: "https://nivadesk.app" + item.path) {
+                            Link(destination: url) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: item.icon)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24)
+                                    Text(item.title)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right.square")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 12)
+                            }
+                            .buttonStyle(.plain)
+                            if index < legalLinks.count - 1 {
+                                Divider().opacity(0.4)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text(t("NivaDesk is operated by EGGCRAFT LIMITED, a company registered in the United Kingdom.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 4)
         }
     }
 

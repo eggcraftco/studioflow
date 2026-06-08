@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,8 +36,15 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Cookie
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Email
@@ -93,6 +101,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -346,7 +355,8 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
-        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People)
+        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
+        SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel)
     ).filter { section ->
         if (isWorkflowOnly) {
             when (section.key) {
@@ -356,6 +366,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "quickReply" -> access?.quickReply != false && access?.settingsQuickReply != false
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
+                "legal" -> true
                 else -> false
             }
         } else {
@@ -378,6 +389,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
                 "about" -> access?.settingsGeneral != false
+                "legal" -> true
                 else -> false
             }
         }
@@ -529,6 +541,7 @@ private fun SettingsDetailScreen(
                     onSaveCustomRole = onSaveCustomRole,
                     onDeleteCustomRole = onDeleteCustomRole
                 )
+                "legal" -> LegalLinksDetail()
             }
         }
         item {
@@ -1970,7 +1983,9 @@ private fun PlanAccessDetail(
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(offerPlan.title, fontWeight = FontWeight.ExtraBold)
                             offersForPlan.forEach { offer ->
-                                val isCurrent = plan == offer.plan
+                                val currentInterval = workspace?.billingInterval.orEmpty()
+                                val isCurrent = plan == offer.plan &&
+                                    (currentInterval.isBlank() || currentInterval == offer.interval)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         if (offer.interval == "year") t("Yearly") else t("Monthly"),
@@ -2006,6 +2021,7 @@ private fun PlanAccessDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                SubscriptionLegalFooter()
             }
         }
         DetailCard(title = t("Available now"), icon = Icons.Filled.CheckCircle) {
@@ -3426,6 +3442,80 @@ private fun DetailCard(title: String, icon: ImageVector, content: @Composable Co
             }
             content()
         }
+    }
+}
+
+// Google Play / App Store subscription disclosure + required Terms/Privacy links.
+@Composable
+private fun SubscriptionLegalFooter() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val uriHandler = LocalUriHandler.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            t("Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. You can manage or cancel anytime in your Google Play account settings."),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                t("Terms of Service"),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = StudioBlue,
+                modifier = Modifier.clickable { uriHandler.openUri("https://nivadesk.app/terms") }
+            )
+            Text(
+                t("Privacy Policy"),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = StudioBlue,
+                modifier = Modifier.clickable { uriHandler.openUri("https://nivadesk.app/privacy") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegalLinksDetail() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val uriHandler = LocalUriHandler.current
+    val links = listOf(
+        Triple("Privacy Policy", Icons.Filled.PrivacyTip, "/privacy"),
+        Triple("Terms of Service", Icons.Filled.Description, "/terms"),
+        Triple("Refund & Cancellation", Icons.Filled.Undo, "/refund-cancellation"),
+        Triple("Cookie Policy", Icons.Filled.Cookie, "/cookies"),
+        Triple("Acceptable Use", Icons.Filled.VerifiedUser, "/acceptable-use"),
+        Triple("Account Deletion", Icons.Filled.DeleteForever, "/account-deletion"),
+        Triple("Support & Contact", Icons.Filled.Email, "/contact")
+    )
+    DetailColumn {
+        DetailCard(title = t("Legal"), icon = Icons.Filled.Gavel) {
+            links.forEachIndexed { index, (title, icon, path) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { uriHandler.openUri("https://nivadesk.app$path") }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(icon, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(t(title), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Icon(Icons.Filled.OpenInNew, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                }
+                if (index < links.size - 1) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                }
+            }
+        }
+        Text(
+            t("NivaDesk is operated by EGGCRAFT LIMITED, a company registered in the United Kingdom."),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
     }
 }
 

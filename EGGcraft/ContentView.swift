@@ -12028,6 +12028,7 @@ struct AccountProfileView: View {
                     planAndAccessCard
                     if authVM.isCompanyOwner {
                         storeKitPurchaseCard
+                        subscriptionLegalFooter
                     }
                 case .teamAccess:
                     teamAccessCard
@@ -12428,6 +12429,30 @@ struct AccountProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
     }
 
+
+    // Auto-renewable subscription disclosure + required Terms/Privacy links
+    // (App Store Review Guideline 3.1.2 requires functional links in the binary).
+    private var subscriptionLegalFooter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. You can manage or cancel anytime in your App Store account settings.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 14) {
+                if let terms = URL(string: "https://nivadesk.app/terms") {
+                    Link(t("Terms of Service", lang: seciliDil), destination: terms)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                if let privacy = URL(string: "https://nivadesk.app/privacy") {
+                    Link(t("Privacy Policy", lang: seciliDil), destination: privacy)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
+    }
 
     private var storeKitPurchaseCard: some View {
         VStack(alignment: .leading, spacing: 12) {

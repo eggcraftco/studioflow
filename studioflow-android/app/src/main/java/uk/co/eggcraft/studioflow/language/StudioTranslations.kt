@@ -58,6 +58,18 @@ internal fun normalizeLang(raw: String?): String {
 private val TRANSLATIONS: Map<String, Map<String, String>> by lazy { TR_1 + TR_2 + TR_3 + TR_4 }
 
 private val TR_1: Map<String, Map<String, String>> by lazy { mapOf(
+    // ============================ LEGAL / POLICY ============================
+    "Legal" to mapOf("Türkçe" to "Yasal"),
+    "Privacy, terms and policy documents." to mapOf("Türkçe" to "Gizlilik, koşullar ve politika belgeleri."),
+    "Privacy Policy" to mapOf("Türkçe" to "Gizlilik Politikası"),
+    "Terms of Service" to mapOf("Türkçe" to "Hizmet Şartları"),
+    "Refund & Cancellation" to mapOf("Türkçe" to "İade ve İptal"),
+    "Cookie Policy" to mapOf("Türkçe" to "Çerez Politikası"),
+    "Acceptable Use" to mapOf("Türkçe" to "Kabul Edilebilir Kullanım"),
+    "Account Deletion" to mapOf("Türkçe" to "Hesap Silme"),
+    "Support & Contact" to mapOf("Türkçe" to "Destek ve İletişim"),
+    "NivaDesk is operated by EGGCRAFT LIMITED, a company registered in the United Kingdom." to mapOf("Türkçe" to "NivaDesk, Birleşik Krallık'ta kayıtlı EGGCRAFT LIMITED tarafından işletilir."),
+    "Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. You can manage or cancel anytime in your Google Play account settings." to mapOf("Türkçe" to "Abonelikler, mevcut dönemin bitiminden en az 24 saat önce iptal edilmedikçe otomatik olarak yenilenir. Google Play hesap ayarlarınızdan istediğiniz zaman yönetebilir veya iptal edebilirsiniz."),
     // ============================ CORPORATION TAX ============================
     "Corporation Tax" to mapOf("Türkçe" to "Kurumlar Vergisi"),
     "Profit after VAT" to mapOf("Türkçe" to "KDV Sonrası Kâr"),
