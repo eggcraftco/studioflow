@@ -141,6 +141,7 @@ class StudioFlowRepository(
             role = role,
             roleLabel = customRoles.firstOrNull { it.id == rawRole }?.name ?: roleLabel(role),
             billingPlan = plan,
+            billingInterval = stringValue(data["billingInterval"], ""),
             memberAccess = memberAccess(data, user.uid, role == "owner", rawRole, customRoles),
             accountDisplayName = stringValue(
                 member?.get("displayName"),
