@@ -573,10 +573,17 @@ service cloud.firestore {
       // API credentials and owner-controlled Knowledge Base fields must be
       // changed only through saveQuickReplySettings callable validation.
       allow write: if canWriteCompanyData(companyId)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
-          'customProductsJSON', 'customRulesJSON'
-        ]);
+        && (
+          resource == null
+            ? !request.resource.data.keys().hasAny([
+                'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
+                'customProductsJSON', 'customRulesJSON'
+              ])
+            : !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
+                'customProductsJSON', 'customRulesJSON'
+              ])
+        );
     }
 
     match /quickReplySecrets/{companyId} {
