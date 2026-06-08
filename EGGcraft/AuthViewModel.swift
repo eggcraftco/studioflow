@@ -758,6 +758,17 @@ class AuthViewModel: ObservableObject {
     @Published private(set) var isWorkspaceReady: Bool = false
     @Published var currentBillingPlan: StudioBillingPlan = .demo
     @Published var currentStorageAddonKey: String = ""
+    @Published var currentStorageAddonMB: Int = 0
+
+    // Base plan storage + any active add-on, as a display string (e.g. "110 GB").
+    var effectiveStorageLimitText: String {
+        let totalMB = currentPlanEntitlements.storageLimitMB + currentStorageAddonMB
+        if totalMB >= 1024 {
+            let gb = Double(totalMB) / 1024.0
+            return gb == gb.rounded() ? "\(Int(gb)) GB" : String(format: "%.1f GB", gb)
+        }
+        return "\(totalMB) MB"
+    }
     @Published var currentBillingInterval: StudioStoreBillingInterval? = nil
     @Published var billingPlanSource: String = "legacy"
     @Published var billingUpdatedAt: Date? = nil
@@ -2583,9 +2594,9 @@ class AuthViewModel: ObservableObject {
         billingPlanSource = (data["billingPlanSource"] as? String) ?? (rawPlan.isEmpty ? "legacy_default" : "manual")
         billingUpdatedAt = (data["billingUpdatedAt"] as? Timestamp)?.dateValue()
         let addonStatus = ((data["billingStorageAddonStatus"] as? String) ?? "").lowercased()
-        currentStorageAddonKey = ["active", "trialing", "past_due"].contains(addonStatus)
-            ? ((data["billingStorageAddonKey"] as? String) ?? "")
-            : ""
+        let addonActive = ["active", "trialing", "past_due"].contains(addonStatus)
+        currentStorageAddonKey = addonActive ? ((data["billingStorageAddonKey"] as? String) ?? "") : ""
+        currentStorageAddonMB = addonActive ? ((data["billingStorageAddonMB"] as? Int) ?? 0) : 0
         UserDefaults.standard.set(resolvedPlan.rawValue, forKey: billingPlanDefaultsKey)
     }
 

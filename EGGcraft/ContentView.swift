@@ -12647,6 +12647,11 @@ struct AccountProfileView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            if authVM.currentStorageAddonMB > 0 {
+                Text(String(format: t("Current total storage: %@", lang: seciliDil), authVM.effectiveStorageLimitText))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.blue)
+            }
             ForEach(grouped.keys.sorted(), id: \.self) { gb in
                 VStack(alignment: .leading, spacing: 6) {
                     Text("+\(gb) GB")
