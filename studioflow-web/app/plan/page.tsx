@@ -428,20 +428,23 @@ export default function PlanPage() {
                     </p>
                     {allowInternalBillingTests ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <button
-                          className="button"
-                          disabled={!canBuyAddon || checkoutLoadingKey !== null}
-                          onClick={() => handleTestCheckout(addon.monthly.itemKey)}
-                        >
-                          {checkoutLoadingKey === addon.monthly.itemKey ? "Opening checkout..." : `Test ${addon.monthly.label}`}
-                        </button>
-                        <button
-                          className="button secondary"
-                          disabled={!canBuyAddon || checkoutLoadingKey !== null}
-                          onClick={() => handleTestCheckout(addon.yearly.itemKey)}
-                        >
-                          {checkoutLoadingKey === addon.yearly.itemKey ? "Opening checkout..." : `Test ${addon.yearly.label}`}
-                        </button>
+                        {([addon.monthly, addon.yearly] as const).map(option => {
+                          const isCurrentAddon = workspace.storageAddonKey === option.itemKey;
+                          return (
+                            <button
+                              key={option.itemKey}
+                              className="button secondary"
+                              disabled={isCurrentAddon || !canBuyAddon || checkoutLoadingKey !== null}
+                              onClick={() => handleTestCheckout(option.itemKey)}
+                            >
+                              {isCurrentAddon
+                                ? "Current add-on"
+                                : checkoutLoadingKey === option.itemKey
+                                  ? "Opening checkout..."
+                                  : `Test ${option.label}`}
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : (
                       <button className="button secondary" disabled>
