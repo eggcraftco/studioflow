@@ -16192,6 +16192,105 @@ html[dir="rtl"] .login-public-shell {
   }
 }
 
+/* Pricing — billing toggle + split price + recommended badge */
+.public-plan-toggle-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 26px;
+}
+
+.public-plan-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--public-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.public-plan-toggle button {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--public-muted);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.public-plan-toggle button.active {
+  background: #fff;
+  color: var(--public-text);
+  box-shadow: 0 2px 8px rgba(23, 25, 35, 0.10);
+}
+
+.public-plan-toggle-save {
+  padding: 0 12px 0 6px;
+  color: var(--public-accent);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.public-plan-card {
+  position: relative;
+}
+
+.public-plan-badge {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 6px 13px;
+  background: var(--public-accent) !important;
+  color: #fff !important;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(47, 111, 109, 0.3);
+}
+
+.public-plan-badge-star { font-size: 11px; }
+
+.public-plan-price-block {
+  margin: 14px 0 14px;
+}
+
+.public-plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-weight: 950;
+}
+
+.public-plan-price-amount {
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 820;
+  letter-spacing: -0.02em;
+  color: var(--public-accent);
+}
+
+.public-plan-price-per {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--public-muted);
+}
+
+.public-plan-price-alt {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--public-muted);
+}
+
 /* ChatGPT App showcase — redesigned */
 .gpt-grid {
   display: grid;
