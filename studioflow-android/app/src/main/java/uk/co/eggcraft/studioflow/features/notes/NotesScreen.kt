@@ -15,6 +15,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
@@ -572,7 +573,10 @@ fun NotesScreen(
                     }
                     .zIndex(if (isDragging) 10f else 0f)
             ) {
-                NoteCard(note, onClick = { editingNote = note }, onTogglePin = {
+                val noteCardContent = @Composable {
+                    NoteCard(note, onClick = { editingNote = note },
+                    onLongClick = { if (!selectionActive) toggleSelect(note.id) },
+                    onTogglePin = {
                     onSave(note.copy(isPinned = !note.isPinned, updatedAt = Date()))
                 }, onArchive = {
                     onSave(note.copy(isArchived = !note.isArchived, updatedAt = Date()))
@@ -599,6 +603,38 @@ fun NotesScreen(
                 onOpenCollaborators = { collabForNote = note },
                 allLabelsList = allLabels,
                 teamMembers = state.messageTeamMembers)
+                }
+
+                // Swipe-left to delete (disabled during multi-select or drag-reorder).
+                if (selectionActive || isDragging) {
+                    noteCardContent()
+                } else {
+                    val swipeState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                        confirmValueChange = { v ->
+                            if (v == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                                if (note.isDeleted) onDelete(note.id)
+                                else onSave(note.copy(isDeleted = true, updatedAt = Date()))
+                                true
+                            } else false
+                        }
+                    )
+                    androidx.compose.material3.SwipeToDismissBox(
+                        state = swipeState,
+                        enableDismissFromStartToEnd = false,
+                        backgroundContent = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFFD32F2F))
+                                    .padding(horizontal = 22.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = Color.White)
+                            }
+                        }
+                    ) { noteCardContent() }
+                }
 
                 // Multi-select checkmark overlay (top-left), visible when hovered/selected/in selection mode
                 if ((selectedIds.contains(note.id) || selectionActive) && !isDragging) {
@@ -832,9 +868,11 @@ fun NotesScreen(
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun NoteCard(
     note: StudioKeepNote,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onTogglePin: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
@@ -864,8 +902,12 @@ private fun NoteCard(
         shape = RoundedCornerShape(14.dp),
         color = colorForNote(note.colorName),
         border = androidx.compose.foundation.BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) StudioBlue else MaterialTheme.colorScheme.outlineVariant),
-        onClick = { if (selectionActive) onToggleSelect() else onClick() },
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { if (selectionActive) onToggleSelect() else onClick() },
+                onLongClick = onLongClick
+            )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

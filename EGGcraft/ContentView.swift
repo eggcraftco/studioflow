@@ -1719,6 +1719,62 @@ extension Notification.Name {
     static let studioOpenNotesFromActivityNotification = Notification.Name("studioOpenNotesFromActivityNotification")
 }
 
+// Swipe-left-to-delete container for phone note cards (LazyVGrid/Stack can't use
+// SwiftUI List .swipeActions). Reveals a red Delete action; swiping far enough
+// keeps it open, then tapping the action deletes. A short swipe snaps back.
+struct KeepSwipeRow<Content: View>: View {
+    let onDelete: () -> Void
+    let deleteLabel: String
+    @ViewBuilder var content: () -> Content
+
+    @State private var offset: CGFloat = 0
+    private let actionWidth: CGFloat = 88
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.red)
+                .overlay(alignment: .trailing) {
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) { offset = 0 }
+                        onDelete()
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: "trash.fill").font(.system(size: 17, weight: .bold))
+                            Text(deleteLabel).font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: actionWidth)
+                        .frame(maxHeight: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .opacity(offset < -2 ? 1 : 0)
+
+            content()
+                .offset(x: offset)
+                .gesture(
+                    DragGesture(minimumDistance: 20)
+                        .onChanged { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            if value.translation.width < 0 {
+                                offset = max(value.translation.width, -actionWidth - 16)
+                            } else if offset < 0 {
+                                offset = min(0, -actionWidth + value.translation.width)
+                            }
+                        }
+                        .onEnded { value in
+                            let shouldOpen = value.translation.width < -actionWidth * 0.55
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                offset = shouldOpen ? -actionWidth : 0
+                            }
+                        }
+                )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
 struct StudioKeepNotesView: View {
     var onOpenProject: ((String) -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
@@ -5485,7 +5541,7 @@ struct StudioKeepNotesView: View {
         let showActions = (!isCompactKeepPhoneLayout && hoveredKeepNoteId == note.id) || selectedKeepNoteIds.contains(note.id)
         let isSelected = selectedKeepNoteIds.contains(note.id)
 
-        return VStack(alignment: .leading, spacing: 10) {
+        let card = VStack(alignment: .leading, spacing: 10) {
             noteHeaderRow(note, showActions: showActions, isSelected: isSelected)
 
             if let reminderDate = note.reminderDate {
@@ -5563,7 +5619,7 @@ struct StudioKeepNotesView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(alignment: .topLeading) {
-            if (showActions || isSelected) && draggingKeepNoteId != note.id {
+            if (showActions || isSelected || (isCompactKeepPhoneLayout && isSelectionModeActive)) && draggingKeepNoteId != note.id {
                 noteSelectionButton(note, isSelected: isSelected)
                     .offset(x: -8, y: -8)
                     .transition(.scale.combined(with: .opacity))
@@ -5581,23 +5637,43 @@ struct StudioKeepNotesView: View {
         .onHover { isHovering in
             hoveredKeepNoteId = isHovering ? note.id : nil
         }
-        .opacity(draggingKeepNoteId == note.id ? 0.72 : 1)
-        .scaleEffect(draggingKeepNoteId == note.id ? 0.985 : 1)
-        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: draggingKeepNoteId)
-        .onDrag {
-            draggingKeepNoteId = note.id
-            lastDropTargetKeepNoteId = nil
-            return NSItemProvider(object: note.id as NSString)
-        }
-        .onDrop(of: [.text], delegate: KeepNoteDropDelegate(
-            targetNoteId: note.id,
-            draggingNoteId: $draggingKeepNoteId,
-            lastTargetNoteId: $lastDropTargetKeepNoteId,
-            moveAction: { draggedId, targetId in
-                moveKeepNote(draggedId, before: targetId)
-            }
-        ))
 
+        // Phone: swipe-left to delete + long-press to enter multi-select.
+        // Desktop/iPad: drag to reorder (hover reveals actions).
+        if isCompactKeepPhoneLayout {
+            return AnyView(
+                KeepSwipeRow(
+                    onDelete: { selectedSection == "trash" ? permanentlyDelete(note) : moveToTrash(note) },
+                    deleteLabel: t("Delete", lang: seciliDil)
+                ) { card }
+                .onLongPressGesture(minimumDuration: 0.35) {
+                    #if os(iOS)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    #endif
+                    if !selectedKeepNoteIds.contains(note.id) { toggleKeepNoteSelection(note) }
+                }
+            )
+        }
+
+        return AnyView(
+            card
+                .opacity(draggingKeepNoteId == note.id ? 0.72 : 1)
+                .scaleEffect(draggingKeepNoteId == note.id ? 0.985 : 1)
+                .animation(.spring(response: 0.28, dampingFraction: 0.88), value: draggingKeepNoteId)
+                .onDrag {
+                    draggingKeepNoteId = note.id
+                    lastDropTargetKeepNoteId = nil
+                    return NSItemProvider(object: note.id as NSString)
+                }
+                .onDrop(of: [.text], delegate: KeepNoteDropDelegate(
+                    targetNoteId: note.id,
+                    draggingNoteId: $draggingKeepNoteId,
+                    lastTargetNoteId: $lastDropTargetKeepNoteId,
+                    moveAction: { draggedId, targetId in
+                        moveKeepNote(draggedId, before: targetId)
+                    }
+                ))
+        )
     }
 
     private var emptyState: some View {
