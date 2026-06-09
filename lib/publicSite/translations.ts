@@ -501,7 +501,7 @@ export const PUBLIC_SITE_EN = {
   "plan.team.bullet3": "Team roles and permissions",
   "plan.team.bullet4": "Client Files and advanced finance",
   "plan.team.bullet5": "ChatGPT App included",
-  "plan.team.limitNote": "Add seats for £5/month each · up to 10 users self-service",
+  "plan.team.limitNote": "Add seats for £5/month each · up to 10 users (contact us)",
 
   "plan.model.demo": "Demo",
   "plan.model.oneTime": "Legacy plan",
@@ -583,7 +583,7 @@ export const PUBLIC_SITE_EN = {
   "faq.q7.title": "How many users are included?",
   "faq.q7.body": "Free Demo, Lite and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio.",
   "faq.q8.title": "Can I add more team members?",
-  "faq.q8.body": "Yes. On Team you can add seats beyond the included 5 for £5/month each, self-service, up to 10 users in total.",
+  "faq.q8.body": "Team includes 5 seats and can grow to 10 users in total, with additional seats at £5/month (or £50/year) each. To add seats right now, contact us at contact@nivadesk.co.uk—self-service seat management is on the way.",
   "faq.q9.title": "Which features are Team-only?",
   "faq.q9.body": "Internal team messaging, Quick Replies, team roles and permissions, join-request approval and To Do assignment are available on the Team plan.",
 
@@ -1156,7 +1156,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "plan.team.bullet3": "Ekip rolleri ve izinleri",
   "plan.team.bullet4": "Client Files ve gelişmiş finans",
   "plan.team.bullet5": "ChatGPT App dahil",
-  "plan.team.limitNote": "Ek koltuk £5/ay · self-service ile 10 kullanıcıya kadar",
+  "plan.team.limitNote": "Ek koltuk £5/ay · 10 kullanıcıya kadar (bize ulaşın)",
   "plan.model.demo": "Demo",
   "plan.model.oneTime": "Eski plan",
   "plan.model.monthly": "Aylık veya yıllık abonelik",
@@ -1234,7 +1234,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "faq.q7.title": "Kaç kullanıcı dahil?",
   "faq.q7.body": "Free Demo, Lite ve Pro tek kullanıcılı workspace'lerdir. Team, stüdyonla iş birliği yapabilmen için 5 koltuk içerir.",
   "faq.q8.title": "Daha fazla ekip üyesi ekleyebilir miyim?",
-  "faq.q8.body": "Evet. Team'de, dahil olan 5 koltuğun ötesine her biri £5/ay olacak şekilde, toplam 10 kullanıcıya kadar kendin koltuk ekleyebilirsin.",
+  "faq.q8.body": "Team 5 koltuk içerir ve her biri £5/ay (veya £50/yıl) olan ek koltuklarla toplam 10 kullanıcıya kadar büyüyebilir. Şimdi koltuk eklemek için contact@nivadesk.co.uk ile iletişime geç—self-service koltuk yönetimi yakında geliyor.",
   "faq.q9.title": "Hangi özellikler sadece Team'e özel?",
   "faq.q9.body": "Ekip içi mesajlaşma, Quick Replies, ekip rolleri ve izinleri, katılım isteği onayı ve To Do ataması Team planında sunulur.",
 
