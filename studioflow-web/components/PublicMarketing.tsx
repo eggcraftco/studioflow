@@ -775,12 +775,63 @@ function PublicShell({ children }: { children: ReactNode }) {
   );
 }
 
+const HERO_CHIPS: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
+  { key: "heroChip.orders", icon: <path d="M4 5h12M4 9h12M4 13h8" /> },
+  { key: "heroChip.files", icon: <path d="M3 6l1.5-2h4l1 1.5H17v9H3V6z" /> },
+  { key: "heroChip.finance", icon: <path d="M7 4h6M7 7h6M11 4c-3 0-3 5 0 5s3 4 0 4H7" /> },
+  { key: "heroChip.notes", icon: <path d="M5 3h10v14H5zM7 7h6M7 10h6M7 13h4" /> },
+  { key: "heroChip.chatgpt", icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> },
+  { key: "heroChip.team", icon: <path d="M7 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13 9a2 2 0 100-4M3 16c0-2.2 1.8-4 4-4s4 1.8 4 4M12 12c2 0 4 1.4 4 4" /> }
+];
+
+function HeroFeatureChips() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="hero-chips">
+      {HERO_CHIPS.map(chip => (
+        <span className="hero-chip" key={chip.key}>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {chip.icon}
+          </svg>
+          {t(chip.key)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ProductScene() {
+  const { t } = usePublicSiteLanguage();
   return (
     <div className="public-hero-visual" aria-hidden="true">
       <div className="hero-app-shot">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/hero-app.webp" alt="NivaDesk order workspace" loading="eager" />
+      </div>
+      <div className="hero-float hero-float-orders">
+        <span className="hero-float-icon" data-tone="sage">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
+        </span>
+        <div><strong>{t("heroFloat.ordersTitle")}</strong><span>{t("heroFloat.ordersSub")}</span></div>
+      </div>
+      <div className="hero-float hero-float-received">
+        <span className="hero-float-icon" data-tone="green">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 5h5M8 8h5M11 5c-3 0-3 5 0 5s3 4 0 4H8" /></svg>
+        </span>
+        <div><strong>{t("heroFloat.receivedTitle")}</strong><span>{t("heroFloat.receivedSub")}</span></div>
+      </div>
+      <div className="hero-float hero-float-chatgpt">
+        <span className="hero-float-icon" data-tone="violet">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /></svg>
+        </span>
+        <div><strong>{t("heroFloat.chatgptTitle")}</strong><span>{t("heroFloat.chatgptSub")}</span></div>
+        <span className="hero-float-arrow">›</span>
+      </div>
+      <div className="hero-float hero-float-file">
+        <span className="hero-float-icon" data-tone="gold">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h6l4 4v10H5zM11 3v4h4" /></svg>
+        </span>
+        <div><strong>{t("heroFloat.fileTitle")}</strong><span>{t("heroFloat.fileSub")}</span></div>
       </div>
     </div>
   );
@@ -1367,9 +1418,15 @@ export function PublicHomePage() {
           <div className="public-shell public-hero-content">
             <div className="public-hero-copy public-scroll-reveal">
               <span className="public-eyebrow">{t("hero.eyebrow")}</span>
-              <h1>{t("hero.title")}</h1>
+              <h1>
+                {t("hero.titleLead")} <span className="hero-accent">{t("hero.titleAccent")}</span> {t("hero.titleTail")}
+              </h1>
               <p>{t("hero.body")}</p>
-              <HeroActions />
+              <div className="public-hero-actions">
+                <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
+                <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
+              </div>
+              <HeroFeatureChips />
             </div>
           </div>
         </section>
