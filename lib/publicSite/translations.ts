@@ -13,6 +13,7 @@ export const PUBLIC_SITE_EN = {
 
   "nav.publicPages": "Public pages",
   "nav.footer": "Footer navigation",
+  "nav.home": "Home",
   "nav.features": "Features",
   "nav.pricing": "Pricing",
   "nav.faq": "FAQ",
@@ -631,6 +632,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "language.draftNotice": "Taslak public site çevirisi. Çevrilmemiş metinlerde İngilizce kullanılır.",
   "nav.publicPages": "Public sayfalar",
   "nav.footer": "Footer navigasyonu",
+  "nav.home": "Ana Sayfa",
   "nav.features": "Özellikler",
   "nav.pricing": "Fiyatlandırma",
   "nav.faq": "SSS",
