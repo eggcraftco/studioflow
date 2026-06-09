@@ -1419,6 +1419,74 @@ function GptMark() {
   );
 }
 
+function ScheduleTimelineShowcase() {
+  const { t } = usePublicSiteLanguage();
+  const sideFeatures: { key: string; title: PublicSiteTranslationKey; body: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
+    { key: "f1", title: "schedule.f1.title", body: "schedule.f1.body", tone: "calendar", icon: <><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></> },
+    { key: "f2", title: "schedule.f2.title", body: "schedule.f2.body", tone: "filter", icon: <path d="M4 5h12l-4.6 5.4v4.1l-2.8 1.5v-5.6z" /> }
+  ];
+  const floats: { key: string; title: PublicSiteTranslationKey; body: PublicSiteTranslationKey; tone: string; pos: string; icon: ReactNode }[] = [
+    { key: "float1", title: "schedule.float1.title", body: "schedule.float1.body", tone: "drag", pos: "right-top", icon: <><path d="M10 3v8M10 11l-2.4-2.4M10 11l2.4-2.4" /><rect x="5" y="13" width="10" height="4" rx="1.5" /></> },
+    { key: "float2", title: "schedule.float2.title", body: "schedule.float2.body", tone: "check", pos: "right-bottom", icon: <><circle cx="10" cy="10" r="6.6" /><path d="M7.2 10.2l1.9 1.9 3.7-3.9" /></> }
+  ];
+  const grid: { key: string; title: PublicSiteTranslationKey; body: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
+    { key: "b1", title: "schedule.b1.title", body: "schedule.b1.body", tone: "calendar", icon: <><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></> },
+    { key: "b2", title: "schedule.b2.title", body: "schedule.b2.body", tone: "trend", icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
+    { key: "b3", title: "schedule.b3.title", body: "schedule.b3.body", tone: "team", icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> },
+    { key: "b4", title: "schedule.b4.title", body: "schedule.b4.body", tone: "view", icon: <><circle cx="6.5" cy="12" r="2.6" /><circle cx="13.5" cy="12" r="2.6" /><path d="M6.5 9.4l1.2-4.4M13.5 9.4l-1.2-4.4" /></> }
+  ];
+  return (
+    <section className="public-section schedule-section public-scroll-reveal">
+      <div className="public-shell">
+        <div className="schedule-top">
+          <div className="schedule-copy">
+            <span className="public-eyebrow schedule-eyebrow">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
+              {t("schedule.eyebrow")}
+            </span>
+            <h2>{t("schedule.title")}</h2>
+            <p>{t("schedule.body")}</p>
+            <div className="schedule-side-features">
+              {sideFeatures.map(f => (
+                <div className="schedule-side-card" key={f.key}>
+                  <span className="schedule-side-icon" data-tone={f.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg></span>
+                  <div>
+                    <strong>{t(f.title)}</strong>
+                    <span>{t(f.body)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="schedule-stage">
+            <img className="schedule-shot" src="/schedule.webp" alt={t("schedule.imageAlt")} loading="lazy" />
+            {floats.map(f => (
+              <div className={`schedule-float schedule-float-${f.pos}`} key={f.key}>
+                <span className="schedule-float-icon" data-tone={f.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg></span>
+                <strong>{t(f.title)}</strong>
+                <span>{t(f.body)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="schedule-grid">
+          {grid.map(g => (
+            <div className="schedule-grid-card" key={g.key}>
+              <span className="schedule-grid-icon" data-tone={g.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{g.icon}</svg></span>
+              <strong>{t(g.title)}</strong>
+              <span>{t(g.body)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="schedule-tagline">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7" /><path d="M6.8 10.2l2.1 2.1 4.3-4.5" /></svg>
+          {t("schedule.tagline")}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ChatGPTAppShowcase() {
   const { t } = usePublicSiteLanguage();
   const currency = useLocaleCurrency();
@@ -1607,6 +1675,8 @@ export function PublicHomePage() {
             </div>
           </div>
         </section>
+
+        <ScheduleTimelineShowcase />
 
         <ChatGPTAppShowcase />
 

@@ -16494,6 +16494,149 @@ html[dir="rtl"] .login-public-shell {
   .public-plan-grid { grid-template-columns: 1fr !important; }
 }
 
+/* Schedule & Timeline showcase */
+.schedule-section { overflow: hidden; }
+
+.schedule-top {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.35fr);
+  gap: 40px;
+  align-items: center;
+}
+
+.schedule-copy { max-width: 460px; }
+
+.schedule-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.schedule-eyebrow svg { width: 15px; height: 15px; }
+
+.schedule-copy h2 {
+  margin: 18px 0 16px;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 760;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+
+.schedule-copy > p {
+  color: var(--public-muted);
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 26px;
+}
+
+.schedule-side-features {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.schedule-side-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid var(--public-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(23, 25, 35, 0.05);
+}
+
+.schedule-side-card strong { display: block; font-size: 15px; font-weight: 720; color: var(--public-text); }
+.schedule-side-card span { display: block; margin-top: 3px; font-size: 13.5px; color: var(--public-muted); line-height: 1.45; }
+
+.schedule-side-icon,
+.schedule-float-icon,
+.schedule-grid-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+}
+.schedule-side-icon { width: 40px; height: 40px; }
+.schedule-side-icon svg, .schedule-float-icon svg, .schedule-grid-icon svg { width: 19px; height: 19px; }
+
+.schedule-side-icon[data-tone="calendar"],
+.schedule-float-icon[data-tone="drag"],
+.schedule-grid-icon[data-tone="calendar"] { background: rgba(70, 120, 220, 0.12); color: #3f6fd6; }
+.schedule-side-icon[data-tone="filter"],
+.schedule-float-icon[data-tone="check"],
+.schedule-grid-icon[data-tone="trend"] { background: rgba(47, 111, 109, 0.13); color: #2f6f6d; }
+.schedule-grid-icon[data-tone="team"] { background: rgba(124, 92, 214, 0.12); color: #7c5cd6; }
+.schedule-grid-icon[data-tone="view"] { background: rgba(214, 150, 46, 0.14); color: #d0922a; }
+
+.schedule-stage { position: relative; }
+
+.schedule-shot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+  border: 1px solid var(--public-border);
+  box-shadow: 0 28px 70px rgba(23, 25, 35, 0.14);
+}
+
+.schedule-float {
+  position: absolute;
+  width: 196px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--public-border);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(23, 25, 35, 0.16);
+}
+.schedule-float strong { display: block; margin-top: 9px; font-size: 14px; font-weight: 720; color: var(--public-text); }
+.schedule-float span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--public-muted); line-height: 1.45; }
+.schedule-float-icon { width: 34px; height: 34px; }
+.schedule-float-right-top { top: 22%; right: -34px; }
+.schedule-float-right-bottom { bottom: 8%; right: -22px; }
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 44px;
+}
+
+.schedule-grid-card {
+  padding: 22px 20px;
+  background: #fff;
+  border: 1px solid var(--public-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(23, 25, 35, 0.05);
+}
+.schedule-grid-icon { width: 42px; height: 42px; margin-bottom: 14px; }
+.schedule-grid-card strong { display: block; font-size: 16px; font-weight: 740; color: var(--public-text); }
+.schedule-grid-card span { display: block; margin-top: 7px; font-size: 14px; color: var(--public-muted); line-height: 1.5; }
+
+.schedule-tagline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 40px;
+  font-size: clamp(17px, 2vw, 21px);
+  font-weight: 740;
+  color: var(--public-text);
+}
+.schedule-tagline svg { width: 22px; height: 22px; color: var(--public-accent); }
+
+@media (max-width: 1080px) {
+  .schedule-top { grid-template-columns: 1fr; gap: 32px; }
+  .schedule-copy { max-width: none; }
+  .schedule-float { position: static; width: auto; margin-top: 12px; }
+  .schedule-stage { display: flex; flex-direction: column; }
+  .schedule-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .schedule-grid { grid-template-columns: 1fr; }
+}
+
 /* ChatGPT App showcase — redesigned */
 .gpt-grid {
   display: grid;
