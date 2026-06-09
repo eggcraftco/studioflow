@@ -16303,10 +16303,10 @@ html[dir="rtl"] .login-public-shell {
 
 /* Right dark-green demo card */
 .gpt-demo-card {
-  border-radius: 24px;
-  padding: 14px;
-  background: linear-gradient(150deg, #18403a 0%, #1f5048 55%, #2c6b5d 100%);
-  box-shadow: 0 26px 70px rgba(23, 53, 47, 0.30);
+  border-radius: 26px;
+  padding: 22px;
+  background: linear-gradient(150deg, #3a8170 0%, #46957f 52%, #58a98c 100%);
+  box-shadow: 0 26px 70px rgba(47, 111, 109, 0.26);
 }
 
 .gpt-demo-inner {
