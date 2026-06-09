@@ -47,6 +47,7 @@ export type WorkspaceContext = {
   billingStorageLimitMB: number;
   billingTeamMemberLimit: number;
   storageAddonMB: number;
+  storageAddonKey: string;
   currentMemberDisplayName: string;
   currentMemberPhotoURL: string;
   entitlements: PlanEntitlements;
@@ -718,6 +719,9 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
   const hasBillingPlan = typeof companyData.billingPlan === "string" && companyData.billingPlan.length > 0;
   const entitlements = entitlementsForPlan(companyData.billingPlan as string | undefined, "demo");
   const storageAddonMB = numberValue(companyData.billingStorageAddonMB, numberValue(companyData.storageAddonMB, 0));
+  const storageAddonStatus = stringValue(companyData.billingStorageAddonStatus, "");
+  const storageAddonActive = ["active", "trialing", "past_due"].includes(storageAddonStatus.toLowerCase());
+  const storageAddonKey = storageAddonActive ? stringValue(companyData.billingStorageAddonKey, "") : "";
   const storedStorageLimitMB = numberValue(companyData.billingStorageLimitMB, entitlements.storageLimitMB);
   const ownerUid = stringValue(companyData.ownerUid, companyId);
   const rawRoleValue = uid === ownerUid || uid === companyId ? "owner" : workspaceMemberRoleValue(companyData, uid, "member");
@@ -750,6 +754,7 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     billingHasMultipleActiveSubscriptions: booleanValue(companyData.billingHasMultipleActiveSubscriptions, false),
     billingEntitlementResolutionReason: stringValue(companyData.billingEntitlementResolutionReason, ""),
     billingStorageLimitMB: storedStorageLimitMB + storageAddonMB,
+    storageAddonKey,
     billingTeamMemberLimit: numberValue(companyData.billingTeamMemberLimit, entitlements.teamMemberLimit),
     storageAddonMB,
     currentMemberDisplayName: Object.prototype.hasOwnProperty.call(memberData, "displayName")

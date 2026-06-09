@@ -157,6 +157,11 @@ export default function PlanPage() {
   }, [counts, workspace]);
 
   const allowInternalBillingTests = showInternalBillingControls(user?.email || "");
+  // When live billing is enabled, real purchase buttons are shown to every
+  // workspace owner. Otherwise only internal test accounts see (test) buttons.
+  const liveBillingEnabled = process.env.NEXT_PUBLIC_NIVADESK_BILLING_LIVE === "true";
+  const purchasesEnabled = liveBillingEnabled || allowInternalBillingTests;
+  const purchaseLabel = (label: string) => (liveBillingEnabled ? label : `Test ${label}`);
 
   async function handleManageBilling() {
     if (!workspace || billingLoading) return;
@@ -346,7 +351,7 @@ export default function PlanPage() {
               const canManage = isWorkspaceOwner(workspace.role);
               const footer = isActive ? (
                 <span>Your workspace is using this plan.</span>
-              ) : checkout && allowInternalBillingTests ? (
+              ) : checkout && purchasesEnabled ? (
                 <div style={{ display: "grid", gap: 8, width: "100%" }}>
                   <button
                     className="button secondary"
@@ -354,7 +359,7 @@ export default function PlanPage() {
                     disabled={!canManage || checkoutLoadingKey !== null}
                     onClick={() => handleTestCheckout(checkout.monthly.itemKey)}
                   >
-                    {checkoutLoadingKey === checkout.monthly.itemKey ? "Opening checkout..." : `Test ${checkout.monthly.label}`}
+                    {checkoutLoadingKey === checkout.monthly.itemKey ? "Opening checkout..." : purchaseLabel(checkout.monthly.label)}
                   </button>
                   <button
                     className="button secondary"
@@ -362,7 +367,7 @@ export default function PlanPage() {
                     disabled={!canManage || checkoutLoadingKey !== null}
                     onClick={() => handleTestCheckout(checkout.yearly.itemKey)}
                   >
-                    {checkoutLoadingKey === checkout.yearly.itemKey ? "Opening checkout..." : `Test ${checkout.yearly.label}`}
+                    {checkoutLoadingKey === checkout.yearly.itemKey ? "Opening checkout..." : purchaseLabel(checkout.yearly.label)}
                   </button>
                 </div>
               ) : null;
@@ -426,22 +431,25 @@ export default function PlanPage() {
                     <p style={{ margin: "0 0 12px", fontWeight: 600 }}>
                       {addon.monthly.label} · {addon.yearly.label}
                     </p>
-                    {allowInternalBillingTests ? (
+                    {purchasesEnabled ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <button
-                          className="button"
-                          disabled={!canBuyAddon || checkoutLoadingKey !== null}
-                          onClick={() => handleTestCheckout(addon.monthly.itemKey)}
-                        >
-                          {checkoutLoadingKey === addon.monthly.itemKey ? "Opening checkout..." : `Test ${addon.monthly.label}`}
-                        </button>
-                        <button
-                          className="button secondary"
-                          disabled={!canBuyAddon || checkoutLoadingKey !== null}
-                          onClick={() => handleTestCheckout(addon.yearly.itemKey)}
-                        >
-                          {checkoutLoadingKey === addon.yearly.itemKey ? "Opening checkout..." : `Test ${addon.yearly.label}`}
-                        </button>
+                        {([addon.monthly, addon.yearly] as const).map(option => {
+                          const isCurrentAddon = workspace.storageAddonKey === option.itemKey;
+                          return (
+                            <button
+                              key={option.itemKey}
+                              className="button secondary"
+                              disabled={isCurrentAddon || !canBuyAddon || checkoutLoadingKey !== null}
+                              onClick={() => handleTestCheckout(option.itemKey)}
+                            >
+                              {isCurrentAddon
+                                ? "Current add-on"
+                                : checkoutLoadingKey === option.itemKey
+                                  ? "Opening checkout..."
+                                  : purchaseLabel(option.label)}
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : (
                       <button className="button secondary" disabled>
