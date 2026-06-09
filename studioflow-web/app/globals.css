@@ -12689,12 +12689,12 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   font-size: 18px;
 }
 
-.hero-float-orders { top: 52px; right: 2%; }
-.hero-float-received { top: 54%; left: 38%; }
-.hero-float-chatgpt { bottom: 70px; left: 48%; }
-.hero-float-file { bottom: 34px; right: 4%; }
+.hero-float-orders { top: 80px; right: 2.5%; }
+.hero-float-received { top: 46%; left: 45%; }
+.hero-float-chatgpt { bottom: 118px; left: 55%; }
+.hero-float-file { bottom: 78px; right: 3%; }
 
-@media (max-width: 1040px) {
+@media (max-width: 1180px) {
   .hero-float { display: none; }
 }
 
@@ -12716,7 +12716,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-hero-copy {
-  max-width: 640px;
+  max-width: 468px;
 }
 
 .public-eyebrow {
@@ -12768,15 +12768,15 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .hero-app-shot {
   position: absolute;
-  right: max(20px, calc((100vw - 1180px) / 2));
-  top: 64px;
-  width: min(760px, 56vw);
-  border-radius: 16px;
+  right: max(20px, calc((100vw - 1200px) / 2));
+  top: 96px;
+  width: min(620px, 46vw);
+  border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(23, 25, 35, 0.12);
-  box-shadow: 0 34px 90px rgba(23, 25, 35, 0.20);
+  box-shadow: 0 30px 80px rgba(23, 25, 35, 0.18);
   background: #fff;
-  transform: perspective(1600px) rotateY(-4deg);
+  transform: perspective(1700px) rotateY(-3deg);
   transform-origin: right center;
 }
 
@@ -12786,7 +12786,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   height: auto;
 }
 
-@media (max-width: 1040px) {
+@media (max-width: 1180px) {
   .hero-app-shot {
     display: none;
   }
@@ -13697,12 +13697,12 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-hero h1 {
-  max-width: 600px;
+  max-width: 468px;
   margin-top: 20px;
-  font-size: clamp(34px, 4.6vw, 58px);
-  line-height: 1.08;
+  font-size: clamp(30px, 3.5vw, 46px);
+  line-height: 1.1;
   font-weight: 740;
-  letter-spacing: -0.022em;
+  letter-spacing: -0.02em;
 }
 
 .public-hero p {
