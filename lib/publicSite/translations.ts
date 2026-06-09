@@ -44,8 +44,8 @@ export const PUBLIC_SITE_EN = {
   "billing.notConfigured": "Billing setup coming soon.",
   "billing.startingCheckout": "Opening checkout...",
 
-  "hero.eyebrow": "Studio management for custom work",
-  "hero.title": "NivaDesk",
+  "hero.eyebrow": "NivaDesk · Studio management for custom work",
+  "hero.title": "Run your custom-order studio from one calm workspace.",
   "hero.body": "A calm operating workspace for creative studios to manage custom orders, delivery timelines, client files, financial summaries and notes, with secure ChatGPT access on every plan.",
 
   "product.frameLabel": "Custom studio workspace",
@@ -162,7 +162,7 @@ export const PUBLIC_SITE_EN = {
   "pricingPreview.body": "Free Demo is available now. Subscribe to Lite, Pro or Team anytime — secure checkout is live and you can cancel whenever you want.",
 
   "ctaBand.eyebrow": "Ready when your studio is",
-  "ctaBand.title": "Try the public flow, then enter the portal with your existing NivaDesk account.",
+  "ctaBand.title": "Start free today, then move to Pro or Team when your studio grows.",
 
   "feature.orders.title": "Orders",
   "feature.orders.eyebrow": "Studio pipeline",
@@ -595,7 +595,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "cta.getStarted": "Başlayın",
   "billing.notConfigured": "Faturalama kurulumu yakında.",
   "billing.startingCheckout": "Checkout açılıyor...",
-  "hero.eyebrow": "Özel üretim için stüdyo yönetimi",
+  "hero.eyebrow": "NivaDesk · Özel üretim için stüdyo yönetimi",
   "hero.body": "Özel siparişleri, müşteri dosyalarını, zaman çizelgelerini, görevleri, ekip erişimini, panelleri ve dışa aktarılabilir iş verilerini yöneten yaratıcı stüdyolar için sakin ve premium bir operasyon workspace'i.",
   "product.frameLabel": "Özel stüdyo workspace'i",
   "product.monthNet": "Ay Net",
@@ -706,7 +706,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "pricingPreview.title": "Basit başlayın. Bulut veya ekip çalışması gerektiğinde yükseltin.",
   "pricingPreview.body": "Free Demo şimdi kullanılabilir. Lite, Pro veya Team'e istediğin zaman abone ol — güvenli ödeme aktif ve dilediğin an iptal edebilirsin.",
   "ctaBand.eyebrow": "Stüdyonuz hazır olduğunda",
-  "ctaBand.title": "Public akışı deneyin, sonra mevcut NivaDesk hesabınızla portala girin.",
+  "ctaBand.title": "Bugün ücretsiz başla; stüdyon büyüdükçe Pro veya Team'e geç.",
   "feature.orders.title": "Siparişler",
   "feature.orders.eyebrow": "Stüdyo hattı",
   "feature.orders.body": "Her özel siparişi ilk brieften son teslimata kadar stüdyonuzun gerçekten kullandığı detaylarla takip edin.",
@@ -1043,7 +1043,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
 
   "brand.name": "NivaDesk",
   "brand.full": "NivaDesk",
-  "hero.title": "NivaDesk",
+  "hero.title": "Sipariş bazlı stüdyonu tek bir sakin workspace'ten yönet.",
   "pricingPage.addon100.title": "100 GB Depolama",
   "pricingPage.addon200.title": "200 GB Depolama",
   "plan.lite.shortName": "Lite",
