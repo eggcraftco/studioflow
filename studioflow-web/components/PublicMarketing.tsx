@@ -1783,10 +1783,6 @@ export function PublicPricingPage() {
           </div>
         </section>
 
-        <PlanFeatureBridgeSection compact />
-
-        <ChatGPTAppShowcase />
-
         <section className="public-section public-section-soft">
           <div className="public-shell">
             <SectionHeader
@@ -1812,6 +1808,10 @@ export function PublicPricingPage() {
             </div>
           </div>
         </section>
+
+        <PlanFeatureBridgeSection compact />
+
+        <ChatGPTAppShowcase />
       </>
     );
   };
