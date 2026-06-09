@@ -332,6 +332,8 @@ const FEATURE_CAPABILITIES: FeatureCapability[] = [
   { titleKey: "capability.finance.title", bodyKey: "capability.finance.body" },
   { titleKey: "capability.messages.title", bodyKey: "capability.messages.body" },
   { titleKey: "capability.chatgpt.title", bodyKey: "capability.chatgpt.body" },
+  { titleKey: "capability.woocommerce.title", bodyKey: "capability.woocommerce.body" },
+  { titleKey: "capability.tracking.title", bodyKey: "capability.tracking.body" },
   { titleKey: "capability.notes.title", bodyKey: "capability.notes.body" },
   { titleKey: "capability.export.title", bodyKey: "capability.export.body" }
 ];
