@@ -5571,6 +5571,7 @@ struct StudioKeepNotesView: View {
 
         let card = VStack(alignment: .leading, spacing: 10) {
             noteHeaderRow(note, showActions: showActions, isSelected: isSelected)
+                .padding(.leading, (isCompactKeepPhoneLayout && (isSelected || isSelectionModeActive)) ? 28 : 0)
 
             if let reminderDate = note.reminderDate {
                 Label(reminderDate.formatted(date: .abbreviated, time: .shortened), systemImage: "bell")
