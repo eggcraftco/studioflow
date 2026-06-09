@@ -112,6 +112,11 @@ type OrderCardInfo = {
 };
 
 type FeatureDeepDive = {
+  id: string;
+  tone: string;
+  navKey: PublicSiteTranslationKey;
+  navIcon: ReactNode;
+  icon: ReactNode;
   titleKey: PublicSiteTranslationKey;
   bodyKey: PublicSiteTranslationKey;
   bulletKeys: PublicSiteTranslationKey[];
@@ -329,19 +334,44 @@ const FEATURE_GROUPS: InfoSection[] = [
 
 const FEATURE_DEEP_DIVES: FeatureDeepDive[] = [
   {
+    id: "orders",
+    tone: "green",
+    navKey: "featuresDeep.nav.orders",
+    navIcon: <path d="M4 6h16M4 12h16M4 18h10" />,
+    icon: <><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3h6v1M9 9h6M9 13h6M9 17h4" /></>,
     titleKey: "featuresDeep.orders.title",
     bodyKey: "featuresDeep.orders.body",
     bulletKeys: ["featuresDeep.orders.bullet1", "featuresDeep.orders.bullet2", "featuresDeep.orders.bullet3"]
   },
   {
+    id: "files",
+    tone: "blue",
+    navKey: "featuresDeep.nav.files",
+    navIcon: <path d="M3 7l1.8-2.2h5l1.5 2H21v12H3z" />,
+    icon: <path d="M3 7l1.8-2.2h5l1.5 2H21v12H3z" />,
     titleKey: "featuresDeep.files.title",
     bodyKey: "featuresDeep.files.body",
     bulletKeys: ["featuresDeep.files.bullet1", "featuresDeep.files.bullet2", "featuresDeep.files.bullet3"]
   },
   {
+    id: "team",
+    tone: "purple",
+    navKey: "featuresDeep.nav.team",
+    navIcon: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" /></>,
+    icon: <path d="M8.5 11a3 3 0 100-6 3 3 0 000 6zM16 11a2.5 2.5 0 100-5M3.5 19c0-2.8 2.2-5 5-5s5 2.2 5 5M15 14.2c2.5 0 4.5 1.7 4.5 4.8" />,
     titleKey: "featuresDeep.team.title",
     bodyKey: "featuresDeep.team.body",
     bulletKeys: ["featuresDeep.team.bullet1", "featuresDeep.team.bullet2", "featuresDeep.team.bullet3"]
+  },
+  {
+    id: "data",
+    tone: "teal",
+    navKey: "featuresDeep.nav.data",
+    navIcon: <path d="M7 18a4 4 0 01-.5-7.97A5 5 0 0117 9.5a3.5 3.5 0 01.5 8.5H7zM12 11v6M9.5 14.5L12 17l2.5-2.5" />,
+    icon: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6" /></>,
+    titleKey: "featuresDeep.data.title",
+    bodyKey: "featuresDeep.data.body",
+    bulletKeys: ["featuresDeep.data.bullet1", "featuresDeep.data.bullet2", "featuresDeep.data.bullet3"]
   }
 ];
 
@@ -1306,26 +1336,42 @@ function FeatureDeepDiveSection() {
     <section className="public-section public-features-deep-section public-scroll-reveal">
       <div className="public-shell public-features-deep-panel">
         <div className="public-features-deep-copy">
-          <span className="public-eyebrow">{t("featuresDeep.eyebrow")}</span>
-          <h2>{t("featuresDeep.title")}</h2>
+          <span className="public-eyebrow featuresDeep-eyebrow">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5l1.4 4 4 1.4-4 1.4L10 13.3 8.6 9.3l-4-1.4 4-1.4zM15.5 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg>
+            {t("featuresDeep.eyebrow")}
+          </span>
+          <h2>
+            {t("featuresDeep.titleA")} <span className="hero-accent">{t("featuresDeep.titleAccent1")}</span> {t("featuresDeep.titleB")} <span className="hero-accent">{t("featuresDeep.titleAccent2")}</span>
+          </h2>
           <p>{t("featuresDeep.body")}</p>
-          <div className="public-features-kpi-row" aria-hidden="true">
-            <span>{t("featuresDeep.kpi1")}</span>
-            <span>{t("featuresDeep.kpi2")}</span>
-            <span>{t("featuresDeep.kpi3")}</span>
-          </div>
+          <nav className="public-features-nav" aria-label={t("featuresDeep.eyebrow")}>
+            {FEATURE_DEEP_DIVES.map(item => (
+              <a className="public-features-nav-pill" href={`#feature-${item.id}`} key={item.id}>
+                <span className="public-features-nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{item.navIcon}</svg>
+                </span>
+                <span className="public-features-nav-label">{t(item.navKey)}</span>
+                <span className="public-features-nav-chevron" aria-hidden="true">›</span>
+              </a>
+            ))}
+          </nav>
         </div>
         <div className="public-features-deep-list">
           {FEATURE_DEEP_DIVES.map((item, index) => (
-            <article key={item.titleKey}>
-              <div className="public-card-index">{String(index + 1).padStart(2, "0")}</div>
-              <div>
-                <h3>{t(item.titleKey)}</h3>
-                <p>{t(item.bodyKey)}</p>
-                <ul>
-                  {item.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
-                </ul>
+            <article id={`feature-${item.id}`} data-tone={item.tone} key={item.titleKey}>
+              <div className="public-features-deep-head">
+                <span className="public-features-deep-index">{String(index + 1).padStart(2, "0")}</span>
+                <span className="public-features-deep-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                </span>
+                <div className="public-features-deep-titles">
+                  <h3>{t(item.titleKey)}</h3>
+                  <p>{t(item.bodyKey)}</p>
+                </div>
               </div>
+              <ul>
+                {item.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
+              </ul>
             </article>
           ))}
         </div>
