@@ -17438,7 +17438,20 @@ body[data-studio-theme="dark"] .finance-payments-item {
   cursor: pointer;
   text-decoration: underline;
 }
-.cookie-btn { padding: 9px 18px !important; font-size: 13.5px !important; }
+.cookie-btn {
+  padding: 9px 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease;
+}
+.cookie-btn-primary { background: #2f6f6d; color: #fff; border-color: #2f6f6d; }
+.cookie-btn-primary:hover { background: #285f5d; }
+.cookie-btn-ghost { background: #fff; color: #2f6f6d; border-color: rgba(47, 111, 109, 0.4); }
+.cookie-btn-ghost:hover { background: rgba(47, 111, 109, 0.06); }
+.cookie-banner[dir="rtl"] .cookie-banner-actions .cookie-link-btn { margin-right: 0; margin-left: auto; }
 .cookie-cats { display: flex; flex-direction: column; gap: 10px; }
 .cookie-cat {
   border: 1px solid rgba(23, 25, 35, 0.1);
@@ -17504,6 +17517,10 @@ body[data-studio-theme="dark"] .cookie-cat { background: rgba(255, 255, 255, 0.0
 body[data-studio-theme="dark"] .cookie-cat-title { color: #f2f4f5; }
 body[data-studio-theme="dark"] .cookie-cat-desc { color: #9aa3a2; }
 body[data-studio-theme="dark"] .cookie-cat-badge { background: rgba(255, 255, 255, 0.1); color: #b8c0c0; }
+body[data-studio-theme="dark"] .cookie-btn-ghost { background: transparent; color: #7fc3b6; border-color: rgba(127, 195, 182, 0.5); }
+body[data-studio-theme="dark"] .cookie-btn-ghost:hover { background: rgba(127, 195, 182, 0.12); }
+body[data-studio-theme="dark"] .cookie-banner-copy a { color: #7fc3b6; }
+body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: #7fc3b6; }
 
 @media (max-width: 560px) {
   .cookie-banner-actions { flex-direction: column; align-items: stretch; }
