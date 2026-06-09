@@ -776,71 +776,11 @@ function PublicShell({ children }: { children: ReactNode }) {
 }
 
 function ProductScene() {
-  const { t } = usePublicSiteLanguage();
   return (
     <div className="public-hero-visual" aria-hidden="true">
-      <div className="product-board">
-        <div className="product-frame-label">{t("product.frameLabel")}</div>
-        <div className="product-sidebar">
-          <div className="product-window-controls">
-            <span />
-            <span />
-            <span />
-          </div>
-          <span className="product-dot active" data-label={t("product.orders")} />
-          <span className="product-dot" data-label={t("product.files")} />
-          <span className="product-dot" data-label={t("product.team")} />
-          <span className="product-dot" data-label={t("product.export")} />
-        </div>
-        <div className="product-main">
-          <div className="product-toolbar">
-            <div>
-              <span>{t("product.monthNet")}</span>
-              <strong>{t("product.dashboard")}</strong>
-            </div>
-            <span className="product-sync-pill">{t("product.saved")}</span>
-          </div>
-          <div className="product-accent-strip">
-            <span data-color="sage" />
-            <span data-color="clay" />
-            <span data-color="sky" />
-            <span data-color="rose" />
-            <span data-color="gold" />
-          </div>
-          <div className="product-grid">
-            <div className="product-panel product-panel-large" data-tone="sage">
-              <span className="product-kicker">{t("product.orders")}</span>
-              <strong>{t("product.orderTitle")}</strong>
-              <p>{t("product.due")}</p>
-              <div className="product-mini-list">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="product-progress"><span style={{ width: "72%" }} /></div>
-            </div>
-            <div className="product-panel" data-tone="sky">
-              <span className="product-kicker">{t("product.files")}</span>
-              <strong>{t("product.assets")}</strong>
-              <p>{t("product.assetsNote")}</p>
-            </div>
-            <div className="product-panel" data-tone="rose">
-              <span className="product-kicker">{t("product.todo")}</span>
-              <strong>{t("product.todoCount")}</strong>
-              <p>{t("product.todoNote")}</p>
-            </div>
-            <div className="product-panel product-panel-wide" data-tone="gold">
-              <span className="product-kicker">{t("product.timeline")}</span>
-              <strong>{t("product.productionWindow")}</strong>
-              <div className="product-timeline">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="hero-app-shot">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/hero-app.webp" alt="NivaDesk order workspace" loading="eager" />
       </div>
     </div>
   );
