@@ -697,6 +697,7 @@ function PublicHeader() {
         </Link>
 
         <nav className="public-nav-links" aria-label={t("nav.publicPages")}>
+          <Link href="/">{t("nav.home")}</Link>
           <Link href="/features">{t("nav.features")}</Link>
           <Link href="/pricing">{t("nav.pricing")}</Link>
           <Link href="/faq">{t("nav.faq")}</Link>
