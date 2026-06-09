@@ -465,7 +465,9 @@ type PublicPlanCopy = {
   priceLabelKey: PublicSiteTranslationKey;
   modelKey: PublicSiteTranslationKey;
   noteKey: PublicSiteTranslationKey;
+  limitNoteKey: PublicSiteTranslationKey;
   ctaKey: PublicSiteTranslationKey;
+  icon: ReactNode;
   href?: string;
   disabled?: boolean;
   featured?: boolean;
@@ -474,6 +476,11 @@ type PublicPlanCopy = {
   bulletKeys: PublicSiteTranslationKey[];
 };
 
+const PLAN_ICON_GIFT = <path d="M4 8.5h12v8.5H4zM3.5 8.5h13V7A1.5 1.5 0 0015 5.5H5A1.5 1.5 0 003.5 7zM10 5.5v11.5M7.2 5.5A1.6 1.6 0 017 2.4c1.6 0 3 1.6 3 3.1M12.8 5.5A1.6 1.6 0 0013 2.4c-1.6 0-3 1.6-3 3.1" />;
+const PLAN_ICON_LEAF = <path d="M5 15.5c0-6.5 5.5-9.5 11.5-9.5 0 6.5-4.3 10.5-9.5 10.5-1.2 0-2-.4-2-1zM6.5 14.5c2-3.2 4.2-5.2 7.5-6.4" />;
+const PLAN_ICON_CHART = <path d="M4 16.5V9.5M9.5 16.5V5M15 16.5v-4.5M3 16.5h14" />;
+const PLAN_ICON_TEAM = <path d="M7 9.4a2.6 2.6 0 100-5.2 2.6 2.6 0 000 5.2zM13.4 9.2a2.1 2.1 0 100-4.2M3 16.5c0-2.3 1.8-4.1 4-4.1s4 1.8 4 4.1M12.4 12.4c2.1 0 3.8 1.4 3.8 4.1" />;
+
 const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
   demo: {
     shortNameKey: "plan.demo.shortName",
@@ -481,9 +488,11 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.demo.price",
     modelKey: "plan.model.demo",
     noteKey: "plan.demo.note",
+    limitNoteKey: "plan.demo.limitNote",
     ctaKey: "cta.startFree",
+    icon: PLAN_ICON_GIFT,
     href: "/signup",
-    bulletKeys: ["plan.demo.bullet1", "plan.demo.bullet2", "plan.demo.bullet3"]
+    bulletKeys: ["plan.demo.bullet1", "plan.demo.bullet2", "plan.demo.bullet3", "plan.demo.bullet4", "plan.demo.bullet5"]
   },
   lifetime_lite: {
     shortNameKey: "plan.lite.shortName",
@@ -491,9 +500,11 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.lite.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.lite.note",
-    ctaKey: "cta.startFree",
+    limitNoteKey: "plan.lite.limitNote",
+    ctaKey: "cta.chooseLite",
+    icon: PLAN_ICON_LEAF,
     href: "/signup",
-    bulletKeys: ["plan.lite.bullet1", "plan.lite.bullet2", "plan.lite.bullet3"]
+    bulletKeys: ["plan.lite.bullet1", "plan.lite.bullet2", "plan.lite.bullet3", "plan.lite.bullet4", "plan.lite.bullet5"]
   },
   pro_monthly: {
     shortNameKey: "plan.pro.shortName",
@@ -501,11 +512,13 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.pro.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.pro.note",
-    ctaKey: "cta.startFree",
+    limitNoteKey: "plan.pro.limitNote",
+    ctaKey: "cta.choosePro",
+    icon: PLAN_ICON_CHART,
     href: "/signup",
     featured: true,
     badgeKey: "plan.pro.badge",
-    bulletKeys: ["plan.pro.bullet1", "plan.pro.bullet2", "plan.pro.bullet3"]
+    bulletKeys: ["plan.pro.bullet1", "plan.pro.bullet2", "plan.pro.bullet3", "plan.pro.bullet4", "plan.pro.bullet5"]
   },
   team_monthly: {
     shortNameKey: "plan.team.shortName",
@@ -513,9 +526,11 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.team.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.team.note",
-    ctaKey: "cta.startFree",
+    limitNoteKey: "plan.team.limitNote",
+    ctaKey: "cta.chooseTeam",
+    icon: PLAN_ICON_TEAM,
     href: "/signup",
-    bulletKeys: ["plan.team.bullet1", "plan.team.bullet2", "plan.team.bullet3"]
+    bulletKeys: ["plan.team.bullet1", "plan.team.bullet2", "plan.team.bullet3", "plan.team.bullet4", "plan.team.bullet5"]
   }
 };
 
@@ -1018,10 +1033,12 @@ function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: 
   const prices = PLAN_PRICES[plan.plan];
   return (
     <article className={copy.featured ? "public-card public-plan-card featured" : "public-card public-plan-card"} data-plan={plan.plan}>
-      <div className="public-plan-glint" aria-hidden="true" />
       {copy.badgeKey ? <span className="public-plan-badge"><span className="public-plan-badge-star">★</span>{t(copy.badgeKey)}</span> : null}
       <div className="public-plan-topline">
         <span className="public-eyebrow">{t(copy.shortNameKey)}</span>
+        <span className="public-plan-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{copy.icon}</svg>
+        </span>
       </div>
       <h3>{t(copy.publicNameKey)}</h3>
       <div className="public-plan-price-block">
@@ -1040,27 +1057,40 @@ function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: 
         )}
       </div>
       <p>{t(copy.noteKey)}</p>
-      <dl className="public-plan-limits">
-        <div>
-          <dt>{t("plan.limit.orders")}</dt>
-          <dd>{plan.orderLimit ?? t("plan.limit.unlimited")}</dd>
+      <div className="public-plan-limits">
+        <div className="public-plan-stat">
+          <svg className="public-plan-stat-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 4h7v13h-7zM8.5 4V3h3v1M8.5 8h3M8.5 11h3" /></svg>
+          <span className="public-plan-stat-label">{t("plan.limit.orders")}</span>
+          <strong>{plan.orderLimit ?? t("plan.limit.unlimited")}</strong>
         </div>
-        <div>
-          <dt>{t("plan.limit.customers")}</dt>
-          <dd>{plan.customerLimit ?? t("plan.limit.unlimited")}</dd>
+        <div className="public-plan-stat">
+          <svg className="public-plan-stat-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 9a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM12.6 8.8a2 2 0 100-4M3.5 15.5c0-2 1.6-3.6 3.5-3.6s3.5 1.6 3.5 3.6M12 11.9c1.9 0 3.5 1.3 3.5 3.6" /></svg>
+          <span className="public-plan-stat-label">{t("plan.limit.customers")}</span>
+          <strong>{plan.customerLimit ?? t("plan.limit.unlimited")}</strong>
         </div>
-        <div>
-          <dt>{t("plan.limit.storage")}</dt>
-          <dd>{plan.features.client_files ? storageLimitLabel(plan) : t("plan.limit.notIncluded")}</dd>
+        <div className="public-plan-stat">
+          <svg className="public-plan-stat-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10 9.6a2.7 2.7 0 100-5.4 2.7 2.7 0 000 5.4zM4.5 16c0-2.6 2.3-4.4 5.5-4.4s5.5 1.8 5.5 4.4" /></svg>
+          <span className="public-plan-stat-label">{plan.plan === "team_monthly" ? t("plan.limit.seats") : t("plan.limit.users")}</span>
+          <strong>{plan.plan === "team_monthly" ? t("plan.limit.teamIncluded") : plan.teamMemberLimit}</strong>
         </div>
-        <div>
-          <dt>{t("plan.limit.team")}</dt>
-          <dd>{plan.plan === "team_monthly" ? t("plan.limit.teamIncluded") : plan.teamMemberLimit}</dd>
+        <div className="public-plan-stat">
+          <svg className="public-plan-stat-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l1.6-2h4l1.3 1.8H17v9.2H3V6z" /></svg>
+          <span className="public-plan-stat-label">{t("plan.limit.clientFiles")}</span>
+          <strong>{plan.features.client_files ? storageLimitLabel(plan) : t("plan.limit.notIncluded")}</strong>
         </div>
-      </dl>
-      <ul>
-        {bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
+      </div>
+      <ul className="public-plan-bullets">
+        {bulletKeys.map(bulletKey => (
+          <li key={bulletKey}>
+            <span className="public-plan-check"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 10.5l3.2 3.2L15.5 6" /></svg></span>
+            {t(bulletKey)}
+          </li>
+        ))}
       </ul>
+      <div className="public-plan-limitnote">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7" /><path d="M10 9.2v4M10 6.4v.1" /></svg>
+        <span>{t(copy.limitNoteKey)}</span>
+      </div>
       <PlanAction copy={copy} />
     </article>
   );
@@ -1521,17 +1551,6 @@ export function PublicHomePage() {
         </section>
 
         <ChatGPTAppShowcase />
-
-        <section className="public-section public-scroll-reveal">
-          <div className="public-shell">
-            <SectionHeader
-              eyebrowKey="pricingPreview.eyebrow"
-              titleKey="pricingPreview.title"
-              bodyKey="pricingPreview.body"
-            />
-            <PublicPlanGrid compact />
-          </div>
-        </section>
 
         <section className="public-section public-cta-band public-scroll-reveal">
           <div className="public-shell public-cta-inner">
