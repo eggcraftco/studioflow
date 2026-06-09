@@ -471,8 +471,8 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.lite.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.lite.note",
-    ctaKey: "cta.billingSoon",
-    disabled: true,
+    ctaKey: "cta.startFree",
+    href: "/signup",
     bulletKeys: ["plan.lite.bullet1", "plan.lite.bullet2", "plan.lite.bullet3"]
   },
   pro_monthly: {
@@ -481,8 +481,8 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.pro.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.pro.note",
-    ctaKey: "cta.billingSoon",
-    disabled: true,
+    ctaKey: "cta.startFree",
+    href: "/signup",
     featured: true,
     badgeKey: "plan.pro.badge",
     bulletKeys: ["plan.pro.bullet1", "plan.pro.bullet2", "plan.pro.bullet3"]
@@ -493,8 +493,8 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
     priceLabelKey: "plan.team.price",
     modelKey: "plan.model.monthly",
     noteKey: "plan.team.note",
-    ctaKey: "cta.billingSoon",
-    disabled: true,
+    ctaKey: "cta.startFree",
+    href: "/signup",
     bulletKeys: ["plan.team.bullet1", "plan.team.bullet2", "plan.team.bullet3"]
   }
 };
@@ -1564,14 +1564,16 @@ export function PublicPricingPage() {
               <article className="public-card public-addon-card" data-addon="100">
                 <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
                 <h3>{t("pricingPage.addon100.title")}</h3>
+                <p className="public-addon-price">£9 / month · £90 / year</p>
                 <p>{t("pricingPage.addon100.body")}</p>
-                <button className="public-button secondary" type="button" disabled>{t("cta.billingSoon")}</button>
+                <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
               </article>
               <article className="public-card public-addon-card" data-addon="200">
                 <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
                 <h3>{t("pricingPage.addon200.title")}</h3>
+                <p className="public-addon-price">£15 / month · £150 / year</p>
                 <p>{t("pricingPage.addon200.body")}</p>
-                <button className="public-button secondary" type="button" disabled>{t("cta.billingSoon")}</button>
+                <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
               </article>
             </div>
           </div>
