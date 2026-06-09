@@ -374,6 +374,8 @@ export const PUBLIC_SITE_EN = {
 
   "chatgptApp.eyebrow": "ChatGPT app for NivaDesk",
   "chatgptApp.title": "Connect your studio workspace securely to ChatGPT.",
+  "chatgptApp.titleLead": "Connect your studio workspace securely to",
+  "chatgptApp.titleAccent": "ChatGPT.",
   "chatgptApp.body": "Available on every plan, the NivaDesk ChatGPT App can read permitted dashboard summaries, orders and personal notes, and perform supported updates through connected workspace permissions. Advanced finance, files and team collaboration remain plan-based.",
   "chatgptApp.useCasesAria": "ChatGPT app use cases",
   "chatgptApp.useCase1": "Which active orders are overdue?",
@@ -922,6 +924,8 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "planBridge.todoAssignment.body": "Üretim sorumluluğu net olsun diye görevleri ekip üyelerine atayın.",
   "chatgptApp.eyebrow": "NivaDesk için ChatGPT app",
   "chatgptApp.title": "Kullanıcılar stüdyoyu doğal sorular sorarak yönetebilsin.",
+  "chatgptApp.titleLead": "Stüdyo workspace'ini güvenle",
+  "chatgptApp.titleAccent": "ChatGPT'ye bağla.",
   "chatgptApp.body": "NivaDesk ChatGPT App her planda kullanılabilir: izin verilen sipariş, temel finans ve kişisel not verileri güvenli şekilde sorgulanabilir; gelişmiş finans, dosyalar ve ekip özellikleri plan yetkilerine göre korunur.",
   "chatgptApp.useCasesAria": "ChatGPT app kullanım örnekleri",
   "chatgptApp.useCase1": "Hangi siparişlerde kalan bakiye var?",
