@@ -12595,8 +12595,107 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   position: relative;
   min-height: min(680px, calc(100vh - 128px));
   overflow: hidden;
-  background: #eef0ed;
+  background:
+    radial-gradient(1100px 540px at 80% 6%, rgba(47, 111, 109, 0.08), transparent 60%),
+    linear-gradient(180deg, #f3eddf 0%, #f7f1e6 48%, #efe8da 100%);
   border-bottom: 1px solid var(--public-border);
+}
+
+.hero-accent {
+  color: var(--public-accent);
+}
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+  max-width: 520px;
+}
+
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--public-border);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--public-text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.hero-chip svg {
+  width: 16px;
+  height: 16px;
+  color: var(--public-accent);
+}
+
+.hero-float {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(23, 25, 35, 0.08);
+  box-shadow: 0 16px 40px rgba(23, 25, 35, 0.14);
+  backdrop-filter: blur(4px);
+}
+
+.hero-float div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.hero-float strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--public-text);
+}
+
+.hero-float span {
+  font-size: 12px;
+  color: var(--public-muted);
+}
+
+.hero-float-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.hero-float-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.hero-float-icon[data-tone="sage"] { background: rgba(47, 111, 109, 0.12); color: #2f6f6d; }
+.hero-float-icon[data-tone="green"] { background: rgba(52, 168, 110, 0.14); color: #2e9c63; }
+.hero-float-icon[data-tone="violet"] { background: rgba(124, 92, 214, 0.14); color: #7c5cd6; }
+.hero-float-icon[data-tone="gold"] { background: rgba(214, 158, 46, 0.16); color: #c08a1e; }
+
+.hero-float-arrow {
+  margin-left: 6px;
+  color: var(--public-muted);
+  font-size: 18px;
+}
+
+.hero-float-orders { top: 52px; right: 2%; }
+.hero-float-received { top: 54%; left: 38%; }
+.hero-float-chatgpt { bottom: 70px; left: 48%; }
+.hero-float-file { bottom: 34px; right: 4%; }
+
+@media (max-width: 1040px) {
+  .hero-float { display: none; }
 }
 
 .public-hero::after {
