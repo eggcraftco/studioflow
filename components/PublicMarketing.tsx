@@ -534,12 +534,61 @@ const PUBLIC_PLAN_COPY: Record<StudioBillingPlan, PublicPlanCopy> = {
   }
 };
 
-const FAQS: InfoSection[] = [
-  { titleKey: "faq.q1.title", bodyKey: "faq.q1.body" },
-  { titleKey: "faq.q2.title", bodyKey: "faq.q2.body" },
-  { titleKey: "faq.q3.title", bodyKey: "faq.q3.body" },
-  { titleKey: "faq.q4.title", bodyKey: "faq.q4.body" },
-  { titleKey: "faq.q5.title", bodyKey: "faq.q5.body" }
+type FaqGroup = { categoryKey: PublicSiteTranslationKey; items: InfoSection[] };
+
+const FAQ_GROUPS: FaqGroup[] = [
+  {
+    categoryKey: "faq.cat.plans",
+    items: [
+      { titleKey: "faq.q1.title", bodyKey: "faq.q1.body" },
+      { titleKey: "faq.q2.title", bodyKey: "faq.q2.body" },
+      { titleKey: "faq.q3.title", bodyKey: "faq.q3.body" },
+      { titleKey: "faq.q4.title", bodyKey: "faq.q4.body" },
+      { titleKey: "faq.q5.title", bodyKey: "faq.q5.body" },
+      { titleKey: "faq.q6.title", bodyKey: "faq.q6.body" }
+    ]
+  },
+  {
+    categoryKey: "faq.cat.team",
+    items: [
+      { titleKey: "faq.q7.title", bodyKey: "faq.q7.body" },
+      { titleKey: "faq.q8.title", bodyKey: "faq.q8.body" },
+      { titleKey: "faq.q9.title", bodyKey: "faq.q9.body" }
+    ]
+  },
+  {
+    categoryKey: "faq.cat.storage",
+    items: [
+      { titleKey: "faq.q10.title", bodyKey: "faq.q10.body" },
+      { titleKey: "faq.q11.title", bodyKey: "faq.q11.body" }
+    ]
+  },
+  {
+    categoryKey: "faq.cat.gpt",
+    items: [
+      { titleKey: "faq.q12.title", bodyKey: "faq.q12.body" },
+      { titleKey: "faq.q13.title", bodyKey: "faq.q13.body" }
+    ]
+  },
+  {
+    categoryKey: "faq.cat.platforms",
+    items: [
+      { titleKey: "faq.q14.title", bodyKey: "faq.q14.body" },
+      { titleKey: "faq.q15.title", bodyKey: "faq.q15.body" },
+      { titleKey: "faq.q16.title", bodyKey: "faq.q16.body" }
+    ]
+  },
+  {
+    categoryKey: "faq.cat.data",
+    items: [
+      { titleKey: "faq.q17.title", bodyKey: "faq.q17.body" },
+      { titleKey: "faq.q18.title", bodyKey: "faq.q18.body" },
+      { titleKey: "faq.q19.title", bodyKey: "faq.q19.body" },
+      { titleKey: "faq.q20.title", bodyKey: "faq.q20.body" },
+      { titleKey: "faq.q21.title", bodyKey: "faq.q21.body" },
+      { titleKey: "faq.q22.title", bodyKey: "faq.q22.body" }
+    ]
+  }
 ];
 
 function usePublicScrollReveal(routeKey: string) {
@@ -2074,16 +2123,21 @@ export function PublicFaqPage() {
           </div>
         </section>
 
-        <section className="public-section">
-          <div className="public-shell public-info-list">
-            {FAQS.map(item => (
-              <article className="public-card public-info-card" key={item.titleKey}>
-                <h2>{t(item.titleKey)}</h2>
-                <p>{t(item.bodyKey)}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+        {FAQ_GROUPS.map(group => (
+          <section className="public-section faq-group-section" key={group.categoryKey}>
+            <div className="public-shell">
+              <h2 className="faq-category-title">{t(group.categoryKey)}</h2>
+              <div className="public-info-list">
+                {group.items.map(item => (
+                  <article className="public-card public-info-card" key={item.titleKey}>
+                    <h3>{t(item.titleKey)}</h3>
+                    <p>{t(item.bodyKey)}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        ))}
       </>
     );
   };
