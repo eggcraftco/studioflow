@@ -16364,38 +16364,41 @@ html[dir="rtl"] .login-public-shell {
 
 .public-plan-limits {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  border: 1px solid var(--public-border);
-  border-radius: 13px;
-  overflow: hidden;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 18px;
 }
 
 .public-plan-stat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 8px;
-  border-right: 1px solid var(--public-border);
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 11px 4px 12px;
+  min-width: 0;
+  text-align: center;
+  border: 1px solid var(--public-border);
+  border-radius: 11px;
   background: #fff;
 }
 
-.public-plan-stat:last-child { border-right: none; }
-
-.public-plan-stat-icon { width: 16px; height: 16px; color: var(--public-muted); }
+.public-plan-stat-icon { width: 16px; height: 16px; color: var(--public-muted); flex-shrink: 0; }
 
 .public-plan-stat-label {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--public-muted);
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .public-plan-stat strong {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 800;
   color: var(--public-text);
-  line-height: 1.2;
+  line-height: 1.25;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .public-plan-bullets {
