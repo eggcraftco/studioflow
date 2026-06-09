@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap"
+});
 import { AppRouteFrame } from "@/components/AppRouteFrame";
 import { PricePrivacyProvider } from "@/components/PricePrivacy";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
@@ -42,7 +49,7 @@ try {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <ThemeBootstrapScript />
         <AuthProvider>
