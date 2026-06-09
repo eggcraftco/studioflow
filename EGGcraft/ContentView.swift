@@ -1719,37 +1719,51 @@ extension Notification.Name {
     static let studioOpenNotesFromActivityNotification = Notification.Name("studioOpenNotesFromActivityNotification")
 }
 
-// Swipe-left-to-delete container for phone note cards (LazyVGrid/Stack can't use
-// SwiftUI List .swipeActions). Reveals a red Delete action; swiping far enough
-// keeps it open, then tapping the action deletes. A short swipe snaps back.
+// Swipe container for phone note cards (LazyVGrid/Stack can't use SwiftUI List
+// .swipeActions). Swipe LEFT reveals a red Delete action; swipe RIGHT past a
+// threshold moves the note to Archive immediately. A short swipe snaps back.
 struct KeepSwipeRow<Content: View>: View {
     let onDelete: () -> Void
+    let onArchive: (() -> Void)?
     let deleteLabel: String
+    let archiveLabel: String
     @ViewBuilder var content: () -> Content
 
     @State private var offset: CGFloat = 0
     private let actionWidth: CGFloat = 88
+    private let archiveThreshold: CGFloat = 92
 
     var body: some View {
-        ZStack(alignment: .trailing) {
+        ZStack {
+            // Background action: orange Archive when swiping right, red Delete when swiping left.
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.red)
-                .overlay(alignment: .trailing) {
-                    Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) { offset = 0 }
-                        onDelete()
-                    } label: {
+                .fill(offset > 0 ? Color.orange : Color.red)
+                .overlay(alignment: offset > 0 ? .leading : .trailing) {
+                    if offset > 0 {
                         VStack(spacing: 3) {
-                            Image(systemName: "trash.fill").font(.system(size: 17, weight: .bold))
-                            Text(deleteLabel).font(.system(size: 11, weight: .bold))
+                            Image(systemName: "archivebox.fill").font(.system(size: 17, weight: .bold))
+                            Text(archiveLabel).font(.system(size: 11, weight: .bold))
                         }
                         .foregroundColor(.white)
                         .frame(width: actionWidth)
                         .frame(maxHeight: .infinity)
+                    } else {
+                        Button {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) { offset = 0 }
+                            onDelete()
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "trash.fill").font(.system(size: 17, weight: .bold))
+                                Text(deleteLabel).font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(width: actionWidth)
+                            .frame(maxHeight: .infinity)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
-                .opacity(offset < -2 ? 1 : 0)
+                .opacity(abs(offset) > 2 ? 1 : 0)
 
             content()
                 .offset(x: offset)
@@ -1757,16 +1771,24 @@ struct KeepSwipeRow<Content: View>: View {
                     DragGesture(minimumDistance: 20)
                         .onChanged { value in
                             guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                            if value.translation.width < 0 {
-                                offset = max(value.translation.width, -actionWidth - 16)
+                            let dx = value.translation.width
+                            if dx < 0 {
+                                offset = max(dx, -actionWidth - 16)
+                            } else if onArchive != nil {
+                                offset = min(dx, actionWidth + 30)
                             } else if offset < 0 {
-                                offset = min(0, -actionWidth + value.translation.width)
+                                offset = min(0, -actionWidth + dx)
                             }
                         }
                         .onEnded { value in
-                            let shouldOpen = value.translation.width < -actionWidth * 0.55
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                offset = shouldOpen ? -actionWidth : 0
+                            let dx = value.translation.width
+                            if onArchive != nil && dx > archiveThreshold {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = 0 }
+                                onArchive?()
+                            } else if dx < -actionWidth * 0.55 {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = -actionWidth }
+                            } else {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = 0 }
                             }
                         }
                 )
@@ -1826,6 +1848,7 @@ struct StudioKeepNotesView: View {
     @State private var draggingKeepNoteId: String? = nil
     @State private var lastDropTargetKeepNoteId: String? = nil
     @State private var selectedKeepNoteIds: Set<String> = []
+    @State private var pressingKeepNoteId: String? = nil
     @State private var keepUndoMessage: String = ""
     @State private var keepUndoAction: (() -> Void)? = nil
 
@@ -5621,7 +5644,7 @@ struct StudioKeepNotesView: View {
         .overlay(alignment: .topLeading) {
             if (showActions || isSelected || (isCompactKeepPhoneLayout && isSelectionModeActive)) && draggingKeepNoteId != note.id {
                 noteSelectionButton(note, isSelected: isSelected)
-                    .offset(x: -8, y: -8)
+                    .offset(x: isCompactKeepPhoneLayout ? 6 : -8, y: isCompactKeepPhoneLayout ? 6 : -8)
                     .transition(.scale.combined(with: .opacity))
             }
         }
@@ -5641,17 +5664,28 @@ struct StudioKeepNotesView: View {
         // Phone: swipe-left to delete + long-press to enter multi-select.
         // Desktop/iPad: drag to reorder (hover reveals actions).
         if isCompactKeepPhoneLayout {
+            let canArchiveSwipe = selectedSection != "trash"
             return AnyView(
                 KeepSwipeRow(
                     onDelete: { selectedSection == "trash" ? permanentlyDelete(note) : moveToTrash(note) },
-                    deleteLabel: t("Delete", lang: seciliDil)
+                    onArchive: canArchiveSwipe ? { toggleArchive(note) } : nil,
+                    deleteLabel: t("Delete", lang: seciliDil),
+                    archiveLabel: note.isArchived ? t("Unarchive", lang: seciliDil) : t("Archive", lang: seciliDil)
                 ) { card }
-                .onLongPressGesture(minimumDuration: 0.35) {
-                    #if os(iOS)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    #endif
-                    if !selectedKeepNoteIds.contains(note.id) { toggleKeepNoteSelection(note) }
-                }
+                .scaleEffect(pressingKeepNoteId == note.id ? 0.97 : 1)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: pressingKeepNoteId)
+                .onLongPressGesture(
+                    minimumDuration: 0.4,
+                    pressing: { isPressing in
+                        pressingKeepNoteId = isPressing ? note.id : nil
+                    },
+                    perform: {
+                        #if os(iOS)
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        #endif
+                        if !selectedKeepNoteIds.contains(note.id) { toggleKeepNoteSelection(note) }
+                    }
+                )
             )
         }
 

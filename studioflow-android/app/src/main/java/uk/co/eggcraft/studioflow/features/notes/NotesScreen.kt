@@ -605,32 +605,47 @@ fun NotesScreen(
                 teamMembers = state.messageTeamMembers)
                 }
 
-                // Swipe-left to delete (disabled during multi-select or drag-reorder).
+                // Swipe LEFT = delete, swipe RIGHT = archive (disabled during multi-select or drag-reorder).
                 if (selectionActive || isDragging) {
                     noteCardContent()
                 } else {
+                    val canArchiveSwipe = section != "trash"
                     val swipeState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                         confirmValueChange = { v ->
-                            if (v == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
-                                if (note.isDeleted) onDelete(note.id)
-                                else onSave(note.copy(isDeleted = true, updatedAt = Date()))
-                                true
-                            } else false
+                            when (v) {
+                                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> {
+                                    if (note.isDeleted) onDelete(note.id)
+                                    else onSave(note.copy(isDeleted = true, updatedAt = Date()))
+                                    true
+                                }
+                                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> {
+                                    if (canArchiveSwipe) {
+                                        onSave(note.copy(isArchived = !note.isArchived, updatedAt = Date()))
+                                        true
+                                    } else false
+                                }
+                                else -> false
+                            }
                         }
                     )
                     androidx.compose.material3.SwipeToDismissBox(
                         state = swipeState,
-                        enableDismissFromStartToEnd = false,
+                        enableDismissFromStartToEnd = canArchiveSwipe,
                         backgroundContent = {
+                            val archiving = swipeState.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0xFFD32F2F))
+                                    .background(if (archiving) Color(0xFFF59E0B) else Color(0xFFD32F2F))
                                     .padding(horizontal = 22.dp),
-                                contentAlignment = Alignment.CenterEnd
+                                contentAlignment = if (archiving) Alignment.CenterStart else Alignment.CenterEnd
                             ) {
-                                Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = Color.White)
+                                if (archiving) {
+                                    Icon(Icons.Filled.Archive, contentDescription = t("Archive"), tint = Color.White)
+                                } else {
+                                    Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = Color.White)
+                                }
                             }
                         }
                     ) { noteCardContent() }
