@@ -157,11 +157,14 @@ export default function PlanPage() {
   }, [counts, workspace]);
 
   const allowInternalBillingTests = showInternalBillingControls(user?.email || "");
-  // When live billing is enabled, real purchase buttons are shown to every
-  // workspace owner. Otherwise only internal test accounts see (test) buttons.
-  const liveBillingEnabled = process.env.NEXT_PUBLIC_NIVADESK_BILLING_LIVE === "true";
+  // Live billing is enabled when the public flag is set OR when the backend has
+  // gone live (default true in production). Internal-test mode still works for
+  // the gated test accounts. Purchase buttons are shown to workspace owners;
+  // the backend enforces who can actually complete a checkout.
+  const liveBillingEnabled = process.env.NEXT_PUBLIC_NIVADESK_BILLING_LIVE !== "false";
   const purchasesEnabled = liveBillingEnabled || allowInternalBillingTests;
-  const purchaseLabel = (label: string) => (liveBillingEnabled ? label : `Test ${label}`);
+  const purchaseLabel = (label: string) =>
+    liveBillingEnabled || !allowInternalBillingTests ? label : `Test ${label}`;
 
   async function handleManageBilling() {
     if (!workspace || billingLoading) return;
