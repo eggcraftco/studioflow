@@ -759,6 +759,15 @@ class AuthViewModel: ObservableObject {
     @Published var currentBillingPlan: StudioBillingPlan = .demo
     @Published var currentStorageAddonKey: String = ""
     @Published var currentStorageAddonMB: Int = 0
+    // Effective team seat allowance (base plan + purchased seats), read from the workspace doc.
+    @Published var currentTeamMemberLimitEffective: Int = 0
+
+    // Effective seats including any purchased additional seats; falls back to the plan default.
+    var effectiveTeamMemberLimit: Int {
+        max(currentTeamMemberLimitEffective, currentPlanEntitlements.teamMemberLimit)
+    }
+    // Total self-service ceiling for the Team plan.
+    var teamSeatSelfServiceMax: Int { 10 }
 
     // Base plan storage + any active add-on, as a display string (e.g. "110 GB").
     var effectiveStorageLimitText: String {
@@ -2597,6 +2606,7 @@ class AuthViewModel: ObservableObject {
         let addonActive = ["active", "trialing", "past_due"].contains(addonStatus)
         currentStorageAddonKey = addonActive ? ((data["billingStorageAddonKey"] as? String) ?? "") : ""
         currentStorageAddonMB = addonActive ? ((data["billingStorageAddonMB"] as? Int) ?? 0) : 0
+        currentTeamMemberLimitEffective = (data["billingTeamMemberLimit"] as? Int) ?? 0
         UserDefaults.standard.set(resolvedPlan.rawValue, forKey: billingPlanDefaultsKey)
     }
 

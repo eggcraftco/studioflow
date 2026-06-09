@@ -61,6 +61,10 @@ private val TR_1: Map<String, Map<String, String>> by lazy { mapOf(
     // ============================ STORAGE ADD-ONS ============================
     "Storage add-ons" to mapOf("Türkçe" to "Depolama eklentileri"),
     "Current add-on" to mapOf("Türkçe" to "Mevcut eklenti"),
+    "Team seats" to mapOf("Türkçe" to "Ekip koltukları"),
+    "Team includes 5 seats. Add more for £5/month or £50/year each, up to 10 users." to mapOf("Türkçe" to "Team 5 koltuk içerir. Her biri £5/ay veya £50/yıl olan ek koltuklarla 10 kullanıcıya kadar."),
+    "Manage seats on the web" to mapOf("Türkçe" to "Koltukları web'de yönet"),
+    "Current allowance" to mapOf("Türkçe" to "Mevcut izin"),
     "Extra Client Files storage on top of your plan. You can switch tier or billing period anytime." to mapOf("Türkçe" to "Planınıza ek Müşteri Dosyaları depolama alanı. İstediğiniz zaman katman veya faturalama dönemini değiştirebilirsiniz."),
     // ============================ LEGAL / POLICY ============================
     "Legal" to mapOf("Türkçe" to "Yasal"),

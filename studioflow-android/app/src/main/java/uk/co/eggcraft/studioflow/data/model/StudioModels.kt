@@ -131,6 +131,7 @@ data class StudioWorkspace(
     val billingInterval: String = "",
     val storageAddonKey: String = "",
     val storageAddonMB: Long = 0,
+    val teamMemberLimitEffective: Int = 0,
     val memberAccess: WorkspaceMemberAccess,
     val accountDisplayName: String = "",
     val accountPhotoUrl: String = "",
@@ -138,6 +139,9 @@ data class StudioWorkspace(
 ) {
     val isOwner: Boolean get() = role == "owner"
     val canSeeFinancialData: Boolean get() = memberAccess.financialInfo
+    // Effective team seats (base plan + purchased seats); falls back to plan default.
+    val effectiveTeamMemberLimit: Int get() = maxOf(teamMemberLimitEffective, billingPlan.teamMemberLimit)
+    val teamSeatSelfServiceMax: Int get() = 10
     // Base plan storage + any active add-on.
     val effectiveStorageLimitMB: Long get() = billingPlan.storageLimitMb.toLong() + storageAddonMB
     val effectiveStorageLimitText: String get() {

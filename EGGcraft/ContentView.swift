@@ -12031,6 +12031,9 @@ struct AccountProfileView: View {
                         if authVM.currentPlanEntitlements.clientFilesEnabled {
                             storageAddonCard
                         }
+                        if authVM.currentPlanEntitlements.teamAccessEnabled {
+                            teamSeatsCard
+                        }
                         subscriptionLegalFooter
                     }
                 case .teamAccess:
@@ -12667,6 +12670,56 @@ struct AccountProfileView: View {
                 ForEach(tiers, id: \.self) { gb in
                     storageProductCard(gb)
                 }
+            }
+        }
+        .padding(14)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    // Team seats are managed self-service on the web (Stripe). Mobile shows the
+    // current allowance and links to nivadesk.app/plan to add or manage seats.
+    private var teamSeatsCard: some View {
+        let current = authVM.effectiveTeamMemberLimit
+        let maxSeats = authVM.teamSeatSelfServiceMax
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.2.badge.plus")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.purple)
+                    .frame(width: 36, height: 36)
+                    .background(Color.purple.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Team seats", lang: seciliDil))
+                        .font(.system(size: 14, weight: .bold))
+                    Text(t("Team includes 5 seats. Add more for £5/month or £50/year each, up to 10 users.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(t("Current", lang: seciliDil))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    Text("\(current) / \(maxSeats)")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(.purple)
+                }
+            }
+
+            Link(destination: URL(string: "https://nivadesk.app/plan")!) {
+                HStack(spacing: 6) {
+                    Image(systemName: "safari")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(t("Manage seats on the web", lang: seciliDil))
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundColor(.purple)
             }
         }
         .padding(14)
