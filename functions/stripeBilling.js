@@ -1104,11 +1104,16 @@ function createStripeBillingFunctions({
       // inflating the effective allowance.
       const seatStatus = String(companyData.billingAdditionalTeamSeatStatus || "").trim().toLowerCase();
       const storageStatus = String(companyData.billingStorageAddonStatus || "").trim().toLowerCase();
-      const staleSeat = ["active", "trialing", "past_due"].includes(seatStatus) || Number(companyData.billingAdditionalTeamSeatQuantity || 0) > 0;
+      const reconcilePlanKey = String(companyData.billingPlan || "demo").trim();
+      const reconcileEntitlements = PLAN_ENTITLEMENTS[reconcilePlanKey] || PLAN_ENTITLEMENTS.demo;
+      // Without a Stripe customer there cannot be any purchased seats, so the
+      // effective seat limit must equal the base plan allowance.
+      const seatLimitInflated = Number(companyData.billingTeamMemberLimit || 0) > Number(reconcileEntitlements.teamMemberLimit || 0);
+      const staleSeat = ["active", "trialing", "past_due"].includes(seatStatus)
+        || Number(companyData.billingAdditionalTeamSeatQuantity || 0) > 0
+        || seatLimitInflated;
       const staleStorage = ["active", "trialing", "past_due"].includes(storageStatus) || Number(companyData.billingStorageAddonMB || 0) > 0;
       if (staleSeat || staleStorage) {
-        const reconcilePlanKey = String(companyData.billingPlan || "demo").trim();
-        const reconcileEntitlements = PLAN_ENTITLEMENTS[reconcilePlanKey] || PLAN_ENTITLEMENTS.demo;
         await companyRef.set({
           billingAdditionalTeamSeatQuantity: 0,
           billingAdditionalTeamSeatKey: "",
