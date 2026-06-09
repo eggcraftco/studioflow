@@ -769,6 +769,8 @@ function PublicLanguageSelector() {
 function PublicHeader() {
   const { user } = useAuth();
   const { t } = usePublicSiteLanguage();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
   return (
     <header className="public-header">
       <div className="public-shell public-header-inner">
@@ -784,15 +786,39 @@ function PublicHeader() {
         </nav>
 
         <div className="public-header-actions">
-          <PublicLanguageSelector />
-          <Link href={user ? "/dashboard" : "/login"} className="public-button ghost">
+          <span className="public-header-lang-desktop"><PublicLanguageSelector /></span>
+          <Link href={user ? "/dashboard" : "/login"} className="public-button ghost public-header-login-desktop">
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
           <Link href="/signup" className="public-button">
             {t("cta.startFree")}
           </Link>
+          <button
+            type="button"
+            className="public-header-menu-btn"
+            aria-label={t("nav.publicPages")}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(v => !v)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {menuOpen ? (
+        <div className="public-header-mobile-menu">
+          <Link href="/" onClick={closeMenu}>{t("nav.home")}</Link>
+          <Link href="/features" onClick={closeMenu}>{t("nav.features")}</Link>
+          <Link href="/pricing" onClick={closeMenu}>{t("nav.pricing")}</Link>
+          <Link href="/faq" onClick={closeMenu}>{t("nav.faq")}</Link>
+          <Link href={user ? "/dashboard" : "/login"} onClick={closeMenu}>
+            {user ? t("cta.openPortal") : t("cta.login")}
+          </Link>
+          <div className="public-header-mobile-lang"><PublicLanguageSelector /></div>
+        </div>
+      ) : null}
     </header>
   );
 }
