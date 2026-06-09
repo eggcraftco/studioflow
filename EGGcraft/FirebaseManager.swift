@@ -1582,10 +1582,10 @@ class FirebaseManager: ObservableObject {
             return
         }
 
-        let allowedExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "webp", "pdf", "psd", "psb"]
+        let allowedExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "webp", "pdf", "psd", "psb", "zip"]
         let ext = fileURL.pathExtension.lowercased()
         guard allowedExtensions.contains(ext) else {
-            lastUploadSafetyMessage = "Upload blocked: only PDF, image, PSD and PSB files are allowed for client files."
+            lastUploadSafetyMessage = "Upload blocked: only PDF, image, PSD, PSB and ZIP files are allowed for client files."
             completion(nil)
             return
         }
@@ -1619,6 +1619,8 @@ class FirebaseManager: ObservableObject {
         let contentType: String
         if safeExtension == "pdf" {
             contentType = "application/pdf"
+        } else if safeExtension == "zip" {
+            contentType = "application/zip"
         } else if safeExtension == "psd" {
             contentType = "image/vnd.adobe.photoshop"
         } else if safeExtension == "psb" {

@@ -2962,13 +2962,14 @@ private fun cleanClientFileContentType(fileName: String, value: String): String 
         clean in setOf("application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif") ->
             if (clean == "image/jpg") "image/jpeg" else clean
         extension == "pdf" -> "application/pdf"
+        extension == "zip" -> "application/zip"
         extension in setOf("jpg", "jpeg") -> "image/jpeg"
         extension == "png" -> "image/png"
         extension == "webp" -> "image/webp"
         extension == "heic" -> "image/heic"
         extension == "heif" -> "image/heif"
         extension in setOf("psd", "psb") -> "application/octet-stream"
-        else -> error("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB.")
+        else -> error("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP.")
     }
 }
 

@@ -7326,7 +7326,7 @@ struct SiparisDetayView: View {
     }
 
     private var allowedClientFileContentTypes: [UTType] {
-        var types: [UTType] = [.pdf, .image]
+        var types: [UTType] = [.pdf, .image, .zip]
         if let psd = UTType(filenameExtension: "psd") { types.append(psd) }
         if let psb = UTType(filenameExtension: "psb") { types.append(psb) }
         // Some systems do not advertise PSD/PSB as a specific UTType.
