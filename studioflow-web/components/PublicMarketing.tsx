@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
+import { openCookiePreferences } from "@/lib/cookieConsent";
 import { usePathname, useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -794,6 +795,7 @@ function PublicFooter() {
               <Link href="/privacy">{t("nav.privacy")}</Link>
               <Link href="/terms">{t("nav.terms")}</Link>
               <Link href="/cookies">{t("nav.cookies")}</Link>
+              <button type="button" className="public-footer-linkbtn" onClick={openCookiePreferences}>{t("nav.cookiePreferences")}</button>
               <Link href="/acceptable-use">{t("nav.acceptableUse")}</Link>
               <Link href="/data-processing-agreement">{t("nav.dataProcessingAgreement")}</Link>
               <Link href="/subprocessors">{t("nav.subprocessors")}</Link>

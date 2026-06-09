@@ -9,6 +9,7 @@ const inter = Inter({
 });
 import { AppRouteFrame } from "@/components/AppRouteFrame";
 import { PricePrivacyProvider } from "@/components/PricePrivacy";
+import { CookieConsent } from "@/components/CookieConsent";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 
 const isStagingPreview = process.env.NEXT_PUBLIC_STAGING_NO_INDEX === "true";
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <AuthProvider>
           <PricePrivacyProvider>
             <AppRouteFrame>{children}</AppRouteFrame>
+            <CookieConsent />
           </PricePrivacyProvider>
         </AuthProvider>
       </body>
