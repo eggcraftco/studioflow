@@ -13422,13 +13422,22 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   font-weight: 900;
 }
 
-@media (max-width: 640px) {
-  .login-public-nav { flex-wrap: wrap; gap: 10px; }
-  /* Pricing / Start Free links also appear in the footnote below — drop them from
-     the cramped mobile header so the brand + language selector fit cleanly.
-     (Only the action links, not the brand logo link.) */
+@media (max-width: 980px) {
+  /* Match the public header bar: same height, side inset and logo size. */
+  .login-public-nav {
+    gap: 10px;
+    min-height: 76px;
+    align-items: center;
+    padding: 0 14px;
+  }
+  /* Pricing / Start Free links + desktop language move into the hamburger menu. */
   .login-public-nav span:last-child a { display: none; }
   .login-public-nav span:last-child { gap: 10px; }
+  .login-public-brand .public-brand-logo { width: clamp(132px, 13vw, 172px); }
+  .login-mobile-menu { width: calc(100% - 28px); }
+}
+
+@media (max-width: 640px) {
   .login-card-frame { padding: 22px; max-width: 100%; }
   .login-card-frame h1 { font-size: 27px !important; line-height: 1.08 !important; }
 }
@@ -13652,7 +13661,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .login-public-brand .public-brand-logo {
-  width: clamp(140px, 17vw, 178px);
+  width: clamp(132px, 13vw, 172px);
 }
 
 .public-footer-logo {
@@ -15456,7 +15465,7 @@ html[dir="rtl"] .login-public-shell {
   }
 
   .login-public-brand .public-brand-logo {
-    width: 142px;
+    width: 132px;
   }
 
   .public-header-actions .public-language-select span,
