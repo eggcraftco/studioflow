@@ -692,6 +692,24 @@ function createStripeBillingFunctions({
     };
 
     if (!selected) {
+      // Preserve a manually granted plan. A manual_workspace plan has no Stripe plan
+      // subscription, so the resolver must not downgrade it to Demo just because an
+      // add-on purchase (storage/seats) created a Stripe customer with no plan sub.
+      const currentSnap = await workspace.ref.get();
+      const currentData = currentSnap.data() || {};
+      const currentSource = String(currentData.billingPlanSource || "").trim().toLowerCase();
+      const currentPlan = String(currentData.billingPlan || "").trim();
+      if (currentSource.includes("manual") && currentPlan && currentPlan !== "demo") {
+        await workspace.ref.set({ ...resolutionFields }, { merge: true });
+        return {
+          plan: currentPlan,
+          provider: "manual",
+          activePlanSubscriptionCount: 0,
+          hasMultipleActiveSubscriptions: false,
+          preservedManualPlan: true
+        };
+      }
+
       const normalizedTriggerStatus = String(triggerProviderStatus || "").trim().toLowerCase();
       const legacyStatus = normalizedTriggerStatus === "unpaid"
         ? "expired"
