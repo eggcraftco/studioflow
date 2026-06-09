@@ -1361,6 +1361,56 @@ function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
   );
 }
 
+const REGION_CURRENCY: Record<string, string> = {
+  GB: "GBP", US: "USD", CA: "CAD", AU: "AUD", NZ: "NZD",
+  TR: "TRY", JP: "JPY", CN: "CNY", IN: "INR", CH: "CHF",
+  SE: "SEK", NO: "NOK", DK: "DKK", PL: "PLN", CZ: "CZK",
+  BR: "BRL", MX: "MXN", ZA: "ZAR", AE: "AED", SA: "SAR",
+  HK: "HKD", SG: "SGD", KR: "KRW", RU: "RUB", IL: "ILS",
+  DE: "EUR", FR: "EUR", IT: "EUR", ES: "EUR", NL: "EUR",
+  BE: "EUR", AT: "EUR", PT: "EUR", IE: "EUR", FI: "EUR",
+  GR: "EUR", SK: "EUR", SI: "EUR", LT: "EUR", LV: "EUR",
+  EE: "EUR", LU: "EUR", CY: "EUR", MT: "EUR"
+};
+
+// Detects the visitor's currency from their browser locale (client-side only).
+// Returns a localized symbol and a formatter for the demo amount. Defaults to GBP.
+function useLocaleCurrency() {
+  const [currency, setCurrency] = useState<string>("GBP");
+  useEffect(() => {
+    try {
+      const lang = navigator.language || "en-GB";
+      let region: string | undefined;
+      try {
+        region = new Intl.Locale(lang).maximize().region ?? undefined;
+      } catch {
+        region = lang.split("-")[1];
+      }
+      const code = (region && REGION_CURRENCY[region.toUpperCase()]) || "GBP";
+      setCurrency(code);
+    } catch {
+      /* keep GBP */
+    }
+  }, []);
+
+  const locale = (typeof navigator !== "undefined" && navigator.language) || "en-GB";
+  let symbol = "£";
+  try {
+    const parts = new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).formatToParts(0);
+    symbol = parts.find(p => p.type === "currency")?.value ?? symbol;
+  } catch {
+    /* keep default */
+  }
+  const format = (amount: number) => {
+    try {
+      return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+    } catch {
+      return `${symbol}${amount.toLocaleString()}`;
+    }
+  };
+  return { symbol, format };
+}
+
 function GptMark() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1371,6 +1421,7 @@ function GptMark() {
 
 function ChatGPTAppShowcase() {
   const { t } = usePublicSiteLanguage();
+  const currency = useLocaleCurrency();
   const queries: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
     { key: "chatgptApp.useCase1", icon: <path d="M5 3h10v14H5zM7.5 7h5M7.5 10h5M7.5 13h3" /> },
     { key: "chatgptApp.useCase2", icon: <path d="M4 16V9M9 16V4M14 16v-5" /> },
@@ -1417,13 +1468,20 @@ function ChatGPTAppShowcase() {
               <span className="gpt-you">You</span>
             </div>
             <div className="gpt-stats">
-              {stats.map(s => (
-                <div className="gpt-stat" key={s.label}>
-                  <span className="gpt-stat-icon" data-tone={s.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{s.icon}</svg></span>
-                  <span className="gpt-stat-label">{t(s.label)}</span>
-                  <strong>{t(s.value)}</strong>
-                </div>
-              ))}
+              {stats.map(s => {
+                const isMoney = s.tone === "money";
+                return (
+                  <div className="gpt-stat" key={s.label}>
+                    <span className="gpt-stat-icon" data-tone={s.tone}>
+                      {isMoney
+                        ? <span className="gpt-stat-symbol">{currency.symbol}</span>
+                        : <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{s.icon}</svg>}
+                    </span>
+                    <span className="gpt-stat-label">{t(s.label)}</span>
+                    <strong>{isMoney ? currency.format(1028) : t(s.value)}</strong>
+                  </div>
+                );
+              })}
             </div>
             <div className="gpt-answer">
               <span className="gpt-answer-avatar"><GptMark /></span>

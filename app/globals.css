@@ -16707,6 +16707,7 @@ html[dir="rtl"] .login-public-shell {
 }
 
 .gpt-stat-icon svg { width: 18px; height: 18px; }
+.gpt-stat-symbol { font-size: 16px; font-weight: 800; line-height: 1; color: inherit; }
 .gpt-stat-icon[data-tone="clock"] { background: rgba(214, 110, 46, 0.14); color: #d06a26; }
 .gpt-stat-icon[data-tone="money"] { background: rgba(47, 111, 109, 0.14); color: #2f6f6d; }
 .gpt-stat-icon[data-tone="lock"] { background: rgba(92, 110, 214, 0.14); color: #5c6ed6; }
