@@ -14945,6 +14945,25 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(247, 244, 239, 0.74));
 }
 
+.faq-group-section { padding-top: 0; }
+.faq-group-section:first-of-type { padding-top: 8px; }
+.faq-category-title {
+  margin: 0 0 18px;
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  color: var(--public-text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.faq-category-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--public-border);
+}
+
 .public-legal-updated {
   margin-top: 18px;
   color: var(--public-muted);
