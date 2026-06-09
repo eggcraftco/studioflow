@@ -41,7 +41,7 @@ export async function downloadClientFilesZip(params: {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
 }
 
-const ALLOWED_CLIENT_FILE_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png", "heic", "heif", "webp", "psd", "psb"]);
+const ALLOWED_CLIENT_FILE_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png", "heic", "heif", "webp", "psd", "psb", "zip"]);
 
 export const CLIENT_FILE_ACCEPT = [
   ".pdf",
@@ -52,7 +52,8 @@ export const CLIENT_FILE_ACCEPT = [
   ".heif",
   ".webp",
   ".psd",
-  ".psb"
+  ".psb",
+  ".zip"
 ].join(",");
 
 export function clientFileSizeLabel(bytes: number) {
@@ -112,13 +113,14 @@ function extensionForFile(file: File) {
   const name = file.name.trim();
   const extension = name.includes(".") ? name.split(".").pop()?.toLowerCase() ?? "" : "";
   if (!ALLOWED_CLIENT_FILE_EXTENSIONS.has(extension)) {
-    throw new Error("Choose a PDF, JPG, JPEG, PNG, HEIC, HEIF, WEBP, PSD or PSB file.");
+    throw new Error("Choose a PDF, JPG, JPEG, PNG, HEIC, HEIF, WEBP, PSD, PSB or ZIP file.");
   }
   return extension;
 }
 
 function contentTypeForFile(file: File, extension: string) {
   if (extension === "pdf") return "application/pdf";
+  if (extension === "zip") return "application/zip";
   if (extension === "psd") return "image/vnd.adobe.photoshop";
   if (extension === "psb") return "application/octet-stream";
   if (file.type) return file.type;
