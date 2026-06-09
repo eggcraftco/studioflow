@@ -1676,8 +1676,6 @@ export function PublicHomePage() {
           </div>
         </section>
 
-        <ScheduleTimelineShowcase />
-
         <ChatGPTAppShowcase />
 
         <section className="public-section public-cta-band public-scroll-reveal">
@@ -1716,6 +1714,8 @@ export function PublicFeaturesPage() {
         <FeatureWorkflowPanel />
 
         <FeatureDeepDiveSection />
+
+        <ScheduleTimelineShowcase />
 
         <section className="public-section public-order-flow-section">
           <div className="public-order-flow-sticky">
