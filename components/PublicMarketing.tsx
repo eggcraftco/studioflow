@@ -208,6 +208,24 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     tone: "graphite",
     metricKey: "feature.export.metric",
     artifactKey: "feature.export.artifact"
+  },
+  {
+    titleKey: "feature.woocommerce.title",
+    eyebrowKey: "feature.woocommerce.eyebrow",
+    bodyKey: "feature.woocommerce.body",
+    bulletKeys: ["feature.woocommerce.bullet1", "feature.woocommerce.bullet2", "feature.woocommerce.bullet3"],
+    tone: "gold",
+    metricKey: "feature.woocommerce.metric",
+    artifactKey: "feature.woocommerce.artifact"
+  },
+  {
+    titleKey: "feature.tracking.title",
+    eyebrowKey: "feature.tracking.eyebrow",
+    bodyKey: "feature.tracking.body",
+    bulletKeys: ["feature.tracking.bullet1", "feature.tracking.bullet2", "feature.tracking.bullet3"],
+    tone: "sky",
+    metricKey: "feature.tracking.metric",
+    artifactKey: "feature.tracking.artifact"
   }
 ];
 
