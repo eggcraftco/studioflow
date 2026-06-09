@@ -1294,52 +1294,85 @@ function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function GptMark() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 2.4l1.7 4.6 4.6 1.7-4.6 1.7L10 15.4l-1.7-4.7L3.7 9l4.6-1.7z" />
+    </svg>
+  );
+}
+
 function ChatGPTAppShowcase() {
   const { t } = usePublicSiteLanguage();
+  const queries: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
+    { key: "chatgptApp.useCase1", icon: <path d="M5 3h10v14H5zM7.5 7h5M7.5 10h5M7.5 13h3" /> },
+    { key: "chatgptApp.useCase2", icon: <path d="M4 16V9M9 16V4M14 16v-5" /> },
+    { key: "chatgptApp.useCase3", icon: <path d="M4 16l.8-3 8-8 2.2 2.2-8 8-3 .8zM11.8 4.2l2.2 2.2" /> }
+  ];
+  const stats: { label: PublicSiteTranslationKey; value: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
+    { label: "chatgptApp.resultMetric1Label", value: "chatgptApp.resultMetric1Value", tone: "clock", icon: <><circle cx="10" cy="10" r="6.4" /><path d="M10 6.4V10l2.6 1.6" /></> },
+    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", tone: "money", icon: <path d="M8 5.5h5M8 8.5h5M11 5.5c-3 0-3 5 0 5s3 4 0 4H8" /> },
+    { label: "chatgptApp.resultMetric3Label", value: "chatgptApp.resultMetric3Value", tone: "lock", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
+  ];
+  const trust: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
+    { key: "chatgptApp.safeBadge1", icon: <path d="M10 3l5 2v4c0 3-2.2 5.4-5 6.4C7.2 14.4 5 12 5 9V5z" /> },
+    { key: "chatgptApp.safeBadge2", icon: <path d="M7 9.2a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM13 9a2 2 0 100-4M3.2 16c0-2.2 1.7-3.9 3.8-3.9s3.8 1.7 3.8 3.9M12 12.1c2 0 3.8 1.3 3.8 3.9" /> },
+    { key: "chatgptApp.safeBadge3", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
+  ];
   return (
-    <section className="public-section public-chatgpt-app-section public-scroll-reveal">
-      <div className="public-shell public-chatgpt-app-panel">
-        <div className="public-chatgpt-app-copy">
-          <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
-          <h2>{t("chatgptApp.title")}</h2>
+    <section className="public-section gpt-section public-scroll-reveal">
+      <div className="public-shell gpt-grid">
+        <div className="gpt-copy-card">
+          <span className="gpt-eyebrow"><span className="gpt-eyebrow-logo"><GptMark /></span>{t("chatgptApp.eyebrow")}</span>
+          <h2>{t("chatgptApp.titleLead")} <span className="hero-accent">{t("chatgptApp.titleAccent")}</span></h2>
           <p>{t("chatgptApp.body")}</p>
-          <div className="public-chatgpt-app-actions" aria-label={t("chatgptApp.useCasesAria")}>
-            <span>{t("chatgptApp.useCase1")}</span>
-            <span>{t("chatgptApp.useCase2")}</span>
-            <span>{t("chatgptApp.useCase3")}</span>
+          <div className="gpt-queries">
+            {queries.map(q => (
+              <div className="gpt-query" key={q.key}>
+                <span className="gpt-query-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{q.icon}</svg></span>
+                <span className="gpt-query-text">{t(q.key)}</span>
+                <span className="gpt-query-arrow">›</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="public-chatgpt-app-demo" aria-label={t("chatgptApp.demoAria")}>
-          <div className="public-chatgpt-window-bar">
-            <span />
-            <strong>{t("chatgptApp.windowTitle")}</strong>
-          </div>
-          <div className="public-chatgpt-message user">
-            <span>{t("chatgptApp.promptLabel")}</span>
-            <p>{t("chatgptApp.prompt")}</p>
-          </div>
-          <div className="public-chatgpt-result-card">
-            <div>
-              <span>{t("chatgptApp.resultMetric1Label")}</span>
-              <strong>{t("chatgptApp.resultMetric1Value")}</strong>
+        <div className="gpt-demo-card">
+          <div className="gpt-demo-inner">
+            <div className="gpt-demo-head">
+              <span className="gpt-demo-head-logo"><GptMark /></span>
+              <strong>{t("chatgptApp.windowTitle")}</strong>
             </div>
-            <div>
-              <span>{t("chatgptApp.resultMetric2Label")}</span>
-              <strong>{t("chatgptApp.resultMetric2Value")}</strong>
+            <div className="gpt-ask">
+              <div>
+                <span className="gpt-ask-label">{t("chatgptApp.promptLabel")}</span>
+                <p>{t("chatgptApp.prompt")}</p>
+              </div>
+              <span className="gpt-you">You</span>
             </div>
-            <div>
-              <span>{t("chatgptApp.resultMetric3Label")}</span>
-              <strong>{t("chatgptApp.resultMetric3Value")}</strong>
+            <div className="gpt-stats">
+              {stats.map(s => (
+                <div className="gpt-stat" key={s.label}>
+                  <span className="gpt-stat-icon" data-tone={s.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{s.icon}</svg></span>
+                  <span className="gpt-stat-label">{t(s.label)}</span>
+                  <strong>{t(s.value)}</strong>
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="public-chatgpt-message assistant">
-            <span>{t("chatgptApp.answerLabel")}</span>
-            <p>{t("chatgptApp.answer")}</p>
-          </div>
-          <div className="public-chatgpt-safe-row">
-            <span>{t("chatgptApp.safeBadge1")}</span>
-            <span>{t("chatgptApp.safeBadge2")}</span>
-            <span>{t("chatgptApp.safeBadge3")}</span>
+            <div className="gpt-answer">
+              <span className="gpt-answer-avatar"><GptMark /></span>
+              <div>
+                <span className="gpt-answer-label">{t("chatgptApp.answerLabel")}</span>
+                <p>{t("chatgptApp.answer")}</p>
+              </div>
+            </div>
+            <div className="gpt-trust">
+              {trust.map(tr => (
+                <div className="gpt-trust-item" key={tr.key}>
+                  <span className="gpt-trust-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{tr.icon}</svg></span>
+                  <span>{t(tr.key)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
