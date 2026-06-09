@@ -12575,10 +12575,10 @@ struct AccountProfileView: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.06))
+        .background(isCurrent ? accent.opacity(0.10) : Color.secondary.opacity(0.06))
         .overlay(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(isCurrent ? accent.opacity(0.50) : Color.primary.opacity(0.08), lineWidth: isCurrent ? 1.1 : 0.8)
+                .stroke(isCurrent ? accent.opacity(0.55) : Color.primary.opacity(0.08), lineWidth: isCurrent ? 1.2 : 0.8)
         )
         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
@@ -12711,10 +12711,10 @@ struct AccountProfileView: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.06))
+        .background(isCurrentTier ? Color.blue.opacity(0.10) : Color.secondary.opacity(0.06))
         .overlay(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(isCurrentTier ? Color.blue.opacity(0.50) : Color.primary.opacity(0.08), lineWidth: isCurrentTier ? 1.1 : 0.8)
+                .stroke(isCurrentTier ? Color.blue.opacity(0.55) : Color.primary.opacity(0.08), lineWidth: isCurrentTier ? 1.2 : 0.8)
         )
         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
