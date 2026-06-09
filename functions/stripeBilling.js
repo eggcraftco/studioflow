@@ -1099,11 +1099,38 @@ function createStripeBillingFunctions({
     // while test checkout and billing portal actions remain allowlisted below.
     const customerId = String(companyData.billingCustomerId || companyData.billingStripeCustomerId || "").trim();
     if (!customerId) {
+      // No Stripe customer means there cannot be any active add-on subscriptions.
+      // Clear any stale seat/storage add-on fields so a leftover record cannot keep
+      // inflating the effective allowance.
+      const seatStatus = String(companyData.billingAdditionalTeamSeatStatus || "").trim().toLowerCase();
+      const storageStatus = String(companyData.billingStorageAddonStatus || "").trim().toLowerCase();
+      const staleSeat = ["active", "trialing", "past_due"].includes(seatStatus) || Number(companyData.billingAdditionalTeamSeatQuantity || 0) > 0;
+      const staleStorage = ["active", "trialing", "past_due"].includes(storageStatus) || Number(companyData.billingStorageAddonMB || 0) > 0;
+      if (staleSeat || staleStorage) {
+        const reconcilePlanKey = String(companyData.billingPlan || "demo").trim();
+        const reconcileEntitlements = PLAN_ENTITLEMENTS[reconcilePlanKey] || PLAN_ENTITLEMENTS.demo;
+        await companyRef.set({
+          billingAdditionalTeamSeatQuantity: 0,
+          billingAdditionalTeamSeatKey: "",
+          billingAdditionalTeamSeatStatus: "cancelled",
+          billingAdditionalTeamSeatSubscriptionId: "",
+          billingTeamMemberLimit: reconcileEntitlements.teamMemberLimit,
+          billingStorageAddonMB: 0,
+          billingStorageAddonKey: "",
+          billingStorageAddonStatus: "cancelled",
+          billingStorageAddonSubscriptionId: "",
+          billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          billingUpdatedBy: "stripe_resync_reconcile",
+          billingExportAccessPreserved: true
+        }, { merge: true });
+      }
       return {
         ok: true,
         configured: true,
-        resynced: false,
-        message: "No verified Stripe customer is connected to this workspace yet."
+        resynced: staleSeat || staleStorage,
+        message: staleSeat || staleStorage
+          ? "Cleared stale add-on records. Your allowance has been refreshed."
+          : "No verified Stripe customer is connected to this workspace yet."
       };
     }
 
@@ -1134,6 +1161,8 @@ function createStripeBillingFunctions({
     const foundSubscriptionIds = new Set();
     let foundSubscriptionCount = 0;
     let recognisedSubscriptionCount = 0;
+    let activeSeatSubFound = false;
+    let activeStorageSubFound = false;
     let startingAfter = null;
 
     // Read all subscription states from Stripe. The client cannot provide a plan,
@@ -1158,6 +1187,10 @@ function createStripeBillingFunctions({
         if (!item) continue;
 
         recognisedSubscriptionCount += 1;
+        const subStatus = String(subscription.status || "").trim().toLowerCase();
+        const subActiveForEntitlement = ["active", "trialing", "past_due"].includes(subStatus);
+        if (subActiveForEntitlement && item.type === "team_seat_addon") activeSeatSubFound = true;
+        if (subActiveForEntitlement && item.type === "storage_addon") activeStorageSubFound = true;
         await applySubscription(subscription, "manual.owner_resync");
       }
 
@@ -1191,6 +1224,33 @@ function createStripeBillingFunctions({
       }, { merge: true });
     });
     await staleBatch.commit();
+
+    // Reconcile add-on doc fields against Stripe. If no active seat/storage add-on
+    // subscription exists at the provider, clear any stale add-on fields so the
+    // recompute below does not keep inflating the effective allowance.
+    const addonReconcile = {};
+    if (!activeSeatSubFound) {
+      addonReconcile.billingAdditionalTeamSeatQuantity = 0;
+      addonReconcile.billingAdditionalTeamSeatKey = "";
+      addonReconcile.billingAdditionalTeamSeatStatus = "cancelled";
+      addonReconcile.billingAdditionalTeamSeatSubscriptionId = "";
+      // Reset the effective seat limit to the base plan allowance (no purchased seats).
+      const reconcilePlanKey = String(companyData.billingPlan || "demo").trim();
+      const reconcileEntitlements = PLAN_ENTITLEMENTS[reconcilePlanKey] || PLAN_ENTITLEMENTS.demo;
+      addonReconcile.billingTeamMemberLimit = reconcileEntitlements.teamMemberLimit;
+    }
+    if (!activeStorageSubFound) {
+      addonReconcile.billingStorageAddonMB = 0;
+      addonReconcile.billingStorageAddonKey = "";
+      addonReconcile.billingStorageAddonStatus = "cancelled";
+      addonReconcile.billingStorageAddonSubscriptionId = "";
+    }
+    if (Object.keys(addonReconcile).length) {
+      addonReconcile.billingUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+      addonReconcile.billingUpdatedBy = "stripe_resync_reconcile";
+      addonReconcile.billingExportAccessPreserved = true;
+      await companyRef.set(addonReconcile, { merge: true });
+    }
 
     const resolution = await recomputeEffectiveWorkspaceEntitlement(companyRef && {
       id: companyId,
