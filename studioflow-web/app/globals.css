@@ -16597,6 +16597,12 @@ html[dir="rtl"] .login-public-shell {
 .schedule-float-right-top { top: 11%; right: -10px; }
 .schedule-float-right-bottom { top: 61%; right: 6px; }
 
+/* Dashboard variant: 3 floats stacked on the right, wider cards (fewer text lines) */
+.dashboard-section .schedule-float { width: 206px; }
+.schedule-float-dash-top { top: 3%; right: -12px; }
+.schedule-float-dash-mid { top: 37%; right: 8px; }
+.schedule-float-dash-bottom { top: 71%; right: -4px; }
+
 .schedule-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

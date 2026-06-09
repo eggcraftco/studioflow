@@ -1488,6 +1488,74 @@ function ScheduleTimelineShowcase() {
   );
 }
 
+function DashboardFinanceShowcase() {
+  const { t } = usePublicSiteLanguage();
+  const sideFeatures: { key: string; title: PublicSiteTranslationKey; body: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
+    { key: "s1", title: "dashboard.side1.title", body: "dashboard.side1.body", tone: "filter", icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7h5M7.5 10h5M7.5 13h3" /></> }
+  ];
+  const floats: { key: string; title: PublicSiteTranslationKey; body: PublicSiteTranslationKey; tone: string; pos: string; icon: ReactNode }[] = [
+    { key: "float1", title: "dashboard.float1.title", body: "dashboard.float1.body", tone: "drag", pos: "dash-top", icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
+    { key: "float2", title: "dashboard.float2.title", body: "dashboard.float2.body", tone: "check", pos: "dash-mid", icon: <><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></> },
+    { key: "float3", title: "dashboard.float3.title", body: "dashboard.float3.body", tone: "drag", pos: "dash-bottom", icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> }
+  ];
+  const grid: { key: string; title: PublicSiteTranslationKey; body: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
+    { key: "b1", title: "dashboard.b1.title", body: "dashboard.b1.body", tone: "calendar", icon: <><circle cx="10" cy="10" r="6.4" /><circle cx="10" cy="10" r="1.6" /></> },
+    { key: "b2", title: "dashboard.b2.title", body: "dashboard.b2.body", tone: "trend", icon: <path d="M4 16V9M9 16V4M14 16v-5" /> },
+    { key: "b3", title: "dashboard.b3.title", body: "dashboard.b3.body", tone: "team", icon: <><rect x="3.5" y="6" width="13" height="9" rx="2" /><path d="M3.5 9h13M12.5 12h1.5" /></> },
+    { key: "b4", title: "dashboard.b4.title", body: "dashboard.b4.body", tone: "view", icon: <><circle cx="10" cy="10" r="6.4" /><circle cx="10" cy="10" r="3" /><circle cx="10" cy="10" r="0.6" /></> }
+  ];
+  return (
+    <section className="public-section schedule-section dashboard-section public-scroll-reveal">
+      <div className="public-shell">
+        <div className="schedule-top">
+          <div className="schedule-copy">
+            <span className="public-eyebrow schedule-eyebrow">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 16V9M9 16V4M14 16v-5" /></svg>
+              {t("dashboard.eyebrow")}
+            </span>
+            <h2>{t("dashboard.title")}</h2>
+            <p>{t("dashboard.body")}</p>
+            <div className="schedule-side-features">
+              {sideFeatures.map(f => (
+                <div className="schedule-side-card" key={f.key}>
+                  <span className="schedule-side-icon" data-tone={f.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg></span>
+                  <div>
+                    <strong>{t(f.title)}</strong>
+                    <span>{t(f.body)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="schedule-stage">
+            <img className="schedule-shot" src="/dashboard.webp" alt={t("dashboard.imageAlt")} loading="lazy" />
+            {floats.map(f => (
+              <div className={`schedule-float schedule-float-${f.pos}`} key={f.key}>
+                <span className="schedule-float-icon" data-tone={f.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg></span>
+                <strong>{t(f.title)}</strong>
+                <span>{t(f.body)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="schedule-grid">
+          {grid.map(g => (
+            <div className="schedule-grid-card" key={g.key}>
+              <span className="schedule-grid-icon" data-tone={g.tone}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{g.icon}</svg></span>
+              <strong>{t(g.title)}</strong>
+              <span>{t(g.body)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="schedule-tagline">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7" /><path d="M6.8 10.2l2.1 2.1 4.3-4.5" /></svg>
+          {t("dashboard.tagline")}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ChatGPTAppShowcase() {
   const { t } = usePublicSiteLanguage();
   const currency = useLocaleCurrency();
@@ -1715,6 +1783,8 @@ export function PublicFeaturesPage() {
         <FeatureWorkflowPanel />
 
         <FeatureDeepDiveSection />
+
+        <DashboardFinanceShowcase />
 
         <ScheduleTimelineShowcase />
 
