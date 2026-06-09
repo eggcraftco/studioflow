@@ -16291,6 +16291,200 @@ html[dir="rtl"] .login-public-shell {
   color: var(--public-muted);
 }
 
+/* Per-plan accent colour */
+.public-plan-card { --plan-accent: #2f6f6d; --plan-accent-soft: rgba(47, 111, 109, 0.1); }
+.public-plan-card[data-plan="team_monthly"] { --plan-accent: #7c5cd6; --plan-accent-soft: rgba(124, 92, 214, 0.12); }
+
+.public-plan-card {
+  padding: 26px 24px 24px;
+  background: #fff;
+  border: 1px solid var(--public-border);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 14px 40px rgba(23, 25, 35, 0.05);
+}
+
+.public-plan-card.featured {
+  border: 1.5px solid var(--plan-accent) !important;
+  background: #fff !important;
+  box-shadow: 0 22px 56px rgba(47, 111, 109, 0.16) !important;
+}
+
+.public-plan-price-amount { color: var(--plan-accent) !important; }
+
+.public-plan-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.public-plan-topline .public-eyebrow {
+  border-color: var(--plan-accent);
+  background: var(--plan-accent-soft);
+  color: var(--plan-accent);
+  font-weight: 700;
+}
+
+.public-plan-card[data-plan="lifetime_lite"] .public-topline .public-eyebrow,
+.public-plan-card[data-plan="lifetime_lite"] .public-eyebrow {
+  border-color: var(--public-border);
+  background: rgba(23, 25, 35, 0.04);
+  color: var(--public-muted);
+}
+
+.public-plan-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--plan-accent-soft);
+  color: var(--plan-accent);
+}
+
+.public-plan-icon svg { width: 21px; height: 21px; }
+
+.public-plan-card h3 {
+  margin: 0 0 4px;
+  font-size: 21px;
+  font-weight: 760;
+  color: var(--public-text);
+}
+
+.public-plan-card > p {
+  margin: 0 0 18px;
+  color: var(--public-muted);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.public-plan-limits {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--public-border);
+  border-radius: 13px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.public-plan-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--public-border);
+  background: #fff;
+}
+
+.public-plan-stat:last-child { border-right: none; }
+
+.public-plan-stat-icon { width: 16px; height: 16px; color: var(--public-muted); }
+
+.public-plan-stat-label {
+  font-size: 10.5px;
+  color: var(--public-muted);
+  font-weight: 600;
+}
+
+.public-plan-stat strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--public-text);
+  line-height: 1.2;
+}
+
+.public-plan-bullets {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.public-plan-bullets li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--public-text);
+  line-height: 1.4;
+}
+
+.public-plan-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--plan-accent-soft);
+  color: var(--plan-accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.public-plan-check svg { width: 13px; height: 13px; }
+
+.public-plan-limitnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 14px;
+  margin: 0 0 18px;
+  border-top: 1px solid var(--public-border);
+  color: var(--public-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.public-plan-limitnote svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+
+.public-plan-card .public-button {
+  margin-top: auto;
+  width: 100%;
+  border: 1.5px solid var(--plan-accent);
+  background: #fff;
+  color: var(--plan-accent);
+  font-weight: 700;
+}
+
+.public-plan-card.featured .public-button {
+  background: var(--plan-accent);
+  color: #fff;
+}
+
+.public-plan-badge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--plan-accent) !important;
+  color: #fff !important;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(47, 111, 109, 0.3);
+  z-index: 2;
+}
+
+@media (max-width: 980px) {
+  .public-plan-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (max-width: 560px) {
+  .public-plan-grid { grid-template-columns: 1fr !important; }
+}
+
 /* ChatGPT App showcase — redesigned */
 .gpt-grid {
   display: grid;
