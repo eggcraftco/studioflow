@@ -14469,11 +14469,12 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .public-plan-grid {
   gap: 16px;
+  padding-top: 18px;
 }
 
 .public-plan-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 20px;
 }
 
@@ -16436,6 +16437,7 @@ html[dir="rtl"] .login-public-shell {
   gap: 8px;
   padding-top: 14px;
   margin: auto 0 18px;
+  min-height: 58px;
   border-top: 1px solid var(--public-border);
   color: var(--public-muted);
   font-size: 12.5px;
