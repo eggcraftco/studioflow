@@ -89,11 +89,9 @@ function languageFromBrowserLocales(locales: readonly string[] | undefined) {
 
 function getInitialPublicSiteLanguage() {
   try {
-    const storedLanguage = window.localStorage.getItem(PUBLIC_SITE_LANGUAGE_STORAGE_KEY);
-    if (storedLanguage && SUPPORTED_STUDIO_LANGUAGES.includes(storedLanguage as StudioLanguage)) {
-      return storedLanguage as StudioLanguage;
-    }
-
+    // Always follow the visitor's browser/device language (default English).
+    // A manually picked language applies for the current session but is not
+    // persisted across reloads, so the site keeps tracking the device language.
     const browserLanguages = window.navigator.languages?.length
       ? window.navigator.languages
       : [window.navigator.language];
