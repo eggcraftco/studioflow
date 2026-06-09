@@ -280,17 +280,17 @@ export default function NotesPage() {
             {section === "trash" ? (
               <>
                 <button onClick={bulkRestoreFromTrash} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Restore to Notes</button>
-                <button onClick={bulkDeleteForever} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Delete forever</button>
+                <button onClick={bulkDeleteForever} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Delete forever")}</button>
               </>
             ) : section === "archive" ? (
               <>
                 <button onClick={bulkUnarchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Unarchive</button>
-                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Move to trash</button>
+                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
               </>
             ) : (
               <>
-                <button onClick={bulkArchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Archive</button>
-                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Move to trash</button>
+                <button onClick={bulkArchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Archive")}</button>
+                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
               </>
             )}
           </div>
@@ -318,7 +318,7 @@ export default function NotesPage() {
               cursor: "pointer",
             }}
           >
-            + New Note
+            + {t("New Note")}
           </button>
         </div>
 
@@ -707,14 +707,35 @@ function NoteCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [isPhone, setIsPhone] = useState(false);
+  const longPressTimer = React.useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const on = () => setIsPhone(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const isDark = notesIsDark();
+  const actionsVisible = hover || menuOpen || colorOpen || reminderOpen || isPhone;
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setMenuOpen(false); setColorOpen(false); setReminderOpen(false); }}
       onClick={onClick}
+      onTouchStart={() => {
+        if (!selectionActive) {
+          longPressTimer.current = window.setTimeout(() => {
+            try { (navigator as Navigator & { vibrate?: (n: number) => void }).vibrate?.(10); } catch {}
+            onToggleSelect();
+          }, 450);
+        }
+      }}
+      onTouchEnd={() => { if (longPressTimer.current) window.clearTimeout(longPressTimer.current); }}
+      onTouchMove={() => { if (longPressTimer.current) window.clearTimeout(longPressTimer.current); }}
       draggable={canDrag && !note.isPinned}
       onDragStart={(e) => {
         if (!canDrag || note.isPinned) return;
@@ -838,9 +859,10 @@ function NoteCard({
           alignItems: "center",
           gap: 2,
           marginTop: "auto",
-          opacity: hover || menuOpen || colorOpen || reminderOpen ? 1 : 0,
+          flexWrap: isPhone ? "wrap" : "nowrap",
+          opacity: actionsVisible ? 1 : 0,
           transition: "opacity 0.15s",
-          pointerEvents: hover || menuOpen || colorOpen || reminderOpen ? "auto" : "none",
+          pointerEvents: actionsVisible ? "auto" : "none",
         }}
       >
         {/* Color */}
@@ -868,15 +890,15 @@ function NoteCard({
           </IconBtn>
           {reminderOpen && (
             <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, left: 0, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 160 }}>
-              <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>Tomorrow</button>
-              <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 7 * 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>Next week</button>
+              <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Tomorrow")}</button>
+              <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 7 * 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Next week")}</button>
               <input
                 type="date"
                 onChange={(e) => { if (e.target.value) { onSave({ ...note, reminderDateMillis: new Date(e.target.value).getTime() }); setReminderOpen(false); } }}
                 style={{ padding: 4, border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 12 }}
               />
               {note.reminderDateMillis && (
-                <button onClick={() => { onSave({ ...note, reminderDateMillis: null }); setReminderOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>Remove reminder</button>
+                <button onClick={() => { onSave({ ...note, reminderDateMillis: null }); setReminderOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>{t("Remove reminder")}</button>
               )}
             </div>
           )}
@@ -897,8 +919,8 @@ function NoteCard({
           </IconBtn>
           {menuOpen && (
             <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, right: 0, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: 4, display: "flex", flexDirection: "column", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 200 }}>
-              <button onClick={() => { onDuplicate(note); setMenuOpen(false); }} style={menuItemStyle}>Duplicate note</button>
-              <button onClick={() => { onCopy(note); setMenuOpen(false); }} style={menuItemStyle}>Copy note</button>
+              <button onClick={() => { onDuplicate(note); setMenuOpen(false); }} style={menuItemStyle}>{t("Duplicate note")}</button>
+              <button onClick={() => { onCopy(note); setMenuOpen(false); }} style={menuItemStyle}>{t("Copy note")}</button>
               {allLabels.length > 0 && (
                 <>
                   <div style={{ borderTop: "1px solid #f3f4f6", margin: "4px 0" }} />
@@ -913,11 +935,11 @@ function NoteCard({
               <div style={{ borderTop: "1px solid #f3f4f6", margin: "4px 0" }} />
               {note.isDeleted ? (
                 <>
-                  <button onClick={() => { onSave({ ...note, isDeleted: false }); setMenuOpen(false); }} style={menuItemStyle}>Restore note</button>
-                  <button onClick={() => { onDelete(note.id); setMenuOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>Delete forever</button>
+                  <button onClick={() => { onSave({ ...note, isDeleted: false }); setMenuOpen(false); }} style={menuItemStyle}>{t("Restore note")}</button>
+                  <button onClick={() => { onDelete(note.id); setMenuOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>{t("Delete forever")}</button>
                 </>
               ) : (
-                <button onClick={() => { onSave({ ...note, isDeleted: true }); setMenuOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>Move to trash</button>
+                <button onClick={() => { onSave({ ...note, isDeleted: true }); setMenuOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>{t("Move to trash")}</button>
               )}
             </div>
           )}
