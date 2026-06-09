@@ -115,6 +115,8 @@ export default function PlanPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [subscriptionRefreshLoading, setSubscriptionRefreshLoading] = useState(false);
   const [checkoutLoadingKey, setCheckoutLoadingKey] = useState<StripeBillingItemKey | null>(null);
+  const [seatQty, setSeatQty] = useState(1);
+  const [seatInterval, setSeatInterval] = useState<"monthly" | "yearly">("monthly");
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
 
   useEffect(() => {
@@ -212,12 +214,12 @@ export default function PlanPage() {
     }
   }
 
-  async function handleTestCheckout(itemKey: StripeBillingItemKey) {
+  async function handleTestCheckout(itemKey: StripeBillingItemKey, quantity?: number) {
     if (!workspace || checkoutLoadingKey) return;
     setCheckoutLoadingKey(itemKey);
     setBillingMessage(null);
     try {
-      const result = await createStripeCheckoutSession({ itemKey, companyId: workspace.id });
+      const result = await createStripeCheckoutSession({ itemKey, companyId: workspace.id, quantity });
       if (result.configured && result.url) {
         window.location.assign(result.url);
         return;
@@ -473,6 +475,68 @@ export default function PlanPage() {
               </p>
             ) : null}
           </section>
+
+          {workspace.entitlements.features.team_access ? (
+            <section className="card" style={{ padding: 24, marginBottom: 18 }}>
+              <div className="pill">Team seats</div>
+              <h2 style={{ margin: "12px 0 6px" }}>Add more team members</h2>
+              <p style={{ color: "var(--muted)", marginTop: 0 }}>
+                Team includes 5 seats. Add extra seats for £5/month or £50/year each, up to 10 users in total. Your current allowance is{" "}
+                <strong>{workspace.billingTeamMemberLimit}</strong> of 10.
+              </p>
+              {(() => {
+                const owner = isWorkspaceOwner(workspace.role);
+                const remaining = Math.max(0, 10 - workspace.billingTeamMemberLimit);
+                if (!owner) {
+                  return <p style={{ color: "var(--muted)", marginBottom: 0 }}>Only the workspace owner can manage seats.</p>;
+                }
+                if (remaining <= 0) {
+                  return (
+                    <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                      You&apos;ve reached the maximum of 10 users. For larger teams, contact contact@nivadesk.co.uk.
+                    </p>
+                  );
+                }
+                const cappedQty = Math.min(seatQty, remaining);
+                const seatItemKey: StripeBillingItemKey = seatInterval === "monthly" ? "additional_team_seat_monthly" : "additional_team_seat_yearly";
+                const seatBusy = checkoutLoadingKey === "additional_team_seat_monthly" || checkoutLoadingKey === "additional_team_seat_yearly";
+                return purchasesEnabled ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ color: "var(--muted)" }}>Seats</span>
+                      <select
+                        value={cappedQty}
+                        onChange={e => setSeatQty(Number(e.target.value))}
+                        style={{ padding: "8px 10px", borderRadius: 8 }}
+                      >
+                        {Array.from({ length: remaining }, (_, i) => i + 1).map(n => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div style={{ display: "inline-flex", borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)" }}>
+                      <button type="button" className={seatInterval === "monthly" ? "button" : "button secondary"} onClick={() => setSeatInterval("monthly")} style={{ borderRadius: 0 }}>Monthly</button>
+                      <button type="button" className={seatInterval === "yearly" ? "button" : "button secondary"} onClick={() => setSeatInterval("yearly")} style={{ borderRadius: 0 }}>Yearly</button>
+                    </div>
+                    <button
+                      className="button"
+                      disabled={seatBusy || checkoutLoadingKey !== null}
+                      onClick={() => handleTestCheckout(seatItemKey, cappedQty)}
+                    >
+                      {seatBusy
+                        ? "Opening checkout..."
+                        : `Add ${cappedQty} seat${cappedQty > 1 ? "s" : ""} · ${seatInterval === "monthly" ? `£${cappedQty * 5}/month` : `£${cappedQty * 50}/year`}`}
+                    </button>
+                    <button type="button" className="button secondary" onClick={handleManageBilling} disabled={billingLoading}>
+                      Manage seats
+                    </button>
+                  </div>
+                ) : (
+                  <button className="button secondary" disabled>Billing setup coming soon</button>
+                );
+              })()}
+            </section>
+          ) : null}
         </>
       ) : null}
     </AppShell>

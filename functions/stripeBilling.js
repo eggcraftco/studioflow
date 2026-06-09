@@ -87,7 +87,7 @@ const STRIPE_BILLING_ITEMS = {
     type: "team_seat_addon",
     mode: "subscription",
     interval: "month",
-    availableForCheckout: false,
+    availableForCheckout: true,
     priceEnv: "STRIPE_PRICE_ADDITIONAL_TEAM_SEAT_MONTHLY"
   },
   additional_team_seat_yearly: {
@@ -95,7 +95,7 @@ const STRIPE_BILLING_ITEMS = {
     type: "team_seat_addon",
     mode: "subscription",
     interval: "year",
-    availableForCheckout: false,
+    availableForCheckout: true,
     priceEnv: "STRIPE_PRICE_ADDITIONAL_TEAM_SEAT_YEARLY"
   },
   storage_100gb: {
@@ -1236,6 +1236,25 @@ function createStripeBillingFunctions({
     }
     requireBillingEnvironmentAccess(request, config);
 
+    // Additional team seats: only on the Team plan, single subscription slot,
+    // quantity 1..5 (Team includes 5, self-service cap is 10 total).
+    let seatQuantity = 1;
+    if (item.type === "team_seat_addon") {
+      const onTeamPlan = String(companyData.billingPlan || "").trim() === "team_monthly"
+        || String(companyData.billingEffectivePlan || "").trim() === "team_monthly";
+      if (!onTeamPlan) {
+        return { ok: true, configured: false, message: "Additional seats are available on the Team plan." };
+      }
+      const existingSeatStatus = String(companyData.billingAdditionalTeamSeatStatus || "").trim().toLowerCase();
+      const hasActiveSeatAddon = ["active", "trialing", "past_due"].includes(existingSeatStatus)
+        && String(companyData.billingAdditionalTeamSeatSubscriptionId || "").trim();
+      if (hasActiveSeatAddon) {
+        return { ok: true, configured: false, message: "You already have additional seats. Use Manage billing to change or cancel them." };
+      }
+      const requested = Math.floor(Number(request.data?.quantity || 1));
+      seatQuantity = Math.min(5, Math.max(1, Number.isFinite(requested) ? requested : 1));
+    }
+
     const stripe = stripeClient(config.secretKey);
     const customerId = await getOrCreateCustomer(stripe, companyRef, companyData, companyId, uid);
     const metadata = {
@@ -1255,7 +1274,7 @@ function createStripeBillingFunctions({
       mode: item.mode,
       customer: customerId,
       client_reference_id: companyId,
-      line_items: [{ price: config.priceId, quantity: 1 }],
+      line_items: [{ price: config.priceId, quantity: item.type === "team_seat_addon" ? seatQuantity : 1 }],
       success_url: safeAbsoluteUrl(request.data?.successUrl, "/plan?billing=success"),
       cancel_url: safeAbsoluteUrl(request.data?.cancelUrl, "/pricing?billing=cancelled"),
       allow_promotion_codes: true,
