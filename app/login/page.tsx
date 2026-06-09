@@ -39,6 +39,8 @@ function LoginPageContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   useEffect(() => {
     if (!loading && user) router.replace("/orders");
@@ -80,11 +82,33 @@ function LoginPageContent() {
           <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt={t("brand.name")} />
         </Link>
         <span className="login-public-actions">
-          <LoginLanguageSelector />
+          <span className="public-header-lang-desktop"><LoginLanguageSelector /></span>
           <Link href="/pricing">{t("nav.pricing")}</Link>
           <Link href="/signup">{t("cta.startFree")}</Link>
+          <button
+            type="button"
+            className="public-header-menu-btn"
+            aria-label={t("nav.publicPages")}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(v => !v)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
         </span>
       </nav>
+
+      {menuOpen ? (
+        <div className="public-header-mobile-menu login-mobile-menu">
+          <Link href="/" onClick={closeMenu}>{t("nav.home")}</Link>
+          <Link href="/features" onClick={closeMenu}>{t("nav.features")}</Link>
+          <Link href="/pricing" onClick={closeMenu}>{t("nav.pricing")}</Link>
+          <Link href="/faq" onClick={closeMenu}>{t("nav.faq")}</Link>
+          <Link href="/signup" onClick={closeMenu}>{t("cta.startFree")}</Link>
+          <div className="public-header-mobile-lang"><LoginLanguageSelector /></div>
+        </div>
+      ) : null}
 
       <section className="card login-card-frame">
         <div className="pill">{t("login.portalPill")}</div>
