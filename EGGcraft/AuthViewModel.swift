@@ -2606,7 +2606,9 @@ class AuthViewModel: ObservableObject {
         let addonActive = ["active", "trialing", "past_due"].contains(addonStatus)
         currentStorageAddonKey = addonActive ? ((data["billingStorageAddonKey"] as? String) ?? "") : ""
         currentStorageAddonMB = addonActive ? ((data["billingStorageAddonMB"] as? Int) ?? 0) : 0
-        currentTeamMemberLimitEffective = (data["billingTeamMemberLimit"] as? Int) ?? 0
+        currentTeamMemberLimitEffective = (data["billingTeamMemberLimit"] as? Int)
+            ?? (data["billingTeamMemberLimit"] as? NSNumber)?.intValue
+            ?? Int((data["billingTeamMemberLimit"] as? Double) ?? 0)
         UserDefaults.standard.set(resolvedPlan.rawValue, forKey: billingPlanDefaultsKey)
     }
 
