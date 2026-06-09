@@ -1005,20 +1005,40 @@ function PlanAction({ copy }: { copy: PublicPlanCopy }) {
   );
 }
 
-function PublicPlanCard({ plan, compact = false }: { plan: PlanEntitlements; compact?: boolean }) {
+const PLAN_PRICES: Partial<Record<StudioBillingPlan, { monthly: string; yearly: string }>> = {
+  lifetime_lite: { monthly: "£9", yearly: "£90" },
+  pro_monthly: { monthly: "£19", yearly: "£190" },
+  team_monthly: { monthly: "£49", yearly: "£490" }
+};
+
+function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: PlanEntitlements; compact?: boolean; billing?: "monthly" | "yearly" }) {
   const { t } = usePublicSiteLanguage();
   const copy = PUBLIC_PLAN_COPY[plan.plan];
   const bulletKeys = compact ? copy.bulletKeys.slice(0, 3) : copy.bulletKeys;
+  const prices = PLAN_PRICES[plan.plan];
   return (
     <article className={copy.featured ? "public-card public-plan-card featured" : "public-card public-plan-card"} data-plan={plan.plan}>
       <div className="public-plan-glint" aria-hidden="true" />
+      {copy.badgeKey ? <span className="public-plan-badge"><span className="public-plan-badge-star">★</span>{t(copy.badgeKey)}</span> : null}
       <div className="public-plan-topline">
         <span className="public-eyebrow">{t(copy.shortNameKey)}</span>
-        {copy.badgeKey ? <span className="public-plan-badge">{t(copy.badgeKey)}</span> : null}
       </div>
       <h3>{t(copy.publicNameKey)}</h3>
-      <div className="public-plan-price">{t(copy.priceLabelKey)}</div>
-      <span className="public-plan-model">{t(copy.modelKey)}</span>
+      <div className="public-plan-price-block">
+        {prices ? (
+          <>
+            <div className="public-plan-price">
+              <span className="public-plan-price-amount">{billing === "yearly" ? prices.yearly : prices.monthly}</span>
+              <span className="public-plan-price-per">{billing === "yearly" ? t("pricing.perYear") : t("pricing.perMonth")}</span>
+            </div>
+            <div className="public-plan-price-alt">
+              {billing === "yearly" ? `${prices.monthly} ${t("pricing.perMonth")}` : `${prices.yearly} ${t("pricing.perYear")}`}
+            </div>
+          </>
+        ) : (
+          <div className="public-plan-price"><span className="public-plan-price-amount">{t("pricing.freeForever")}</span></div>
+        )}
+      </div>
       <p>{t(copy.noteKey)}</p>
       <dl className="public-plan-limits">
         <div>
@@ -1047,12 +1067,29 @@ function PublicPlanCard({ plan, compact = false }: { plan: PlanEntitlements; com
 }
 
 function PublicPlanGrid({ compact = false }: { compact?: boolean }) {
+  const { t } = usePublicSiteLanguage();
+  const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
   return (
-    <div className="public-plan-grid">
-      {PLAN_ORDER.map(planKey => (
-        <PublicPlanCard key={planKey} plan={PLAN_ENTITLEMENTS[planKey]} compact={compact} />
-      ))}
-    </div>
+    <>
+      {!compact ? (
+        <div className="public-plan-toggle-row">
+          <div className="public-plan-toggle">
+            <button type="button" className={billing === "monthly" ? "active" : ""} onClick={() => setBilling("monthly")}>
+              {t("pricing.toggleMonthly")}
+            </button>
+            <button type="button" className={billing === "yearly" ? "active" : ""} onClick={() => setBilling("yearly")}>
+              {t("pricing.toggleYearly")}
+            </button>
+            <span className="public-plan-toggle-save">{t("pricing.toggleSave")}</span>
+          </div>
+        </div>
+      ) : null}
+      <div className="public-plan-grid">
+        {PLAN_ORDER.map(planKey => (
+          <PublicPlanCard key={planKey} plan={PLAN_ENTITLEMENTS[planKey]} compact={compact} billing={billing} />
+        ))}
+      </div>
+    </>
   );
 }
 
