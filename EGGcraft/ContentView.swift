@@ -12939,7 +12939,7 @@ struct AccountProfileView: View {
                 HStack(spacing: 8) {
                     compactPlanMetric(planOrderLimitText(entitlements), icon: "shippingbox.fill")
                     compactPlanMetric(currentPlanStorageLimitText, icon: "externaldrive.fill")
-                    compactPlanMetric(planTeamLimitText(entitlements), icon: "person.2.fill")
+                    compactPlanMetric(currentPlanTeamLimitText, icon: "person.2.fill")
                 }
             }
 
@@ -13107,6 +13107,16 @@ struct AccountProfileView: View {
     // Storage for the CURRENT workspace plan, including any active add-on.
     private var currentPlanStorageLimitText: String {
         String(format: t("Storage: %@", lang: seciliDil), authVM.effectiveStorageLimitText)
+    }
+
+    // Header chip for the current plan uses the effective seat allowance
+    // (base plan + purchased seats), not the static plan default.
+    private var currentPlanTeamLimitText: String {
+        let limit = authVM.effectiveTeamMemberLimit
+        if limit <= 1 {
+            return t("1 user", lang: seciliDil)
+        }
+        return String(format: t("Up to %d users", lang: seciliDil), limit)
     }
 
     private func planTeamLimitText(_ entitlements: StudioPlanEntitlements) -> String {

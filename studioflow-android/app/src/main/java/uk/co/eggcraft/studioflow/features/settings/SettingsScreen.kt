@@ -1979,7 +1979,7 @@ private fun PlanAccessDetail(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             MiniPill(planOrderLimitText(plan), Icons.Filled.Backup)
                             MiniPill("Storage: ${workspace?.effectiveStorageLimitText ?: planStorageLimitText(plan).removePrefix("Storage: ")}", Icons.Filled.Storage)
-                            MiniPill("Up to ${plan.teamMemberLimit}", Icons.Filled.People)
+                            MiniPill("Up to ${workspace?.effectiveTeamMemberLimit ?: plan.teamMemberLimit}", Icons.Filled.People)
                         }
                     }
                 }
