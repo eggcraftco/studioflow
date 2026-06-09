@@ -48,11 +48,13 @@ function currentOrigin() {
 export async function createStripeCheckoutSession({
   itemKey,
   companyId,
+  quantity,
   successUrl,
   cancelUrl
 }: {
   itemKey: StripeBillingItemKey;
   companyId?: string;
+  quantity?: number;
   successUrl?: string;
   cancelUrl?: string;
 }) {
@@ -61,6 +63,7 @@ export async function createStripeCheckoutSession({
   const result = await callable({
     itemKey,
     companyId,
+    quantity,
     successUrl: successUrl || (origin ? origin + "/plan?billing=success" : undefined),
     cancelUrl: cancelUrl || (origin ? origin + "/pricing?billing=cancelled" : undefined)
   });
