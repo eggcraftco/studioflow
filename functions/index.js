@@ -12706,14 +12706,16 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
     const ref = orderDocRef(docId);
     const existing = await ref.get();
 
-    // Do not create a NEW app order for WooCommerce orders that failed payment or
-    // are otherwise not real orders (failed, cancelled, trashed, incomplete checkout).
-    // Existing orders are still updated, so a real order that later fails is reflected.
+    // Only create a NEW app order for WooCommerce orders whose payment has actually
+    // been received: "processing" (paid, in progress) or "completed". Everything else
+    // (pending, on-hold, failed, cancelled, refunded, trash, draft, checkout-draft) is
+    // ignored on creation. Existing orders are still updated, so later status changes
+    // (e.g. a real paid order moving to completed/refunded) are reflected in the app.
     const wooStatus = String(order?.status || "").trim().toLowerCase().replace(/^wc-/, "");
-    const WOO_SKIP_NEW_STATUSES = new Set(["failed", "cancelled", "canceled", "trash", "checkout-draft", "draft"]);
-    if (!existing.exists && WOO_SKIP_NEW_STATUSES.has(wooStatus)) {
+    const WOO_PAID_STATUSES = new Set(["processing", "completed"]);
+    if (!existing.exists && !WOO_PAID_STATUSES.has(wooStatus)) {
       // Acknowledge with 200 so WooCommerce does not retry or auto-disable the webhook.
-      res.status(200).json({ ok: true, ignored: "skipped_status", status: wooStatus, orderId: docId });
+      res.status(200).json({ ok: true, ignored: "unpaid_status", status: wooStatus, orderId: docId });
       return;
     }
 
