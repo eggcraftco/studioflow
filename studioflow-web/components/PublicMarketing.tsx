@@ -408,6 +408,11 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     planKeys: ["pro_monthly", "team_monthly"]
   },
   {
+    titleKey: "planBridge.storageAddons.title",
+    bodyKey: "planBridge.storageAddons.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
     titleKey: "planBridge.messages.title",
     bodyKey: "planBridge.messages.body",
     planKeys: ["team_monthly"]
@@ -416,11 +421,6 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     titleKey: "planBridge.quickReplies.title",
     bodyKey: "planBridge.quickReplies.body",
     planKeys: ["team_monthly"]
-  },
-  {
-    titleKey: "planBridge.storageAddons.title",
-    bodyKey: "planBridge.storageAddons.body",
-    planKeys: ["pro_monthly", "team_monthly"]
   },
   {
     titleKey: "planBridge.teamAccess.title",
@@ -1783,6 +1783,10 @@ export function PublicPricingPage() {
           </div>
         </section>
 
+        <PlanFeatureBridgeSection compact />
+
+        <ChatGPTAppShowcase />
+
         <section className="public-section public-section-soft">
           <div className="public-shell">
             <SectionHeader
@@ -1808,10 +1812,6 @@ export function PublicPricingPage() {
             </div>
           </div>
         </section>
-
-        <PlanFeatureBridgeSection compact />
-
-        <ChatGPTAppShowcase />
       </>
     );
   };
