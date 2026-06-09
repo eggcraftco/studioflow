@@ -1731,7 +1731,6 @@ struct KeepSwipeRow<Content: View>: View {
 
     @State private var offset: CGFloat = 0
     private let actionWidth: CGFloat = 88
-    private let archiveThreshold: CGFloat = 92
 
     var body: some View {
         ZStack {
@@ -1740,13 +1739,19 @@ struct KeepSwipeRow<Content: View>: View {
                 .fill(offset > 0 ? Color.orange : Color.red)
                 .overlay(alignment: offset > 0 ? .leading : .trailing) {
                     if offset > 0 {
-                        VStack(spacing: 3) {
-                            Image(systemName: "archivebox.fill").font(.system(size: 17, weight: .bold))
-                            Text(archiveLabel).font(.system(size: 11, weight: .bold))
+                        Button {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) { offset = 0 }
+                            onArchive?()
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "archivebox.fill").font(.system(size: 17, weight: .bold))
+                                Text(archiveLabel).font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(width: actionWidth)
+                            .frame(maxHeight: .infinity)
                         }
-                        .foregroundColor(.white)
-                        .frame(width: actionWidth)
-                        .frame(maxHeight: .infinity)
+                        .buttonStyle(.plain)
                     } else {
                         Button {
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) { offset = 0 }
@@ -1782,9 +1787,9 @@ struct KeepSwipeRow<Content: View>: View {
                         }
                         .onEnded { value in
                             let dx = value.translation.width
-                            if onArchive != nil && dx > archiveThreshold {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = 0 }
-                                onArchive?()
+                            // Both directions reveal a tappable action (like delete) and wait.
+                            if onArchive != nil && dx > actionWidth * 0.55 {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = actionWidth }
                             } else if dx < -actionWidth * 0.55 {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = -actionWidth }
                             } else {
@@ -5672,10 +5677,10 @@ struct StudioKeepNotesView: View {
                     deleteLabel: t("Delete", lang: seciliDil),
                     archiveLabel: note.isArchived ? t("Unarchive", lang: seciliDil) : t("Archive", lang: seciliDil)
                 ) { card }
-                .scaleEffect(pressingKeepNoteId == note.id ? 0.97 : 1)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: pressingKeepNoteId)
+                .scaleEffect(pressingKeepNoteId == note.id ? 1.04 : 1)
+                .animation(.easeOut(duration: 0.22), value: pressingKeepNoteId)
                 .onLongPressGesture(
-                    minimumDuration: 0.4,
+                    minimumDuration: 0.5,
                     pressing: { isPressing in
                         pressingKeepNoteId = isPressing ? note.id : nil
                     },
