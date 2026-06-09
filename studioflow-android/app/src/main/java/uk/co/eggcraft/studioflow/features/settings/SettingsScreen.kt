@@ -2073,26 +2073,6 @@ private fun PlanAccessDetail(
                 }
             }
         }
-        if (isOwner && plan.hasTeamAccess) {
-            val seatUriHandler = LocalUriHandler.current
-            DetailCard(title = t("Team seats"), icon = Icons.Filled.People) {
-                Text(
-                    t("Team includes 5 seats. Add more for £5/month or £50/year each, up to 10 users."),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp
-                )
-                val currentSeats = workspace?.effectiveTeamMemberLimit ?: plan.teamMemberLimit
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(t("Current allowance"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text("$currentSeats / 10", fontWeight = FontWeight.ExtraBold)
-                }
-                OutlinedButton(
-                    onClick = { seatUriHandler.openUri("https://nivadesk.app/plan") },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(t("Manage seats on the web")) }
-            }
-        }
         DetailCard(title = t("Available now"), icon = Icons.Filled.CheckCircle) {
             Text(t("Current plan access"), fontWeight = FontWeight.ExtraBold)
             PlanFeatureGrid(plan = plan, storageText = workspace?.let { "Storage: ${it.effectiveStorageLimitText}" } ?: planStorageLimitText(plan))
@@ -2126,6 +2106,26 @@ private fun PlanAccessDetail(
         }
         DetailCard(title = t("Billing security"), icon = Icons.Filled.Security) {
             Text(t("Plan changes are managed securely through subscription billing."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (isOwner && plan.hasTeamAccess) {
+            val seatUriHandler = LocalUriHandler.current
+            DetailCard(title = t("Team seats"), icon = Icons.Filled.People) {
+                Text(
+                    t("Team includes 5 seats. Add more for £5/month or £50/year each, up to 10 users."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
+                val currentSeats = workspace?.effectiveTeamMemberLimit ?: plan.teamMemberLimit
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(t("Current allowance"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text("$currentSeats / 10", fontWeight = FontWeight.ExtraBold)
+                }
+                OutlinedButton(
+                    onClick = { seatUriHandler.openUri("https://nivadesk.app/plan") },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(t("Manage seats on the web")) }
+            }
         }
     }
 }
