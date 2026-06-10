@@ -16981,7 +16981,31 @@ function siteStatsDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
 }
 
-exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res) => {
+// geoip-lite holds its database in memory (~100MB), so load it lazily and only
+// inside recordSiteVisit instances — other functions never pay the cost.
+let geoipModule = null;
+function lookupCountryFromIp(req) {
+  try {
+    if (geoipModule === null) {
+      geoipModule = require("geoip-lite");
+    }
+    const forwarded = String(req.headers["x-forwarded-for"] || "");
+    const ip = (forwarded.split(",")[0] || "").trim() || req.ip || "";
+    if (!ip) return "";
+    const geo = geoipModule.lookup(ip);
+    return String(geo?.country || "").toUpperCase();
+  } catch (error) {
+    console.warn("geoip lookup failed:", error?.message || error);
+    return "";
+  }
+}
+
+function sitePresenceSessionKey(value) {
+  const cleaned = String(value || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return cleaned.length >= 8 && cleaned.length <= 64 ? cleaned : "";
+}
+
+exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }, async (req, res) => {
   const origin = String(req.headers.origin || "");
   if (SITE_STATS_ALLOWED_ORIGINS.has(origin)) {
     res.set("Access-Control-Allow-Origin", origin);
@@ -17007,6 +17031,21 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res)
 
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 
+    // Heartbeat beacons keep the "on site now" presence list fresh. They write
+    // a single per-session doc (random session id, reset every browser session)
+    // and add nothing to the daily counters.
+    if (body.kind === "heartbeat") {
+      const sessionKey = sitePresenceSessionKey(body.sessionId);
+      if (sessionKey) {
+        await admin.firestore().collection("sitePresence").doc(sessionKey).set({
+          lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+          path: siteStatsFieldKey(body.path, "unknown")
+        }, { merge: true });
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     // Duration beacons (sent on page hide) only add watch-time seconds.
     if (body.kind === "duration") {
       const seconds = Math.min(Math.max(Math.round(Number(body.seconds) || 0), 0), 1800);
@@ -17025,7 +17064,11 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res)
     const languageKey = siteStatsFieldKey(String(body.language || "").slice(0, 8), "unknown", 8);
     const newSession = body.newSession === true;
     const secondView = body.secondView === true;
-    const countryRaw = String(body.country || "").trim().toUpperCase();
+    // Country comes from IP geolocation (the IP itself is never stored); the
+    // browser-locale country is only a fallback when the lookup finds nothing.
+    const localeCountryRaw = String(body.country || "").trim().toUpperCase();
+    const geoCountry = lookupCountryFromIp(req);
+    const countryRaw = geoCountry || localeCountryRaw;
     const countryKey = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : "";
 
     let referrerKey = "";
@@ -17063,6 +17106,16 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res)
     }
 
     await admin.firestore().collection("siteStats").doc(siteStatsDateKey()).set(update, { merge: true });
+
+    // Page views also refresh presence so navigation shows up instantly.
+    const presenceKey = sitePresenceSessionKey(body.sessionId);
+    if (presenceKey) {
+      await admin.firestore().collection("sitePresence").doc(presenceKey).set({
+        lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+        path: pageKey
+      }, { merge: true });
+    }
+
     res.status(200).json({ ok: true });
   } catch (error) {
     console.error("recordSiteVisit error:", error?.message || error);
@@ -17124,4 +17177,51 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
   });
 
   return { ok: true, isSupportAdmin: true, days: daysOut };
+});
+
+exports.getSitePresence = onCall({ region: "europe-west2" }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Site statistics are restricted to NivaDesk admins.");
+  }
+
+  const now = Date.now();
+  const activeCutoff = admin.firestore.Timestamp.fromMillis(now - 2 * 60 * 1000);
+  const snap = await admin.firestore()
+    .collection("sitePresence")
+    .where("lastSeenAt", ">=", activeCutoff)
+    .limit(500)
+    .get();
+
+  const pages = {};
+  snap.docs.forEach((doc) => {
+    const path = String(doc.data()?.path || "unknown");
+    pages[path] = (pages[path] || 0) + 1;
+  });
+
+  // Opportunistic cleanup: drop sessions idle for more than 15 minutes.
+  try {
+    const staleCutoff = admin.firestore.Timestamp.fromMillis(now - 15 * 60 * 1000);
+    const staleSnap = await admin.firestore()
+      .collection("sitePresence")
+      .where("lastSeenAt", "<", staleCutoff)
+      .limit(100)
+      .get();
+    if (!staleSnap.empty) {
+      const batch = admin.firestore().batch();
+      staleSnap.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+  } catch (error) {
+    console.warn("sitePresence cleanup failed:", error?.message || error);
+  }
+
+  return {
+    ok: true,
+    active: snap.size,
+    pages: Object.entries(pages)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([path, count]) => ({ path, count }))
+  };
 });

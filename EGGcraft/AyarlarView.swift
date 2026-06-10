@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import Combine
 import UniformTypeIdentifiers
 import FirebaseFirestore
 import FirebaseFunctions
@@ -6963,6 +6964,10 @@ struct SiteStatsAdminView: View {
     @State private var errorText = ""
     @State private var allDays: [SiteDayStat] = []
     @State private var lastLoadedAt: Date? = nil
+    @State private var presenceActive = 0
+    @State private var presencePages: [(path: String, count: Int)] = []
+    @State private var presenceLoaded = false
+    private let presenceTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     // MARK: data
 
@@ -7042,6 +7047,18 @@ struct SiteStatsAdminView: View {
                     )
                 }
                 lastLoadedAt = Date()
+            }
+        }
+    }
+
+    private func loadPresence() {
+        Functions.functions(region: "europe-west2").httpsCallable("getSitePresence").call([:]) { result, error in
+            DispatchQueue.main.async {
+                guard error == nil, let data = result?.data as? [String: Any] else { return }
+                presenceActive = intValue(data["active"])
+                let rawPages = data["pages"] as? [[String: Any]] ?? []
+                presencePages = rawPages.map { (path: $0["path"] as? String ?? "?", count: intValue($0["count"])) }
+                presenceLoaded = true
             }
         }
     }
@@ -7282,6 +7299,89 @@ struct SiteStatsAdminView: View {
         }
     }
 
+    // MARK: live presence card
+
+    private var liveOnSiteCard: some View {
+        let navy = Color(red: 0.09, green: 0.10, blue: 0.14)
+        let barHeights: [CGFloat] = (0..<28).map { index in
+            guard presenceActive > 0 else { return 6 }
+            let wave = abs(sin(Double(index) * 1.7 + Double(presenceActive)))
+            return CGFloat(10 + wave * 22)
+        }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(t("On Site Now", lang: seciliDil))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                Spacer()
+                HStack(spacing: 5) {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                    Text(t("Live", lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.green)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(presenceActive)")
+                    .font(.system(size: 40, weight: .heavy))
+                    .foregroundColor(.white)
+                    .contentTransition(.numericText())
+                Text(t("Active users", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.55))
+            }
+
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(Array(barHeights.enumerated()), id: \.offset) { _, height in
+                    Capsule()
+                        .fill(presenceActive > 0 ? Color.purple : Color.white.opacity(0.14))
+                        .frame(width: 9, height: height)
+                }
+            }
+            .frame(height: 34, alignment: .bottom)
+            .animation(.easeInOut(duration: 0.6), value: presenceActive)
+
+            if !presencePages.isEmpty {
+                HStack {
+                    Text(t("Most Active Pages", lang: seciliDil))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.55))
+                    Spacer()
+                    Text(t("Users", lang: seciliDil))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                VStack(spacing: 0) {
+                    ForEach(Array(presencePages.prefix(5).enumerated()), id: \.element.path) { index, page in
+                        HStack {
+                            Text(page.path.hasPrefix("/") ? page.path : "/" + page.path)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(page.count)")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .padding(.vertical, 8)
+                        if index < min(presencePages.count, 5) - 1 {
+                            Divider().background(Color.white.opacity(0.10))
+                        }
+                    }
+                }
+            } else if presenceLoaded {
+                Text(t("No one is on the site right now.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(navy)
+        .cornerRadius(16)
+    }
+
     // MARK: body
 
     var body: some View {
@@ -7326,6 +7426,8 @@ struct SiteStatsAdminView: View {
                     .background(cardBackground)
                     .cornerRadius(12)
                 }
+
+                liveOnSiteCard
 
                 if loading {
                     HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
@@ -7452,6 +7554,10 @@ struct SiteStatsAdminView: View {
             }
             .padding(.bottom, 24)
         }
-        .onAppear { load() }
+        .onAppear {
+            load()
+            loadPresence()
+        }
+        .onReceive(presenceTimer) { _ in loadPresence() }
     }
 }
