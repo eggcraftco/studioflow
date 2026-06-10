@@ -122,11 +122,6 @@ type FeatureDeepDive = {
   bulletKeys: PublicSiteTranslationKey[];
 };
 
-type FeatureCapability = {
-  titleKey: PublicSiteTranslationKey;
-  bodyKey: PublicSiteTranslationKey;
-};
-
 type PlanFeatureBridge = {
   titleKey: PublicSiteTranslationKey;
   bodyKey: PublicSiteTranslationKey;
@@ -147,7 +142,7 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     titleKey: "feature.orders.title",
     eyebrowKey: "feature.orders.eyebrow",
     bodyKey: "feature.orders.body",
-    bulletKeys: ["feature.orders.bullet1", "feature.orders.bullet2", "feature.orders.bullet3"],
+    bulletKeys: ["feature.orders.bullet1", "feature.orders.bullet2", "feature.orders.bullet3", "feature.orders.bullet4"],
     tone: "sage",
     metricKey: "feature.orders.metric",
     artifactKey: "feature.orders.artifact"
@@ -156,7 +151,7 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     titleKey: "feature.files.title",
     eyebrowKey: "feature.files.eyebrow",
     bodyKey: "feature.files.body",
-    bulletKeys: ["feature.files.bullet1", "feature.files.bullet2", "feature.files.bullet3"],
+    bulletKeys: ["feature.files.bullet1", "feature.files.bullet2", "feature.files.bullet3", "feature.files.bullet4"],
     tone: "sky",
     metricKey: "feature.files.metric",
     artifactKey: "feature.files.artifact"
@@ -183,7 +178,7 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     titleKey: "feature.team.title",
     eyebrowKey: "feature.team.eyebrow",
     bodyKey: "feature.team.body",
-    bulletKeys: ["feature.team.bullet1", "feature.team.bullet2", "feature.team.bullet3"],
+    bulletKeys: ["feature.team.bullet1", "feature.team.bullet2", "feature.team.bullet3", "feature.team.bullet4"],
     tone: "lilac",
     metricKey: "feature.team.metric",
     artifactKey: "feature.team.artifact"
@@ -192,7 +187,7 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     titleKey: "feature.dashboard.title",
     eyebrowKey: "feature.dashboard.eyebrow",
     bodyKey: "feature.dashboard.body",
-    bulletKeys: ["feature.dashboard.bullet1", "feature.dashboard.bullet2", "feature.dashboard.bullet3"],
+    bulletKeys: ["feature.dashboard.bullet1", "feature.dashboard.bullet2", "feature.dashboard.bullet3", "feature.dashboard.bullet4"],
     tone: "clay",
     metricKey: "feature.dashboard.metric",
     artifactKey: "feature.dashboard.artifact"
@@ -409,18 +404,6 @@ const FEATURE_DEEP_DIVES: FeatureDeepDive[] = [
     bodyKey: "featuresDeep.data.body",
     bulletKeys: ["featuresDeep.data.bullet1", "featuresDeep.data.bullet2", "featuresDeep.data.bullet3"]
   }
-];
-
-const FEATURE_CAPABILITIES: FeatureCapability[] = [
-  { titleKey: "capability.offline.title", bodyKey: "capability.offline.body" },
-  { titleKey: "capability.customization.title", bodyKey: "capability.customization.body" },
-  { titleKey: "capability.finance.title", bodyKey: "capability.finance.body" },
-  { titleKey: "capability.messages.title", bodyKey: "capability.messages.body" },
-  { titleKey: "capability.chatgpt.title", bodyKey: "capability.chatgpt.body" },
-  { titleKey: "capability.woocommerce.title", bodyKey: "capability.woocommerce.body" },
-  { titleKey: "capability.tracking.title", bodyKey: "capability.tracking.body" },
-  { titleKey: "capability.notes.title", bodyKey: "capability.notes.body" },
-  { titleKey: "capability.export.title", bodyKey: "capability.export.body" }
 ];
 
 const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
@@ -1445,30 +1428,6 @@ function FeatureDeepDiveSection() {
   );
 }
 
-function FeatureCapabilityMatrix() {
-  const { t } = usePublicSiteLanguage();
-  return (
-    <section className="public-section public-feature-capability-section">
-      <div className="public-shell">
-        <SectionHeader
-          eyebrowKey="capability.eyebrow"
-          titleKey="capability.title"
-          bodyKey="capability.body"
-        />
-        <div className="public-capability-grid public-scroll-stagger">
-          {FEATURE_CAPABILITIES.map((item, index) => (
-            <article className="public-capability-card" key={item.titleKey}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <h3>{t(item.titleKey)}</h3>
-              <p>{t(item.bodyKey)}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
   const { t } = usePublicSiteLanguage();
   return (
@@ -1965,6 +1924,11 @@ export function PublicFeaturesPage() {
 
         <section className="public-section">
           <div className="public-shell">
+            <SectionHeader
+              eyebrowKey="capability.eyebrow"
+              titleKey="capability.title"
+              bodyKey="capability.body"
+            />
             <div className="public-feature-grid">
               {FEATURE_HIGHLIGHTS.map((feature, index) => (
                 <FeatureCard key={feature.titleKey} feature={feature} index={index} />
@@ -1972,8 +1936,6 @@ export function PublicFeaturesPage() {
             </div>
           </div>
         </section>
-
-        <FeatureCapabilityMatrix />
 
         <ChatGPTAppShowcase />
 
