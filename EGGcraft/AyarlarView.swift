@@ -6969,6 +6969,13 @@ struct SiteStatsAdminView: View {
     @State private var presenceLoaded = false
     private let presenceTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var isCompactLayout: Bool { horizontalSizeClass == .compact }
+    #else
+    private var isCompactLayout: Bool { false }
+    #endif
+
     // MARK: data
 
     private var selectedRange: (start: Date, end: Date) {
@@ -7397,15 +7404,12 @@ struct SiteStatsAdminView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(t("Overview", lang: seciliDil))
-                            .font(.system(size: 20, weight: .heavy))
-                        Text(t("Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.", lang: seciliDil))
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                    }
-                    Spacer()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(t("Overview", lang: seciliDil))
+                        .font(.system(size: 20, weight: .heavy))
+                    Text(t("Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
                     Picker("", selection: $rangeMode) {
                         Text("7d").tag(7)
                         Text("30d").tag(30)
@@ -7413,12 +7417,12 @@ struct SiteStatsAdminView: View {
                         Text(t("Custom", lang: seciliDil)).tag(-1)
                     }
                     .pickerStyle(.segmented)
-                    .frame(maxWidth: 280)
+                    .frame(maxWidth: isCompactLayout ? .infinity : 300)
                     .onChange(of: rangeMode) { _, _ in load() }
                 }
 
                 if rangeMode == -1 {
-                    HStack(spacing: 14) {
+                    let dateControls = Group {
                         DatePicker(t("Start", lang: seciliDil), selection: $customStart, in: ...Date(), displayedComponents: .date)
                             .datePickerStyle(.compact)
                             .font(.system(size: 12, weight: .semibold))
@@ -7427,10 +7431,24 @@ struct SiteStatsAdminView: View {
                             .datePickerStyle(.compact)
                             .font(.system(size: 12, weight: .semibold))
                             .onChange(of: customEnd) { _, _ in load() }
-                        Spacer()
-                        Text("\(rangeLength) " + t("days", lang: seciliDil))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.gray)
+                    }
+                    Group {
+                        if isCompactLayout {
+                            VStack(alignment: .leading, spacing: 10) {
+                                dateControls
+                                Text("\(rangeLength) " + t("days", lang: seciliDil))
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.gray)
+                            }
+                        } else {
+                            HStack(spacing: 14) {
+                                dateControls
+                                Spacer()
+                                Text("\(rangeLength) " + t("days", lang: seciliDil))
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.gray)
+                            }
+                        }
                     }
                     .padding(12)
                     .background(cardBackground)
@@ -7503,7 +7521,7 @@ struct SiteStatsAdminView: View {
                         .frame(height: 220)
                     }
 
-                    HStack(alignment: .top, spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
                         panel(t("Top Traffic Sources", lang: seciliDil)) {
                             let slices = sourceSlices()
                             if slices.isEmpty {
@@ -7526,7 +7544,7 @@ struct SiteStatsAdminView: View {
                         }
                     }
 
-                    HStack(alignment: .top, spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
                         panel(t("Visitors by Country", lang: seciliDil)) {
                             rankedList(topEntries({ $0.countries }, limit: 6), flagMode: true)
                         }
@@ -7535,7 +7553,7 @@ struct SiteStatsAdminView: View {
                         }
                     }
 
-                    HStack(alignment: .top, spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
                         panel(t("Visitor languages", lang: seciliDil)) {
                             rankedList(topEntries({ $0.languages }, limit: 6))
                         }

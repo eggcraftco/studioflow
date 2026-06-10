@@ -17840,3 +17840,65 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
   .cookie-banner-actions .cookie-link-btn { margin-right: 0; text-align: center; }
   .cookie-btn { width: 100%; }
 }
+
+/* Admin site statistics dashboard */
+.site-stats-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.site-stats-panels {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+
+.site-stats-live {
+  display: grid;
+  gap: 14px;
+  background: #14161d !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.site-stats-donut-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.site-stats-custom-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.site-stats-custom-range input[type="date"] {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .site-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .site-stats-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .site-stats-custom-range {
+    width: 100%;
+  }
+
+  .site-stats-custom-range label {
+    flex: 1 1 130px;
+  }
+}
