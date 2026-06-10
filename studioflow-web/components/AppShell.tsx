@@ -1431,8 +1431,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   title={t("Add Project")}
                   onClick={handleAddOrder}
                 >
-                  <span>
-                    {creatingOrder ? t("Creating...") : `+ ${t("Add Project")}`}
+                  <span className="native-add-order-plus" aria-hidden="true">+</span>
+                  <span className="native-add-order-label">
+                    {creatingOrder ? t("Creating...") : t("Add Project")}
                   </span>
                 </button>
               ) : null}
