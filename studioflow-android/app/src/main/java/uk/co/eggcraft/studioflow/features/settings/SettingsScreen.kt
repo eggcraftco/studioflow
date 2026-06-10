@@ -71,6 +71,9 @@ import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -105,6 +108,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,6 +145,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.tasks.await
 
 private val StudioOrange = Color(0xFFFF9500)
 private val StudioPurple = Color(0xFFCC2FE1)
@@ -360,6 +365,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
+        SettingsSection("siteStats", "Site Statistics", "Public website visitors and traffic (NivaDesk admin).", Icons.Filled.Storage),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
         SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel)
@@ -373,6 +379,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
                 "legal" -> true
+                "siteStats" -> isNivaDeskAdminAccount()
                 else -> false
             }
         } else {
@@ -396,6 +403,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "team" -> access?.settingsTeamAccess != false
                 "about" -> access?.settingsGeneral != false
                 "legal" -> true
+                "siteStats" -> isNivaDeskAdminAccount()
                 else -> false
             }
         }
@@ -528,6 +536,7 @@ private fun SettingsDetailScreen(
                     includeSecurity = true
                 )
                 "support" -> SupportTicketsDetail(state)
+                "siteStats" -> SiteStatsAdminDetail()
                 "plan" -> PlanAccessDetail(
                     state = state,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
@@ -5049,5 +5058,163 @@ private fun MessageSettingsToggle(
             )
         }
         androidx.compose.material3.Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+    }
+}
+
+// --- NivaDesk admin: public site statistics -------------------------------
+
+private fun isNivaDeskAdminAccount(): Boolean {
+    val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+        ?.trim()?.lowercase() ?: return false
+    return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
+}
+
+private data class SiteStatsDay(
+    val total: Int,
+    val sessions: Int,
+    val pages: Map<String, Int>,
+    val devices: Map<String, Int>,
+    val languages: Map<String, Int>,
+    val referrers: Map<String, Int>
+)
+
+private fun siteStatsInt(value: Any?): Int = when (value) {
+    is Number -> value.toInt()
+    else -> 0
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun siteStatsMap(value: Any?): Map<String, Int> =
+    (value as? Map<String, Any?>)?.mapValues { siteStatsInt(it.value) } ?: emptyMap()
+
+private fun mergeTopEntries(days: List<SiteStatsDay>, pick: (SiteStatsDay) -> Map<String, Int>, limit: Int = 6): List<Pair<String, Int>> {
+    val merged = mutableMapOf<String, Int>()
+    days.forEach { day -> pick(day).forEach { (key, value) -> merged[key] = (merged[key] ?: 0) + value } }
+    return merged.entries.sortedByDescending { it.value }.take(limit).map { it.key to it.value }
+}
+
+@Composable
+private fun SiteStatsAdminDetail() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+
+    var range by remember { mutableStateOf(30) }
+    var loading by remember { mutableStateOf(true) }
+    var errorText by remember { mutableStateOf("") }
+    var days by remember { mutableStateOf<List<SiteStatsDay>>(emptyList()) }
+
+    LaunchedEffect(range) {
+        loading = true
+        errorText = ""
+        try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                .getHttpsCallable("getSiteStats")
+                .call(mapOf("days" to range))
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val data = result.data as? Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            val rawDays = data?.get("days") as? List<Map<String, Any?>> ?: emptyList()
+            days = rawDays.map { day ->
+                SiteStatsDay(
+                    total = siteStatsInt(day["total"]),
+                    sessions = siteStatsInt(day["sessions"]),
+                    pages = siteStatsMap(day["pages"]),
+                    devices = siteStatsMap(day["devices"]),
+                    languages = siteStatsMap(day["languages"]),
+                    referrers = siteStatsMap(day["referrers"])
+                )
+            }
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not load site statistics."
+        }
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(t("Public website statistics"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            t("Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected."),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(7, 30, 90).forEach { option ->
+                FilterChip(
+                    selected = range == option,
+                    onClick = { range = option },
+                    label = { Text("${option}d") }
+                )
+            }
+        }
+
+        when {
+            loading -> CircularProgressIndicator(modifier = Modifier.padding(vertical = 12.dp))
+            errorText.isNotEmpty() -> Text(errorText, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            else -> {
+                val today = days.lastOrNull()
+                val last7 = days.takeLast(7)
+                val tiles = listOf(
+                    t("Today · page views") to (today?.total ?: 0),
+                    t("Today · visitors") to (today?.sessions ?: 0),
+                    t("Last 7 days · views") to last7.sumOf { it.total },
+                    t("Last 7 days · visitors") to last7.sumOf { it.sessions },
+                    "${range}d · " + t("views") to days.sumOf { it.total },
+                    "${range}d · " + t("visitors") to days.sumOf { it.sessions }
+                )
+                tiles.chunked(2).forEach { rowTiles ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowTiles.forEach { (label, value) ->
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                tonalElevation = 1.dp
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("$value", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                listOf(
+                    t("Top pages") to mergeTopEntries(days, { it.pages }),
+                    t("Devices") to mergeTopEntries(days, { it.devices }, 3),
+                    t("Visitor languages") to mergeTopEntries(days, { it.languages }),
+                    t("Traffic sources") to mergeTopEntries(days, { it.referrers })
+                ).forEach { (title, entries) ->
+                    Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            if (entries.isEmpty()) {
+                                Text(t("No data yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                val max = entries.firstOrNull()?.second ?: 1
+                                entries.forEach { (key, value) ->
+                                    Column {
+                                        Row {
+                                            Text(key, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                                            Text("$value", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { if (max > 0) value.toFloat() / max.toFloat() else 0f },
+                                            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(99.dp))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -340,6 +340,8 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settingsGeneral")
         case "Support":
             return workspaceAccessAllows("settingsSupport")
+        case "Site Statistics":
+            return isNivaDeskSupportAdmin
         case "Legal":
             // Legal/policy links are always available to every signed-in user
             // (App Store / Play Store compliance requirement).
@@ -363,6 +365,7 @@ struct AyarlarView: View {
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
             ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
+            ("Site Statistics", t("Site Statistics", lang: seciliDil), "chart.bar.xaxis"),
             ("Legal", t("Legal", lang: seciliDil), "doc.text.fill")
         ]
 
@@ -569,6 +572,8 @@ struct AyarlarView: View {
             return t("Members, roles and workspace requests.", lang: seciliDil)
         case "Message Settings":
             return t("Direct messages, group chats and attachment permissions.", lang: seciliDil)
+        case "Site Statistics":
+            return t("Public website visitors and traffic (NivaDesk admin).", lang: seciliDil)
         case "Legal":
             return t("Privacy, terms and policy documents.", lang: seciliDil)
         default:
@@ -601,6 +606,7 @@ struct AyarlarView: View {
             else if seciliAyarSekmesi == "Team Access" { AccountProfileView(sectionMode: .teamAccess) }
             else if seciliAyarSekmesi == "Message Settings" { messageWorkspaceSettingsAyari }
             else if seciliAyarSekmesi == "Support" { supportTicketsAyari }
+            else if seciliAyarSekmesi == "Site Statistics" { SiteStatsAdminView(seciliDil: seciliDil) }
             else if seciliAyarSekmesi == "Legal" { legalLinksAyari }
         }
     }
@@ -6920,3 +6926,161 @@ private extension View {
 }
 
 struct SettingsTextField: View { let label: String; @Binding var text: String; var body: some View { HStack(spacing: 10) { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 150, alignment: .leading); TextField("", text: $text).textFieldStyle(.plain).font(.system(size: 13)).foregroundColor(.primary).padding(.vertical, 10).padding(.horizontal, 12).background(Color.primary.opacity(0.05)).cornerRadius(6) } } }
+
+// MARK: - NivaDesk admin: public site statistics
+
+struct SiteStatsAdminView: View {
+    @Environment(\.colorScheme) var colorScheme
+    let seciliDil: String
+
+    @State private var range = 30
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var days: [[String: Any]] = []
+
+    private func intValue(_ value: Any?) -> Int {
+        if let number = value as? Int { return number }
+        if let number = value as? Double { return Int(number) }
+        if let number = value as? NSNumber { return number.intValue }
+        return 0
+    }
+
+    private func sumField(_ source: [[String: Any]], _ field: String) -> Int {
+        source.reduce(0) { $0 + intValue($1[field]) }
+    }
+
+    private func topEntries(_ field: String, limit: Int = 6) -> [(key: String, value: Int)] {
+        var merged: [String: Int] = [:]
+        for day in days {
+            guard let map = day[field] as? [String: Any] else { continue }
+            for (key, value) in map {
+                merged[key, default: 0] += intValue(value)
+            }
+        }
+        return merged.sorted { $0.value > $1.value }.prefix(limit).map { (key: $0.key, value: $0.value) }
+    }
+
+    private func load() {
+        loading = true
+        errorText = ""
+        Functions.functions(region: "europe-west2").httpsCallable("getSiteStats").call(["days": range]) { result, error in
+            DispatchQueue.main.async {
+                loading = false
+                if let error = error {
+                    errorText = error.localizedDescription
+                    return
+                }
+                let data = result?.data as? [String: Any]
+                days = data?["days"] as? [[String: Any]] ?? []
+            }
+        }
+    }
+
+    private var todayViews: Int { intValue(days.last?["total"]) }
+    private var todaySessions: Int { intValue(days.last?["sessions"]) }
+    private var last7: [[String: Any]] { Array(days.suffix(7)) }
+
+    private func statTile(_ label: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.gray)
+            Text("\(value)")
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundColor(.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(0.04))
+        .cornerRadius(10)
+    }
+
+    private func breakdownCard(_ title: String, _ entries: [(key: String, value: Int)]) -> some View {
+        SettingsCard(title: title, iconName: "chart.bar.fill") {
+            if entries.isEmpty {
+                Text(t("No data yet.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(entries, id: \.key) { entry in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(entry.key)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("\(entry.value)")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.primary.opacity(0.07))
+                                    Capsule()
+                                        .fill(Color.blue)
+                                        .frame(width: max(6, geo.size.width * CGFloat(entry.value) / CGFloat(max(entries.first?.value ?? 1, 1))))
+                                }
+                            }
+                            .frame(height: 6)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsCard(title: t("Public website statistics", lang: seciliDil), iconName: "chart.bar.xaxis") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(t("Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.", lang: seciliDil))
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+
+                        Picker("", selection: $range) {
+                            Text("7d").tag(7)
+                            Text("30d").tag(30)
+                            Text("90d").tag(90)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 240)
+                        .onChange(of: range) { _, _ in load() }
+
+                        if loading {
+                            ProgressView().padding(.vertical, 8)
+                        } else if !errorText.isEmpty {
+                            Text(errorText)
+                                .font(.system(size: 12))
+                                .foregroundColor(.red)
+                        } else {
+                            VStack(spacing: 10) {
+                                HStack(spacing: 10) {
+                                    statTile(t("Today · page views", lang: seciliDil), todayViews)
+                                    statTile(t("Today · visitors", lang: seciliDil), todaySessions)
+                                }
+                                HStack(spacing: 10) {
+                                    statTile(t("Last 7 days · views", lang: seciliDil), sumField(last7, "total"))
+                                    statTile(t("Last 7 days · visitors", lang: seciliDil), sumField(last7, "sessions"))
+                                }
+                                HStack(spacing: 10) {
+                                    statTile("\(range)d · " + t("views", lang: seciliDil), sumField(days, "total"))
+                                    statTile("\(range)d · " + t("visitors", lang: seciliDil), sumField(days, "sessions"))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !loading && errorText.isEmpty {
+                    breakdownCard(t("Top pages", lang: seciliDil), topEntries("pages"))
+                    breakdownCard(t("Devices", lang: seciliDil), topEntries("devices", limit: 3))
+                    breakdownCard(t("Visitor languages", lang: seciliDil), topEntries("languages"))
+                    breakdownCard(t("Traffic sources", lang: seciliDil), topEntries("referrers"))
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear { load() }
+    }
+}
