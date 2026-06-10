@@ -151,6 +151,7 @@ class StudioFlowRepository(
                 if (status in setOf("active", "trialing", "past_due")) (data["billingStorageAddonMB"] as? Number)?.toLong() ?: 0L else 0L
             },
             teamMemberLimitEffective = (data["billingTeamMemberLimit"] as? Number)?.toInt() ?: 0,
+            quickReplyMenuEnabled = (data["quickReplyMenuEnabled"] as? Boolean) ?: true,
             memberAccess = memberAccess(data, user.uid, role == "owner", rawRole, customRoles),
             accountDisplayName = stringValue(
                 member?.get("displayName"),
@@ -810,6 +811,13 @@ class StudioFlowRepository(
     }
 
     suspend fun updateWorkspaceSettings(workspace: StudioWorkspace, updates: Map<String, Any?>) {
+        // The "AI Replies" menu toggle lives on the companies doc (read by the nav).
+        if (updates.containsKey("quickReplyMenuEnabled")) {
+            db.collection("companies").document(workspace.id)
+                .set(mapOf("quickReplyMenuEnabled" to (updates["quickReplyMenuEnabled"] as? Boolean ?: true)), com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            return
+        }
         val contributionText = updates["quickReplyContributionText"]?.toString()?.trim().orEmpty()
         if (contributionText.isNotBlank()) {
             functions.getHttpsCallable("saveQuickReplyContribution")

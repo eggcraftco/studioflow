@@ -3391,6 +3391,13 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+    // Owner toggle: show/hide the "AI Replies" (Quick Reply) item in the main menu.
+    func setQuickReplyMenuEnabled(_ enabled: Bool) {
+        let companyId = currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+        db.collection("companies").document(companyId).setData(["quickReplyMenuEnabled": enabled], merge: true)
+    }
+
     func markAllActivityNotificationsRead(companyId: String) {
         let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let uid = currentActivityUserId

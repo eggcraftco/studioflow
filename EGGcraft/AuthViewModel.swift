@@ -757,6 +757,8 @@ class AuthViewModel: ObservableObject {
     @Published private(set) var currentCompanyId: String? = nil
     @Published private(set) var isWorkspaceReady: Bool = false
     @Published var currentBillingPlan: StudioBillingPlan = .demo
+    // Owner toggle: show/hide the "AI Replies" (Quick Reply) item in the main menu.
+    @Published var quickReplyMenuEnabled: Bool = true
     @Published var currentStorageAddonKey: String = ""
     @Published var currentStorageAddonMB: Int = 0
     // Effective team seat allowance (base plan + purchased seats), read from the workspace doc.
@@ -2598,6 +2600,7 @@ class AuthViewModel: ObservableObject {
         let rawPlan = (data["billingPlan"] as? String) ?? ""
         let resolvedPlan = StudioBillingPlan(rawValue: rawPlan) ?? .demo
         currentBillingPlan = resolvedPlan
+        quickReplyMenuEnabled = (data["quickReplyMenuEnabled"] as? Bool) ?? true
         let rawInterval = (data["billingInterval"] as? String) ?? ""
         currentBillingInterval = resolvedPlan == .demo ? nil : StudioStoreBillingInterval(rawValue: rawInterval)
         billingPlanSource = (data["billingPlanSource"] as? String) ?? (rawPlan.isEmpty ? "legacy_default" : "manual")

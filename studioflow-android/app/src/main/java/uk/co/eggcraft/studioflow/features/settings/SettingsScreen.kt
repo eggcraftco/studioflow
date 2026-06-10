@@ -1062,6 +1062,24 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
     }
     DetailColumn {
         DetailCard(title = t("Quick Reply Settings"), icon = Icons.Outlined.AutoAwesome) {
+            if (canManageCoreAI) {
+                val menuEnabled = state.workspace?.quickReplyMenuEnabled ?: true
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                ) {
+                    Text(
+                        t("Show \"AI Replies\" in the menu"),
+                        modifier = Modifier.weight(1f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    androidx.compose.material3.Switch(
+                        checked = menuEnabled,
+                        onCheckedChange = { onSave(mapOf("quickReplyMenuEnabled" to it), "Saved.") }
+                    )
+                }
+            }
             Text(t("Reply Engine"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
             SegmentedRow(listOf("On-Device AI", "OpenAI Online", "Offline Template"), engineLabel(selectedReplyMode)) {
                 val mode = when (it) {

@@ -132,6 +132,7 @@ data class StudioWorkspace(
     val storageAddonKey: String = "",
     val storageAddonMB: Long = 0,
     val teamMemberLimitEffective: Int = 0,
+    val quickReplyMenuEnabled: Boolean = true,
     val memberAccess: WorkspaceMemberAccess,
     val accountDisplayName: String = "",
     val accountPhotoUrl: String = "",

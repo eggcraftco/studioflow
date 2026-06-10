@@ -5208,6 +5208,24 @@ struct AyarlarView: View {
                     .foregroundColor(.primary)
             }
 
+            if canEditWorkspace {
+                Toggle(isOn: Binding(
+                    get: { authVM.quickReplyMenuEnabled },
+                    set: { newValue in
+                        authVM.quickReplyMenuEnabled = newValue
+                        firebaseManager.setQuickReplyMenuEnabled(newValue)
+                    }
+                )) {
+                    Text(t("Show \"AI Replies\" in the menu", lang: seciliDil))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+                }
+                .tint(.green)
+                .padding(14)
+                .background(Color.secondary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("Reply Engine")
                     .font(.system(size: 16, weight: .bold))

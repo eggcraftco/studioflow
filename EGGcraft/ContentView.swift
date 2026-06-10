@@ -6787,7 +6787,7 @@ struct ContentView: View {
     private var canAccessSchedule: Bool { workspaceAccessAllows("schedule") }
     private var canAccessCustomers: Bool { workspaceAccessAllows("customers") }
     private var canAccessFiles: Bool { workspaceAccessAllows("clientFiles") }
-    private var canAccessQuickReply: Bool { workspaceAccessAllows("quickReply") }
+    private var canAccessQuickReply: Bool { authVM.quickReplyMenuEnabled && workspaceAccessAllows("quickReply") }
     private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("messages") }
     private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
@@ -7469,7 +7469,7 @@ struct ContentView: View {
                     aktifSekme = "QuickReply"
                     phoneShowsOrderDetail = false
                 } label: {
-                    Label(t("Quick Reply", lang: seciliDil), systemImage: "text.bubble")
+                    Label(t("AI Replies", lang: seciliDil), systemImage: "text.bubble")
                 }
             }
 
@@ -7790,7 +7790,7 @@ struct ContentView: View {
                 UstMenuButonu(title: t("Files", lang: seciliDil), icon: "folder.fill", isSelected: aktifSekme == "Files") { aktifSekme = "Files" }
             }
             if canAccessQuickReply {
-                UstMenuButonu(title: t("Quick Reply", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
+                UstMenuButonu(title: t("AI Replies", lang: seciliDil), icon: "text.bubble", isSelected: aktifSekme == "QuickReply") { aktifSekme = "QuickReply" }
             }
             if canAccessMessages {
                 messagesTopNavigationButton
@@ -9905,7 +9905,7 @@ struct ContentView: View {
             Button(t("Customers", lang: seciliDil)) { if canAccessCustomers { aktifSekme = "Customers" } }
                 .keyboardShortcut("4", modifiers: .command)
                 .disabled(!canAccessCustomers)
-            Button(t("Quick Reply", lang: seciliDil)) { if canAccessQuickReply { aktifSekme = "QuickReply" } }
+            Button(t("AI Replies", lang: seciliDil)) { if canAccessQuickReply { aktifSekme = "QuickReply" } }
                 .keyboardShortcut("5", modifiers: .command)
                 .disabled(!canAccessQuickReply)
             Button(t("Settings", lang: seciliDil)) { if canAccessSettings { aktifSekme = "Settings" } }

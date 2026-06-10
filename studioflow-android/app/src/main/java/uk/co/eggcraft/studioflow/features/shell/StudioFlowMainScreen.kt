@@ -135,7 +135,7 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Messages("Messages", Icons.AutoMirrored.Filled.Chat, "messages"),
     Notifications("Notifications", Icons.Filled.Notifications, "notifications"),
     Notes("Notes", Icons.AutoMirrored.Filled.Note, "notes"),
-    QuickReply("Quick Reply", Icons.Outlined.AutoAwesome, "quickReply"),
+    QuickReply("AI Replies", Icons.Outlined.AutoAwesome, "quickReply"),
     Settings("Settings", Icons.Filled.Settings, "settings")
 }
 
@@ -268,7 +268,10 @@ fun StudioFlowMainScreen(
     val availableSections = preferredSectionOrder.filter { item ->
         val planAllowsSection = item != StudioSection.Messages ||
             state.workspace?.billingPlan == StudioBillingPlan.TeamMonthly
-        planAllowsSection && (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
+        val menuAllowsSection = item != StudioSection.QuickReply ||
+            (state.workspace?.quickReplyMenuEnabled ?: true)
+        planAllowsSection && menuAllowsSection &&
+            (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
     }
     val activeSection = section.takeIf { it in availableSections } ?: availableSections.firstOrNull()
 
