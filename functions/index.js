@@ -18055,3 +18055,148 @@ exports.getAdminFeatureUsageDetail = onCall({ region: "europe-west2", timeoutSec
     note: "Files, tasks, exports and calendar events are not individually logged yet; counts cover orders, customers, notes and messages."
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights detail: Storage (client files inside order documents)
+// ---------------------------------------------------------------------------
+
+function adminFileTypeBucket(contentType = "", fileName = "") {
+  const type = String(contentType || "").toLowerCase();
+  const name = String(fileName || "").toLowerCase();
+  if (type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif|svg)$/.test(name)) return "Images";
+  if (type.startsWith("video/") || /\.(mp4|mov|avi|mkv|webm)$/.test(name)) return "Videos";
+  if (type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|flac)$/.test(name)) return "Audio";
+  if (type.includes("pdf") || type.includes("document") || type.includes("sheet") || type.includes("text") || /\.(pdf|docx?|xlsx?|pptx?|txt|csv|zip)$/.test(name)) return "Documents";
+  return "Other";
+}
+
+function adminPlanStorageLimitMB(plan, companyData = {}) {
+  const base = plan === "team_monthly" ? 51200 : plan === "pro_monthly" ? 10240 : plan === "lifetime_lite" ? 250 : 50;
+  return base + activeStorageAddonMB(companyData);
+}
+
+exports.getAdminStorageDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const now = Date.now();
+  const since30 = now - 30 * 86400000;
+
+  const companiesSnap = await db.collection("companies").limit(3000).get();
+  const companyMeta = new Map();
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    companyMeta.set(doc.id, {
+      name: String(data.name || data.companyName || doc.id).slice(0, 60),
+      plan,
+      limitMB: adminPlanStorageLimitMB(plan, data)
+    });
+  });
+
+  let totalBytes = 0;
+  let fileCount = 0;
+  let uploaded30dBytes = 0;
+  let uploaded30dCount = 0;
+  const typeBytes = {};
+  const planBytes = { demo: 0, lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
+  const perCompany = new Map();
+  const recentUploads = [];
+  const heatmap = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const hourFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hour12: false });
+  const weekdayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" });
+  const weekdayIndex = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+
+  try {
+    const ordersSnap = await db.collection("siparisler").select("companyId", "clientFiles").limit(20000).get();
+    ordersSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      const companyId = String(data.companyId || "");
+      const files = Array.isArray(data.clientFiles) ? data.clientFiles : [];
+      for (const file of files) {
+        if (file?.isPendingUpload === true) continue;
+        const size = parseClientFileSize(file);
+        if (size <= 0) continue;
+        totalBytes += size;
+        fileCount += 1;
+
+        const bucket = adminFileTypeBucket(file.contentType, file.fileName);
+        typeBytes[bucket] = (typeBytes[bucket] || 0) + size;
+
+        const meta = companyMeta.get(companyId);
+        if (meta) planBytes[meta.plan] = (planBytes[meta.plan] || 0) + size;
+        if (companyId) {
+          const entry = perCompany.get(companyId) || { bytes: 0, count: 0 };
+          entry.bytes += size;
+          entry.count += 1;
+          perCompany.set(companyId, entry);
+        }
+
+        let uploadedMs = 0;
+        const uploadedAt = file.uploadedAt;
+        if (uploadedAt && typeof uploadedAt.toMillis === "function") uploadedMs = uploadedAt.toMillis();
+        else if (typeof uploadedAt === "number") uploadedMs = uploadedAt > 3000000000 ? uploadedAt : (uploadedAt + 978307200) * 1000;
+        if (uploadedMs >= since30) {
+          uploaded30dBytes += size;
+          uploaded30dCount += 1;
+          const date = new Date(uploadedMs);
+          const day = weekdayIndex[weekdayFmt.format(date)] ?? 0;
+          const hour = Math.min(Math.max(parseInt(hourFmt.format(date), 10) || 0, 0), 23);
+          heatmap[day][hour] += 1;
+        }
+        if (uploadedMs > 0) {
+          recentUploads.push({
+            fileName: String(file.fileName || "file").slice(0, 60),
+            companyName: companyMeta.get(companyId)?.name || companyId,
+            sizeBytes: size,
+            type: bucket,
+            uploadedAtMs: uploadedMs
+          });
+        }
+      }
+    });
+  } catch (error) {
+    console.warn("storageDetail scan failed:", error?.message || error);
+  }
+
+  recentUploads.sort((a, b) => b.uploadedAtMs - a.uploadedAtMs);
+
+  const workspaces = Array.from(perCompany.entries()).map(([id, entry]) => {
+    const meta = companyMeta.get(id) || { name: id, plan: "demo", limitMB: 50 };
+    const limitBytes = meta.limitMB * 1024 * 1024;
+    return {
+      id,
+      name: meta.name,
+      plan: meta.plan,
+      bytes: entry.bytes,
+      files: entry.count,
+      limitMB: meta.limitMB,
+      percent: limitBytes > 0 ? Math.round((entry.bytes / limitBytes) * 1000) / 10 : 0
+    };
+  });
+  workspaces.sort((a, b) => b.bytes - a.bytes);
+  const nearLimit = workspaces.filter((workspace) => workspace.percent >= 80);
+
+  return {
+    ok: true,
+    generatedAtMs: now,
+    totals: {
+      totalBytes,
+      fileCount,
+      avgFileBytes: fileCount > 0 ? Math.round(totalBytes / fileCount) : 0,
+      uploaded30dBytes,
+      uploaded30dCount,
+      nearLimitCount: nearLimit.length
+    },
+    typeBytes,
+    planBytes,
+    topWorkspaces: workspaces.slice(0, 8),
+    nearLimit: nearLimit.slice(0, 8),
+    recentUploads: recentUploads.slice(0, 8),
+    heatmap,
+    note: "Sizes come from client-file records on orders. Retention/unused-file analysis is not tracked yet."
+  };
+});
