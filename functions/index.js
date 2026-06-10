@@ -17663,3 +17663,77 @@ exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeout
     heatmap
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights detail: Subscriptions (plan assignments; billing not live)
+// ---------------------------------------------------------------------------
+
+exports.getAdminSubscriptionsDetail = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const now = Date.now();
+  const companiesSnap = await admin.firestore().collection("companies").limit(3000).get();
+
+  const planCounts = { demo: 0, lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
+  const sourceCounts = {};
+  let paidNew30d = 0;
+  const paidWorkspaces = [];
+
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    planCounts[plan] = (planCounts[plan] || 0) + 1;
+    const source = String(data.billingPlanSource || "legacy_default").slice(0, 40);
+    const createdMs = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
+
+    if (plan !== "demo") {
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      if (createdMs >= now - 30 * 86400000) paidNew30d += 1;
+      paidWorkspaces.push({
+        id: doc.id,
+        name: String(data.name || data.companyName || doc.id).slice(0, 60),
+        ownerEmail: String(data.ownerEmail || data.email || "").slice(0, 80),
+        plan,
+        monthlyGbp: ADMIN_PLAN_MONTHLY_GBP[plan] || 0,
+        createdAtMs: createdMs
+      });
+    }
+  });
+
+  paidWorkspaces.sort((a, b) => b.createdAtMs - a.createdAtMs);
+
+  const paidTotal = paidWorkspaces.length;
+  const mrrByPlan = {
+    lifetime_lite: planCounts.lifetime_lite * ADMIN_PLAN_MONTHLY_GBP.lifetime_lite,
+    pro_monthly: planCounts.pro_monthly * ADMIN_PLAN_MONTHLY_GBP.pro_monthly,
+    team_monthly: planCounts.team_monthly * ADMIN_PLAN_MONTHLY_GBP.team_monthly
+  };
+  const mrr = mrrByPlan.lifetime_lite + mrrByPlan.pro_monthly + mrrByPlan.team_monthly;
+
+  return {
+    ok: true,
+    generatedAtMs: now,
+    estimated: true,
+    note: "Plan assignments only — live billing (trials, cancellations, payments) is not connected yet.",
+    subscriptions: {
+      paidTotal,
+      paidNew30d,
+      planCounts,
+      freeDemo: planCounts.demo
+    },
+    revenue: {
+      currency: "GBP",
+      mrr,
+      arr: mrr * 12,
+      arpu: paidTotal > 0 ? Math.round((mrr / paidTotal) * 100) / 100 : 0,
+      mrrByPlan
+    },
+    sources: Object.entries(sourceCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([source, count]) => ({ source, count })),
+    recent: paidWorkspaces.slice(0, 10)
+  };
+});

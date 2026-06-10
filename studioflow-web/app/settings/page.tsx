@@ -5237,8 +5237,154 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AdminSubsDetail = {
+  generatedAtMs: number;
+  note: string;
+  subscriptions: { paidTotal: number; paidNew30d: number; planCounts: Record<string, number>; freeDemo: number };
+  revenue: { currency: string; mrr: number; arr: number; arpu: number; mrrByPlan: Record<string, number> };
+  sources: { source: string; count: number }[];
+  recent: { id: string; name: string; ownerEmail: string; plan: string; monthlyGbp: number; createdAtMs: number }[];
+};
+
+const ADMIN_SOURCE_LABELS: Record<string, string> = {
+  signup_free_demo: "Sign-up default",
+  new_workspace_default: "New workspace default",
+  workspace: "Set in workspace (manual)",
+  legacy_default: "Legacy default",
+  legacy: "Legacy",
+  secure_default: "Secure default"
+};
+
+function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminSubsDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminSubsDetail>(functions, "getAdminSubscriptionsDetail");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Subscriptions
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Subscriptions" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const paidSlices = ["lifetime_lite", "pro_monthly", "team_monthly"]
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.subscriptions.planCounts[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .filter(slice => slice.value > 0);
+
+  const mrrEntries: [string, number][] = ["lifetime_lite", "pro_monthly", "team_monthly"]
+    .map(key => [ADMIN_PLAN_LABELS[key] || key, data.revenue.mrrByPlan[key] || 0] as [string, number])
+    .filter(([, value]) => value > 0);
+
+  const sourceEntries: [string, number][] = data.sources.map(item => [ADMIN_SOURCE_LABELS[item.source] || item.source, item.count]);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Subscriptions" />
+        <p className="muted-copy">Monitor plan assignments and estimated billing performance. {data.note}</p>
+      </section>
+
+      <div className="site-stats-grid">
+        {adminKpiTile("Active Subscriptions", data.subscriptions.paidTotal.toLocaleString(), "paid plan assigned")}
+        {adminKpiTile("New Subscriptions (30d)", data.subscriptions.paidNew30d.toLocaleString(), "paid workspaces created")}
+        {adminKpiTile("Free Demo Workspaces", data.subscriptions.freeDemo.toLocaleString())}
+        {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
+        {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
+        {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Plans" title="Subscriptions by Plan" />
+          {paidSlices.length ? <StatsDonut slices={paidSlices} centerLabel="Paid" /> : <p className="muted-copy">No paid subscriptions yet.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Revenue" title="Est. MRR by Plan" />
+          <StatsRankedList entries={mrrEntries.map(([label, value]) => [`${label}`, value])} />
+          <p className="muted-copy" style={{ marginTop: 8 }}>Values in GBP/month, from plan list prices.</p>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Source" title="Plan Source Distribution" />
+          {sourceEntries.length ? <StatsRankedList entries={sourceEntries} /> : <p className="muted-copy">No paid subscriptions yet.</p>}
+          <p className="muted-copy" style={{ marginTop: 8 }}>How each paid plan was assigned. Stripe / Apple / Google payment methods will appear here once live billing is connected.</p>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Billing" title="Not Connected Yet" />
+          <p className="muted-copy" style={{ margin: 0 }}>
+            Trials, cancellations, expirations, failed payments, billing cycles and plan-change history require live billing.
+            When Stripe / App Store / Play billing is enabled, those cards will activate here automatically.
+          </p>
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Subscriptions" title="Recent Subscriptions" />
+        {data.recent.length === 0 ? (
+          <p className="muted-copy">No paid subscriptions yet.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 520, borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                  <th style={{ padding: "6px 8px" }}>Workspace</th>
+                  <th style={{ padding: "6px 8px" }}>Owner</th>
+                  <th style={{ padding: "6px 8px" }}>Plan</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Est. £/mo</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recent.map(item => (
+                  <tr key={item.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                    <td style={{ padding: "7px 8px", fontWeight: 700 }}>{item.name}</td>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{item.ownerEmail || "—"}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[item.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[item.plan] || item.plan}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>£{item.monthlyGbp}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", color: "var(--muted)" }}>{item.createdAtMs ? new Date(item.createdAtMs).toLocaleDateString() : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
-  const [page, setPage] = useState<"overview" | "users">("overview");
+  const [page, setPage] = useState<"overview" | "users" | "subscriptions">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5302,6 +5448,9 @@ function AdminInsightsSection() {
   if (page === "users") {
     return <AdminUsersWorkspacesDetail onBack={() => setPage("overview")} />;
   }
+  if (page === "subscriptions") {
+    return <AdminSubscriptionsDetail onBack={() => setPage("overview")} />;
+  }
 
   return (
     <div className="settings-card-stack">
@@ -5318,6 +5467,14 @@ function AdminInsightsSection() {
             style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
           >
             Users &amp; Workspaces →
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("subscriptions")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
+          >
+            Subscriptions →
           </button>
         </div>
       </section>
