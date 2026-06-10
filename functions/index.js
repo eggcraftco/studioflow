@@ -17896,3 +17896,162 @@ exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 6
     note: "Upgrade/downgrade trends and plan-change history require live billing events; they are not tracked yet."
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights detail: Feature Usage
+// ---------------------------------------------------------------------------
+
+exports.getAdminFeatureUsageDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const now = Date.now();
+  const since30 = admin.firestore.Timestamp.fromMillis(now - 30 * 86400000);
+
+  // Plans per company (one read).
+  const companiesSnap = await db.collection("companies").limit(3000).get();
+  const planOf = new Map();
+  const nameOf = new Map();
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    planOf.set(doc.id, normalizeBillingPlan(data.billingPlan, "demo"));
+    nameOf.set(doc.id, String(data.name || data.companyName || doc.id).slice(0, 60));
+  });
+
+  const FEATURES = [
+    { key: "orders", label: "Orders Created", collection: "siparisler" },
+    { key: "customers", label: "Customers Added", collection: "musteriler" },
+    { key: "notes", label: "Notes Created", collection: "notes" },
+    { key: "messages", label: "Messages Sent", collection: "messages" }
+  ];
+
+  const heatmap = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const hourFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hour12: false });
+  const weekdayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" });
+  const weekdayIndex = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+
+  const perCompanyActions = new Map();
+  const perCompanyTopFeature = new Map();
+  const features = [];
+
+  for (const feature of FEATURES) {
+    let total = null;
+    try {
+      const snap = await db.collection(feature.collection).count().get();
+      total = Number(snap.data().count || 0);
+    } catch (error) {
+      console.warn(`featureUsage total ${feature.key} failed:`, error?.message || error);
+    }
+
+    let count30d = 0;
+    const companies = new Set();
+    const byPlan = { demo: 0, lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
+    try {
+      const snap = await db.collection(feature.collection)
+        .where("createdAt", ">=", since30)
+        .select("companyId", "createdAt")
+        .limit(8000)
+        .get();
+      count30d = snap.size;
+      snap.docs.forEach((doc) => {
+        const data = doc.data() || {};
+        const companyId = String(data.companyId || "");
+        if (companyId) {
+          companies.add(companyId);
+          const plan = planOf.get(companyId) || "demo";
+          byPlan[plan] = (byPlan[plan] || 0) + 1;
+          perCompanyActions.set(companyId, (perCompanyActions.get(companyId) || 0) + 1);
+          const top = perCompanyTopFeature.get(companyId) || {};
+          top[feature.label] = (top[feature.label] || 0) + 1;
+          perCompanyTopFeature.set(companyId, top);
+        }
+        const createdMs = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
+        if (createdMs > 0) {
+          const date = new Date(createdMs);
+          const day = weekdayIndex[weekdayFmt.format(date)] ?? 0;
+          const hour = Math.min(Math.max(parseInt(hourFmt.format(date), 10) || 0, 0), 23);
+          heatmap[day][hour] += 1;
+        }
+      });
+    } catch (error) {
+      console.warn(`featureUsage 30d ${feature.key} failed:`, error?.message || error);
+    }
+
+    features.push({
+      key: feature.key,
+      label: feature.label,
+      total,
+      count30d,
+      activeWorkspaces: companies.size,
+      byPlan
+    });
+  }
+
+  // Adoption funnel from all-time activity (distinct companies).
+  const distinctCompanies = async (collection) => {
+    try {
+      const snap = await db.collection(collection).select("companyId").limit(20000).get();
+      const set = new Set();
+      snap.docs.forEach((doc) => {
+        const id = String(doc.data()?.companyId || "");
+        if (id) set.add(id);
+      });
+      return set.size;
+    } catch (error) {
+      console.warn(`featureUsage funnel ${collection} failed:`, error?.message || error);
+      return null;
+    }
+  };
+  const [withOrder, withCustomer] = await Promise.all([
+    distinctCompanies("siparisler"),
+    distinctCompanies("musteriler")
+  ]);
+
+  let chatgptConnected = 0;
+  try {
+    const tokensSnap = await db.collection("chatgptOAuthTokens").limit(2000).get();
+    const set = new Set();
+    tokensSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if (Number(data.revokedAtMs || 0) > 0) return;
+      if (data.companyId) set.add(String(data.companyId));
+    });
+    chatgptConnected = set.size;
+  } catch (error) {
+    console.warn("featureUsage chatgpt failed:", error?.message || error);
+  }
+
+  const topWorkspaces = Array.from(perCompanyActions.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([id, actions]) => {
+      const top = perCompanyTopFeature.get(id) || {};
+      const topFeature = Object.entries(top).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
+      return {
+        id,
+        name: nameOf.get(id) || id,
+        plan: planOf.get(id) || "demo",
+        actions,
+        topFeature
+      };
+    });
+
+  return {
+    ok: true,
+    generatedAtMs: now,
+    totalWorkspaces: companiesSnap.size,
+    features,
+    heatmap,
+    funnel: {
+      workspaces: companiesSnap.size,
+      withCustomer,
+      withOrder,
+      chatgptConnected
+    },
+    topWorkspaces,
+    note: "Files, tasks, exports and calendar events are not individually logged yet; counts cover orders, customers, notes and messages."
+  };
+});
