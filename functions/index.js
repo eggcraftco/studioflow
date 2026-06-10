@@ -17737,3 +17737,86 @@ exports.getAdminSubscriptionsDetail = onCall({ region: "europe-west2", timeoutSe
     recent: paidWorkspaces.slice(0, 10)
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights detail: Revenue (estimated — live billing not connected)
+// ---------------------------------------------------------------------------
+
+function adminStorageAddonMonthlyGbp(companyData = {}) {
+  const mb = activeStorageAddonMB(companyData);
+  if (mb >= 200000) return 15;
+  if (mb >= 100000) return 9;
+  return 0;
+}
+
+exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const companiesSnap = await admin.firestore().collection("companies").limit(3000).get();
+
+  let baseMrr = 0;
+  let seatsMrr = 0;
+  let storageMrr = 0;
+  let paidTotal = 0;
+  let seatCount = 0;
+  let storageAddonCount = 0;
+  const mrrByPlan = { lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
+  const workspaces = [];
+
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    if (plan === "demo") return;
+
+    const base = ADMIN_PLAN_MONTHLY_GBP[plan] || 0;
+    const seats = plan === "team_monthly" ? activeAdditionalTeamSeats(data) : 0;
+    const seatGbp = seats * 5;
+    const storageGbp = adminStorageAddonMonthlyGbp(data);
+
+    paidTotal += 1;
+    baseMrr += base;
+    seatsMrr += seatGbp;
+    storageMrr += storageGbp;
+    seatCount += seats;
+    if (storageGbp > 0) storageAddonCount += 1;
+    mrrByPlan[plan] = (mrrByPlan[plan] || 0) + base + (plan === "team_monthly" ? seatGbp : 0);
+
+    workspaces.push({
+      id: doc.id,
+      name: String(data.name || data.companyName || doc.id).slice(0, 60),
+      ownerEmail: String(data.ownerEmail || data.email || "").slice(0, 80),
+      plan,
+      baseGbp: base,
+      seatGbp,
+      storageGbp,
+      totalGbp: base + seatGbp + storageGbp
+    });
+  });
+
+  workspaces.sort((a, b) => b.totalGbp - a.totalGbp);
+  const totalMrr = baseMrr + seatsMrr + storageMrr;
+
+  return {
+    ok: true,
+    generatedAtMs: Date.now(),
+    estimated: true,
+    note: "Estimated from plan and add-on assignments at list prices; live billing (payments, refunds, currencies) is not connected yet.",
+    revenue: {
+      currency: "GBP",
+      mrr: totalMrr,
+      arr: totalMrr * 12,
+      arpu: paidTotal > 0 ? Math.round((totalMrr / paidTotal) * 100) / 100 : 0,
+      baseMrr,
+      seatsMrr,
+      storageMrr,
+      mrrByPlan,
+      paidTotal,
+      seatCount,
+      storageAddonCount
+    },
+    topPaying: workspaces.slice(0, 8)
+  };
+});
