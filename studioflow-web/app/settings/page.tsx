@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
@@ -5037,7 +5037,208 @@ function adminKpiTile(label: string, value: string, hint?: string) {
   );
 }
 
+type AdminUsersDetail = {
+  generatedAtMs: number;
+  users: { total: number; new7d: number; new30d: number; active7d: number; active30d: number; neverLoggedIn: number };
+  growth: { date: string; signups: number; cumulative: number }[];
+  workspaces: { total: number; active30d: number; inactive: number; planCounts: Record<string, number> };
+  quick: { avgWorkspacesPerUser: number; usersWithMultipleWorkspaces: number };
+  topWorkspaces: { id: string; name: string; ownerEmail: string; plan: string; members: number | null; orders30d: number; ordersTotal: number | null; lastOrderAtMs: number }[];
+  heatmap: number[][];
+};
+
+function GrowthChart({ growth }: { growth: { date: string; cumulative: number }[] }) {
+  if (!growth.length) return <p className="muted-copy">No data yet.</p>;
+  const width = 600;
+  const height = 190;
+  const pad = 8;
+  const max = Math.max(...growth.map(point => point.cumulative), 1);
+  const min = Math.min(...growth.map(point => point.cumulative), 0);
+  const x = (index: number) => pad + (index / Math.max(growth.length - 1, 1)) * (width - pad * 2);
+  const y = (value: number) => height - pad - ((value - min) / Math.max(max - min, 1)) * (height - pad * 2);
+  const line = growth.map((point, index) => `${x(index)},${y(point.cumulative)}`).join(" ");
+  const area = `${pad},${height - pad} ${line} ${width - pad},${height - pad}`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      <polygon points={area} fill="rgba(138, 92, 246, 0.14)" />
+      <polyline points={line} fill="none" stroke="#8a5cf6" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+      {growth.map((point, index) => (
+        index % Math.ceil(growth.length / 24) === 0 ? (
+          <circle key={point.date} cx={x(index)} cy={y(point.cumulative)} r="2.6" fill="#8a5cf6">
+            <title>{`${point.date}: ${point.cumulative}`}</title>
+          </circle>
+        ) : null
+      ))}
+    </svg>
+  );
+}
+
+const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function ActivityHeatmap({ heatmap }: { heatmap: number[][] }) {
+  const max = Math.max(...heatmap.flat(), 1);
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "34px repeat(24, 1fr)", gap: 2, minWidth: 560 }}>
+        <span />
+        {Array.from({ length: 24 }, (_, hour) => (
+          <span key={hour} style={{ fontSize: 8.5, color: "var(--muted)", textAlign: "center" }}>{hour % 3 === 0 ? hour : ""}</span>
+        ))}
+        {heatmap.map((row, day) => (
+          <Fragment key={HEATMAP_DAYS[day]}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", alignSelf: "center" }}>{HEATMAP_DAYS[day]}</span>
+            {row.map((value, hour) => (
+              <span
+                key={hour}
+                title={`${HEATMAP_DAYS[day]} ${hour}:00 — ${value}`}
+                style={{
+                  aspectRatio: "1",
+                  borderRadius: 3,
+                  background: value === 0 ? "rgba(17,24,39,0.06)" : `rgba(138, 92, 246, ${0.25 + (value / max) * 0.75})`
+                }}
+              />
+            ))}
+          </Fragment>
+        ))}
+      </div>
+      <p className="muted-copy" style={{ marginTop: 8 }}>Order creation activity by weekday and hour (last 30 days, UK time).</p>
+    </div>
+  );
+}
+
+function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminUsersDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminUsersDetail>(functions, "getAdminUsersWorkspacesDetail");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Users & Workspaces
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Users & Workspaces" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const planSlices = Object.entries(data.workspaces.planCounts)
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }));
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Users & Workspaces" />
+        <p className="muted-copy">Track user growth, activity and workspace statistics across NivaDesk.</p>
+      </section>
+
+      <div className="site-stats-grid">
+        {adminKpiTile("Total Users", data.users.total.toLocaleString(), `+${data.users.new30d} in last 30 days`)}
+        {adminKpiTile("Active Users (30d)", data.users.active30d.toLocaleString(), `${data.users.active7d} this week`)}
+        {adminKpiTile("New Users (30d)", data.users.new30d.toLocaleString(), `${data.users.new7d} this week`)}
+        {adminKpiTile("Active Workspaces", data.workspaces.active30d.toLocaleString(), "order in last 30 days")}
+        {adminKpiTile("Inactive Workspaces", data.workspaces.inactive.toLocaleString())}
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Growth" title="User Growth" />
+        <GrowthChart growth={data.growth} />
+        <p className="muted-copy" style={{ marginTop: 6 }}>Cumulative registered users, last 60 days.</p>
+      </section>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Plans" title="Workspaces by Plan" />
+          {planSlices.length ? <StatsDonut slices={planSlices} centerLabel="Workspaces" /> : <p className="muted-copy">No data yet.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Users" title="Quick Stats" />
+          <div className="settings-mini-grid">
+            <InfoTile label="Avg workspaces per user" value={data.quick.avgWorkspacesPerUser.toLocaleString()} />
+            <InfoTile label="Users in multiple workspaces" value={data.quick.usersWithMultipleWorkspaces.toLocaleString()} />
+            <InfoTile label="New users this week" value={data.users.new7d.toLocaleString()} />
+            <InfoTile label="Active users this week" value={data.users.active7d.toLocaleString()} />
+            <InfoTile label="Never logged in" value={data.users.neverLoggedIn.toLocaleString()} />
+          </div>
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Workspaces" title="Top Workspaces by Activity" />
+        {data.topWorkspaces.length === 0 ? (
+          <p className="muted-copy">No workspace activity in the last 30 days.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                  <th style={{ padding: "6px 8px" }}>#</th>
+                  <th style={{ padding: "6px 8px" }}>Workspace</th>
+                  <th style={{ padding: "6px 8px" }}>Owner</th>
+                  <th style={{ padding: "6px 8px" }}>Plan</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Users</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Orders (30d)</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Orders (total)</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Last Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.topWorkspaces.map((workspace, index) => (
+                  <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.members ?? "—"}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{workspace.orders30d}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.ordersTotal ?? "—"}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", color: "var(--muted)" }}>{workspace.lastOrderAtMs ? new Date(workspace.lastOrderAtMs).toLocaleDateString() : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Activity" title="User Activity Overview" />
+        <ActivityHeatmap heatmap={data.heatmap} />
+      </section>
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
+  const [page, setPage] = useState<"overview" | "users">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5098,6 +5299,10 @@ function AdminInsightsSection() {
 
   const heartbeatText = (ms: number | null) => (ms ? new Date(ms).toLocaleString() : "—");
 
+  if (page === "users") {
+    return <AdminUsersWorkspacesDetail onBack={() => setPage("overview")} />;
+  }
+
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
@@ -5105,6 +5310,16 @@ function AdminInsightsSection() {
         <p className="muted-copy">
           Live overview across all NivaDesk users and workspaces. Generated {new Date(data.generatedAtMs).toLocaleString()}.
         </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("users")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
+          >
+            Users &amp; Workspaces →
+          </button>
+        </div>
       </section>
 
       <div className="site-stats-grid">

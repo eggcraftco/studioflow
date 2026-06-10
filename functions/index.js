@@ -17477,3 +17477,189 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     }
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights detail: Users & Workspaces
+// ---------------------------------------------------------------------------
+
+exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const now = Date.now();
+  const dayMs = 86400000;
+  const windowDays = 60;
+  const windowStartMs = now - (windowDays - 1) * dayMs;
+  const londonDateKey = (ms) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(ms));
+
+  // --- Firebase Auth scan: totals, activity and daily signup buckets.
+  let totalUsers = 0;
+  let new7d = 0;
+  let new30d = 0;
+  let active7d = 0;
+  let active30d = 0;
+  let neverLoggedIn = 0;
+  let createdBeforeWindow = 0;
+  const signupsByDay = {};
+  try {
+    let pageToken = undefined;
+    let pages = 0;
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken);
+      totalUsers += page.users.length;
+      page.users.forEach((user) => {
+        const created = Date.parse(user.metadata?.creationTime || "");
+        const lastSignIn = Date.parse(user.metadata?.lastSignInTime || "");
+        if (Number.isFinite(created)) {
+          if (created >= now - 7 * dayMs) new7d += 1;
+          if (created >= now - 30 * dayMs) new30d += 1;
+          if (created >= windowStartMs) {
+            const key = londonDateKey(created);
+            signupsByDay[key] = (signupsByDay[key] || 0) + 1;
+          } else {
+            createdBeforeWindow += 1;
+          }
+        }
+        if (Number.isFinite(lastSignIn)) {
+          if (lastSignIn >= now - 7 * dayMs) active7d += 1;
+          if (lastSignIn >= now - 30 * dayMs) active30d += 1;
+        } else {
+          neverLoggedIn += 1;
+        }
+      });
+      pageToken = page.pageToken;
+      pages += 1;
+    } while (pageToken && pages < 20);
+  } catch (error) {
+    console.warn("usersDetail listUsers failed:", error?.message || error);
+  }
+
+  const growth = [];
+  let cumulative = createdBeforeWindow;
+  for (let offset = windowDays - 1; offset >= 0; offset -= 1) {
+    const key = londonDateKey(now - offset * dayMs);
+    const signups = signupsByDay[key] || 0;
+    cumulative += signups;
+    growth.push({ date: key, signups, cumulative });
+  }
+
+  // --- Companies (single read) for names, plans and owners.
+  const companiesSnap = await db.collection("companies").limit(3000).get();
+  const companyInfo = new Map();
+  const planCounts = { demo: 0, lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    planCounts[plan] = (planCounts[plan] || 0) + 1;
+    companyInfo.set(doc.id, {
+      name: String(data.name || data.companyName || doc.id).slice(0, 60),
+      ownerEmail: String(data.ownerEmail || data.email || "").slice(0, 80),
+      plan
+    });
+  });
+
+  // --- Orders in the last 30 days: active workspaces, top list and heatmap.
+  const heatmap = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const ordersByCompany = new Map();
+  const lastOrderByCompany = new Map();
+  try {
+    const recentSnap = await db.collection("siparisler")
+      .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(now - 30 * dayMs))
+      .select("companyId", "createdAt")
+      .limit(8000)
+      .get();
+    const hourFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hour12: false });
+    const weekdayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" });
+    const weekdayIndex = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+    recentSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      const companyId = String(data.companyId || "");
+      const createdMs = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
+      if (companyId) {
+        ordersByCompany.set(companyId, (ordersByCompany.get(companyId) || 0) + 1);
+        if (createdMs > (lastOrderByCompany.get(companyId) || 0)) lastOrderByCompany.set(companyId, createdMs);
+      }
+      if (createdMs > 0) {
+        const date = new Date(createdMs);
+        const day = weekdayIndex[weekdayFmt.format(date)] ?? 0;
+        const hour = Math.min(Math.max(parseInt(hourFmt.format(date), 10) || 0, 0), 23);
+        heatmap[day][hour] += 1;
+      }
+    });
+  } catch (error) {
+    console.warn("usersDetail recent orders failed:", error?.message || error);
+  }
+
+  const activeWorkspaces = ordersByCompany.size;
+
+  // --- Top workspaces by recent activity, enriched with totals and members.
+  const topIds = Array.from(ordersByCompany.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([id]) => id);
+  const topWorkspaces = await Promise.all(topIds.map(async (id) => {
+    const info = companyInfo.get(id) || { name: id, ownerEmail: "", plan: "demo" };
+    let ordersTotal = null;
+    let members = null;
+    try {
+      const snap = await db.collection("siparisler").where("companyId", "==", id).count().get();
+      ordersTotal = Number(snap.data().count || 0);
+    } catch (error) {
+      console.warn("usersDetail orders count failed:", error?.message || error);
+    }
+    try {
+      const snap = await db.collection("companies").doc(id).collection("users").count().get();
+      members = Number(snap.data().count || 0);
+    } catch (error) {
+      console.warn("usersDetail members count failed:", error?.message || error);
+    }
+    return {
+      id,
+      name: info.name,
+      ownerEmail: info.ownerEmail,
+      plan: info.plan,
+      members,
+      orders30d: ordersByCompany.get(id) || 0,
+      ordersTotal,
+      lastOrderAtMs: lastOrderByCompany.get(id) || 0
+    };
+  }));
+
+  // --- Multi-workspace users via the workspaceAccess subcollections.
+  let usersWithMultipleWorkspaces = 0;
+  try {
+    const accessSnap = await db.collectionGroup("workspaceAccess").select().limit(10000).get();
+    const perUser = new Map();
+    accessSnap.docs.forEach((doc) => {
+      const uid = doc.ref.parent.parent?.id || "";
+      if (uid) perUser.set(uid, (perUser.get(uid) || 0) + 1);
+    });
+    perUser.forEach((count) => {
+      if (count > 1) usersWithMultipleWorkspaces += 1;
+    });
+  } catch (error) {
+    console.warn("usersDetail workspaceAccess failed:", error?.message || error);
+  }
+
+  return {
+    ok: true,
+    generatedAtMs: now,
+    users: { total: totalUsers, new7d, new30d, active7d, active30d, neverLoggedIn },
+    growth,
+    workspaces: {
+      total: companiesSnap.size,
+      active30d: activeWorkspaces,
+      inactive: Math.max(companiesSnap.size - activeWorkspaces, 0),
+      planCounts
+    },
+    quick: {
+      avgWorkspacesPerUser: totalUsers > 0 ? Math.round((companiesSnap.size / totalUsers) * 100) / 100 : 0,
+      usersWithMultipleWorkspaces
+    },
+    topWorkspaces,
+    heatmap
+  };
+});
