@@ -17076,12 +17076,32 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
     throw new HttpsError("permission-denied", "Site statistics are restricted to NivaDesk admins.");
   }
 
-  // Clients may request up to 180 days (e.g. 90-day range plus the previous
-  // 90 days for trend comparison).
-  const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 180);
+  // Two request shapes:
+  //  - { days: N }                  → last N days ending today
+  //  - { startDate, endDate }       → explicit YYYY-MM-DD range (inclusive)
+  // Either way the span is capped at 800 days to bound Firestore reads; a
+  // client wanting trend comparison simply requests a window twice as long.
+  const MAX_SPAN_DAYS = 800;
   const dateKeys = [];
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
-    dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
+  const startRaw = String(request.data?.startDate || "").trim();
+  const endRaw = String(request.data?.endDate || "").trim();
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (datePattern.test(startRaw) && datePattern.test(endRaw)) {
+    const startMs = Date.parse(`${startRaw}T12:00:00Z`);
+    const endMs = Math.min(Date.parse(`${endRaw}T12:00:00Z`), Date.now());
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
+      throw new HttpsError("invalid-argument", "Invalid date range.");
+    }
+    const span = Math.min(Math.round((endMs - startMs) / 86400000) + 1, MAX_SPAN_DAYS);
+    for (let offset = span - 1; offset >= 0; offset -= 1) {
+      dateKeys.push(siteStatsDateKey(new Date(endMs - offset * 86400000)));
+    }
+  } else {
+    const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), MAX_SPAN_DAYS);
+    for (let offset = days - 1; offset >= 0; offset -= 1) {
+      dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
+    }
   }
 
   const refs = dateKeys.map((key) => admin.firestore().collection("siteStats").doc(key));

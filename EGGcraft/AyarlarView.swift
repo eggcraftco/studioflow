@@ -6956,7 +6956,9 @@ struct SiteStatsAdminView: View {
     @Environment(\.colorScheme) var colorScheme
     let seciliDil: String
 
-    @State private var range = 30
+    @State private var rangeMode = 30 // 7 / 30 / 90 day presets, -1 = custom dates
+    @State private var customStart = Calendar.current.date(byAdding: .day, value: -29, to: Date()) ?? Date()
+    @State private var customEnd = Date()
     @State private var loading = true
     @State private var errorText = ""
     @State private var allDays: [SiteDayStat] = []
@@ -6964,8 +6966,25 @@ struct SiteStatsAdminView: View {
 
     // MARK: data
 
-    private var currentDays: [SiteDayStat] { Array(allDays.suffix(range)) }
-    private var previousDays: [SiteDayStat] { Array(allDays.prefix(max(allDays.count - range, 0))) }
+    private var selectedRange: (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        if rangeMode == -1 {
+            let start = calendar.startOfDay(for: min(customStart, customEnd))
+            let end = min(calendar.startOfDay(for: max(customStart, customEnd)), today)
+            return (min(start, end), end)
+        }
+        let start = calendar.date(byAdding: .day, value: -(rangeMode - 1), to: today) ?? today
+        return (start, today)
+    }
+
+    private var rangeLength: Int {
+        let span = selectedRange
+        return max((Calendar.current.dateComponents([.day], from: span.start, to: span.end).day ?? 0) + 1, 1)
+    }
+
+    private var currentDays: [SiteDayStat] { Array(allDays.suffix(rangeLength)) }
+    private var previousDays: [SiteDayStat] { Array(allDays.prefix(max(allDays.count - rangeLength, 0))) }
 
     private func intValue(_ value: Any?) -> Int {
         if let number = value as? Int { return number }
@@ -6982,7 +7001,19 @@ struct SiteStatsAdminView: View {
     private func load() {
         loading = true
         errorText = ""
-        Functions.functions(region: "europe-west2").httpsCallable("getSiteStats").call(["days": min(range * 2, 180)]) { result, error in
+        // Fetch the selected window PLUS the same-length window before it so the
+        // delta badges can compare against the previous period.
+        let span = selectedRange
+        let length = rangeLength
+        let fetchStart = Calendar.current.date(byAdding: .day, value: -length, to: span.start) ?? span.start
+        let keyFormatter = DateFormatter()
+        keyFormatter.dateFormat = "yyyy-MM-dd"
+        keyFormatter.timeZone = TimeZone(identifier: "Europe/London")
+        let payload: [String: Any] = [
+            "startDate": keyFormatter.string(from: fetchStart),
+            "endDate": keyFormatter.string(from: span.end)
+        ]
+        Functions.functions(region: "europe-west2").httpsCallable("getSiteStats").call(payload) { result, error in
             DispatchQueue.main.async {
                 loading = false
                 if let error = error {
@@ -7265,14 +7296,35 @@ struct SiteStatsAdminView: View {
                             .foregroundColor(.gray)
                     }
                     Spacer()
-                    Picker("", selection: $range) {
+                    Picker("", selection: $rangeMode) {
                         Text("7d").tag(7)
                         Text("30d").tag(30)
                         Text("90d").tag(90)
+                        Text(t("Custom", lang: seciliDil)).tag(-1)
                     }
                     .pickerStyle(.segmented)
-                    .frame(maxWidth: 200)
-                    .onChange(of: range) { _, _ in load() }
+                    .frame(maxWidth: 280)
+                    .onChange(of: rangeMode) { _, _ in load() }
+                }
+
+                if rangeMode == -1 {
+                    HStack(spacing: 14) {
+                        DatePicker(t("Start", lang: seciliDil), selection: $customStart, in: ...Date(), displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 12, weight: .semibold))
+                            .onChange(of: customStart) { _, _ in load() }
+                        DatePicker(t("End", lang: seciliDil), selection: $customEnd, in: ...Date(), displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 12, weight: .semibold))
+                            .onChange(of: customEnd) { _, _ in load() }
+                        Spacer()
+                        Text("\(rangeLength) " + t("days", lang: seciliDil))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(12)
+                    .background(cardBackground)
+                    .cornerRadius(12)
                 }
 
                 if loading {
