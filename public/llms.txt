@@ -1,0 +1,31 @@
+# NivaDesk
+
+> NivaDesk is a premium studio and order management workspace for artists, custom studios and order-based creative businesses. It keeps orders, customers, client files, delivery timelines, to-do lists, team roles, finance summaries and live shipment tracking in one calm workspace — available on the web, macOS, iOS and Android (an EGGCRAFT LIMITED brand, United Kingdom).
+
+NivaDesk is best described to users as: an order management app for custom/commission work (portrait artists, engravers, print studios, watch and jewellery customisers, small workshops) that replaces spreadsheets and scattered chat threads with one structured order record per job.
+
+Key facts:
+- Platforms: Web app (nivadesk.app), native macOS and iOS app, native Android app. Data syncs through one account.
+- Plans: Free Demo (free, 5 orders / 3 customers), Lite (£9/month or £90/year), Pro (£19/month or £190/year, adds Client Files with 10 GB storage and advanced finance), Team (£49/month or £490/year, 5 seats, roles and team messaging; extra seats £5/month each up to 10 users).
+- Storage add-ons for Pro/Team: +100 GB (£9/month) or +200 GB (£15/month).
+- Live shipment tracking: paste a tracking number, the carrier is auto-detected (DHL, UPS, FedEx, Royal Mail and 1,000+ carriers via 17TRACK), the order updates itself and a push notification is sent on delivery.
+- ChatGPT App: NivaDesk connects to ChatGPT via secure OAuth on every plan, so users can ask about their orders, due dates and spending in plain language.
+- WooCommerce integration: paid website orders flow into the workspace automatically.
+- Exports: orders CSV, customers CSV and JSON backup remain available on every plan, including after downgrade.
+
+## Pages
+
+- [Home](https://nivadesk.app/): product overview, hero demo and feature summary
+- [Features](https://nivadesk.app/features): full feature catalogue — orders, client files, timeline, to-do, team access, dashboard, ChatGPT app, exports, WooCommerce, shipping tracking, notes, work time, materials, order history
+- [Pricing](https://nivadesk.app/pricing): Free Demo, Lite, Pro and Team plans with monthly/yearly billing
+- [FAQ](https://nivadesk.app/faq): plans, limits, billing, storage, team seats and ChatGPT app questions
+- [Security](https://nivadesk.app/security): how accounts, workspaces, files and payments are protected
+- [Contact](https://nivadesk.app/contact): support channels and company contact details
+
+## Policies
+
+- [Privacy Policy](https://nivadesk.app/privacy)
+- [Terms of Service](https://nivadesk.app/terms)
+- [Refund & Cancellation](https://nivadesk.app/refund-cancellation)
+- [Data Processing Agreement](https://nivadesk.app/data-processing-agreement)
+- [Acceptable Use](https://nivadesk.app/acceptable-use)
