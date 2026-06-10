@@ -17238,3 +17238,177 @@ exports.getSitePresence = onCall({ region: "europe-west2" }, async (request) => 
       .map(([path, count]) => ({ path, count }))
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights — cross-workspace overview for NivaDesk admins only.
+// Aggregates real Firestore data (counts + company docs). Revenue figures are
+// ESTIMATES derived from plan assignments; live billing is not connected.
+// ---------------------------------------------------------------------------
+
+const ADMIN_PLAN_MONTHLY_GBP = { lifetime_lite: 9, pro_monthly: 19, team_monthly: 49 };
+
+exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const now = Date.now();
+  const days30Ago = admin.firestore.Timestamp.fromMillis(now - 30 * 86400000);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthStartTs = admin.firestore.Timestamp.fromDate(monthStart);
+
+  // --- Workspaces: read company docs once (small collection) and aggregate.
+  const companiesSnap = await db.collection("companies").limit(3000).get();
+  const planCounts = { demo: 0, lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
+  let newWorkspaces30d = 0;
+  const newestWorkspaces = [];
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    planCounts[plan] = (planCounts[plan] || 0) + 1;
+    const createdMs = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
+    if (createdMs >= now - 30 * 86400000) newWorkspaces30d += 1;
+    newestWorkspaces.push({
+      id: doc.id,
+      name: String(data.name || data.companyName || doc.id).slice(0, 60),
+      plan,
+      createdAtMs: createdMs
+    });
+  });
+  newestWorkspaces.sort((a, b) => b.createdAtMs - a.createdAtMs);
+
+  const paidWorkspaces = planCounts.lifetime_lite + planCounts.pro_monthly + planCounts.team_monthly;
+  const estimatedMrr =
+    planCounts.lifetime_lite * ADMIN_PLAN_MONTHLY_GBP.lifetime_lite +
+    planCounts.pro_monthly * ADMIN_PLAN_MONTHLY_GBP.pro_monthly +
+    planCounts.team_monthly * ADMIN_PLAN_MONTHLY_GBP.team_monthly;
+
+  // --- Users (Firebase Auth, paginated; fine at current scale).
+  let totalUsers = 0;
+  let newUsers30d = 0;
+  try {
+    let pageToken = undefined;
+    let pages = 0;
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken);
+      totalUsers += page.users.length;
+      page.users.forEach((user) => {
+        const created = Date.parse(user.metadata?.creationTime || "");
+        if (Number.isFinite(created) && created >= now - 30 * 86400000) newUsers30d += 1;
+      });
+      pageToken = page.pageToken;
+      pages += 1;
+    } while (pageToken && pages < 20);
+  } catch (error) {
+    console.warn("getAdminInsights listUsers failed:", error?.message || error);
+  }
+
+  // --- Usage totals via Firestore count() aggregations (cheap).
+  const countOf = async (query) => {
+    try {
+      const snap = await query.count().get();
+      return Number(snap.data().count || 0);
+    } catch (error) {
+      console.warn("getAdminInsights count failed:", error?.message || error);
+      return null;
+    }
+  };
+
+  const [
+    ordersTotal,
+    ordersThisMonth,
+    customersTotal,
+    notesTotal,
+    supportOpen,
+    supportInProgress,
+    supportTotal
+  ] = await Promise.all([
+    countOf(db.collection("siparisler")),
+    countOf(db.collection("siparisler").where("createdAt", ">=", monthStartTs)),
+    countOf(db.collection("musteriler")),
+    countOf(db.collection("notes")),
+    countOf(db.collection("supportTickets").where("status", "==", "open")),
+    countOf(db.collection("supportTickets").where("status", "==", "inProgress")),
+    countOf(db.collection("supportTickets"))
+  ]);
+
+  // --- ChatGPT app: distinct workspaces with a non-revoked OAuth token.
+  let chatgptConnectedWorkspaces = 0;
+  let chatgptActiveTokens = 0;
+  try {
+    const tokensSnap = await db.collection("chatgptOAuthTokens").limit(2000).get();
+    const connected = new Set();
+    tokensSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if (Number(data.revokedAtMs || 0) > 0) return;
+      chatgptActiveTokens += 1;
+      if (data.companyId) connected.add(String(data.companyId));
+    });
+    chatgptConnectedWorkspaces = connected.size;
+  } catch (error) {
+    console.warn("getAdminInsights chatgpt tokens failed:", error?.message || error);
+  }
+
+  // --- Public site pulse (today) + live presence.
+  let siteToday = { total: 0, sessions: 0 };
+  try {
+    const todaySnap = await db.collection("siteStats").doc(siteStatsDateKey()).get();
+    const data = todaySnap.exists ? todaySnap.data() : {};
+    siteToday = { total: Number(data.total || 0), sessions: Number(data.sessions || 0) };
+  } catch (error) {
+    console.warn("getAdminInsights siteStats failed:", error?.message || error);
+  }
+  let liveVisitors = 0;
+  try {
+    const presenceSnap = await db.collection("sitePresence")
+      .where("lastSeenAt", ">=", admin.firestore.Timestamp.fromMillis(now - 2 * 60 * 1000))
+      .limit(500)
+      .get();
+    liveVisitors = presenceSnap.size;
+  } catch (error) {
+    console.warn("getAdminInsights presence failed:", error?.message || error);
+  }
+
+  return {
+    ok: true,
+    generatedAtMs: now,
+    users: { total: totalUsers, new30d: newUsers30d },
+    workspaces: {
+      total: companiesSnap.size,
+      new30d: newWorkspaces30d,
+      paid: paidWorkspaces,
+      planCounts,
+      newest: newestWorkspaces.slice(0, 6).map(({ id, name, plan, createdAtMs }) => ({ id, name, plan, createdAtMs }))
+    },
+    revenue: {
+      estimated: true,
+      currency: "GBP",
+      mrr: estimatedMrr,
+      arr: estimatedMrr * 12,
+      note: "Estimated from plan assignments; live billing is not connected."
+    },
+    usage: {
+      ordersTotal,
+      ordersThisMonth,
+      customersTotal,
+      notesTotal
+    },
+    support: {
+      open: supportOpen,
+      inProgress: supportInProgress,
+      total: supportTotal
+    },
+    chatgpt: {
+      connectedWorkspaces: chatgptConnectedWorkspaces,
+      activeTokens: chatgptActiveTokens
+    },
+    site: {
+      today: siteToday,
+      liveVisitors
+    }
+  };
+});

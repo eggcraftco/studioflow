@@ -89,6 +89,7 @@ type SettingsSectionId =
   | "team-access"
   | "support-tickets"
   | "admin-stats"
+  | "admin-insights"
   | "about";
 
 type SettingsSection = {
@@ -127,7 +128,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team" },
   { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" },
-  { id: "admin-stats", title: "Site Statistics", appKey: "Site Statistics", description: "Public website visitors and traffic (NivaDesk admin).", icon: "data" }
+  { id: "admin-stats", title: "Site Statistics", appKey: "Site Statistics", description: "Public website visitors and traffic (NivaDesk admin).", icon: "data" },
+  { id: "admin-insights", title: "Admin Insights", appKey: "Admin Insights", description: "Users, plans, revenue and usage across all of NivaDesk (admin).", icon: "plan" }
 ];
 
 const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com"]);
@@ -196,7 +198,7 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (!workspace) return true;
   // Visibility for admin-stats is decided by the signed-in email (see
   // visibleSections); the backend enforces the same allowlist regardless.
-  if (sectionId === "admin-stats") return true;
+  if (sectionId === "admin-stats" || sectionId === "admin-insights") return true;
   if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
 
   const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
@@ -337,7 +339,7 @@ export default function SettingsPage() {
 
   const visibleSections = useMemo(
     () => SETTINGS_SECTIONS.filter(section => {
-      if (section.id === "admin-stats" && !isNivaDeskAdminEmail(user?.email)) return false;
+      if ((section.id === "admin-stats" || section.id === "admin-insights") && !isNivaDeskAdminEmail(user?.email)) return false;
       return canSeeSettingsSection(workspace, section.id);
     }),
     [workspace, user]
@@ -535,6 +537,8 @@ function renderSettingsSection({
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "admin-stats":
       return <AdminSiteStatsSection />;
+    case "admin-insights":
+      return <AdminInsightsSection />;
     case "about":
       return <AboutSection workspace={workspace} />;
   }
@@ -4977,6 +4981,176 @@ function AdminSiteStatsSection() {
           </section>
         </>
       ) : null}
+    </div>
+  );
+}
+
+type AdminInsights = {
+  generatedAtMs: number;
+  users: { total: number; new30d: number };
+  workspaces: {
+    total: number;
+    new30d: number;
+    paid: number;
+    planCounts: Record<string, number>;
+    newest: { id: string; name: string; plan: string; createdAtMs: number }[];
+  };
+  revenue: { estimated: boolean; currency: string; mrr: number; arr: number; note: string };
+  usage: { ordersTotal: number | null; ordersThisMonth: number | null; customersTotal: number | null; notesTotal: number | null };
+  support: { open: number | null; inProgress: number | null; total: number | null };
+  chatgpt: { connectedWorkspaces: number; activeTokens: number };
+  site: { today: { total: number; sessions: number }; liveVisitors: number };
+};
+
+const ADMIN_PLAN_LABELS: Record<string, string> = {
+  demo: "Free Demo",
+  lifetime_lite: "Lite",
+  pro_monthly: "Pro",
+  team_monthly: "Team"
+};
+
+const ADMIN_PLAN_COLORS: Record<string, string> = {
+  demo: "#8a5cf6",
+  lifetime_lite: "#0a84ff",
+  pro_monthly: "#30d158",
+  team_monthly: "#ff9f0a"
+};
+
+function adminKpiTile(label: string, value: string, hint?: string) {
+  return (
+    <section key={label} className="card app-card" style={{ display: "grid", gap: 4 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{label}</span>
+      <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{value}</strong>
+      {hint ? <span style={{ fontSize: 11, color: "var(--muted)" }}>{hint}</span> : null}
+    </section>
+  );
+}
+
+function AdminInsightsSection() {
+  const [data, setData] = useState<AdminInsights | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminInsights>(functions, "getAdminInsights");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load admin insights.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Admin Insights" />
+          <p className="muted-copy">Loading insights...</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          <CardTitle icon="lock" eyebrow="NivaDesk admin" title="Admin Insights" />
+          <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>
+        </section>
+      </div>
+    );
+  }
+
+  const planSlices = Object.entries(data.workspaces.planCounts)
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }));
+
+  const usageEntries: [string, number][] = [
+    ["Orders (total)", data.usage.ordersTotal ?? 0],
+    ["Orders this month", data.usage.ordersThisMonth ?? 0],
+    ["Customers", data.usage.customersTotal ?? 0],
+    ["Notes", data.usage.notesTotal ?? 0]
+  ];
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Admin Insights" />
+        <p className="muted-copy">
+          Live overview across all NivaDesk users and workspaces. Generated {new Date(data.generatedAtMs).toLocaleString()}.
+        </p>
+      </section>
+
+      <div className="site-stats-grid">
+        {adminKpiTile("Total Users", data.users.total.toLocaleString(), `+${data.users.new30d} in last 30 days`)}
+        {adminKpiTile("Workspaces", data.workspaces.total.toLocaleString(), `+${data.workspaces.new30d} in last 30 days`)}
+        {adminKpiTile("Paid Subscriptions", data.workspaces.paid.toLocaleString())}
+        {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
+        {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
+        {adminKpiTile("On Site Now", data.site.liveVisitors.toLocaleString(), `${data.site.today.sessions} visitors today`)}
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Plans" title="Plan Distribution" />
+          {planSlices.length ? <StatsDonut slices={planSlices} centerLabel="Workspaces" /> : <p className="muted-copy">No data yet.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Usage" title="Feature Usage" />
+          <StatsRankedList entries={usageEntries} />
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="ChatGPT App" title="ChatGPT App Usage" />
+          <div className="settings-mini-grid">
+            <InfoTile label="Connected workspaces" value={data.chatgpt.connectedWorkspaces.toLocaleString()} />
+            <InfoTile label="Active OAuth tokens" value={data.chatgpt.activeTokens.toLocaleString()} />
+          </div>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Support" title="Support Tickets" />
+          <div className="settings-mini-grid">
+            <InfoTile label="Open" value={(data.support.open ?? 0).toLocaleString()} />
+            <InfoTile label="In progress" value={(data.support.inProgress ?? 0).toLocaleString()} />
+            <InfoTile label="All time" value={(data.support.total ?? 0).toLocaleString()} />
+          </div>
+          <p className="muted-copy" style={{ marginTop: 10 }}>Reply to tickets from the Support / Tickets section.</p>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Workspaces" title="Newest Workspaces" />
+          <div style={{ display: "grid" }}>
+            {data.workspaces.newest.map((workspace, index) => (
+              <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", width: 16 }}>{index + 1}</span>
+                <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{workspace.name}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
+                <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 74, textAlign: "right" }}>
+                  {workspace.createdAtMs ? new Date(workspace.createdAtMs).toLocaleDateString() : "—"}
+                </span>
+              </div>
+            ))}
+            {data.workspaces.newest.length === 0 ? <p className="muted-copy">No workspaces yet.</p> : null}
+          </div>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Website" title="Public Site Today" />
+          <div className="settings-mini-grid">
+            <InfoTile label="Page views" value={data.site.today.total.toLocaleString()} />
+            <InfoTile label="Visitors" value={data.site.today.sessions.toLocaleString()} />
+            <InfoTile label="On site now" value={data.site.liveVisitors.toLocaleString()} />
+          </div>
+          <p className="muted-copy" style={{ marginTop: 10 }}>Full traffic analytics live in the Site Statistics section.</p>
+        </section>
+      </div>
     </div>
   );
 }
