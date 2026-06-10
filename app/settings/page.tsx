@@ -5815,37 +5815,6 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
 
       <div className="site-stats-panels">
         <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Workspaces" title="Top Workspaces by Feature Usage (30d)" />
-          {data.topWorkspaces.length === 0 ? (
-            <p className="muted-copy">No activity in the last 30 days.</p>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", minWidth: 420, borderCollapse: "collapse", fontSize: 12.5 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--muted)" }}>
-                    <th style={{ padding: "6px 8px" }}>#</th>
-                    <th style={{ padding: "6px 8px" }}>Workspace</th>
-                    <th style={{ padding: "6px 8px" }}>Plan</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Actions</th>
-                    <th style={{ padding: "6px 8px" }}>Top Feature</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.topWorkspaces.map((workspace, index) => (
-                    <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
-                      <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
-                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
-                      <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{workspace.actions.toLocaleString()}</td>
-                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.topFeature}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-        <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Adoption" title="Feature Adoption Funnel" />
           <div style={{ display: "grid", gap: 8 }}>
             {funnelSteps.map(([label, value], index) => (
@@ -6512,15 +6481,6 @@ function AdminInsightsSection() {
             <InfoTile label="Last support ticket" value={heartbeatText(data.heartbeat.lastSupportAtMs)} />
           </div>
           <p className="muted-copy" style={{ marginTop: 10 }}>Real activity timestamps — if these stop moving, the matching pipeline needs a look.</p>
-        </section>
-        <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Website" title="Public Site Today" />
-          <div className="settings-mini-grid">
-            <InfoTile label="Page views" value={data.site.today.total.toLocaleString()} />
-            <InfoTile label="Visitors" value={data.site.today.sessions.toLocaleString()} />
-            <InfoTile label="On site now" value={data.site.liveVisitors.toLocaleString()} />
-          </div>
-          <p className="muted-copy" style={{ marginTop: 10 }}>Full traffic analytics live in the Site Statistics section.</p>
         </section>
       </div>
     </div>
