@@ -5874,8 +5874,206 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AdminStorageDetail = {
+  generatedAtMs: number;
+  totals: { totalBytes: number; fileCount: number; avgFileBytes: number; uploaded30dBytes: number; uploaded30dCount: number; nearLimitCount: number };
+  typeBytes: Record<string, number>;
+  planBytes: Record<string, number>;
+  topWorkspaces: { id: string; name: string; plan: string; bytes: number; files: number; limitMB: number; percent: number }[];
+  nearLimit: { id: string; name: string; plan: string; bytes: number; limitMB: number; percent: number }[];
+  recentUploads: { fileName: string; companyName: string; sizeBytes: number; type: string; uploadedAtMs: number }[];
+  heatmap: number[][];
+  note: string;
+};
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+const ADMIN_TYPE_COLORS: Record<string, string> = {
+  Images: "#8a5cf6",
+  Documents: "#0a84ff",
+  Videos: "#30d158",
+  Audio: "#ff9f0a",
+  Other: "#9ca3af"
+};
+
+function AdminStorageDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminStorageDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminStorageDetail>(functions, "getAdminStorageDetail");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Storage
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Storage" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const typeSlices = Object.entries(data.typeBytes)
+    .filter(([, value]) => value > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, value]) => ({ label: key, value, color: ADMIN_TYPE_COLORS[key] || "#9ca3af" }));
+
+  const planSlices = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.planBytes[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .filter(slice => slice.value > 0);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Storage" />
+        <p className="muted-copy">Client Files usage across all workspaces. {data.note}</p>
+      </section>
+
+      <div className="site-stats-grid">
+        {adminKpiTile("Total Used", formatBytes(data.totals.totalBytes))}
+        {adminKpiTile("Total Files", data.totals.fileCount.toLocaleString())}
+        {adminKpiTile("Avg. File Size", formatBytes(data.totals.avgFileBytes))}
+        {adminKpiTile("Uploaded (30d)", formatBytes(data.totals.uploaded30dBytes), `${data.totals.uploaded30dCount} files`)}
+        {adminKpiTile("Near Limit (≥80%)", data.totals.nearLimitCount.toLocaleString(), "workspaces")}
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Storage" title="Usage by File Type" />
+          {typeSlices.length ? (
+            <StatsDonut slices={typeSlices.map(slice => ({ ...slice, value: Math.round(slice.value / 1024 / 1024) || 1 }))} centerLabel="MB" />
+          ) : <p className="muted-copy">No files yet.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Storage" title="Usage by Plan" />
+          {planSlices.length ? (
+            <StatsRankedList entries={planSlices.map(slice => [slice.label, Math.round(slice.value / 1024 / 1024)] as [string, number])} />
+          ) : <p className="muted-copy">No files yet.</p>}
+          <p className="muted-copy" style={{ marginTop: 8 }}>Values in MB.</p>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Attention" title="Storage Warnings" />
+          {data.nearLimit.length === 0 ? (
+            <p className="muted-copy">No workspace is above 80% of its storage limit. ✓</p>
+          ) : (
+            <div style={{ display: "grid" }}>
+              {data.nearLimit.map((workspace, index) => (
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: workspace.percent >= 95 ? "#d92d20" : "#ff9f0a" }} />
+                  <span style={{ fontSize: 13, fontWeight: 650, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</span>
+                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{formatBytes(workspace.bytes)} / {workspace.limitMB >= 1024 ? `${workspace.limitMB / 1024} GB` : `${workspace.limitMB} MB`}</span>
+                  <strong style={{ fontSize: 12.5, color: workspace.percent >= 95 ? "#d92d20" : "#b36b00" }}>{workspace.percent}%</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Workspaces" title="Top Workspaces by Storage" />
+        {data.topWorkspaces.length === 0 ? (
+          <p className="muted-copy">No files yet.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 540, borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                  <th style={{ padding: "6px 8px" }}>#</th>
+                  <th style={{ padding: "6px 8px" }}>Workspace</th>
+                  <th style={{ padding: "6px 8px" }}>Plan</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Files</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Used</th>
+                  <th style={{ padding: "6px 8px", minWidth: 140 }}>Of Limit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.topWorkspaces.map((workspace, index) => (
+                  <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.files}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{formatBytes(workspace.bytes)}</td>
+                    <td style={{ padding: "7px 8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1, height: 7, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden" }}>
+                          <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${Math.min(workspace.percent, 100)}%`, background: workspace.percent >= 95 ? "#d92d20" : workspace.percent >= 80 ? "#ff9f0a" : "#0a84ff" }} />
+                        </div>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 42, textAlign: "right" }}>{workspace.percent}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Files" title="Recent Uploads" />
+          {data.recentUploads.length === 0 ? (
+            <p className="muted-copy">No uploads yet.</p>
+          ) : (
+            <div style={{ display: "grid" }}>
+              {data.recentUploads.map((file, index) => (
+                <div key={`${file.fileName}-${file.uploadedAtMs}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: ADMIN_TYPE_COLORS[file.type] || "#9ca3af" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.fileName}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>{file.companyName}</div>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{formatBytes(file.sizeBytes)}</span>
+                  <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 74, textAlign: "right" }}>{new Date(file.uploadedAtMs).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Activity" title="Uploads by Time of Day (30d)" />
+          <ActivityHeatmap heatmap={data.heatmap} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
-  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans" | "features">("overview");
+  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans" | "features" | "storage">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5951,6 +6149,9 @@ function AdminInsightsSection() {
   if (page === "features") {
     return <AdminFeatureUsageDetail onBack={() => setPage("overview")} />;
   }
+  if (page === "storage") {
+    return <AdminStorageDetail onBack={() => setPage("overview")} />;
+  }
 
   return (
     <div className="settings-card-stack">
@@ -5999,6 +6200,14 @@ function AdminInsightsSection() {
             style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
           >
             Feature Usage →
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("storage")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
+          >
+            Storage →
           </button>
         </div>
       </section>
