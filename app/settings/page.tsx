@@ -232,6 +232,18 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [error, setError] = useState("");
+  // Mobile drill-in: show the section list first, then the selected section's
+  // content full-screen with a Back button (like the Mac/iPhone settings).
+  const [isPhone, setIsPhone] = useState(false);
+  const [mobileDetail, setMobileDetail] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 980px)");
+    const onChange = () => setIsPhone(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -328,6 +340,7 @@ export default function SettingsPage() {
 
   function selectSection(sectionId: SettingsSectionId) {
     setActiveSection(sectionId);
+    setMobileDetail(true);
     const url = new URL(window.location.href);
     url.searchParams.set("section", sectionId);
     window.history.replaceState(null, "", url);
@@ -365,7 +378,7 @@ export default function SettingsPage() {
   return (
     <AppShell>
       {loadingSettings ? <LoadingScreen /> : null}
-      <div className="settings-workspace">
+      <div className="settings-workspace" data-mobile-view={isPhone ? (mobileDetail ? "detail" : "list") : "both"}>
         <aside className="settings-sidebar">
           <div className="settings-sidebar-heading">
             <h1>{t("Settings")}</h1>
@@ -396,6 +409,14 @@ export default function SettingsPage() {
         </aside>
 
         <section className="settings-content-pane">
+          <button
+            type="button"
+            className="settings-mobile-back"
+            onClick={() => setMobileDetail(false)}
+          >
+            <span aria-hidden="true">‹</span> {t("Settings")}
+          </button>
+          <div className="settings-mobile-title">{t(selectedSection.title)}</div>
           {error ? (
             <div className="card app-card">
               <CardTitle icon="lock" eyebrow={t("Settings error")} title={t("Could not load workspace settings")} />
