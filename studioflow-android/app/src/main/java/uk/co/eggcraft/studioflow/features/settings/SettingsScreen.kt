@@ -366,6 +366,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
         SettingsSection("siteStats", "Site Statistics", "Public website visitors and traffic (NivaDesk admin).", Icons.Filled.Storage),
+        SettingsSection("adminInsights", "Admin Insights", "Users, plans, revenue and usage across all of NivaDesk (admin).", Icons.Filled.CreditCard),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
         SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel)
@@ -380,6 +381,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "team" -> access?.settingsTeamAccess != false
                 "legal" -> true
                 "siteStats" -> isNivaDeskAdminAccount()
+                "adminInsights" -> isNivaDeskAdminAccount()
                 else -> false
             }
         } else {
@@ -404,6 +406,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "about" -> access?.settingsGeneral != false
                 "legal" -> true
                 "siteStats" -> isNivaDeskAdminAccount()
+                "adminInsights" -> isNivaDeskAdminAccount()
                 else -> false
             }
         }
@@ -537,6 +540,7 @@ private fun SettingsDetailScreen(
                 )
                 "support" -> SupportTicketsDetail(state)
                 "siteStats" -> SiteStatsAdminDetail()
+                "adminInsights" -> AdminInsightsDetail()
                 "plan" -> PlanAccessDetail(
                     state = state,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
@@ -5208,6 +5212,157 @@ private fun SiteStatsAdminDetail() {
                                             progress = { if (max > 0) value.toFloat() / max.toFloat() else 0f },
                                             modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(99.dp))
                                         )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- NivaDesk admin: cross-workspace Admin Insights -----------------------
+
+@Suppress("UNCHECKED_CAST")
+private fun insightsMap(value: Any?): Map<String, Any?> = value as? Map<String, Any?> ?: emptyMap()
+
+@Suppress("UNCHECKED_CAST")
+private fun insightsList(value: Any?): List<Map<String, Any?>> = value as? List<Map<String, Any?>> ?: emptyList()
+
+private fun insightsInt(root: Map<String, Any?>, vararg path: String): Int {
+    var node: Any? = root
+    for (key in path) node = insightsMap(node)[key]
+    return siteStatsInt(node)
+}
+
+@Composable
+private fun AdminInsightsDetail() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+
+    var loading by remember { mutableStateOf(true) }
+    var errorText by remember { mutableStateOf("") }
+    var data by remember { mutableStateOf<Map<String, Any?>>(emptyMap()) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                .getHttpsCallable("getAdminInsights")
+                .call(emptyMap<String, Any>())
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            data = result.data as? Map<String, Any?> ?: emptyMap()
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not load admin insights."
+        }
+        loading = false
+    }
+
+    val planLabels = mapOf("demo" to "Free Demo", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
+    val planColors = mapOf(
+        "demo" to Color(0xFF8A5CF6),
+        "lifetime_lite" to Color(0xFF0A84FF),
+        "pro_monthly" to Color(0xFF30D158),
+        "team_monthly" to Color(0xFFFF9F0A)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(t("Admin Insights"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            t("Live overview across all NivaDesk users and workspaces."),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        when {
+            loading -> CircularProgressIndicator(modifier = Modifier.padding(vertical = 12.dp))
+            errorText.isNotEmpty() -> Text(errorText, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            else -> {
+                val tiles = listOf(
+                    Triple(t("Total Users"), insightsInt(data, "users", "total"), "+${insightsInt(data, "users", "new30d")} · 30d"),
+                    Triple(t("Workspaces"), insightsInt(data, "workspaces", "total"), "+${insightsInt(data, "workspaces", "new30d")} · 30d"),
+                    Triple(t("Active Workspaces"), insightsInt(data, "workspaces", "active30d"), t("order in last 30 days")),
+                    Triple(t("Paid Subscriptions"), insightsInt(data, "workspaces", "paid"), ""),
+                    Triple(t("Est. MRR"), insightsInt(data, "revenue", "mrr"), t("estimate — billing not live")),
+                    Triple(t("On Site Now"), insightsInt(data, "site", "liveVisitors"), "${insightsInt(data, "site", "today", "sessions")} " + t("visitors today"))
+                )
+                tiles.chunked(2).forEach { rowTiles ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowTiles.forEach { (label, value, hint) ->
+                            Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        if (label == t("Est. MRR")) "£$value" else "$value",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    if (hint.isNotEmpty()) {
+                                        Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val sectionsUi: List<Pair<String, List<Triple<String, String, Color?>>>> = listOf(
+                    t("Plan Distribution") to insightsMap(insightsMap(data["workspaces"])["planCounts"]).entries
+                        .filter { siteStatsInt(it.value) > 0 }
+                        .map { Triple(planLabels[it.key] ?: it.key, siteStatsInt(it.value).toString(), planColors[it.key]) },
+                    t("Feature Usage") to listOf(
+                        Triple(t("Orders (total)"), insightsInt(data, "usage", "ordersTotal").toString(), null),
+                        Triple(t("Orders this month"), insightsInt(data, "usage", "ordersThisMonth").toString(), null),
+                        Triple(t("Customers"), insightsInt(data, "usage", "customersTotal").toString(), null),
+                        Triple(t("Notes"), insightsInt(data, "usage", "notesTotal").toString(), null),
+                        Triple(t("Notes with reminders"), insightsInt(data, "usage", "remindersTotal").toString(), null),
+                        Triple(t("Messages"), insightsInt(data, "usage", "messagesTotal").toString(), null),
+                        Triple(t("Workspace tickets"), insightsInt(data, "usage", "workspaceTicketsTotal").toString(), null)
+                    ),
+                    t("ChatGPT App Usage") to listOf(
+                        Triple(t("Connected workspaces"), insightsInt(data, "chatgpt", "connectedWorkspaces").toString(), null),
+                        Triple(t("Active OAuth tokens"), insightsInt(data, "chatgpt", "activeTokens").toString(), null),
+                        Triple(t("Tokens issued (30d)"), insightsInt(data, "chatgpt", "tokens30d").toString(), null)
+                    ),
+                    t("Support Tickets") to listOf(
+                        Triple(t("Open"), insightsInt(data, "support", "open").toString(), Color(0xFFFF9F0A)),
+                        Triple(t("In progress"), insightsInt(data, "support", "inProgress").toString(), Color(0xFF0A84FF)),
+                        Triple(t("All time"), insightsInt(data, "support", "total").toString(), null)
+                    ),
+                    t("Newest Workspaces") to insightsList(insightsMap(data["workspaces"])["newest"]).map { workspace ->
+                        val plan = workspace["plan"] as? String ?: "demo"
+                        Triple(workspace["name"] as? String ?: "?", planLabels[plan] ?: plan, planColors[plan])
+                    },
+                    t("Workspaces Requiring Attention") to insightsList(insightsMap(data["attention"])["inactivePaidWorkspaces"]).map { workspace ->
+                        Triple(workspace["name"] as? String ?: "?", t("no orders in 30 days"), Color(0xFFFF9F0A))
+                    }
+                )
+
+                sectionsUi.forEach { (title, rows) ->
+                    Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            if (rows.isEmpty()) {
+                                Text(
+                                    if (title == t("Workspaces Requiring Attention")) t("All paid workspaces created an order in the last 30 days.") + " ✓" else t("No data yet."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (title == t("Workspaces Requiring Attention")) Color(0xFF30D158) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                rows.forEach { (label, value, dot) ->
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (dot != null) {
+                                            Surface(color = dot, shape = RoundedCornerShape(50), modifier = Modifier.size(8.dp)) {}
+                                        }
+                                        Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                                        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

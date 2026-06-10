@@ -344,6 +344,8 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settingsSupport")
         case "Site Statistics":
             return isNivaDeskSupportAdmin
+        case "Admin Insights":
+            return isNivaDeskSupportAdmin
         case "Legal":
             // Legal/policy links are always available to every signed-in user
             // (App Store / Play Store compliance requirement).
@@ -368,6 +370,7 @@ struct AyarlarView: View {
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
             ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
             ("Site Statistics", t("Site Statistics", lang: seciliDil), "chart.bar.xaxis"),
+            ("Admin Insights", t("Admin Insights", lang: seciliDil), "chart.pie.fill"),
             ("Legal", t("Legal", lang: seciliDil), "doc.text.fill")
         ]
 
@@ -576,6 +579,8 @@ struct AyarlarView: View {
             return t("Direct messages, group chats and attachment permissions.", lang: seciliDil)
         case "Site Statistics":
             return t("Public website visitors and traffic (NivaDesk admin).", lang: seciliDil)
+        case "Admin Insights":
+            return t("Users, plans, revenue and usage across all of NivaDesk (admin).", lang: seciliDil)
         case "Legal":
             return t("Privacy, terms and policy documents.", lang: seciliDil)
         default:
@@ -609,6 +614,7 @@ struct AyarlarView: View {
             else if seciliAyarSekmesi == "Message Settings" { messageWorkspaceSettingsAyari }
             else if seciliAyarSekmesi == "Support" { supportTicketsAyari }
             else if seciliAyarSekmesi == "Site Statistics" { SiteStatsAdminView(seciliDil: seciliDil) }
+            else if seciliAyarSekmesi == "Admin Insights" { AdminInsightsView(seciliDil: seciliDil) }
             else if seciliAyarSekmesi == "Legal" { legalLinksAyari }
         }
     }
@@ -7587,5 +7593,246 @@ struct SiteStatsAdminView: View {
             loadPresence()
         }
         .onReceive(presenceTimer) { _ in loadPresence() }
+    }
+}
+
+// MARK: - NivaDesk admin: cross-workspace Admin Insights
+
+struct AdminInsightsView: View {
+    @Environment(\.colorScheme) var colorScheme
+    let seciliDil: String
+
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
+    }
+
+    private func intAt(_ path: [String]) -> Int {
+        var node: Any? = data
+        for key in path {
+            node = (node as? [String: Any])?[key]
+        }
+        if let number = node as? Int { return number }
+        if let number = node as? Double { return Int(number) }
+        if let number = node as? NSNumber { return number.intValue }
+        return 0
+    }
+
+    private func listAt(_ path: [String]) -> [[String: Any]] {
+        var node: Any? = data
+        for key in path {
+            node = (node as? [String: Any])?[key]
+        }
+        return node as? [[String: Any]] ?? []
+    }
+
+    private func load() {
+        loading = true
+        errorText = ""
+        Functions.functions(region: "europe-west2").httpsCallable("getAdminInsights").call([:]) { result, error in
+            DispatchQueue.main.async {
+                loading = false
+                if let error = error {
+                    errorText = error.localizedDescription
+                    return
+                }
+                data = result?.data as? [String: Any] ?? [:]
+            }
+        }
+    }
+
+    private let planLabels: [String: String] = ["demo": "Free Demo", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
+    private let planColors: [String: Color] = ["demo": .purple, "lifetime_lite": .blue, "pro_monthly": .green, "team_monthly": .orange]
+
+    private func kpi(_ label: String, _ value: String, hint: String = "") -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.gray)
+            Text(value)
+                .font(.system(size: 21, weight: .heavy))
+                .foregroundColor(.primary)
+            if !hint.isEmpty {
+                Text(hint)
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray.opacity(0.75))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(cardBackground)
+        .cornerRadius(12)
+    }
+
+    private func panelCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(cardBackground)
+        .cornerRadius(14)
+    }
+
+    private func valueRow(_ label: String, _ value: String, dotColor: Color? = nil) -> some View {
+        HStack(spacing: 8) {
+            if let dotColor {
+                Circle().fill(dotColor).frame(width: 8, height: 8)
+            }
+            Text(label)
+                .font(.system(size: 12.5, weight: .semibold))
+                .lineLimit(1)
+            Spacer()
+            Text(value)
+                .font(.system(size: 12.5, weight: .bold))
+        }
+        .padding(.vertical, 5)
+    }
+
+    private func timeText(_ ms: Int) -> String {
+        guard ms > 0 else { return "—" }
+        return Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t("Admin Insights", lang: seciliDil))
+                            .font(.system(size: 20, weight: .heavy))
+                        Text(t("Live overview across all NivaDesk users and workspaces.", lang: seciliDil))
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray)
+                    }
+                    Spacer()
+                    Button(action: load) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.gray)
+                }
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText)
+                        .font(.system(size: 12))
+                        .foregroundColor(.red)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
+                        kpi(t("Total Users", lang: seciliDil), "\(intAt(["users", "total"]))", hint: "+\(intAt(["users", "new30d"])) · 30d")
+                        kpi(t("Workspaces", lang: seciliDil), "\(intAt(["workspaces", "total"]))", hint: "+\(intAt(["workspaces", "new30d"])) · 30d")
+                        kpi(t("Active Workspaces", lang: seciliDil), "\(intAt(["workspaces", "active30d"]))", hint: t("order in last 30 days", lang: seciliDil))
+                        kpi(t("Paid Subscriptions", lang: seciliDil), "\(intAt(["workspaces", "paid"]))")
+                        kpi(t("Est. MRR", lang: seciliDil), "£\(intAt(["revenue", "mrr"]))", hint: t("estimate — billing not live", lang: seciliDil))
+                        kpi(t("On Site Now", lang: seciliDil), "\(intAt(["site", "liveVisitors"]))", hint: "\(intAt(["site", "today", "sessions"])) " + t("visitors today", lang: seciliDil))
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        panelCard(t("Plan Distribution", lang: seciliDil)) {
+                            let counts = (data["workspaces"] as? [String: Any])?["planCounts"] as? [String: Any] ?? [:]
+                            let slices = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"].compactMap { key -> SiteStatSlice? in
+                                let value = (counts[key] as? NSNumber)?.intValue ?? (counts[key] as? Int ?? 0)
+                                guard value > 0 else { return nil }
+                                return SiteStatSlice(id: key, label: planLabels[key] ?? key, value: value, color: planColors[key] ?? .gray)
+                            }
+                            if slices.isEmpty {
+                                Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                let total = max(slices.reduce(0) { $0 + $1.value }, 1)
+                                HStack(alignment: .center, spacing: 18) {
+                                    Chart(slices) { slice in
+                                        SectorMark(angle: .value("v", slice.value), innerRadius: .ratio(0.62), angularInset: 1.5)
+                                            .foregroundStyle(slice.color)
+                                            .cornerRadius(3)
+                                    }
+                                    .frame(width: 110, height: 110)
+                                    VStack(alignment: .leading, spacing: 7) {
+                                        ForEach(slices) { slice in
+                                            valueRow(slice.label, "\(slice.value) · \(Int(Double(slice.value) / Double(total) * 100))%", dotColor: slice.color)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        panelCard(t("Feature Usage", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                valueRow(t("Orders (total)", lang: seciliDil), "\(intAt(["usage", "ordersTotal"]))")
+                                valueRow(t("Orders this month", lang: seciliDil), "\(intAt(["usage", "ordersThisMonth"]))")
+                                valueRow(t("Customers", lang: seciliDil), "\(intAt(["usage", "customersTotal"]))")
+                                valueRow(t("Notes", lang: seciliDil), "\(intAt(["usage", "notesTotal"]))")
+                                valueRow(t("Notes with reminders", lang: seciliDil), "\(intAt(["usage", "remindersTotal"]))")
+                                valueRow(t("Messages", lang: seciliDil), "\(intAt(["usage", "messagesTotal"]))")
+                                valueRow(t("Workspace tickets", lang: seciliDil), "\(intAt(["usage", "workspaceTicketsTotal"]))")
+                            }
+                        }
+
+                        panelCard(t("ChatGPT App Usage", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                valueRow(t("Connected workspaces", lang: seciliDil), "\(intAt(["chatgpt", "connectedWorkspaces"]))")
+                                valueRow(t("Active OAuth tokens", lang: seciliDil), "\(intAt(["chatgpt", "activeTokens"]))")
+                                valueRow(t("Tokens issued (30d)", lang: seciliDil), "\(intAt(["chatgpt", "tokens30d"]))")
+                            }
+                        }
+
+                        panelCard(t("Support Tickets", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                valueRow(t("Open", lang: seciliDil), "\(intAt(["support", "open"]))", dotColor: .orange)
+                                valueRow(t("In progress", lang: seciliDil), "\(intAt(["support", "inProgress"]))", dotColor: .blue)
+                                valueRow(t("All time", lang: seciliDil), "\(intAt(["support", "total"]))")
+                            }
+                        }
+
+                        panelCard(t("Newest Workspaces", lang: seciliDil)) {
+                            let newest = listAt(["workspaces", "newest"])
+                            if newest.isEmpty {
+                                Text(t("No workspaces yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(newest.enumerated()), id: \.offset) { _, workspace in
+                                        let plan = workspace["plan"] as? String ?? "demo"
+                                        valueRow(workspace["name"] as? String ?? "?", planLabels[plan] ?? plan, dotColor: planColors[plan] ?? .gray)
+                                    }
+                                }
+                            }
+                        }
+
+                        panelCard(t("Workspaces Requiring Attention", lang: seciliDil)) {
+                            let attention = listAt(["attention", "inactivePaidWorkspaces"])
+                            if attention.isEmpty {
+                                Text(t("All paid workspaces created an order in the last 30 days.", lang: seciliDil) + " ✓")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.green)
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(attention.enumerated()), id: \.offset) { _, workspace in
+                                        let plan = workspace["plan"] as? String ?? ""
+                                        valueRow(workspace["name"] as? String ?? "?", t("no orders in 30 days", lang: seciliDil), dotColor: .orange)
+                                    }
+                                }
+                            }
+                        }
+
+                        panelCard(t("Service Heartbeat", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                valueRow(t("Last order created", lang: seciliDil), timeText(intAt(["heartbeat", "lastOrderAtMs"])))
+                                valueRow(t("Last site visit", lang: seciliDil), timeText(intAt(["heartbeat", "lastSiteBeaconAtMs"])))
+                                valueRow(t("Last support ticket", lang: seciliDil), timeText(intAt(["heartbeat", "lastSupportAtMs"])))
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear { load() }
     }
 }

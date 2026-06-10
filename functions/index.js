@@ -17323,6 +17323,9 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     ordersThisMonth,
     customersTotal,
     notesTotal,
+    remindersTotal,
+    messagesTotal,
+    workspaceTicketsTotal,
     supportOpen,
     supportInProgress,
     supportTotal
@@ -17331,19 +17334,68 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     countOf(db.collection("siparisler").where("createdAt", ">=", monthStartTs)),
     countOf(db.collection("musteriler")),
     countOf(db.collection("notes")),
+    countOf(db.collection("notes").where("reminderDate", ">", admin.firestore.Timestamp.fromMillis(0))),
+    countOf(db.collection("messages")),
+    countOf(db.collection("workspaceTickets")),
     countOf(db.collection("supportTickets").where("status", "==", "open")),
     countOf(db.collection("supportTickets").where("status", "==", "inProgress")),
     countOf(db.collection("supportTickets"))
   ]);
 
+  // --- Active workspaces (any order created in the last 30 days) and paid
+  // workspaces with no recent activity (attention list).
+  let activeWorkspaces30d = 0;
+  let inactivePaidWorkspaces = [];
+  try {
+    const recentOrdersSnap = await db.collection("siparisler")
+      .where("createdAt", ">=", days30Ago)
+      .select("companyId")
+      .limit(5000)
+      .get();
+    const activeIds = new Set();
+    recentOrdersSnap.docs.forEach((doc) => {
+      const id = String(doc.data()?.companyId || "");
+      if (id) activeIds.add(id);
+    });
+    activeWorkspaces30d = activeIds.size;
+    inactivePaidWorkspaces = newestWorkspaces
+      .filter((workspace) => workspace.plan !== "demo" && !activeIds.has(workspace.id))
+      .slice(0, 8)
+      .map(({ id, name, plan }) => ({ id, name, plan }));
+  } catch (error) {
+    console.warn("getAdminInsights active workspaces failed:", error?.message || error);
+  }
+
+  // --- Service heartbeat: timestamps of the most recent real activity.
+  const latestTimestamp = async (query, field) => {
+    try {
+      const snap = await query.limit(1).get();
+      const value = snap.docs[0]?.data()?.[field];
+      return value && typeof value.toMillis === "function" ? value.toMillis() : null;
+    } catch (error) {
+      console.warn("getAdminInsights heartbeat failed:", error?.message || error);
+      return null;
+    }
+  };
+  const [lastOrderAtMs, lastSupportAtMs, lastSiteBeaconAtMs] = await Promise.all([
+    latestTimestamp(db.collection("siparisler").orderBy("createdAt", "desc"), "createdAt"),
+    latestTimestamp(db.collection("supportTickets").orderBy("createdAt", "desc"), "createdAt"),
+    db.collection("siteStats").doc(siteStatsDateKey()).get().then((snap) => {
+      const value = snap.exists ? snap.data()?.updatedAt : null;
+      return value && typeof value.toMillis === "function" ? value.toMillis() : null;
+    }).catch(() => null)
+  ]);
+
   // --- ChatGPT app: distinct workspaces with a non-revoked OAuth token.
   let chatgptConnectedWorkspaces = 0;
   let chatgptActiveTokens = 0;
+  let chatgptTokens30d = 0;
   try {
     const tokensSnap = await db.collection("chatgptOAuthTokens").limit(2000).get();
     const connected = new Set();
     tokensSnap.docs.forEach((doc) => {
       const data = doc.data() || {};
+      if (Number(data.createdAtMs || 0) >= now - 30 * 86400000) chatgptTokens30d += 1;
       if (Number(data.revokedAtMs || 0) > 0) return;
       chatgptActiveTokens += 1;
       if (data.companyId) connected.add(String(data.companyId));
@@ -17380,6 +17432,7 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     workspaces: {
       total: companiesSnap.size,
       new30d: newWorkspaces30d,
+      active30d: activeWorkspaces30d,
       paid: paidWorkspaces,
       planCounts,
       newest: newestWorkspaces.slice(0, 6).map(({ id, name, plan, createdAtMs }) => ({ id, name, plan, createdAtMs }))
@@ -17395,7 +17448,10 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
       ordersTotal,
       ordersThisMonth,
       customersTotal,
-      notesTotal
+      notesTotal,
+      remindersTotal,
+      messagesTotal,
+      workspaceTicketsTotal
     },
     support: {
       open: supportOpen,
@@ -17404,7 +17460,16 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     },
     chatgpt: {
       connectedWorkspaces: chatgptConnectedWorkspaces,
-      activeTokens: chatgptActiveTokens
+      activeTokens: chatgptActiveTokens,
+      tokens30d: chatgptTokens30d
+    },
+    attention: {
+      inactivePaidWorkspaces
+    },
+    heartbeat: {
+      lastOrderAtMs,
+      lastSupportAtMs,
+      lastSiteBeaconAtMs
     },
     site: {
       today: siteToday,

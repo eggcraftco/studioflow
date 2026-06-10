@@ -4991,14 +4991,25 @@ type AdminInsights = {
   workspaces: {
     total: number;
     new30d: number;
+    active30d: number;
     paid: number;
     planCounts: Record<string, number>;
     newest: { id: string; name: string; plan: string; createdAtMs: number }[];
   };
   revenue: { estimated: boolean; currency: string; mrr: number; arr: number; note: string };
-  usage: { ordersTotal: number | null; ordersThisMonth: number | null; customersTotal: number | null; notesTotal: number | null };
+  usage: {
+    ordersTotal: number | null;
+    ordersThisMonth: number | null;
+    customersTotal: number | null;
+    notesTotal: number | null;
+    remindersTotal: number | null;
+    messagesTotal: number | null;
+    workspaceTicketsTotal: number | null;
+  };
   support: { open: number | null; inProgress: number | null; total: number | null };
-  chatgpt: { connectedWorkspaces: number; activeTokens: number };
+  chatgpt: { connectedWorkspaces: number; activeTokens: number; tokens30d: number };
+  attention: { inactivePaidWorkspaces: { id: string; name: string; plan: string }[] };
+  heartbeat: { lastOrderAtMs: number | null; lastSupportAtMs: number | null; lastSiteBeaconAtMs: number | null };
   site: { today: { total: number; sessions: number }; liveVisitors: number };
 };
 
@@ -5079,8 +5090,13 @@ function AdminInsightsSection() {
     ["Orders (total)", data.usage.ordersTotal ?? 0],
     ["Orders this month", data.usage.ordersThisMonth ?? 0],
     ["Customers", data.usage.customersTotal ?? 0],
-    ["Notes", data.usage.notesTotal ?? 0]
+    ["Notes", data.usage.notesTotal ?? 0],
+    ["Notes with reminders", data.usage.remindersTotal ?? 0],
+    ["Messages", data.usage.messagesTotal ?? 0],
+    ["Workspace tickets", data.usage.workspaceTicketsTotal ?? 0]
   ];
+
+  const heartbeatText = (ms: number | null) => (ms ? new Date(ms).toLocaleString() : "—");
 
   return (
     <div className="settings-card-stack">
@@ -5094,6 +5110,7 @@ function AdminInsightsSection() {
       <div className="site-stats-grid">
         {adminKpiTile("Total Users", data.users.total.toLocaleString(), `+${data.users.new30d} in last 30 days`)}
         {adminKpiTile("Workspaces", data.workspaces.total.toLocaleString(), `+${data.workspaces.new30d} in last 30 days`)}
+        {adminKpiTile("Active Workspaces", data.workspaces.active30d.toLocaleString(), "created an order in last 30 days")}
         {adminKpiTile("Paid Subscriptions", data.workspaces.paid.toLocaleString())}
         {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
         {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
@@ -5114,6 +5131,7 @@ function AdminInsightsSection() {
           <div className="settings-mini-grid">
             <InfoTile label="Connected workspaces" value={data.chatgpt.connectedWorkspaces.toLocaleString()} />
             <InfoTile label="Active OAuth tokens" value={data.chatgpt.activeTokens.toLocaleString()} />
+            <InfoTile label="Tokens issued (30d)" value={data.chatgpt.tokens30d.toLocaleString()} />
           </div>
         </section>
         <section className="card app-card">
@@ -5140,6 +5158,33 @@ function AdminInsightsSection() {
             ))}
             {data.workspaces.newest.length === 0 ? <p className="muted-copy">No workspaces yet.</p> : null}
           </div>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Attention" title="Workspaces Requiring Attention" />
+          {data.attention.inactivePaidWorkspaces.length === 0 ? (
+            <p className="muted-copy">All paid workspaces created an order in the last 30 days. ✓</p>
+          ) : (
+            <div style={{ display: "grid" }}>
+              {data.attention.inactivePaidWorkspaces.map((workspace, index) => (
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: "#ff9f0a" }} />
+                  <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{workspace.name}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>no orders in 30 days</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="muted-copy" style={{ marginTop: 10 }}>Payment failures, trials and storage limits will appear here once live billing and storage metering are connected.</p>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="System" title="Service Heartbeat" />
+          <div className="settings-mini-grid">
+            <InfoTile label="Last order created" value={heartbeatText(data.heartbeat.lastOrderAtMs)} />
+            <InfoTile label="Last site visit" value={heartbeatText(data.heartbeat.lastSiteBeaconAtMs)} />
+            <InfoTile label="Last support ticket" value={heartbeatText(data.heartbeat.lastSupportAtMs)} />
+          </div>
+          <p className="muted-copy" style={{ marginTop: 10 }}>Real activity timestamps — if these stop moving, the matching pipeline needs a look.</p>
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Website" title="Public Site Today" />
