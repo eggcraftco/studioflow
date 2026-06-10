@@ -193,6 +193,7 @@ export const PUBLIC_SITE_EN = {
   "feature.orders.bullet1": "Customer, design and reference fields",
   "feature.orders.bullet2": "Production and delivery status",
   "feature.orders.bullet3": "Finance visibility by plan",
+  "feature.orders.bullet4": "Lock, move, resize and colour every card",
   "feature.orders.metric": "Order blocks",
   "feature.orders.artifact": "Status, client and finance cards",
 
@@ -202,6 +203,7 @@ export const PUBLIC_SITE_EN = {
   "feature.files.bullet1": "PDF and image-friendly workflow",
   "feature.files.bullet2": "Preview and download in the portal",
   "feature.files.bullet3": "Cloud upload for Pro and Team",
+  "feature.files.bullet4": "Offline cache with visible sync status",
   "feature.files.metric": "Asset shelf",
   "feature.files.artifact": "Images, PDFs and previews",
 
@@ -229,6 +231,7 @@ export const PUBLIC_SITE_EN = {
   "feature.team.bullet1": "Owner and admin workflows",
   "feature.team.bullet2": "Join request review",
   "feature.team.bullet3": "Team-only role management",
+  "feature.team.bullet4": "Team messages and AI quick replies",
   "feature.team.metric": "Role layer",
   "feature.team.artifact": "Owner, admin and member access",
 
@@ -238,6 +241,7 @@ export const PUBLIC_SITE_EN = {
   "feature.dashboard.bullet1": "Month and year totals",
   "feature.dashboard.bullet2": "Order and customer counts",
   "feature.dashboard.bullet3": "Shared workspace context",
+  "feature.dashboard.bullet4": "Plan-aware finance fields on every order",
   "feature.dashboard.metric": "Studio pulse",
   "feature.dashboard.artifact": "Month, year and workspace totals",
 
@@ -918,6 +922,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "feature.orders.bullet1": "Müşteri, tasarım ve referans alanları",
   "feature.orders.bullet2": "Üretim ve teslimat durumu",
   "feature.orders.bullet3": "Plana göre finans görünürlüğü",
+  "feature.orders.bullet4": "Her kartı kilitle, taşı, boyutlandır ve renklendir",
   "feature.orders.metric": "Sipariş blokları",
   "feature.orders.artifact": "Durum, müşteri ve finans kartları",
   "feature.files.title": "Müşteri Dosyaları",
@@ -926,6 +931,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "feature.files.bullet1": "PDF ve görsel dostu iş akışı",
   "feature.files.bullet2": "Portalda önizleme ve indirme",
   "feature.files.bullet3": "Pro ve Team için bulut yükleme",
+  "feature.files.bullet4": "Görünür sync durumuyla offline önbellek",
   "feature.files.metric": "Dosya rafı",
   "feature.files.artifact": "Görseller, PDF'ler ve önizlemeler",
   "feature.timeline.title": "Zaman Çizelgesi ve Teslimat",
@@ -950,6 +956,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "feature.team.bullet1": "Owner ve admin akışları",
   "feature.team.bullet2": "Katılım isteği inceleme",
   "feature.team.bullet3": "Sadece Team'e özel rol yönetimi",
+  "feature.team.bullet4": "Ekip mesajları ve AI hızlı yanıtlar",
   "feature.team.metric": "Rol katmanı",
   "feature.team.artifact": "Owner, admin ve üye erişimi",
   "feature.dashboard.title": "Dashboard",
@@ -958,6 +965,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "feature.dashboard.bullet1": "Ay ve yıl toplamları",
   "feature.dashboard.bullet2": "Sipariş ve müşteri sayıları",
   "feature.dashboard.bullet3": "Paylaşılan workspace bağlamı",
+  "feature.dashboard.bullet4": "Her siparişte plana duyarlı finans alanları",
   "feature.dashboard.metric": "Stüdyo nabzı",
   "feature.dashboard.artifact": "Ay, yıl ve workspace toplamları",
   "feature.chatgpt.title": "ChatGPT App",
