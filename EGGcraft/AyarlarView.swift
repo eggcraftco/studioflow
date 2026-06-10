@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import UniformTypeIdentifiers
 import FirebaseFirestore
 import FirebaseFunctions
@@ -6927,7 +6928,29 @@ private extension View {
 
 struct SettingsTextField: View { let label: String; @Binding var text: String; var body: some View { HStack(spacing: 10) { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 150, alignment: .leading); TextField("", text: $text).textFieldStyle(.plain).font(.system(size: 13)).foregroundColor(.primary).padding(.vertical, 10).padding(.horizontal, 12).background(Color.primary.opacity(0.05)).cornerRadius(6) } } }
 
-// MARK: - NivaDesk admin: public site statistics
+
+// MARK: - NivaDesk admin: public site statistics dashboard
+
+private struct SiteDayStat: Identifiable {
+    let id: String
+    let date: Date
+    let total: Int
+    let sessions: Int
+    let engagedSessions: Int
+    let durationSeconds: Int
+    let pages: [String: Int]
+    let devices: [String: Int]
+    let languages: [String: Int]
+    let referrers: [String: Int]
+    let countries: [String: Int]
+}
+
+private struct SiteStatSlice: Identifiable {
+    let id: String
+    let label: String
+    let value: Int
+    let color: Color
+}
 
 struct SiteStatsAdminView: View {
     @Environment(\.colorScheme) var colorScheme
@@ -6936,7 +6959,13 @@ struct SiteStatsAdminView: View {
     @State private var range = 30
     @State private var loading = true
     @State private var errorText = ""
-    @State private var days: [[String: Any]] = []
+    @State private var allDays: [SiteDayStat] = []
+    @State private var lastLoadedAt: Date? = nil
+
+    // MARK: data
+
+    private var currentDays: [SiteDayStat] { Array(allDays.suffix(range)) }
+    private var previousDays: [SiteDayStat] { Array(allDays.prefix(max(allDays.count - range, 0))) }
 
     private func intValue(_ value: Any?) -> Int {
         if let number = value as? Int { return number }
@@ -6945,25 +6974,15 @@ struct SiteStatsAdminView: View {
         return 0
     }
 
-    private func sumField(_ source: [[String: Any]], _ field: String) -> Int {
-        source.reduce(0) { $0 + intValue($1[field]) }
-    }
-
-    private func topEntries(_ field: String, limit: Int = 6) -> [(key: String, value: Int)] {
-        var merged: [String: Int] = [:]
-        for day in days {
-            guard let map = day[field] as? [String: Any] else { continue }
-            for (key, value) in map {
-                merged[key, default: 0] += intValue(value)
-            }
-        }
-        return merged.sorted { $0.value > $1.value }.prefix(limit).map { (key: $0.key, value: $0.value) }
+    private func mapValue(_ value: Any?) -> [String: Int] {
+        guard let raw = value as? [String: Any] else { return [:] }
+        return raw.mapValues { intValue($0) }
     }
 
     private func load() {
         loading = true
         errorText = ""
-        Functions.functions(region: "europe-west2").httpsCallable("getSiteStats").call(["days": range]) { result, error in
+        Functions.functions(region: "europe-west2").httpsCallable("getSiteStats").call(["days": min(range * 2, 180)]) { result, error in
             DispatchQueue.main.async {
                 loading = false
                 if let error = error {
@@ -6971,112 +6990,412 @@ struct SiteStatsAdminView: View {
                     return
                 }
                 let data = result?.data as? [String: Any]
-                days = data?["days"] as? [[String: Any]] ?? []
+                let rawDays = data?["days"] as? [[String: Any]] ?? []
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd"
+                formatter.timeZone = TimeZone(identifier: "Europe/London")
+                allDays = rawDays.map { day in
+                    let dateKey = day["date"] as? String ?? ""
+                    return SiteDayStat(
+                        id: dateKey,
+                        date: formatter.date(from: dateKey) ?? Date(),
+                        total: intValue(day["total"]),
+                        sessions: intValue(day["sessions"]),
+                        engagedSessions: intValue(day["engagedSessions"]),
+                        durationSeconds: intValue(day["durationSeconds"]),
+                        pages: mapValue(day["pages"]),
+                        devices: mapValue(day["devices"]),
+                        languages: mapValue(day["languages"]),
+                        referrers: mapValue(day["referrers"]),
+                        countries: mapValue(day["countries"])
+                    )
+                }
+                lastLoadedAt = Date()
             }
         }
     }
 
-    private var todayViews: Int { intValue(days.last?["total"]) }
-    private var todaySessions: Int { intValue(days.last?["sessions"]) }
-    private var last7: [[String: Any]] { Array(days.suffix(7)) }
+    // MARK: aggregates
 
-    private func statTile(_ label: String, _ value: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.gray)
-            Text("\(value)")
-                .font(.system(size: 20, weight: .heavy))
-                .foregroundColor(.primary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.primary.opacity(0.04))
-        .cornerRadius(10)
+    private func sum(_ source: [SiteDayStat], _ field: (SiteDayStat) -> Int) -> Int {
+        source.reduce(0) { $0 + field($1) }
     }
 
-    private func breakdownCard(_ title: String, _ entries: [(key: String, value: Int)]) -> some View {
-        SettingsCard(title: title, iconName: "chart.bar.fill") {
+    private func merged(_ source: [SiteDayStat], _ pick: (SiteDayStat) -> [String: Int]) -> [String: Int] {
+        var out: [String: Int] = [:]
+        for day in source {
+            for (key, value) in pick(day) { out[key, default: 0] += value }
+        }
+        return out
+    }
+
+    private func topEntries(_ pick: (SiteDayStat) -> [String: Int], limit: Int = 6) -> [(key: String, value: Int)] {
+        merged(currentDays, pick).sorted { $0.value > $1.value }.prefix(limit).map { (key: $0.key, value: $0.value) }
+    }
+
+    private func deltaPercent(current: Double, previous: Double) -> Double? {
+        guard previous > 0 else { return nil }
+        return (current - previous) / previous * 100
+    }
+
+    private func avgDuration(_ source: [SiteDayStat]) -> Double {
+        let sessions = sum(source, { $0.sessions })
+        guard sessions > 0 else { return 0 }
+        return Double(sum(source, { $0.durationSeconds })) / Double(sessions)
+    }
+
+    private func bounceRate(_ source: [SiteDayStat]) -> Double {
+        let sessions = sum(source, { $0.sessions })
+        guard sessions > 0 else { return 0 }
+        let engaged = min(sum(source, { $0.engagedSessions }), sessions)
+        return Double(sessions - engaged) / Double(sessions) * 100
+    }
+
+    private func durationText(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private func sourceSlices() -> [SiteStatSlice] {
+        let referrers = merged(currentDays, { $0.referrers })
+        var direct = 0
+        var organic = 0
+        var social = 0
+        var referral = 0
+        let searchHosts = ["google", "bing", "duckduckgo", "yandex", "baidu", "ecosia"]
+        let socialHosts = ["facebook", "instagram", "twitter", "x.com", "t.co", "linkedin", "youtube", "tiktok", "reddit", "pinterest"]
+        for (host, value) in referrers {
+            if host == "direct" { direct += value }
+            else if searchHosts.contains(where: { host.contains($0) }) { organic += value }
+            else if socialHosts.contains(where: { host.contains($0) }) { social += value }
+            else { referral += value }
+        }
+        return [
+            SiteStatSlice(id: "direct", label: t("Direct", lang: seciliDil), value: direct, color: .blue),
+            SiteStatSlice(id: "organic", label: t("Organic Search", lang: seciliDil), value: organic, color: .teal),
+            SiteStatSlice(id: "social", label: t("Social Media", lang: seciliDil), value: social, color: .green),
+            SiteStatSlice(id: "referral", label: t("Referral", lang: seciliDil), value: referral, color: .orange)
+        ].filter { $0.value > 0 }
+    }
+
+    private func deviceSlices() -> [SiteStatSlice] {
+        let devices = merged(currentDays, { $0.devices })
+        return [
+            SiteStatSlice(id: "desktop", label: t("Desktop", lang: seciliDil), value: devices["desktop"] ?? 0, color: .blue),
+            SiteStatSlice(id: "mobile", label: t("Mobile", lang: seciliDil), value: devices["mobile"] ?? 0, color: .purple),
+            SiteStatSlice(id: "tablet", label: t("Tablet", lang: seciliDil), value: devices["tablet"] ?? 0, color: .teal)
+        ].filter { $0.value > 0 }
+    }
+
+    private func flagEmoji(_ countryCode: String) -> String {
+        let base: UInt32 = 127397
+        var flag = ""
+        for scalar in countryCode.uppercased().unicodeScalars {
+            if let emojiScalar = UnicodeScalar(base + scalar.value) {
+                flag.unicodeScalars.append(emojiScalar)
+            }
+        }
+        return flag.isEmpty ? "🌍" : flag
+    }
+
+    // MARK: subviews
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
+    }
+
+    private func deltaBadge(_ delta: Double?, invertGood: Bool = false) -> some View {
+        Group {
+            if let delta {
+                let isGood = invertGood ? delta <= 0 : delta >= 0
+                HStack(spacing: 2) {
+                    Image(systemName: delta >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                        .font(.system(size: 8, weight: .bold))
+                    Text(String(format: "%.1f%%", abs(delta)))
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(isGood ? .green : .red)
+            }
+        }
+    }
+
+    private func sparkline(_ values: [Double], color: Color) -> some View {
+        Chart(Array(values.enumerated()), id: \.offset) { item in
+            LineMark(x: .value("i", item.offset), y: .value("v", item.element))
+                .foregroundStyle(color)
+                .interpolationMethod(.catmullRom)
+                .lineStyle(StrokeStyle(lineWidth: 1.6))
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .frame(height: 30)
+    }
+
+    private func statCard(icon: String, iconColor: Color, title: String, value: String, delta: Double?, invertGood: Bool, spark: [Double], sparkColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(iconColor)
+                    .frame(width: 32, height: 32)
+                    .background(iconColor.opacity(0.13))
+                    .cornerRadius(9)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value)
+                    .font(.system(size: 24, weight: .heavy))
+                    .foregroundColor(.primary)
+                deltaBadge(delta, invertGood: invertGood)
+            }
+            Text(t("vs previous period", lang: seciliDil))
+                .font(.system(size: 10))
+                .foregroundColor(.gray.opacity(0.7))
+            sparkline(spark, color: sparkColor)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .cornerRadius(14)
+    }
+
+    private func panel<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.primary)
+            content()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(cardBackground)
+        .cornerRadius(14)
+    }
+
+    private func donutWithLegend(_ slices: [SiteStatSlice], centerTitle: String) -> some View {
+        let totalValue = max(slices.reduce(0) { $0 + $1.value }, 1)
+        return HStack(alignment: .center, spacing: 18) {
+            Chart(slices) { slice in
+                SectorMark(angle: .value("v", slice.value), innerRadius: .ratio(0.62), angularInset: 1.5)
+                    .foregroundStyle(slice.color)
+                    .cornerRadius(3)
+            }
+            .frame(width: 120, height: 120)
+            .overlay(
+                VStack(spacing: 1) {
+                    Text(centerTitle)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.gray)
+                    Text("\(totalValue)")
+                        .font(.system(size: 15, weight: .heavy))
+                }
+            )
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(slices) { slice in
+                    HStack(spacing: 8) {
+                        Circle().fill(slice.color).frame(width: 8, height: 8)
+                        Text(slice.label)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(String(format: "%%%.1f", Double(slice.value) / Double(totalValue) * 100))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.gray)
+                        Text("\(slice.value)")
+                            .font(.system(size: 12, weight: .bold))
+                            .frame(minWidth: 44, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private func rankedList(_ entries: [(key: String, value: Int)], flagMode: Bool = false) -> some View {
+        let totalValue = max(entries.reduce(0) { $0 + $1.value }, 1)
+        return VStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.key) { index, entry in
+                HStack(spacing: 10) {
+                    if flagMode {
+                        Text(flagEmoji(entry.key))
+                        Text(Locale.current.localizedString(forRegionCode: entry.key) ?? entry.key)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                    } else {
+                        Text("\(index + 1)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.gray)
+                            .frame(width: 16)
+                        Text(entry.key)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text(String(format: "%%%.1f", Double(entry.value) / Double(totalValue) * 100))
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                    Text("\(entry.value)")
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(minWidth: 44, alignment: .trailing)
+                }
+                .padding(.vertical, 8)
+                if index < entries.count - 1 { Divider().opacity(0.35) }
+            }
             if entries.isEmpty {
                 Text(t("No data yet.", lang: seciliDil))
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(entries, id: \.key) { entry in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(entry.key)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(entry.value)")
-                                    .font(.system(size: 12, weight: .bold))
-                            }
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(Color.primary.opacity(0.07))
-                                    Capsule()
-                                        .fill(Color.blue)
-                                        .frame(width: max(6, geo.size.width * CGFloat(entry.value) / CGFloat(max(entries.first?.value ?? 1, 1))))
-                                }
-                            }
-                            .frame(height: 6)
-                        }
-                    }
-                }
             }
         }
     }
 
+    // MARK: body
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                SettingsCard(title: t("Public website statistics", lang: seciliDil), iconName: "chart.bar.xaxis") {
-                    VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t("Overview", lang: seciliDil))
+                            .font(.system(size: 20, weight: .heavy))
                         Text(t("Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.", lang: seciliDil))
-                            .font(.system(size: 12))
+                            .font(.system(size: 11))
                             .foregroundColor(.gray)
+                    }
+                    Spacer()
+                    Picker("", selection: $range) {
+                        Text("7d").tag(7)
+                        Text("30d").tag(30)
+                        Text("90d").tag(90)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 200)
+                    .onChange(of: range) { _, _ in load() }
+                }
 
-                        Picker("", selection: $range) {
-                            Text("7d").tag(7)
-                            Text("30d").tag(30)
-                            Text("90d").tag(90)
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText)
+                        .font(.system(size: 12))
+                        .foregroundColor(.red)
+                } else {
+                    let curSessions = sum(currentDays, { $0.sessions })
+                    let prevSessions = sum(previousDays, { $0.sessions })
+                    let curViews = sum(currentDays, { $0.total })
+                    let prevViews = sum(previousDays, { $0.total })
+                    let curDuration = avgDuration(currentDays)
+                    let prevDuration = avgDuration(previousDays)
+                    let curBounce = bounceRate(currentDays)
+                    let prevBounce = bounceRate(previousDays)
+
+                    let tileColumns = [GridItem(.adaptive(minimum: 200), spacing: 12)]
+                    LazyVGrid(columns: tileColumns, spacing: 12) {
+                        statCard(icon: "person.2.fill", iconColor: .purple,
+                                 title: t("Total Visitors", lang: seciliDil),
+                                 value: "\(curSessions)",
+                                 delta: deltaPercent(current: Double(curSessions), previous: Double(prevSessions)),
+                                 invertGood: false,
+                                 spark: currentDays.map { Double($0.sessions) }, sparkColor: .purple)
+                        statCard(icon: "eye.fill", iconColor: .blue,
+                                 title: t("Page Views", lang: seciliDil),
+                                 value: "\(curViews)",
+                                 delta: deltaPercent(current: Double(curViews), previous: Double(prevViews)),
+                                 invertGood: false,
+                                 spark: currentDays.map { Double($0.total) }, sparkColor: .blue)
+                        statCard(icon: "clock.fill", iconColor: .green,
+                                 title: t("Avg. Session Duration", lang: seciliDil),
+                                 value: durationText(curDuration),
+                                 delta: deltaPercent(current: curDuration, previous: prevDuration),
+                                 invertGood: false,
+                                 spark: currentDays.map { Double($0.sessions) > 0 ? Double($0.durationSeconds) / Double($0.sessions) : 0 }, sparkColor: .green)
+                        statCard(icon: "arrow.up.right", iconColor: .orange,
+                                 title: t("Bounce Rate", lang: seciliDil),
+                                 value: String(format: "%%%.1f", curBounce),
+                                 delta: deltaPercent(current: curBounce, previous: prevBounce),
+                                 invertGood: true,
+                                 spark: currentDays.map { day in
+                                     let s = day.sessions
+                                     guard s > 0 else { return 0 }
+                                     return Double(s - min(day.engagedSessions, s)) / Double(s) * 100
+                                 }, sparkColor: .orange)
+                    }
+
+                    panel(t("Visitor Trend", lang: seciliDil)) {
+                        Chart(currentDays) { day in
+                            AreaMark(x: .value("Date", day.date), y: .value("Visitors", day.sessions))
+                                .foregroundStyle(LinearGradient(colors: [Color.purple.opacity(0.28), Color.purple.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                                .interpolationMethod(.catmullRom)
+                            LineMark(x: .value("Date", day.date), y: .value("Visitors", day.sessions))
+                                .foregroundStyle(Color.purple)
+                                .interpolationMethod(.catmullRom)
+                                .lineStyle(StrokeStyle(lineWidth: 2))
+                            PointMark(x: .value("Date", day.date), y: .value("Visitors", day.sessions))
+                                .foregroundStyle(Color.purple)
+                                .symbolSize(18)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 240)
-                        .onChange(of: range) { _, _ in load() }
+                        .frame(height: 220)
+                    }
 
-                        if loading {
-                            ProgressView().padding(.vertical, 8)
-                        } else if !errorText.isEmpty {
-                            Text(errorText)
-                                .font(.system(size: 12))
-                                .foregroundColor(.red)
-                        } else {
-                            VStack(spacing: 10) {
-                                HStack(spacing: 10) {
-                                    statTile(t("Today · page views", lang: seciliDil), todayViews)
-                                    statTile(t("Today · visitors", lang: seciliDil), todaySessions)
-                                }
-                                HStack(spacing: 10) {
-                                    statTile(t("Last 7 days · views", lang: seciliDil), sumField(last7, "total"))
-                                    statTile(t("Last 7 days · visitors", lang: seciliDil), sumField(last7, "sessions"))
-                                }
-                                HStack(spacing: 10) {
-                                    statTile("\(range)d · " + t("views", lang: seciliDil), sumField(days, "total"))
-                                    statTile("\(range)d · " + t("visitors", lang: seciliDil), sumField(days, "sessions"))
-                                }
+                    HStack(alignment: .top, spacing: 14) {
+                        panel(t("Top Traffic Sources", lang: seciliDil)) {
+                            let slices = sourceSlices()
+                            if slices.isEmpty {
+                                Text(t("No data yet.", lang: seciliDil))
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.gray)
+                            } else {
+                                donutWithLegend(slices, centerTitle: t("Total", lang: seciliDil))
+                            }
+                        }
+                        panel(t("Devices", lang: seciliDil)) {
+                            let slices = deviceSlices()
+                            if slices.isEmpty {
+                                Text(t("No data yet.", lang: seciliDil))
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.gray)
+                            } else {
+                                donutWithLegend(slices, centerTitle: t("Total", lang: seciliDil))
                             }
                         }
                     }
-                }
 
-                if !loading && errorText.isEmpty {
-                    breakdownCard(t("Top pages", lang: seciliDil), topEntries("pages"))
-                    breakdownCard(t("Devices", lang: seciliDil), topEntries("devices", limit: 3))
-                    breakdownCard(t("Visitor languages", lang: seciliDil), topEntries("languages"))
-                    breakdownCard(t("Traffic sources", lang: seciliDil), topEntries("referrers"))
+                    HStack(alignment: .top, spacing: 14) {
+                        panel(t("Visitors by Country", lang: seciliDil)) {
+                            rankedList(topEntries({ $0.countries }, limit: 6), flagMode: true)
+                        }
+                        panel(t("Top Pages", lang: seciliDil)) {
+                            rankedList(topEntries({ $0.pages }, limit: 6))
+                        }
+                    }
+
+                    HStack(alignment: .top, spacing: 14) {
+                        panel(t("Visitor languages", lang: seciliDil)) {
+                            rankedList(topEntries({ $0.languages }, limit: 6))
+                        }
+                        panel(t("Traffic sources", lang: seciliDil)) {
+                            rankedList(topEntries({ $0.referrers }, limit: 6))
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                        if let lastLoadedAt {
+                            Text(t("Updated", lang: seciliDil) + " " + lastLoadedAt.formatted(date: .omitted, time: .shortened))
+                                .font(.system(size: 11))
+                                .foregroundColor(.gray)
+                        }
+                        Button(action: load) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 4)
                 }
             }
             .padding(.bottom, 24)

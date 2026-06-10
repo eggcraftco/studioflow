@@ -17006,10 +17006,27 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res)
     }
 
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+
+    // Duration beacons (sent on page hide) only add watch-time seconds.
+    if (body.kind === "duration") {
+      const seconds = Math.min(Math.max(Math.round(Number(body.seconds) || 0), 0), 1800);
+      if (seconds > 0) {
+        await admin.firestore().collection("siteStats").doc(siteStatsDateKey()).set({
+          durationSeconds: admin.firestore.FieldValue.increment(seconds),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     const pageKey = siteStatsFieldKey(body.path, "unknown");
     const deviceKey = ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop";
     const languageKey = siteStatsFieldKey(String(body.language || "").slice(0, 8), "unknown", 8);
     const newSession = body.newSession === true;
+    const secondView = body.secondView === true;
+    const countryRaw = String(body.country || "").trim().toUpperCase();
+    const countryKey = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : "";
 
     let referrerKey = "";
     if (newSession) {
@@ -17037,6 +17054,12 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res)
     if (newSession) {
       update.sessions = inc;
       if (referrerKey) update.referrers = { [referrerKey]: inc };
+      if (countryKey) update.countries = { [countryKey]: inc };
+    }
+    // A session's second page view marks it "engaged" (non-bounce). The client
+    // sends this flag exactly once per session.
+    if (secondView) {
+      update.engagedSessions = inc;
     }
 
     await admin.firestore().collection("siteStats").doc(siteStatsDateKey()).set(update, { merge: true });
@@ -17053,7 +17076,9 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
     throw new HttpsError("permission-denied", "Site statistics are restricted to NivaDesk admins.");
   }
 
-  const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 90);
+  // Clients may request up to 180 days (e.g. 90-day range plus the previous
+  // 90 days for trend comparison).
+  const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 180);
   const dateKeys = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
     dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
@@ -17068,10 +17093,13 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
       date: dateKeys[index],
       total: Number(data.total || 0),
       sessions: Number(data.sessions || 0),
+      engagedSessions: Number(data.engagedSessions || 0),
+      durationSeconds: Number(data.durationSeconds || 0),
       pages: data.pages || {},
       devices: data.devices || {},
       languages: data.languages || {},
-      referrers: data.referrers || {}
+      referrers: data.referrers || {},
+      countries: data.countries || {}
     };
   });
 
