@@ -12652,12 +12652,30 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   color: var(--public-accent);
 }
 
+.hero-chips-frame {
+  margin-top: 26px;
+  max-width: 520px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--public-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 10px 30px rgba(23, 25, 35, 0.05);
+}
+
+.hero-chips-label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--public-muted);
+}
+
 .hero-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 26px;
-  max-width: 520px;
 }
 
 .hero-chip {

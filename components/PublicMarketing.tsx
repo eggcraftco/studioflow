@@ -910,15 +910,18 @@ const HERO_CHIPS: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
 function HeroFeatureChips() {
   const { t } = usePublicSiteLanguage();
   return (
-    <div className="hero-chips">
-      {HERO_CHIPS.map(chip => (
-        <span className="hero-chip" key={chip.key}>
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            {chip.icon}
-          </svg>
-          {t(chip.key)}
-        </span>
-      ))}
+    <div className="hero-chips-frame">
+      <span className="hero-chips-label">{t("heroChips.title")}</span>
+      <div className="hero-chips">
+        {HERO_CHIPS.map(chip => (
+          <span className="hero-chip" key={chip.key}>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {chip.icon}
+            </svg>
+            {t(chip.key)}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
