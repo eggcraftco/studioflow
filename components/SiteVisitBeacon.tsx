@@ -6,6 +6,21 @@ import { usePathname } from "next/navigation";
 const BEACON_URL = "https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit";
 const SESSION_FLAG = "nv_visit_session";
 const VIEW_COUNT_KEY = "nv_visit_views";
+const SESSION_ID_KEY = "nv_visit_id";
+const HEARTBEAT_MS = 30000;
+
+function sessionId(): string {
+  try {
+    let id = window.sessionStorage.getItem(SESSION_ID_KEY);
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).toLowerCase();
+      window.sessionStorage.setItem(SESSION_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
 
 function sendBeaconPayload(payload: Record<string, unknown>) {
   const body = JSON.stringify(payload);
@@ -63,9 +78,26 @@ export function SiteVisitBeacon() {
       country: newSession ? browserCountry() : "",
       newSession,
       secondView,
+      sessionId: sessionId(),
       referrer: newSession ? document.referrer || "" : ""
     });
   }, [pathname]);
+
+  // Presence heartbeat: while the tab is visible, ping every 30s so the
+  // "on site now" panel stays accurate. Stops when the tab is hidden.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.location.hostname.endsWith("nivadesk.app")) return;
+
+    const ping = () => {
+      if (document.visibilityState !== "visible") return;
+      const id = sessionId();
+      if (id) sendBeaconPayload({ kind: "heartbeat", sessionId: id, path: window.location.pathname });
+    };
+
+    const interval = window.setInterval(ping, HEARTBEAT_MS);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
