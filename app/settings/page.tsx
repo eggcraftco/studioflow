@@ -5531,8 +5531,166 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AdminPlansDetail = {
+  generatedAtMs: number;
+  totalWorkspaces: number;
+  stats: Record<string, { workspaces: number; newThisMonth: number; active30d: number; orders30d: number }>;
+  comparison: { plan: string; label: string; orders: string; customers: string; storage: string; seats: string; monthly: number; yearly: number }[];
+  note: string;
+};
+
+const ADMIN_PLAN_ORDER = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"];
+
+function AdminPlansDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminPlansDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminPlansDetail>(functions, "getAdminPlansDetail");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Plans
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Plans" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const total = Math.max(data.totalWorkspaces, 1);
+  const planSlices = ADMIN_PLAN_ORDER
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.stats[key]?.workspaces || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .filter(slice => slice.value > 0);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Plans" />
+        <p className="muted-copy">Analyze plan performance, features and limits. {data.note}</p>
+      </section>
+
+      <div className="site-stats-grid">
+        {ADMIN_PLAN_ORDER.map(key => {
+          const bucket = data.stats[key] || { workspaces: 0, newThisMonth: 0, active30d: 0, orders30d: 0 };
+          return (
+            <section key={key} className="card app-card" style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: ADMIN_PLAN_COLORS[key] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[key] || key}</span>
+              <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{bucket.workspaces.toLocaleString()}</strong>
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>{((bucket.workspaces / total) * 100).toFixed(1)}% of total · {bucket.active30d} active 30d · +{bucket.newThisMonth} this month</span>
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Plans" title="Plan Distribution" />
+          {planSlices.length ? <StatsDonut slices={planSlices} centerLabel="Workspaces" /> : <p className="muted-copy">No data yet.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Usage" title="Orders Created by Plan (30d)" />
+          <StatsRankedList entries={ADMIN_PLAN_ORDER.map(key => [ADMIN_PLAN_LABELS[key] || key, data.stats[key]?.orders30d || 0] as [string, number]).filter(([, value]) => value > 0)} />
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Plans" title="Plan Comparison" />
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                <th style={{ padding: "6px 8px" }}>Feature / Limit</th>
+                {data.comparison.map(plan => (
+                  <th key={plan.plan} style={{ padding: "6px 8px", color: ADMIN_PLAN_COLORS[plan.plan] || "var(--text)" }}>{plan.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ["Orders", (plan: AdminPlansDetail["comparison"][number]) => plan.orders],
+                ["Customers", plan => plan.customers],
+                ["Storage", plan => plan.storage],
+                ["Seats", plan => plan.seats],
+                ["Price (monthly)", plan => (plan.monthly ? `£${plan.monthly}` : "£0")],
+                ["Price (yearly)", plan => (plan.yearly ? `£${plan.yearly}` : "£0")]
+              ] as [string, (plan: AdminPlansDetail["comparison"][number]) => string][]).map(([label, pick]) => (
+                <tr key={label} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                  <td style={{ padding: "7px 8px", fontWeight: 700 }}>{label}</td>
+                  {data.comparison.map(plan => (
+                    <td key={plan.plan} style={{ padding: "7px 8px" }}>{pick(plan)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="muted-copy" style={{ marginTop: 8 }}>Values come from the live entitlement constants used by the apps.</p>
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Plans" title="Plan Performance" />
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 480, borderCollapse: "collapse", fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                <th style={{ padding: "6px 8px" }}>Plan</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>Workspaces</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>Active 30d</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>New This Month</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>Orders 30d</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ADMIN_PLAN_ORDER.map(key => {
+                const bucket = data.stats[key] || { workspaces: 0, newThisMonth: 0, active30d: 0, orders30d: 0 };
+                return (
+                  <tr key={key} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[key] || "var(--text)" }}>{ADMIN_PLAN_LABELS[key] || key}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{bucket.workspaces}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{bucket.active30d}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{bucket.newThisMonth}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{bucket.orders30d}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="muted-copy" style={{ marginTop: 8 }}>Conversion, upgrade and downgrade columns will activate once live billing events are tracked.</p>
+      </section>
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
-  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue">("overview");
+  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5602,6 +5760,9 @@ function AdminInsightsSection() {
   if (page === "revenue") {
     return <AdminRevenueDetail onBack={() => setPage("overview")} />;
   }
+  if (page === "plans") {
+    return <AdminPlansDetail onBack={() => setPage("overview")} />;
+  }
 
   return (
     <div className="settings-card-stack">
@@ -5634,6 +5795,14 @@ function AdminInsightsSection() {
             style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
           >
             Revenue →
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("plans")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
+          >
+            Plans →
           </button>
         </div>
       </section>
