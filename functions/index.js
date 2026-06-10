@@ -17820,3 +17820,79 @@ exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds:
     topPaying: workspaces.slice(0, 8)
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights detail: Plans
+// ---------------------------------------------------------------------------
+
+exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const now = Date.now();
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthStartMs = monthStart.getTime();
+
+  const companiesSnap = await db.collection("companies").limit(3000).get();
+  const planOf = new Map();
+  const stats = {};
+  const ensure = (plan) => {
+    if (!stats[plan]) stats[plan] = { workspaces: 0, newThisMonth: 0, active30d: 0, orders30d: 0 };
+    return stats[plan];
+  };
+  ["demo", "lifetime_lite", "pro_monthly", "team_monthly"].forEach(ensure);
+
+  companiesSnap.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    planOf.set(doc.id, plan);
+    const bucket = ensure(plan);
+    bucket.workspaces += 1;
+    const createdMs = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
+    if (createdMs >= monthStartMs) bucket.newThisMonth += 1;
+  });
+
+  try {
+    const recentSnap = await db.collection("siparisler")
+      .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(now - 30 * 86400000))
+      .select("companyId")
+      .limit(8000)
+      .get();
+    const activeIds = new Map();
+    recentSnap.docs.forEach((doc) => {
+      const id = String(doc.data()?.companyId || "");
+      if (!id) return;
+      activeIds.set(id, (activeIds.get(id) || 0) + 1);
+    });
+    activeIds.forEach((orderCount, id) => {
+      const plan = planOf.get(id);
+      if (!plan) return;
+      stats[plan].active30d += 1;
+      stats[plan].orders30d += orderCount;
+    });
+  } catch (error) {
+    console.warn("plansDetail recent orders failed:", error?.message || error);
+  }
+
+  // Static comparison straight from the entitlement constants used by the app.
+  const comparison = [
+    { plan: "demo", label: "Free Demo", orders: "5", customers: "3", storage: "50 MB", seats: "1", monthly: 0, yearly: 0 },
+    { plan: "lifetime_lite", label: "Lite", orders: "Unlimited", customers: "Unlimited", storage: "250 MB", seats: "1", monthly: 9, yearly: 90 },
+    { plan: "pro_monthly", label: "Pro", orders: "Unlimited", customers: "Unlimited", storage: "10 GB", seats: "1", monthly: 19, yearly: 190 },
+    { plan: "team_monthly", label: "Team", orders: "Unlimited", customers: "Unlimited", storage: "50 GB", seats: "5 (+5 add-on)", monthly: 49, yearly: 490 }
+  ];
+
+  return {
+    ok: true,
+    generatedAtMs: now,
+    totalWorkspaces: companiesSnap.size,
+    stats,
+    comparison,
+    note: "Upgrade/downgrade trends and plan-change history require live billing events; they are not tracked yet."
+  };
+});
