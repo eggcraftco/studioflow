@@ -1501,6 +1501,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <span />
                 <span />
                 <span />
+                {notifUnreadCount > 0 ? (
+                  <span className="toolbar-menu-badge" aria-hidden="true">
+                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
+                  </span>
+                ) : null}
               </button>
             </div>
           </header>
