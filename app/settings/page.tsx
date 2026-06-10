@@ -5383,8 +5383,156 @@ function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AdminRevenueDetail = {
+  generatedAtMs: number;
+  note: string;
+  revenue: {
+    currency: string;
+    mrr: number;
+    arr: number;
+    arpu: number;
+    baseMrr: number;
+    seatsMrr: number;
+    storageMrr: number;
+    mrrByPlan: Record<string, number>;
+    paidTotal: number;
+    seatCount: number;
+    storageAddonCount: number;
+  };
+  topPaying: { id: string; name: string; ownerEmail: string; plan: string; baseGbp: number; seatGbp: number; storageGbp: number; totalGbp: number }[];
+};
+
+function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminRevenueDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminRevenueDetail>(functions, "getAdminRevenueDetail");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Revenue
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Revenue" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const planSlices = ["lifetime_lite", "pro_monthly", "team_monthly"]
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.revenue.mrrByPlan[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .filter(slice => slice.value > 0);
+
+  const breakdownRows: [string, number][] = [
+    ["Subscription plans (base)", data.revenue.baseMrr],
+    [`Extra team seats (${data.revenue.seatCount} × £5)`, data.revenue.seatsMrr],
+    [`Storage add-ons (${data.revenue.storageAddonCount})`, data.revenue.storageMrr]
+  ];
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Revenue" />
+        <p className="muted-copy">Track estimated financial performance across NivaDesk. {data.note}</p>
+      </section>
+
+      <div className="site-stats-grid">
+        {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "plans + seats + storage")}
+        {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`)}
+        {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}
+        {adminKpiTile("Paid Workspaces", data.revenue.paidTotal.toLocaleString())}
+        {adminKpiTile("Extra Seats", data.revenue.seatCount.toLocaleString(), `£${data.revenue.seatsMrr}/mo`)}
+        {adminKpiTile("Storage Add-ons", data.revenue.storageAddonCount.toLocaleString(), `£${data.revenue.storageMrr}/mo`)}
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Revenue" title="Est. Revenue by Plan" />
+          {planSlices.length ? <StatsDonut slices={planSlices} centerLabel="£/month" /> : <p className="muted-copy">No paid subscriptions yet.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Revenue" title="Revenue Breakdown" />
+          <StatsRankedList entries={breakdownRows.filter(([, value]) => value > 0).map(([label, value]) => [label, value])} />
+          <p className="muted-copy" style={{ marginTop: 8 }}>Monthly GBP at list prices.</p>
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Billing" title="Not Connected Yet" />
+          <p className="muted-copy" style={{ margin: 0 }}>
+            Revenue over time, billing sources (Stripe / Apple / Google), currencies, countries, transactions and refunds
+            require live billing. These cards will activate here automatically once payments are enabled.
+          </p>
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Workspaces" title="Top Paying Workspaces (Est.)" />
+        {data.topPaying.length === 0 ? (
+          <p className="muted-copy">No paid workspaces yet.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                  <th style={{ padding: "6px 8px" }}>#</th>
+                  <th style={{ padding: "6px 8px" }}>Workspace</th>
+                  <th style={{ padding: "6px 8px" }}>Owner</th>
+                  <th style={{ padding: "6px 8px" }}>Plan</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Base</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Seats</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Storage</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Est. £/mo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.topPaying.map((workspace, index) => (
+                  <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>£{workspace.baseGbp}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.seatGbp ? `£${workspace.seatGbp}` : "—"}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.storageGbp ? `£${workspace.storageGbp}` : "—"}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 800 }}>£{workspace.totalGbp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
-  const [page, setPage] = useState<"overview" | "users" | "subscriptions">("overview");
+  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5451,6 +5599,9 @@ function AdminInsightsSection() {
   if (page === "subscriptions") {
     return <AdminSubscriptionsDetail onBack={() => setPage("overview")} />;
   }
+  if (page === "revenue") {
+    return <AdminRevenueDetail onBack={() => setPage("overview")} />;
+  }
 
   return (
     <div className="settings-card-stack">
@@ -5475,6 +5626,14 @@ function AdminInsightsSection() {
             style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
           >
             Subscriptions →
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("revenue")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
+          >
+            Revenue →
           </button>
         </div>
       </section>
