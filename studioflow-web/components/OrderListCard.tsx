@@ -411,9 +411,11 @@ export function OrderListCard({
     </div>
   );
 
+  const cancelledClass = order.status.trim().toLowerCase().includes("cancel") ? " is-cancelled" : "";
+
   if (mobileHref) {
     return (
-      <Link href={mobileHref} className={selected ? "order-list-card selected" : "order-list-card"}>
+      <Link href={mobileHref} className={(selected ? "order-list-card selected" : "order-list-card") + cancelledClass}>
         {content}
       </Link>
     );

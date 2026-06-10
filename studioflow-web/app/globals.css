@@ -2775,6 +2775,11 @@ th {
   display: none;
 }
 
+/* Shown only on phones (≤640px) where the bell icon is hidden. */
+.toolbar-menu-badge {
+  display: none;
+}
+
 .mobile-nav-scrim {
   display: none;
 }
@@ -10644,9 +10649,9 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   }
 
   .native-add-order {
-    min-width: 112px;
+    min-width: 0;
     min-height: 36px;
-    padding: 8px 11px;
+    padding: 8px 12px;
     border-radius: 13px;
     background: #31c85b;
     font-size: 13px;
@@ -10654,14 +10659,47 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
     white-space: nowrap;
   }
 
+  /* iPhone parity: header shows "+ Add Project" with its label, no bell icon
+     (unread count moves to the hamburger badge). */
+  .native-add-order-label {
+    display: inline;
+  }
+
+  .native-add-order-plus {
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .notif-bell-btn {
+    display: none;
+  }
+
   .toolbar-menu-button {
     display: inline-grid;
+    position: relative;
     place-items: center;
     gap: 4px;
     padding: 9px;
     border: 1px solid var(--border);
     color: var(--text);
     cursor: pointer;
+  }
+
+  .toolbar-menu-badge {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
   }
 
   .toolbar-menu-button span {
@@ -10804,6 +10842,11 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
     box-shadow: none;
   }
 
+  /* iPhone parity: cancelled orders render dimmed in the list. */
+  .orders-mobile-list .order-list-card.is-cancelled {
+    opacity: 0.55;
+  }
+
   .orders-mobile-list .order-list-card-content {
     grid-template-columns: 70px minmax(0, 1fr);
     gap: 17px;
@@ -10816,7 +10859,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   }
 
   .orders-mobile-list .order-list-card-body {
-    grid-template-columns: minmax(0, 1fr) 112px;
+    grid-template-columns: minmax(0, 1fr) 102px;
     gap: 8px;
     align-items: stretch;
   }
@@ -10839,15 +10882,15 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 
   .orders-mobile-list .order-list-title-row > strong,
   .orders-mobile-list .order-customer-name-link {
-    max-width: calc(100% - 64px);
+    max-width: calc(100% - 58px);
   }
 
   .orders-mobile-list .order-delivery-badge {
-    min-width: 56px;
-    min-height: 28px;
+    min-width: 50px;
+    min-height: 26px;
     padding: 4px 7px;
     border-radius: 9px;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .orders-mobile-list .order-delivery-icon {
