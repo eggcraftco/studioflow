@@ -50,6 +50,7 @@ export type WorkspaceContext = {
   storageAddonKey: string;
   currentMemberDisplayName: string;
   currentMemberPhotoURL: string;
+  quickReplyMenuEnabled: boolean;
   entitlements: PlanEntitlements;
 };
 
@@ -763,8 +764,14 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     currentMemberPhotoURL: Object.prototype.hasOwnProperty.call(memberData, "photoURL")
       ? stringValue(memberData.photoURL, "")
       : "",
+    quickReplyMenuEnabled: booleanValue(companyData.quickReplyMenuEnabled, true),
     entitlements
   };
+}
+
+// Owner toggle: show/hide the AI Replies (Quick Reply) item in the main menu.
+export async function setWorkspaceQuickReplyMenuEnabled(companyId: string, enabled: boolean): Promise<void> {
+  await setDoc(doc(db, "companies", companyId), { quickReplyMenuEnabled: enabled }, { merge: true });
 }
 
 export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: string): Promise<JoinedWorkspaceOption[]> {

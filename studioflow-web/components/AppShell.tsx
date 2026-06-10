@@ -79,7 +79,7 @@ const NAV_ITEMS: Array<
   { href: "/files", label: "Files", icon: "files" },
   { href: "/messages", label: "Messages", icon: "messages" },
   { href: "/notes", label: "Notes", icon: "notes" },
-  { href: "/quick-reply", label: "Quick Reply", icon: "reply" },
+  { href: "/quick-reply", label: "AI Replies", icon: "reply" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -1304,6 +1304,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   "href" in item &&
                   item.href === "/messages" &&
                   workspace?.entitlements.features.messages !== true
+                )
+                  return null;
+                if (
+                  "href" in item &&
+                  item.href === "/quick-reply" &&
+                  workspace?.quickReplyMenuEnabled === false
                 )
                   return null;
                 if ("href" in item) {

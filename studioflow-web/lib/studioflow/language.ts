@@ -112,6 +112,19 @@ const WEB_TRANSLATIONS: TranslationTable = {
     "العربية (Arabic)": "رد سريع",
     "हिन्दी (Hindi)": "त्वरित उत्तर"
   },
+  "AI Replies": {
+    Türkçe: "AI Yanıtları",
+    Deutsch: "KI-Antworten",
+    Français: "Réponses IA",
+    Italiano: "Risposte IA",
+    "Español (Spanish)": "Respuestas IA",
+    Português: "Respostas IA",
+    "Русский (Russian)": "ИИ-ответы",
+    "日本語 (Japanese)": "AI返信",
+    "中文 (Chinese)": "AI 回复",
+    "العربية (Arabic)": "ردود الذكاء الاصطناعي",
+    "हिन्दी (Hindi)": "AI उत्तर"
+  },
   "Add Order": {
     Türkçe: "Sipariş Ekle",
     Deutsch: "Bestellung hinzufügen",
