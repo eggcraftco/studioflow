@@ -232,6 +232,42 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     tone: "sky",
     metricKey: "feature.tracking.metric",
     artifactKey: "feature.tracking.artifact"
+  },
+  {
+    titleKey: "feature.notes.title",
+    eyebrowKey: "feature.notes.eyebrow",
+    bodyKey: "feature.notes.body",
+    bulletKeys: ["feature.notes.bullet1", "feature.notes.bullet2", "feature.notes.bullet3"],
+    tone: "gold",
+    metricKey: "feature.notes.metric",
+    artifactKey: "feature.notes.artifact"
+  },
+  {
+    titleKey: "feature.worktime.title",
+    eyebrowKey: "feature.worktime.eyebrow",
+    bodyKey: "feature.worktime.body",
+    bulletKeys: ["feature.worktime.bullet1", "feature.worktime.bullet2", "feature.worktime.bullet3"],
+    tone: "rose",
+    metricKey: "feature.worktime.metric",
+    artifactKey: "feature.worktime.artifact"
+  },
+  {
+    titleKey: "feature.materials.title",
+    eyebrowKey: "feature.materials.eyebrow",
+    bodyKey: "feature.materials.body",
+    bulletKeys: ["feature.materials.bullet1", "feature.materials.bullet2", "feature.materials.bullet3"],
+    tone: "clay",
+    metricKey: "feature.materials.metric",
+    artifactKey: "feature.materials.artifact"
+  },
+  {
+    titleKey: "feature.history.title",
+    eyebrowKey: "feature.history.eyebrow",
+    bodyKey: "feature.history.body",
+    bulletKeys: ["feature.history.bullet1", "feature.history.bullet2", "feature.history.bullet3"],
+    tone: "graphite",
+    metricKey: "feature.history.metric",
+    artifactKey: "feature.history.artifact"
   }
 ];
 
