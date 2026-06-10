@@ -16983,15 +16983,56 @@ html[dir="rtl"] .login-public-shell {
 
 /* Right dark-green demo card */
 .gpt-demo-card {
+  position: relative;
   border-radius: 26px;
-  padding: 22px;
-  background: linear-gradient(150deg, #3a8170 0%, #46957f 52%, #58a98c 100%);
-  box-shadow: 0 26px 70px rgba(47, 111, 109, 0.26);
+  padding: 5px;
+  background: linear-gradient(
+    115deg,
+    #4f8cff 0%,
+    #8a5cf6 22%,
+    #d65bd6 42%,
+    #ff7a6b 60%,
+    #ffb14e 76%,
+    #8a5cf6 100%
+  );
+  background-size: 300% 300%;
+  animation: gpt-intelligence-flow 8s ease-in-out infinite;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
+    0 18px 50px rgba(138, 92, 246, 0.28),
+    0 8px 26px rgba(255, 122, 107, 0.18);
+  isolation: isolate;
+}
+
+.gpt-demo-card::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  z-index: -1;
+  border-radius: 36px;
+  background: inherit;
+  background-size: inherit;
+  animation: inherit;
+  filter: blur(26px);
+  opacity: 0.55;
+}
+
+@keyframes gpt-intelligence-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gpt-demo-card,
+  .gpt-demo-card::before {
+    animation: none;
+  }
 }
 
 .gpt-demo-inner {
   background: #fff;
-  border-radius: 16px;
+  border-radius: 21px;
   padding: 22px;
   height: 100%;
 }
