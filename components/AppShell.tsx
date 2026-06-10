@@ -66,7 +66,10 @@ type NavIconName =
   | "messages"
   | "notes"
   | "reply"
-  | "settings";
+  | "settings"
+  | "activity"
+  | "account"
+  | "signout";
 
 const NAV_ITEMS: Array<
   | { href: string; label: string; icon: NavIconName }
@@ -349,6 +352,19 @@ function NavIcon({ name }: { name: NavIconName }) {
     settings: [
       "M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z",
       "M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.9 3.2-.2-.1a1.7 1.7 0 0 0-2 .1 1.7 1.7 0 0 0-.8 1.7V22h-5.8v-.1a1.7 1.7 0 0 0-.8-1.7 1.7 1.7 0 0 0-2-.1l-.2.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1.1H3v-3.8h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.9-3.2.2.1a1.7 1.7 0 0 0 2-.1 1.7 1.7 0 0 0 .8-1.7V2h5.8v.1a1.7 1.7 0 0 0 .8 1.7 1.7 1.7 0 0 0 2 .1l.2-.1L19.8 7l-.1.1A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.5 1.1h.1v3.8h-.1a1.7 1.7 0 0 0-1.5 1.1Z",
+    ],
+    activity: [
+      "M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9Z",
+      "M10.3 21a2 2 0 0 0 3.4 0",
+    ],
+    account: [
+      "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+      "M4 21a8 8 0 0 1 16 0",
+    ],
+    signout: [
+      "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",
+      "M16 17l5-5-5-5",
+      "M21 12H9",
     ],
   };
 
@@ -1360,6 +1376,45 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </Link>
                 );
               })}
+              <button
+                type="button"
+                className="nav-pill native-nav-pill native-nav-extra"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  setNotifDrawerOpen(true);
+                }}
+              >
+                <NavIcon name="activity" />
+                {t("Activity")}
+                {notifUnreadCount > 0 && (
+                  <span className="nav-pill-badge">
+                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                className="nav-pill native-nav-pill native-nav-extra"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  router.push("/settings?section=account");
+                }}
+              >
+                <NavIcon name="account" />
+                {t("Account")}
+              </button>
+              <span className="native-nav-divider native-nav-extra" aria-hidden="true" />
+              <button
+                type="button"
+                className="nav-pill native-nav-pill native-nav-signout native-nav-extra"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  void handleToolbarSignOut();
+                }}
+              >
+                <NavIcon name="signout" />
+                {t("Sign Out")}
+              </button>
             </nav>
 
             <div className="toolbar-account native-toolbar-actions">
