@@ -17061,7 +17061,9 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
 
     const pageKey = siteStatsFieldKey(body.path, "unknown");
     const deviceKey = ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop";
-    const languageKey = siteStatsFieldKey(String(body.language || "").slice(0, 8), "unknown", 8);
+    // Browsers report either "tr" or "tr-TR" — keep only the base language so
+    // the same language never splits into two rows.
+    const languageKey = siteStatsFieldKey(String(body.language || "").split("-")[0].slice(0, 3), "unknown", 3);
     const newSession = body.newSession === true;
     const secondView = body.secondView === true;
     // Country comes from IP geolocation (the IP itself is never stored); the
@@ -17160,6 +17162,17 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
   const refs = dateKeys.map((key) => admin.firestore().collection("siteStats").doc(key));
   const snaps = await admin.firestore().getAll(...refs);
 
+  // Older docs stored full locale tags ("tr-tr"); fold them into the base
+  // language ("tr") so the same language never shows as two rows.
+  const normalizeLanguages = (languages = {}) => {
+    const merged = {};
+    for (const [key, value] of Object.entries(languages)) {
+      const base = String(key).split(/[-_]/)[0].slice(0, 3) || "unknown";
+      merged[base] = (merged[base] || 0) + Number(value || 0);
+    }
+    return merged;
+  };
+
   const daysOut = snaps.map((snap, index) => {
     const data = snap.exists ? snap.data() : {};
     return {
@@ -17170,7 +17183,7 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
       durationSeconds: Number(data.durationSeconds || 0),
       pages: data.pages || {},
       devices: data.devices || {},
-      languages: data.languages || {},
+      languages: normalizeLanguages(data.languages),
       referrers: data.referrers || {},
       countries: data.countries || {}
     };
