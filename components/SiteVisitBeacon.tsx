@@ -5,10 +5,35 @@ import { usePathname } from "next/navigation";
 
 const BEACON_URL = "https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit";
 const SESSION_FLAG = "nv_visit_session";
+const VIEW_COUNT_KEY = "nv_visit_views";
+
+function sendBeaconPayload(payload: Record<string, unknown>) {
+  const body = JSON.stringify(payload);
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(BEACON_URL, new Blob([body], { type: "application/json" }));
+    } else {
+      fetch(BEACON_URL, { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true });
+    }
+  } catch {
+    // Stats are best-effort; never break the page.
+  }
+}
+
+function browserCountry(): string {
+  try {
+    const locale = new Intl.Locale(navigator.language || "");
+    return (locale.region || "").toUpperCase();
+  } catch {
+    return "";
+  }
+}
 
 // Anonymous aggregate page-view beacon for the public marketing site.
-// Sends no cookies, no identifiers — only path, device class, UI language and
-// (once per session) the referrer host. Skipped entirely outside production.
+// Sends no cookies, no identifiers — only path, device class, UI language,
+// browser-locale country and (once per session) the referrer host. A second
+// page view marks the session "engaged" (for bounce rate), and time-on-page
+// seconds are reported when the tab is hidden. Skipped outside production.
 export function SiteVisitBeacon() {
   const pathname = usePathname();
 
@@ -17,34 +42,51 @@ export function SiteVisitBeacon() {
     if (!window.location.hostname.endsWith("nivadesk.app")) return;
 
     let newSession = false;
+    let secondView = false;
     try {
       if (!window.sessionStorage.getItem(SESSION_FLAG)) {
         window.sessionStorage.setItem(SESSION_FLAG, "1");
         newSession = true;
       }
+      const views = Number(window.sessionStorage.getItem(VIEW_COUNT_KEY) || "0") + 1;
+      window.sessionStorage.setItem(VIEW_COUNT_KEY, String(views));
+      secondView = views === 2;
     } catch {
       // sessionStorage unavailable — count as page view only.
     }
 
     const width = window.innerWidth;
-    const payload = JSON.stringify({
+    sendBeaconPayload({
       path: pathname || "/",
       device: width <= 640 ? "mobile" : width <= 1024 ? "tablet" : "desktop",
       language: (navigator.language || "").slice(0, 8),
+      country: newSession ? browserCountry() : "",
       newSession,
+      secondView,
       referrer: newSession ? document.referrer || "" : ""
     });
-
-    try {
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(BEACON_URL, new Blob([payload], { type: "application/json" }));
-      } else {
-        fetch(BEACON_URL, { method: "POST", body: payload, headers: { "Content-Type": "application/json" }, keepalive: true });
-      }
-    } catch {
-      // Stats are best-effort; never break the page.
-    }
   }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.location.hostname.endsWith("nivadesk.app")) return;
+
+    let shownAt = Date.now();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        const seconds = Math.round((Date.now() - shownAt) / 1000);
+        if (seconds >= 2) {
+          sendBeaconPayload({ kind: "duration", seconds });
+        }
+      } else {
+        shownAt = Date.now();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
 
   return null;
 }
