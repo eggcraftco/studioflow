@@ -9832,9 +9832,13 @@ struct SiparisDetayView: View {
         var fields = siparis.customFields ?? [:]
         var live: [String: String] = liveTrackingData
 
+        // These keys must also CLEAR when the server returns them empty, otherwise a
+        // stale "Checking 17TRACK support…" or an old error stays on a healthy card.
+        let alwaysOverwriteKeys: Set<String> = ["supportMessage", "supportMessageKey", "error", "trackingSupportStatus"]
+
         for key in trackingStorageKeys {
             let value = stringFromTrackingValue(dict[key])
-            if !value.isEmpty {
+            if !value.isEmpty || (alwaysOverwriteKeys.contains(key) && dict[key] != nil) {
                 fields[trackingCustomKey(key)] = value
                 live[key] = value
             }

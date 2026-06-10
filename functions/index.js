@@ -11385,6 +11385,18 @@ function isAlreadyRegistered(error) {
   return error?.code === -18019901 || String(error?.message || "").toLowerCase().includes("already registered");
 }
 
+// Pattern-based carrier guesses for numbers 17TRACK cannot auto-detect.
+// Order matters: the first registration 17TRACK accepts wins.
+function carrierCandidatesFromNumber(trackingNumber) {
+  const value = cleanTrackingNumber(trackingNumber).toUpperCase();
+  const candidates = [];
+  if (/^1Z[0-9A-Z]{16}$/.test(value)) candidates.push(100002);            // UPS
+  if (/^[A-Z]{2}\d{9}GB$/.test(value)) candidates.push(11031);            // Royal Mail
+  if (/^\d{10}$/.test(value)) candidates.push(100001);                    // DHL Express waybill
+  if (/^\d{12}$/.test(value) || /^\d{15}$/.test(value)) candidates.push(100003); // FedEx
+  return candidates;
+}
+
 function isCarrierCannotBeDetected(error) {
   const message = String(error?.message || "").toLowerCase();
   return error?.code === -18019903 || message.includes("carrier can not be detected") || message.includes("carrier cannot be detected");
@@ -11460,7 +11472,9 @@ function extractCarrierName(track, item, fallback = {}) {
 }
 
 function normalize17TrackPayload(raw, fallback = {}) {
-  const item = Array.isArray(raw) ? raw[0] : raw || {};
+  // raw can be an empty array (e.g. building a "waiting" result before 17TRACK has
+  // any data) — raw[0] would be undefined, so guard the whole expression.
+  const item = (Array.isArray(raw) ? raw[0] : raw) || {};
   const track = item.track_info || item.track || item.info || item || {};
 
   const provider = firstArrayValue(track?.tracking?.providers, track?.providers);
@@ -11895,10 +11909,19 @@ async function getTrackingDetails(token, trackingNumber, carrierCode, fallback, 
     }
 
     if (apiError && !isNoTrackingInfoYet(apiError)) {
+      // The number is already registered at this point; a query-side API error
+      // usually just means 17TRACK has no data yet. Surface the message as a
+      // support note and keep the card in "waiting" instead of a red error.
+      console.warn("17TRACK gettrackinfo api error:", apiError.code, apiError.message);
       return {
         ...normalize17TrackPayload([], fallback),
+        status: "Registered",
+        statusText: "Registered - waiting for 17TRACK update",
+        trackingSupportStatus: "waiting",
+        supportMessageKey: "registered_waiting",
+        supportMessage: localizedMessage("registered_waiting", language),
         ...limitedSupportForCarrier(carrierCode, language),
-        error: apiError.message
+        error: ""
       };
     }
   } catch (error) {
@@ -11921,11 +11944,9 @@ async function getTrackingDetails(token, trackingNumber, carrierCode, fallback, 
       }
 
       if (apiError && !isRealtimeNotAvailable(apiError) && !isNoTrackingInfoYet(apiError)) {
-        return {
-          ...normalize17TrackPayload([], fallback),
-          ...limitedSupportForCarrier(carrierCode, language),
-          error: apiError.message
-        };
+        // Same as gettrackinfo: realtime quota/support errors after a successful
+        // registration should not paint the card red — keep waiting.
+        console.warn("17TRACK realtime api error:", apiError.code, apiError.message);
       }
     } catch (error) {
       if (!isRealtimeNotAvailable(error)) {
@@ -12069,9 +12090,28 @@ async function refreshTrackingCore({ companyId, orderId, trackingNumber, courier
 
   const registerBody = buildTrack17Body(trackingNumber, manualCarrierCode, { autoDetection: !manualCarrierCode });
   const registerResponse = await call17Track(TRACK17_REGISTER_URL, token, registerBody);
-  const registerAccepted = firstAccepted(registerResponse);
-  const registerError = firstApiError(registerResponse);
-  const alreadyRegistered = isAlreadyRegistered(registerError);
+  let registerAccepted = firstAccepted(registerResponse);
+  let registerError = firstApiError(registerResponse);
+  let alreadyRegistered = isAlreadyRegistered(registerError);
+  let candidateCarrierCode = null;
+
+  // Auto Detect fallback: when 17TRACK cannot detect the carrier from the bare
+  // number (common for 10-digit DHL Express waybills), retry registration with
+  // pattern-based candidates before asking the user to pick a courier manually.
+  if (!registerAccepted && registerError && !alreadyRegistered && isCarrierCannotBeDetected(registerError) && !manualCarrierCode) {
+    for (const candidate of carrierCandidatesFromNumber(trackingNumber)) {
+      const retryResponse = await call17Track(TRACK17_REGISTER_URL, token, buildTrack17Body(trackingNumber, candidate));
+      const retryAccepted = firstAccepted(retryResponse);
+      const retryError = firstApiError(retryResponse);
+      if (retryAccepted || isAlreadyRegistered(retryError)) {
+        registerAccepted = retryAccepted;
+        registerError = retryError;
+        alreadyRegistered = isAlreadyRegistered(retryError);
+        candidateCarrierCode = candidate;
+        break;
+      }
+    }
+  }
 
   if (!registerAccepted && registerError && !alreadyRegistered) {
     const cannotDetect = isCarrierCannotBeDetected(registerError);
@@ -12107,7 +12147,7 @@ async function refreshTrackingCore({ companyId, orderId, trackingNumber, courier
     await tryChangeCarrier(token, trackingNumber, manualCarrierCode);
   }
 
-  const detectedCarrierCode = firstNonEmpty(registerAccepted?.carrier, manualCarrierCode);
+  const detectedCarrierCode = firstNonEmpty(registerAccepted?.carrier, candidateCarrierCode, manualCarrierCode);
   const detectedCarrierName = firstNonEmpty(manualCarrier, carrierNameFromCode(detectedCarrierCode));
 
   const details = await getTrackingDetails(token, trackingNumber, detectedCarrierCode ? Number(detectedCarrierCode) : null, {
