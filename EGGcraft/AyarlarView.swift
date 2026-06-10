@@ -7135,6 +7135,16 @@ struct SiteStatsAdminView: View {
         ].filter { $0.value > 0 }
     }
 
+    // Page paths are stored with "/" replaced by "_" (Firestore field-name
+    // limitation). Convert back for display; the bare home path gets a name.
+    private func pagePathLabel(_ key: String) -> String {
+        let path = key.replacingOccurrences(of: "_", with: "/")
+        if path == "/" || path.isEmpty || key == "unknown" {
+            return t("Home page", lang: seciliDil)
+        }
+        return path
+    }
+
     private func flagEmoji(_ countryCode: String) -> String {
         let base: UInt32 = 127397
         var flag = ""
@@ -7171,7 +7181,7 @@ struct SiteStatsAdminView: View {
         Chart(Array(values.enumerated()), id: \.offset) { item in
             LineMark(x: .value("i", item.offset), y: .value("v", item.element))
                 .foregroundStyle(color)
-                .interpolationMethod(.catmullRom)
+                .interpolationMethod(.linear)
                 .lineStyle(StrokeStyle(lineWidth: 1.6))
         }
         .chartXAxis(.hidden)
@@ -7355,7 +7365,7 @@ struct SiteStatsAdminView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(presencePages.prefix(5).enumerated()), id: \.element.path) { index, page in
                         HStack {
-                            Text(page.path.hasPrefix("/") ? page.path : "/" + page.path)
+                            Text(pagePathLabel(page.path))
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
@@ -7481,10 +7491,10 @@ struct SiteStatsAdminView: View {
                         Chart(currentDays) { day in
                             AreaMark(x: .value("Date", day.date), y: .value("Visitors", day.sessions))
                                 .foregroundStyle(LinearGradient(colors: [Color.purple.opacity(0.28), Color.purple.opacity(0.02)], startPoint: .top, endPoint: .bottom))
-                                .interpolationMethod(.catmullRom)
+                                .interpolationMethod(.linear)
                             LineMark(x: .value("Date", day.date), y: .value("Visitors", day.sessions))
                                 .foregroundStyle(Color.purple)
-                                .interpolationMethod(.catmullRom)
+                                .interpolationMethod(.linear)
                                 .lineStyle(StrokeStyle(lineWidth: 2))
                             PointMark(x: .value("Date", day.date), y: .value("Visitors", day.sessions))
                                 .foregroundStyle(Color.purple)
@@ -7521,7 +7531,7 @@ struct SiteStatsAdminView: View {
                             rankedList(topEntries({ $0.countries }, limit: 6), flagMode: true)
                         }
                         panel(t("Top Pages", lang: seciliDil)) {
-                            rankedList(topEntries({ $0.pages }, limit: 6))
+                            rankedList(topEntries({ $0.pages }, limit: 6).map { (key: pagePathLabel($0.key), value: $0.value) })
                         }
                     }
 

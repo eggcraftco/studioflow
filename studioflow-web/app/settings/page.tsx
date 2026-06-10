@@ -4528,6 +4528,14 @@ function sumStatsField(days: SiteStatsDay[], field: "total" | "sessions") {
   return days.reduce((acc, day) => acc + (Number(day[field]) || 0), 0);
 }
 
+// Page paths are stored with "/" replaced by "_" (Firestore field-name
+// limitation). Convert back for display; the bare home path gets a name.
+function pagePathLabel(key: string) {
+  const path = key.replace(/_/g, "/");
+  if (path === "/" || path === "" || key === "unknown") return "Home page";
+  return path;
+}
+
 function topStatsEntries(days: SiteStatsDay[], field: "pages" | "devices" | "languages" | "referrers", limit = 6) {
   const merged = new Map<string, number>();
   for (const day of days) {
@@ -4637,7 +4645,7 @@ function AdminSiteStatsSection() {
 
       {!loading && !error ? (
         <>
-          <StatsBreakdownCard title="Top pages" entries={topStatsEntries(loaded, "pages")} />
+          <StatsBreakdownCard title="Top pages" entries={topStatsEntries(loaded, "pages").map(([key, value]) => [pagePathLabel(key), value])} />
           <StatsBreakdownCard title="Devices" entries={topStatsEntries(loaded, "devices", 3)} />
           <StatsBreakdownCard title="Visitor languages" entries={topStatsEntries(loaded, "languages")} />
           <StatsBreakdownCard title="Traffic sources" entries={topStatsEntries(loaded, "referrers")} />
