@@ -908,6 +908,10 @@ th {
   padding: 22px;
 }
 
+/* Mobile settings drill-in (list → section content + Back). Hidden on desktop. */
+.settings-mobile-back,
+.settings-mobile-title { display: none; }
+
 .settings-content-header {
   display: flex;
   align-items: flex-start;
@@ -10518,6 +10522,33 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 
   .settings-content-pane {
     padding: 14px;
+  }
+
+  /* Drill-in: list view hides the content; detail view hides the list and shows
+     a Back button + section title, like the Mac/iPhone settings flow. */
+  .settings-workspace[data-mobile-view="list"] .settings-content-pane { display: none; }
+  .settings-workspace[data-mobile-view="detail"] .settings-sidebar { display: none; }
+
+  .settings-workspace[data-mobile-view="detail"] .settings-mobile-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 4px 0 12px;
+    margin: 0 0 4px;
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 750;
+    cursor: pointer;
+  }
+  .settings-workspace[data-mobile-view="detail"] .settings-mobile-back span { font-size: 22px; line-height: 1; }
+  .settings-workspace[data-mobile-view="detail"] .settings-mobile-title {
+    display: block;
+    margin: 0 0 14px;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
   }
 }
 
