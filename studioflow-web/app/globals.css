@@ -10728,61 +10728,61 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   }
 
   .orders-mobile-header {
-    grid-template-columns: minmax(96px, 112px) minmax(0, 1fr) 50px;
-    gap: 10px;
-    min-height: 66px;
-    padding: 10px 14px 12px;
+    grid-template-columns: minmax(78px, 94px) minmax(0, 1fr) 38px;
+    gap: 9px;
+    min-height: 52px;
+    padding: 8px 14px 10px;
     border-bottom: 1px solid rgba(17, 24, 39, 0.12);
     background: #fff;
   }
 
   .orders-mobile-header h2 {
-    font-size: 29px;
+    font-size: 20px;
     line-height: 1.05;
-    font-weight: 950;
+    font-weight: 900;
   }
 
   .orders-mobile-header p {
-    margin-top: 3px;
-    font-size: 17px;
+    margin-top: 2px;
+    font-size: 12px;
     font-weight: 700;
   }
 
   .orders-mobile-header .order-filter-card {
-    min-height: 58px;
+    min-height: 44px;
     gap: 0;
-    padding: 8px 12px;
-    border-radius: 18px;
+    padding: 6px 10px;
+    border-radius: 14px;
     background: #ededee;
     border-color: rgba(17, 24, 39, 0.12);
   }
 
   .orders-mobile-header .order-filter-icon {
-    width: 31px;
-    height: 31px;
-    font-size: 15px;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
   }
 
   .orders-mobile-header .order-filter-topline {
-    gap: 9px;
+    gap: 7px;
   }
 
   .orders-mobile-header .order-filter-topline small {
-    font-size: 14px;
+    font-size: 10.5px;
     line-height: 1;
   }
 
   .orders-mobile-header .order-filter-topline strong {
     min-width: 0;
-    font-size: 20px;
+    font-size: 14px;
     line-height: 1;
   }
 
   .orders-mobile-search-toggle {
-    width: 50px;
-    height: 50px;
-    border-radius: 16px;
-    font-size: 30px;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    font-size: 20px;
   }
 
   .orders-mobile-list > .orders-list {
