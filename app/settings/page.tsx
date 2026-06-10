@@ -5689,8 +5689,193 @@ function AdminPlansDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AdminFeatureUsageDetail = {
+  generatedAtMs: number;
+  totalWorkspaces: number;
+  features: { key: string; label: string; total: number | null; count30d: number; activeWorkspaces: number; byPlan: Record<string, number> }[];
+  heatmap: number[][];
+  funnel: { workspaces: number; withCustomer: number | null; withOrder: number | null; chatgptConnected: number };
+  topWorkspaces: { id: string; name: string; plan: string; actions: number; topFeature: string }[];
+  note: string;
+};
+
+const ADMIN_FEATURE_COLORS = ["#8a5cf6", "#0a84ff", "#30d158", "#ff9f0a"];
+
+function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminFeatureUsageDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminFeatureUsageDetail>(functions, "getAdminFeatureUsageDetail");
+    callable({})
+      .then(result => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Feature Usage
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Feature Usage" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const totalActions30d = data.features.reduce((acc, feature) => acc + feature.count30d, 0);
+  const distributionSlices = data.features
+    .map((feature, index) => ({ label: feature.label, value: feature.count30d, color: ADMIN_FEATURE_COLORS[index % ADMIN_FEATURE_COLORS.length] }))
+    .filter(slice => slice.value > 0);
+
+  const funnelSteps: [string, number | null][] = [
+    ["Workspaces", data.funnel.workspaces],
+    ["Added a customer", data.funnel.withCustomer],
+    ["Created an order", data.funnel.withOrder],
+    ["Connected ChatGPT App", data.funnel.chatgptConnected]
+  ];
+  const funnelMax = Math.max(data.funnel.workspaces, 1);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Feature Usage" />
+        <p className="muted-copy">Track how features are used across all workspaces (last 30 days). {data.note}</p>
+      </section>
+
+      <div className="site-stats-grid">
+        {data.features.map(feature => (
+          <section key={feature.key} className="card app-card" style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{feature.label}</span>
+            <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{feature.count30d.toLocaleString()}</strong>
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>30 days · {feature.total !== null ? `${feature.total.toLocaleString()} all-time` : "all-time —"}</span>
+          </section>
+        ))}
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Usage" title="Feature Usage Distribution (30d)" />
+          {distributionSlices.length ? <StatsDonut slices={distributionSlices} centerLabel={`${totalActions30d.toLocaleString()} actions`} /> : <p className="muted-copy">No activity in the last 30 days.</p>}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Adoption" title="Active Workspaces by Feature (30d)" />
+          <StatsRankedList entries={data.features.map(feature => [`${feature.label} — ${((feature.activeWorkspaces / Math.max(data.totalWorkspaces, 1)) * 100).toFixed(1)}%`, feature.activeWorkspaces] as [string, number])} />
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Plans" title="Feature Usage by Plan (30d)" />
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 520, borderCollapse: "collapse", fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                <th style={{ padding: "6px 8px" }}>Feature</th>
+                {["demo", "lifetime_lite", "pro_monthly", "team_monthly"].map(plan => (
+                  <th key={plan} style={{ padding: "6px 8px", textAlign: "right", color: ADMIN_PLAN_COLORS[plan] }}>{ADMIN_PLAN_LABELS[plan]}</th>
+                ))}
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.features.map(feature => (
+                <tr key={feature.key} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                  <td style={{ padding: "7px 8px", fontWeight: 700 }}>{feature.label}</td>
+                  {["demo", "lifetime_lite", "pro_monthly", "team_monthly"].map(plan => (
+                    <td key={plan} style={{ padding: "7px 8px", textAlign: "right" }}>{(feature.byPlan[plan] || 0).toLocaleString()}</td>
+                  ))}
+                  <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 800 }}>{feature.count30d.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Workspaces" title="Top Workspaces by Feature Usage (30d)" />
+          {data.topWorkspaces.length === 0 ? (
+            <p className="muted-copy">No activity in the last 30 days.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 420, borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                    <th style={{ padding: "6px 8px" }}>#</th>
+                    <th style={{ padding: "6px 8px" }}>Workspace</th>
+                    <th style={{ padding: "6px 8px" }}>Plan</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Actions</th>
+                    <th style={{ padding: "6px 8px" }}>Top Feature</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.topWorkspaces.map((workspace, index) => (
+                    <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{workspace.actions.toLocaleString()}</td>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.topFeature}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Adoption" title="Feature Adoption Funnel" />
+          <div style={{ display: "grid", gap: 8 }}>
+            {funnelSteps.map(([label, value], index) => (
+              <div key={label}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 650 }}>
+                  <span>{index + 1}. {label}</span>
+                  <span style={{ color: "var(--muted)", fontWeight: 800 }}>
+                    {value !== null ? `${value.toLocaleString()} (${((value / funnelMax) * 100).toFixed(1)}%)` : "—"}
+                  </span>
+                </div>
+                <div style={{ height: 10, borderRadius: 999, background: "rgba(17,24,39,0.07)", overflow: "hidden", marginTop: 4 }}>
+                  <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${value !== null ? Math.max((value / funnelMax) * 100, 2) : 0}%`, background: ADMIN_FEATURE_COLORS[index % ADMIN_FEATURE_COLORS.length] }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="muted-copy" style={{ marginTop: 10 }}>All-time adoption: how far workspaces get after signing up.</p>
+        </section>
+      </div>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Activity" title="Feature Usage by Time of Day" />
+        <ActivityHeatmap heatmap={data.heatmap} />
+      </section>
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
-  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans">("overview");
+  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans" | "features">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5763,6 +5948,9 @@ function AdminInsightsSection() {
   if (page === "plans") {
     return <AdminPlansDetail onBack={() => setPage("overview")} />;
   }
+  if (page === "features") {
+    return <AdminFeatureUsageDetail onBack={() => setPage("overview")} />;
+  }
 
   return (
     <div className="settings-card-stack">
@@ -5803,6 +5991,14 @@ function AdminInsightsSection() {
             style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
           >
             Plans →
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("features")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
+          >
+            Feature Usage →
           </button>
         </div>
       </section>
