@@ -299,7 +299,7 @@ export default function NotesPage() {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingLeft: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
+            <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
             <div style={{ fontSize: 13, color: "#6b7280" }}>{visible.length} note{visible.length === 1 ? "" : "s"}</div>
           </div>
           <button
@@ -313,7 +313,8 @@ export default function NotesPage() {
               color: "white",
               border: "none",
               borderRadius: 999,
-              padding: "10px 18px",
+              padding: isPhone ? "8px 13px" : "10px 18px",
+              fontSize: isPhone ? 13 : undefined,
               fontWeight: 800,
               cursor: "pointer",
             }}
@@ -720,7 +721,9 @@ function NoteCard({
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const isDark = notesIsDark();
-  const actionsVisible = hover || menuOpen || colorOpen || reminderOpen || isPhone;
+  // Mac parity: on phones the card stays clean (title + text only); actions
+  // are available inside the note editor and via long-press selection.
+  const actionsVisible = !isPhone && (hover || menuOpen || colorOpen || reminderOpen);
   return (
     <div
       onMouseEnter={() => setHover(true)}
@@ -809,14 +812,16 @@ function NoteCard({
           </div>
         )}
         {!note.title && <div style={{ flex: 1 }} />}
-        <span style={{ color: note.isPinned ? "#2D7BF4" : (isDark ? "#cbd5e1" : "#374151") }}>
-          <IconBtn
-            title={note.isPinned ? t("Unpin") : t("Pin")}
-            onClick={(e) => { e.stopPropagation(); onSave({ ...note, isPinned: !note.isPinned }); }}
-          >
-            <Icon name={note.isPinned ? "pinFilled" : "pin"} />
-          </IconBtn>
-        </span>
+        {(!isPhone || note.isPinned) && (
+          <span style={{ color: note.isPinned ? "#2D7BF4" : (isDark ? "#cbd5e1" : "#374151") }}>
+            <IconBtn
+              title={note.isPinned ? t("Unpin") : t("Pin")}
+              onClick={(e) => { e.stopPropagation(); onSave({ ...note, isPinned: !note.isPinned }); }}
+            >
+              <Icon name={note.isPinned ? "pinFilled" : "pin"} />
+            </IconBtn>
+          </span>
+        )}
       </div>
       {note.links[0] && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -852,14 +857,14 @@ function NoteCard({
       {note.collaboratorEmails.length > 0 && (
         <div style={{ fontSize: 11, color: "#6b7280" }}>👥 {note.collaboratorEmails.length} shared</div>
       )}
-      {/* Bottom action row — Mac parity */}
+      {/* Bottom action row — Mac parity (not rendered at all on phones) */}
       <div
         style={{
-          display: "flex",
+          display: isPhone ? "none" : "flex",
           alignItems: "center",
           gap: 2,
           marginTop: "auto",
-          flexWrap: isPhone ? "wrap" : "nowrap",
+          flexWrap: "nowrap",
           opacity: actionsVisible ? 1 : 0,
           transition: "opacity 0.15s",
           pointerEvents: actionsVisible ? "auto" : "none",
