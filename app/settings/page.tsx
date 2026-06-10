@@ -4518,13 +4518,16 @@ type SiteStatsDay = {
   date: string;
   total: number;
   sessions: number;
+  engagedSessions: number;
+  durationSeconds: number;
   pages: Record<string, number>;
   devices: Record<string, number>;
   languages: Record<string, number>;
   referrers: Record<string, number>;
+  countries: Record<string, number>;
 };
 
-function sumStatsField(days: SiteStatsDay[], field: "total" | "sessions") {
+function sumStatsField(days: SiteStatsDay[], field: "total" | "sessions" | "durationSeconds" | "engagedSessions") {
   return days.reduce((acc, day) => acc + (Number(day[field]) || 0), 0);
 }
 
@@ -4536,7 +4539,21 @@ function pagePathLabel(key: string) {
   return path;
 }
 
-function topStatsEntries(days: SiteStatsDay[], field: "pages" | "devices" | "languages" | "referrers", limit = 6) {
+function flagEmoji(countryCode: string) {
+  const code = countryCode.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return "🌍";
+  return String.fromCodePoint(...[...code].map(c => 127397 + c.charCodeAt(0)));
+}
+
+function countryName(code: string) {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) || code;
+  } catch {
+    return code;
+  }
+}
+
+function topStatsEntries(days: SiteStatsDay[], field: "pages" | "devices" | "languages" | "referrers" | "countries", limit = 6): [string, number][] {
   const merged = new Map<string, number>();
   for (const day of days) {
     for (const [key, value] of Object.entries(day[field] || {})) {
@@ -4546,48 +4563,293 @@ function topStatsEntries(days: SiteStatsDay[], field: "pages" | "devices" | "lan
   return Array.from(merged.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit);
 }
 
-function StatsBreakdownCard({ title, entries }: { title: string; entries: [string, number][] }) {
-  const max = entries.length ? entries[0][1] : 0;
+function statsAvgDuration(days: SiteStatsDay[]) {
+  const sessions = sumStatsField(days, "sessions");
+  return sessions > 0 ? sumStatsField(days, "durationSeconds") / sessions : 0;
+}
+
+function statsBounceRate(days: SiteStatsDay[]) {
+  const sessions = sumStatsField(days, "sessions");
+  if (sessions <= 0) return 0;
+  const engaged = Math.min(sumStatsField(days, "engagedSessions"), sessions);
+  return ((sessions - engaged) / sessions) * 100;
+}
+
+function statsDurationText(seconds: number) {
+  const total = Math.round(seconds);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function statsDeltaPercent(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+const STATS_SEARCH_HOSTS = ["google", "bing", "duckduckgo", "yandex", "baidu", "ecosia"];
+const STATS_SOCIAL_HOSTS = ["facebook", "instagram", "twitter", "x.com", "t.co", "linkedin", "youtube", "tiktok", "reddit", "pinterest"];
+
+function statsSourceSlices(days: SiteStatsDay[]): { label: string; value: number; color: string }[] {
+  let direct = 0;
+  let organic = 0;
+  let social = 0;
+  let referral = 0;
+  for (const [host, value] of topStatsEntries(days, "referrers", 100)) {
+    if (host === "direct") direct += value;
+    else if (STATS_SEARCH_HOSTS.some(h => host.includes(h))) organic += value;
+    else if (STATS_SOCIAL_HOSTS.some(h => host.includes(h))) social += value;
+    else referral += value;
+  }
+  return [
+    { label: "Direct", value: direct, color: "#0a84ff" },
+    { label: "Organic Search", value: organic, color: "#30b0c7" },
+    { label: "Social Media", value: social, color: "#30d158" },
+    { label: "Referral", value: referral, color: "#ff9f0a" }
+  ].filter(slice => slice.value > 0);
+}
+
+function StatsSparkline({ values, color }: { values: number[]; color: string }) {
+  if (!values.length) return null;
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${30 - (value / max) * 26}`).join(" ");
   return (
-    <section className="card app-card">
-      <CardTitle icon="dashboard" eyebrow="Visitors" title={title} />
-      {entries.length === 0 ? (
-        <p className="muted-copy">No data yet.</p>
-      ) : (
-        <div style={{ display: "grid", gap: 8 }}>
-          {entries.map(([key, value]) => (
-            <div key={key} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 56px", alignItems: "center", gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 650 }}>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{key}</span>
-                </div>
-                <div style={{ height: 6, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden", marginTop: 4 }}>
-                  <span style={{ display: "block", height: "100%", width: `${max ? Math.max(6, Math.round((value / max) * 100)) : 0}%`, borderRadius: 999, background: "#0a84ff" }} />
-                </div>
-              </div>
-              <strong style={{ fontSize: 13, textAlign: "right" }}>{value.toLocaleString()}</strong>
+    <svg viewBox="0 0 100 32" preserveAspectRatio="none" style={{ width: "100%", height: 30, display: "block" }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function StatsDeltaBadge({ delta, invertGood }: { delta: number | null; invertGood?: boolean }) {
+  if (delta === null) return null;
+  const isGood = invertGood ? delta <= 0 : delta >= 0;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 800, color: isGood ? "#1d8f43" : "#d92d20" }}>
+      <span aria-hidden="true">{delta >= 0 ? "▲" : "▼"}</span>
+      {Math.abs(delta).toFixed(1)}%
+    </span>
+  );
+}
+
+function StatsTrendChart({ days }: { days: SiteStatsDay[] }) {
+  const width = 600;
+  const height = 200;
+  const pad = 8;
+  const max = Math.max(...days.map(day => day.sessions), 1);
+  const x = (index: number) => pad + (index / Math.max(days.length - 1, 1)) * (width - pad * 2);
+  const y = (value: number) => height - pad - (value / max) * (height - pad * 2);
+  const linePoints = days.map((day, index) => `${x(index)},${y(day.sessions)}`).join(" ");
+  const areaPoints = `${pad},${height - pad} ${linePoints} ${width - pad},${height - pad}`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      <polygon points={areaPoints} fill="rgba(138, 92, 246, 0.16)" />
+      <polyline points={linePoints} fill="none" stroke="#8a5cf6" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+      {days.map((day, index) => (
+        <circle key={day.date} cx={x(index)} cy={y(day.sessions)} r="3" fill="#8a5cf6">
+          <title>{`${day.date}: ${day.sessions}`}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
+function StatsDonut({ slices, centerLabel }: { slices: { label: string; value: number; color: string }[]; centerLabel: string }) {
+  const total = Math.max(slices.reduce((acc, slice) => acc + slice.value, 0), 1);
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return (
+    <div className="site-stats-donut-row">
+      <div style={{ position: "relative", width: 116, height: 116, flex: "0 0 auto" }}>
+        <svg viewBox="0 0 116 116" style={{ width: 116, height: 116, transform: "rotate(-90deg)" }}>
+          {slices.map(slice => {
+            const fraction = slice.value / total;
+            const dash = fraction * circumference;
+            const el = (
+              <circle
+                key={slice.label}
+                cx="58"
+                cy="58"
+                r={radius}
+                fill="none"
+                stroke={slice.color}
+                strokeWidth="14"
+                strokeDasharray={`${dash} ${circumference - dash}`}
+                strokeDashoffset={-offset}
+              />
+            );
+            offset += dash;
+            return el;
+          })}
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>{centerLabel}</div>
+            <div style={{ fontSize: 16, fontWeight: 900 }}>{total.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gap: 7, minWidth: 0, flex: 1 }}>
+        {slices.map(slice => (
+          <div key={slice.label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: slice.color, flex: "0 0 auto" }} />
+            <span style={{ fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{slice.label}</span>
+            <span style={{ marginLeft: "auto", color: "var(--muted)", fontWeight: 700 }}>{((slice.value / total) * 100).toFixed(1)}%</span>
+            <strong style={{ minWidth: 40, textAlign: "right" }}>{slice.value.toLocaleString()}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatsRankedList({ entries, flags }: { entries: [string, number][]; flags?: boolean }) {
+  const total = Math.max(entries.reduce((acc, [, value]) => acc + value, 0), 1);
+  if (!entries.length) return <p className="muted-copy">No data yet.</p>;
+  return (
+    <div style={{ display: "grid" }}>
+      {entries.map(([key, value], index) => (
+        <div
+          key={key}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}
+        >
+          {flags ? (
+            <>
+              <span aria-hidden="true">{flagEmoji(key)}</span>
+              <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{countryName(key)}</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", width: 16 }}>{index + 1}</span>
+              <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{key}</span>
+            </>
+          )}
+          <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>{((value / total) * 100).toFixed(1)}%</span>
+          <strong style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>{value.toLocaleString()}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsCard({ title, value, delta, invertGood, spark, color }: {
+  title: string;
+  value: string;
+  delta: number | null;
+  invertGood?: boolean;
+  spark: number[];
+  color: string;
+}) {
+  return (
+    <section className="card app-card" style={{ display: "grid", gap: 8 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{title}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <strong style={{ fontSize: 26, fontWeight: 900, lineHeight: 1 }}>{value}</strong>
+        <StatsDeltaBadge delta={delta} invertGood={invertGood} />
+      </div>
+      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>vs previous period</span>
+      <StatsSparkline values={spark} color={color} />
+    </section>
+  );
+}
+
+function LiveOnSiteCard() {
+  const [active, setActive] = useState(0);
+  const [pages, setPages] = useState<{ path: string; count: number }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, { active: number; pages: { path: string; count: number }[] }>(functions, "getSitePresence");
+    const poll = () => {
+      callable({}).then(result => {
+        if (cancelled) return;
+        setActive(Number(result.data?.active) || 0);
+        setPages(result.data?.pages ?? []);
+        setLoaded(true);
+      }).catch(() => undefined);
+    };
+    poll();
+    const interval = window.setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const bars = Array.from({ length: 28 }, (_, index) =>
+    active > 0 ? 10 + Math.abs(Math.sin(index * 1.7 + active)) * 22 : 6
+  );
+
+  return (
+    <section className="card app-card site-stats-live">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <strong style={{ fontSize: 15, color: "#fff" }}>On Site Now</strong>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 800, color: "#30d158" }}>
+          <span style={{ width: 7, height: 7, borderRadius: 99, background: "#30d158" }} />
+          Live
+        </span>
+      </div>
+      <div>
+        <div style={{ fontSize: 40, fontWeight: 900, color: "#fff", lineHeight: 1.05 }}>{active}</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>Active users</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 34 }}>
+        {bars.map((height, index) => (
+          <span key={index} style={{ width: 8, height, borderRadius: 99, background: active > 0 ? "#8a5cf6" : "rgba(255,255,255,0.14)", transition: "height 0.5s ease" }} />
+        ))}
+      </div>
+      {pages.length > 0 ? (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.55)", marginBottom: 4 }}>
+            <span>Most Active Pages</span>
+            <span>Users</span>
+          </div>
+          {pages.slice(0, 5).map((page, index) => (
+            <div key={page.path} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: index === 0 ? "none" : "1px solid rgba(255,255,255,0.10)" }}>
+              <span style={{ fontSize: 13, fontWeight: 650, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pagePathLabel(page.path)}</span>
+              <strong style={{ fontSize: 13, color: "#fff" }}>{page.count}</strong>
             </div>
           ))}
         </div>
-      )}
+      ) : loaded ? (
+        <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>No one is on the site right now.</p>
+      ) : null}
     </section>
   );
 }
 
 function AdminSiteStatsSection() {
-  const [range, setRange] = useState(30);
-  const [days, setDays] = useState<SiteStatsDay[] | null>(null);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [rangeMode, setRangeMode] = useState<number>(30); // 7 / 30 / 90, -1 = custom
+  const [customStart, setCustomStart] = useState(() => new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10));
+  const [customEnd, setCustomEnd] = useState(todayKey);
+  const [allDays, setAllDays] = useState<SiteStatsDay[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const span = (() => {
+    if (rangeMode !== -1) {
+      const end = new Date(`${todayKey}T12:00:00Z`);
+      const start = new Date(end.getTime() - (rangeMode - 1) * 86400000);
+      return { start, end };
+    }
+    let start = new Date(`${customStart}T12:00:00Z`);
+    let end = new Date(`${customEnd}T12:00:00Z`);
+    if (start > end) [start, end] = [end, start];
+    const today = new Date(`${todayKey}T12:00:00Z`);
+    if (end > today) end = today;
+    return { start, end };
+  })();
+  const rangeLength = Math.max(Math.round((span.end.getTime() - span.start.getTime()) / 86400000) + 1, 1);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError("");
-    const callable = httpsCallable<{ days: number }, { ok: boolean; days: SiteStatsDay[] }>(functions, "getSiteStats");
-    callable({ days: range })
+    const fetchStart = new Date(span.start.getTime() - rangeLength * 86400000);
+    const callable = httpsCallable<{ startDate: string; endDate: string }, { ok: boolean; days: SiteStatsDay[] }>(functions, "getSiteStats");
+    callable({ startDate: fetchStart.toISOString().slice(0, 10), endDate: span.end.toISOString().slice(0, 10) })
       .then(result => {
-        if (!cancelled) setDays(result.data?.days ?? []);
+        if (!cancelled) setAllDays(result.data?.days ?? []);
       })
       .catch(err => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load site statistics.");
@@ -4598,64 +4860,123 @@ function AdminSiteStatsSection() {
     return () => {
       cancelled = true;
     };
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeMode, customStart, customEnd]);
 
-  const loaded = days ?? [];
-  const today = loaded.length ? loaded[loaded.length - 1] : null;
-  const last7 = loaded.slice(-7);
+  const loadedDays = allDays ?? [];
+  const current = loadedDays.slice(-rangeLength);
+  const previous = loadedDays.slice(0, Math.max(loadedDays.length - rangeLength, 0));
+
+  const curSessions = sumStatsField(current, "sessions");
+  const prevSessions = sumStatsField(previous, "sessions");
+  const curViews = sumStatsField(current, "total");
+  const prevViews = sumStatsField(previous, "total");
+  const curDuration = statsAvgDuration(current);
+  const prevDuration = statsAvgDuration(previous);
+  const curBounce = statsBounceRate(current);
+  const prevBounce = statsBounceRate(previous);
+
+  const rangeButton = (option: number, label: string) => (
+    <button
+      key={option}
+      type="button"
+      className="button"
+      onClick={() => setRangeMode(option)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: 999,
+        fontSize: 13,
+        fontWeight: 700,
+        background: rangeMode === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        color: rangeMode === option ? "#fff" : "var(--text)"
+      }}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Public website statistics" />
         <p className="muted-copy">Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.</p>
-        <div style={{ display: "flex", gap: 8, margin: "10px 0 14px" }}>
-          {[7, 30, 90].map(option => (
-            <button
-              key={option}
-              type="button"
-              className="button"
-              onClick={() => setRange(option)}
-              style={{
-                padding: "7px 14px",
-                borderRadius: 999,
-                fontSize: 13,
-                fontWeight: 700,
-                background: range === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
-                color: range === option ? "#fff" : "var(--text)"
-              }}
-            >
-              {option}d
-            </button>
-          ))}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 4px" }}>
+          {rangeButton(7, "7d")}
+          {rangeButton(30, "30d")}
+          {rangeButton(90, "90d")}
+          {rangeButton(-1, "Custom")}
         </div>
-        {loading ? <p className="muted-copy">Loading statistics...</p> : null}
-        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
-        {!loading && !error ? (
-          <div className="settings-mini-grid">
-            <InfoTile label="Today · page views" value={(today?.total ?? 0).toLocaleString()} />
-            <InfoTile label="Today · visitors" value={(today?.sessions ?? 0).toLocaleString()} />
-            <InfoTile label="Last 7 days · views" value={sumStatsField(last7, "total").toLocaleString()} />
-            <InfoTile label="Last 7 days · visitors" value={sumStatsField(last7, "sessions").toLocaleString()} />
-            <InfoTile label={`Last ${range} days · views`} value={sumStatsField(loaded, "total").toLocaleString()} />
-            <InfoTile label={`Last ${range} days · visitors`} value={sumStatsField(loaded, "sessions").toLocaleString()} />
+        {rangeMode === -1 ? (
+          <div className="site-stats-custom-range">
+            <label style={{ display: "grid", gap: 3, fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+              Start
+              <input type="date" value={customStart} max={todayKey} onChange={event => setCustomStart(event.target.value)} />
+            </label>
+            <label style={{ display: "grid", gap: 3, fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+              End
+              <input type="date" value={customEnd} max={todayKey} onChange={event => setCustomEnd(event.target.value)} />
+            </label>
+            <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", alignSelf: "end", paddingBottom: 8 }}>{rangeLength} days</span>
           </div>
         ) : null}
+        {loading ? <p className="muted-copy">Loading statistics...</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
       </section>
+
+      <LiveOnSiteCard />
 
       {!loading && !error ? (
         <>
-          <StatsBreakdownCard title="Top pages" entries={topStatsEntries(loaded, "pages").map(([key, value]) => [pagePathLabel(key), value])} />
-          <StatsBreakdownCard title="Devices" entries={topStatsEntries(loaded, "devices", 3)} />
-          <StatsBreakdownCard title="Visitor languages" entries={topStatsEntries(loaded, "languages")} />
-          <StatsBreakdownCard title="Traffic sources" entries={topStatsEntries(loaded, "referrers")} />
+          <div className="site-stats-grid">
+            <StatsCard title="Total Visitors" value={curSessions.toLocaleString()} delta={statsDeltaPercent(curSessions, prevSessions)} spark={current.map(day => day.sessions)} color="#8a5cf6" />
+            <StatsCard title="Page Views" value={curViews.toLocaleString()} delta={statsDeltaPercent(curViews, prevViews)} spark={current.map(day => day.total)} color="#0a84ff" />
+            <StatsCard title="Avg. Session Duration" value={statsDurationText(curDuration)} delta={statsDeltaPercent(curDuration, prevDuration)} spark={current.map(day => (day.sessions > 0 ? day.durationSeconds / day.sessions : 0))} color="#30d158" />
+            <StatsCard title="Bounce Rate" value={`${curBounce.toFixed(1)}%`} delta={statsDeltaPercent(curBounce, prevBounce)} invertGood spark={current.map(day => (day.sessions > 0 ? ((day.sessions - Math.min(day.engagedSessions, day.sessions)) / day.sessions) * 100 : 0))} color="#ff9f0a" />
+          </div>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Visitors" title="Visitor Trend" />
+            <StatsTrendChart days={current} />
+          </section>
+
+          <div className="site-stats-panels">
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Visitors" title="Top Traffic Sources" />
+              {statsSourceSlices(current).length ? <StatsDonut slices={statsSourceSlices(current)} centerLabel="Total" /> : <p className="muted-copy">No data yet.</p>}
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Visitors" title="Devices" />
+              {(() => {
+                const devices = topStatsEntries(current, "devices", 3);
+                const palette: Record<string, string> = { desktop: "#0a84ff", mobile: "#8a5cf6", tablet: "#30b0c7" };
+                const slices = devices.map(([key, value]) => ({ label: key.charAt(0).toUpperCase() + key.slice(1), value, color: palette[key] || "#9ca3af" }));
+                return slices.length ? <StatsDonut slices={slices} centerLabel="Total" /> : <p className="muted-copy">No data yet.</p>;
+              })()}
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Visitors" title="Visitors by Country" />
+              <StatsRankedList entries={topStatsEntries(current, "countries")} flags />
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Visitors" title="Top Pages" />
+              <StatsRankedList entries={topStatsEntries(current, "pages").map(([key, value]) => [pagePathLabel(key), value])} />
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Visitors" title="Visitor Languages" />
+              <StatsRankedList entries={topStatsEntries(current, "languages")} />
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Visitors" title="Traffic Sources (hosts)" />
+              <StatsRankedList entries={topStatsEntries(current, "referrers")} />
+            </section>
+          </div>
+
+          <section className="card app-card">
+            <CardTitle icon="notes" eyebrow="Support" title="Support inbox" />
+            <p className="muted-copy">Messages sent via Contact NivaDesk Support appear in the Support / Tickets section — as an admin you see every user&apos;s tickets there.</p>
+          </section>
         </>
       ) : null}
-
-      <section className="card app-card">
-        <CardTitle icon="notes" eyebrow="Support" title="Support inbox" />
-        <p className="muted-copy">Messages sent via Contact NivaDesk Support appear in the Support / Tickets section — as an admin you see every user&apos;s tickets there.</p>
-      </section>
     </div>
   );
 }
