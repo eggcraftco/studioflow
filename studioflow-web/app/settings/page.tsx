@@ -6072,8 +6072,219 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AdminLookupUser = { uid: string; email: string; displayName: string; createdAtMs: number; lastSignInMs: number };
+type AdminLookupWorkspace = { id: string; name: string; ownerEmail: string; plan: string };
+
+function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState("");
+  const [users, setUsers] = useState<AdminLookupUser[]>([]);
+  const [workspaces, setWorkspaces] = useState<AdminLookupWorkspace[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const [detailKind, setDetailKind] = useState<"user" | "workspace" | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const runSearch = () => {
+    const clean = query.trim();
+    if (clean.length < 2) {
+      setError("Enter at least 2 characters.");
+      return;
+    }
+    setSearching(true);
+    setError("");
+    setDetail(null);
+    setDetailKind(null);
+    const callable = httpsCallable<{ mode: string; query: string }, { users: AdminLookupUser[]; workspaces: AdminLookupWorkspace[] }>(functions, "getAdminLookup");
+    callable({ mode: "search", query: clean })
+      .then(result => {
+        setUsers(result.data?.users ?? []);
+        setWorkspaces(result.data?.workspaces ?? []);
+        setSearched(true);
+      })
+      .catch(err => setError(err instanceof Error ? err.message : "Search failed."))
+      .finally(() => setSearching(false));
+  };
+
+  const openDetail = (kind: "user" | "workspace", id: string) => {
+    setDetailLoading(true);
+    setDetailKind(kind);
+    setDetail(null);
+    const callable = httpsCallable<{ mode: string; uid?: string; companyId?: string }, Record<string, unknown>>(functions, "getAdminLookup");
+    const payload = kind === "user" ? { mode: "user", uid: id } : { mode: "workspace", companyId: id };
+    callable(payload)
+      .then(result => setDetail(result.data as Record<string, unknown>))
+      .catch(err => setError(err instanceof Error ? err.message : "Could not load details."))
+      .finally(() => setDetailLoading(false));
+  };
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}User Lookup
+    </p>
+  );
+
+  const dateText = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms).toLocaleString() : "—");
+
+  const renderUserDetail = () => {
+    const user = (detail?.user ?? {}) as Record<string, unknown>;
+    const memberships = (detail?.memberships ?? []) as { companyId: string; name: string; plan: string; role: string }[];
+    return (
+      <>
+        <div className="settings-mini-grid">
+          <InfoTile label="Email" value={String(user.email || "—")} />
+          <InfoTile label="Name" value={String(user.displayName || "—")} />
+          <InfoTile label="Signed up" value={dateText(user.createdAtMs)} />
+          <InfoTile label="Last sign-in" value={dateText(user.lastSignInMs)} />
+          <InfoTile label="Support tickets" value={String(user.ticketsCreated ?? "—")} />
+          <InfoTile label="Status" value={user.disabled ? "Disabled" : "Active"} />
+        </div>
+        <p className="muted-copy" style={{ margin: "12px 0 6px", fontWeight: 700 }}>Workspaces</p>
+        {memberships.length === 0 ? (
+          <p className="muted-copy">No workspace memberships found.</p>
+        ) : (
+          <div style={{ display: "grid" }}>
+            {memberships.map((membership, index) => (
+              <div key={membership.companyId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <span style={{ fontSize: 13, fontWeight: 650, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{membership.name}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[membership.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[membership.plan] || membership.plan}</span>
+                <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{membership.role}</span>
+                <button type="button" onClick={() => openDetail("workspace", membership.companyId)} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
+                  Stats →
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  const renderWorkspaceDetail = () => {
+    const workspace = (detail?.workspace ?? {}) as Record<string, unknown>;
+    const percent = Number(workspace.storagePercent || 0);
+    return (
+      <>
+        <div className="settings-mini-grid">
+          <InfoTile label="Workspace" value={String(workspace.name || "—")} />
+          <InfoTile label="Owner" value={String(workspace.ownerEmail || "—")} />
+          <InfoTile label="Plan" value={ADMIN_PLAN_LABELS[String(workspace.plan)] || String(workspace.plan || "—")} />
+          <InfoTile label="Members" value={String(workspace.members ?? "—")} />
+          <InfoTile label="Created" value={dateText(workspace.createdAtMs)} />
+          <InfoTile label="Last order" value={dateText(workspace.lastOrderAtMs)} />
+          <InfoTile label="Orders (total)" value={String(workspace.ordersTotal ?? "—")} />
+          <InfoTile label="Orders (30d)" value={String(workspace.orders30d ?? "—")} />
+          <InfoTile label="Customers" value={String(workspace.customersTotal ?? "—")} />
+          <InfoTile label="Messages" value={String(workspace.messagesTotal ?? "—")} />
+          <InfoTile label="Support tickets" value={String(workspace.supportTotal ?? "—")} />
+          <InfoTile label="Files" value={String(workspace.storageFiles ?? "—")} />
+        </div>
+        <p className="muted-copy" style={{ margin: "12px 0 6px", fontWeight: 700 }}>Storage</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, height: 9, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden" }}>
+            <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${Math.min(percent, 100)}%`, background: percent >= 95 ? "#d92d20" : percent >= 80 ? "#ff9f0a" : "#0a84ff" }} />
+          </div>
+          <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+            {formatBytes(Number(workspace.storageBytes || 0))} / {Number(workspace.storageLimitMB || 0) >= 1024 ? `${Number(workspace.storageLimitMB) / 1024} GB` : `${workspace.storageLimitMB} MB`} ({percent}%)
+          </span>
+        </div>
+      </>
+    );
+  };
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="User Lookup" />
+        <p className="muted-copy">Search any user or workspace by email or name and inspect their statistics.</p>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            onKeyDown={event => { if (event.key === "Enter") runSearch(); }}
+            placeholder="Email, name or workspace..."
+            style={{ flex: "1 1 220px", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", color: "var(--text)", fontSize: 14 }}
+          />
+          <button
+            type="button"
+            className="button"
+            onClick={runSearch}
+            disabled={searching}
+            style={{ padding: "10px 18px", borderRadius: 12, fontWeight: 800, background: "#0a84ff", color: "#fff" }}
+          >
+            {searching ? "Searching..." : "Search"}
+          </button>
+        </div>
+        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{error}</p> : null}
+      </section>
+
+      {searched && !detailKind ? (
+        <div className="site-stats-panels">
+          <section className="card app-card">
+            <CardTitle icon="customer" eyebrow="Results" title={`Users (${users.length})`} />
+            {users.length === 0 ? <p className="muted-copy">No matching users.</p> : (
+              <div style={{ display: "grid" }}>
+                {users.map((user, index) => (
+                  <button
+                    key={user.uid}
+                    type="button"
+                    onClick={() => openDetail("user", user.uid)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email || user.uid}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{user.displayName || "—"} · last sign-in {user.lastSignInMs ? new Date(user.lastSignInMs).toLocaleDateString() : "never"}</div>
+                    </div>
+                    <span style={{ color: "#0a84ff", fontWeight: 800 }}>→</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+          <section className="card app-card">
+            <CardTitle icon="storage" eyebrow="Results" title={`Workspaces (${workspaces.length})`} />
+            {workspaces.length === 0 ? <p className="muted-copy">No matching workspaces.</p> : (
+              <div style={{ display: "grid" }}>
+                {workspaces.map((workspace, index) => (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    onClick={() => openDetail("workspace", workspace.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</div>
+                    </div>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
+                    <span style={{ color: "#0a84ff", fontWeight: 800 }}>→</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {detailKind ? (
+        <section className="card app-card">
+          <p className="muted-copy" style={{ margin: "0 0 6px" }}>
+            <button type="button" onClick={() => { setDetailKind(null); setDetail(null); }} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>← Results</button>
+          </p>
+          <CardTitle icon="dashboard" eyebrow={detailKind === "user" ? "User" : "Workspace"} title={detailKind === "user" ? "User Statistics" : "Workspace Statistics"} />
+          {detailLoading ? <p className="muted-copy">Loading...</p> : detail ? (detailKind === "user" ? renderUserDetail() : renderWorkspaceDetail()) : null}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 function AdminInsightsSection() {
-  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans" | "features" | "storage">("overview");
+  const [page, setPage] = useState<"overview" | "users" | "subscriptions" | "revenue" | "plans" | "features" | "storage" | "lookup">("overview");
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -6152,6 +6363,9 @@ function AdminInsightsSection() {
   if (page === "storage") {
     return <AdminStorageDetail onBack={() => setPage("overview")} />;
   }
+  if (page === "lookup") {
+    return <AdminUserLookupDetail onBack={() => setPage("overview")} />;
+  }
 
   return (
     <div className="settings-card-stack">
@@ -6208,6 +6422,14 @@ function AdminInsightsSection() {
             style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(10,132,255,0.10)", color: "#0a84ff" }}
           >
             Storage →
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() => setPage("lookup")}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(48,209,88,0.12)", color: "#1d8f43" }}
+          >
+            🔍 User Lookup →
           </button>
         </div>
       </section>

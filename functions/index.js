@@ -18200,3 +18200,205 @@ exports.getAdminStorageDetail = onCall({ region: "europe-west2", timeoutSeconds:
     note: "Sizes come from client-file records on orders. Retention/unused-file analysis is not tracked yet."
   };
 });
+
+// ---------------------------------------------------------------------------
+// Admin Insights: user / workspace lookup with per-account statistics
+// ---------------------------------------------------------------------------
+
+exports.getAdminLookup = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const mode = String(request.data?.mode || "search");
+
+  // ---- Search by email / name fragment -----------------------------------
+  if (mode === "search") {
+    const query = String(request.data?.query || "").trim().toLowerCase();
+    if (query.length < 2) {
+      throw new HttpsError("invalid-argument", "Enter at least 2 characters.");
+    }
+
+    const users = [];
+    try {
+      let pageToken = undefined;
+      let pages = 0;
+      do {
+        const page = await admin.auth().listUsers(1000, pageToken);
+        page.users.forEach((user) => {
+          const userEmail = String(user.email || "").toLowerCase();
+          const name = String(user.displayName || "").toLowerCase();
+          if (userEmail.includes(query) || name.includes(query)) {
+            users.push({
+              uid: user.uid,
+              email: user.email || "",
+              displayName: user.displayName || "",
+              createdAtMs: Date.parse(user.metadata?.creationTime || "") || 0,
+              lastSignInMs: Date.parse(user.metadata?.lastSignInTime || "") || 0
+            });
+          }
+        });
+        pageToken = page.pageToken;
+        pages += 1;
+      } while (pageToken && pages < 20 && users.length < 25);
+    } catch (error) {
+      console.warn("adminLookup listUsers failed:", error?.message || error);
+    }
+
+    const workspaces = [];
+    const companiesSnap = await db.collection("companies").limit(3000).get();
+    companiesSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      const name = String(data.name || data.companyName || "").toLowerCase();
+      const owner = String(data.ownerEmail || data.email || "").toLowerCase();
+      if (name.includes(query) || owner.includes(query) || doc.id.toLowerCase() === query) {
+        workspaces.push({
+          id: doc.id,
+          name: String(data.name || data.companyName || doc.id).slice(0, 60),
+          ownerEmail: String(data.ownerEmail || data.email || "").slice(0, 80),
+          plan: normalizeBillingPlan(data.billingPlan, "demo")
+        });
+      }
+    });
+
+    return { ok: true, users: users.slice(0, 12), workspaces: workspaces.slice(0, 12) };
+  }
+
+  // ---- Workspace statistics ----------------------------------------------
+  if (mode === "workspace") {
+    const companyId = String(request.data?.companyId || "").trim();
+    if (!companyId) throw new HttpsError("invalid-argument", "companyId is required.");
+
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) throw new HttpsError("not-found", "Workspace not found.");
+    const data = companyDoc.data() || {};
+    const plan = normalizeBillingPlan(data.billingPlan, "demo");
+    const since30 = admin.firestore.Timestamp.fromMillis(Date.now() - 30 * 86400000);
+
+    const countOf = async (collection, recent) => {
+      try {
+        let query = db.collection(collection).where("companyId", "==", companyId);
+        if (recent) query = query.where("createdAt", ">=", since30);
+        const snap = await query.count().get();
+        return Number(snap.data().count || 0);
+      } catch (error) {
+        console.warn(`adminLookup count ${collection} failed:`, error?.message || error);
+        return null;
+      }
+    };
+
+    const [
+      ordersTotal, orders30d,
+      customersTotal,
+      notesTotal,
+      messagesTotal,
+      supportTotal,
+      membersCount,
+      storage
+    ] = await Promise.all([
+      countOf("siparisler", false), countOf("siparisler", true),
+      countOf("musteriler", false),
+      countOf("notes", false),
+      countOf("messages", false),
+      countOf("supportTickets", false),
+      db.collection("companies").doc(companyId).collection("users").count().get().then((snap) => Number(snap.data().count || 0)).catch(() => null),
+      calculateClientFilesStorageBytes(companyId).catch(() => ({ clientFilesBytes: 0, clientFilesCount: 0 }))
+    ]);
+
+    let lastOrderAtMs = 0;
+    try {
+      const snap = await db.collection("siparisler").where("companyId", "==", companyId).orderBy("createdAt", "desc").limit(1).get();
+      const value = snap.docs[0]?.data()?.createdAt;
+      lastOrderAtMs = value && typeof value.toMillis === "function" ? value.toMillis() : 0;
+    } catch (error) {
+      console.warn("adminLookup last order failed:", error?.message || error);
+    }
+
+    const limitMB = adminPlanStorageLimitMB(plan, data);
+    return {
+      ok: true,
+      workspace: {
+        id: companyId,
+        name: String(data.name || data.companyName || companyId).slice(0, 60),
+        ownerEmail: String(data.ownerEmail || data.email || "").slice(0, 80),
+        plan,
+        createdAtMs: data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0,
+        members: membersCount,
+        ordersTotal,
+        orders30d,
+        customersTotal,
+        notesTotal,
+        messagesTotal,
+        supportTotal,
+        lastOrderAtMs,
+        storageBytes: storage.clientFilesBytes,
+        storageFiles: storage.clientFilesCount,
+        storageLimitMB: limitMB,
+        storagePercent: limitMB > 0 ? Math.round((storage.clientFilesBytes / (limitMB * 1024 * 1024)) * 1000) / 10 : 0
+      }
+    };
+  }
+
+  // ---- User statistics ----------------------------------------------------
+  if (mode === "user") {
+    const uid = String(request.data?.uid || "").trim();
+    if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
+
+    let authUser = null;
+    try {
+      authUser = await admin.auth().getUser(uid);
+    } catch (error) {
+      throw new HttpsError("not-found", "User not found.");
+    }
+
+    const memberships = [];
+    try {
+      const accessSnap = await db.collection("users").doc(uid).collection("workspaceAccess").limit(20).get();
+      for (const doc of accessSnap.docs) {
+        const companyDoc = await db.collection("companies").doc(doc.id).get();
+        const data = companyDoc.exists ? companyDoc.data() || {} : {};
+        memberships.push({
+          companyId: doc.id,
+          name: String(data.name || data.companyName || doc.id).slice(0, 60),
+          plan: normalizeBillingPlan(data.billingPlan, "demo"),
+          role: String(doc.data()?.role || "member").slice(0, 30)
+        });
+      }
+    } catch (error) {
+      console.warn("adminLookup memberships failed:", error?.message || error);
+    }
+
+    // Per-user content counts (created-by fields where available).
+    const countWhere = async (collection, field) => {
+      try {
+        const snap = await db.collection(collection).where(field, "==", uid).count().get();
+        return Number(snap.data().count || 0);
+      } catch (error) {
+        return null;
+      }
+    };
+    const [notesOwned, ticketsCreated] = await Promise.all([
+      countWhere("notes", "ownerUid"),
+      countWhere("supportTickets", "createdByUid")
+    ]);
+
+    return {
+      ok: true,
+      user: {
+        uid,
+        email: authUser.email || "",
+        displayName: authUser.displayName || "",
+        createdAtMs: Date.parse(authUser.metadata?.creationTime || "") || 0,
+        lastSignInMs: Date.parse(authUser.metadata?.lastSignInTime || "") || 0,
+        disabled: Boolean(authUser.disabled),
+        notesOwned,
+        ticketsCreated
+      },
+      memberships
+    };
+  }
+
+  throw new HttpsError("invalid-argument", "Unknown mode.");
+});
