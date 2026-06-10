@@ -17902,3 +17902,64 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
     flex: 1 1 130px;
   }
 }
+
+/* iPhone-style single-column mobile menu (parity with the native app) */
+.native-nav-extra,
+.native-nav-divider {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .native-toolbar-nav.is-open {
+    grid-template-columns: 1fr;
+    gap: 2px;
+    width: min(330px, calc(100vw - 24px));
+    padding: 14px 16px;
+    border-radius: 26px;
+    max-height: calc(100dvh - 90px);
+    overflow-y: auto;
+  }
+
+  .native-toolbar-nav .native-nav-pill {
+    justify-content: flex-start;
+    gap: 14px;
+    min-height: 46px;
+    padding: 11px 10px;
+    border: 0;
+    background: transparent;
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--text);
+    border-radius: 12px;
+    cursor: pointer;
+  }
+
+  .native-toolbar-nav .native-nav-pill svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .native-toolbar-nav .native-nav-pill.active {
+    background: rgba(10, 132, 255, 0.12);
+    color: #0a84ff;
+  }
+
+  .native-toolbar-nav .native-nav-pill.disabled {
+    opacity: 0.45;
+  }
+
+  .native-toolbar-nav .native-nav-extra {
+    display: inline-flex;
+  }
+
+  .native-toolbar-nav .native-nav-divider {
+    display: block;
+    height: 1px;
+    margin: 8px 4px;
+    background: rgba(17, 24, 39, 0.12);
+  }
+
+  .native-toolbar-nav .native-nav-signout {
+    color: #e0302f;
+  }
+}

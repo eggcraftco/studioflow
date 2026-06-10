@@ -1264,9 +1264,10 @@ private fun StudioLargeTopBar(
                             onOpenAccount()
                         }
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                     DropdownMenuItem(
-                        text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                        text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold, color = StudioRed) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = StudioRed) },
                         onClick = {
                             menuOpen = false
                             onSignOut()
@@ -1775,7 +1776,7 @@ private fun StudioMobileHeader(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(item.title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    Text(t(item.title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                     if (badge > 0) {
                                         Surface(color = StudioRed, shape = RoundedCornerShape(50)) {
                                             Text(
@@ -1827,9 +1828,10 @@ private fun StudioMobileHeader(
                             onOpenAccount()
                         }
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                     DropdownMenuItem(
-                        text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                        text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold, color = StudioRed) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = StudioRed) },
                         onClick = {
                             menuOpen = false
                             onSignOut()
