@@ -15056,6 +15056,27 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   color: var(--public-accent);
   font-size: 12px;
   font-weight: 920;
+  transition: background 0.45s ease, color 0.45s ease;
+}
+
+.public-story-status[data-tone="waiting"] {
+  background: rgba(120, 128, 140, 0.14);
+  color: #5b6470;
+}
+
+.public-story-status[data-tone="transit"] {
+  background: rgba(10, 132, 255, 0.13);
+  color: #0a66d6;
+}
+
+.public-story-status[data-tone="out"] {
+  background: rgba(255, 159, 10, 0.16);
+  color: #b36b00;
+}
+
+.public-story-status[data-tone="delivered"] {
+  background: rgba(48, 209, 88, 0.18);
+  color: #1d8f43;
 }
 
 .public-story-progress {

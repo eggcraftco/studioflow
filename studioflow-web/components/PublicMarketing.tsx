@@ -1273,6 +1273,15 @@ function StudioAccentBand() {
   );
 }
 
+const STORY_STATUS_KEYS: PublicSiteTranslationKey[] = [
+  "scrollStory.status1",
+  "scrollStory.status2",
+  "scrollStory.status3",
+  "scrollStory.status4"
+];
+
+const STORY_STATUS_TONES = ["waiting", "transit", "out", "delivered"];
+
 function ScrollStoryShowcase() {
   const { t } = usePublicSiteLanguage();
   const [activeStep, setActiveStep] = useState(0);
@@ -1314,7 +1323,9 @@ function ScrollStoryShowcase() {
                 <strong>{t("scrollStory.orderTitle")}</strong>
                 <small>{t("scrollStory.orderClient")}</small>
               </div>
-              <span className="public-story-status">{t("scrollStory.orderStatus")}</span>
+              <span className="public-story-status" data-tone={STORY_STATUS_TONES[activeStep]}>
+                {t(STORY_STATUS_KEYS[activeStep])}
+              </span>
             </div>
 
             <div className="public-story-progress" aria-hidden="true">
