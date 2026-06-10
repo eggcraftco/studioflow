@@ -23,6 +23,7 @@ import {
   switchActiveWorkspace,
   loadWorkspaceExportData,
   loadWorkspaceSettingsOverview,
+  setWorkspaceQuickReplyMenuEnabled,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
   type JoinRequestDetail,
@@ -1630,6 +1631,22 @@ function QuickReplySettingsSection({
   const canEditCore = canEditQuickReplySettingsForRole(workspace.role);
   const canEditPersonal = canEditPersonalQuickReplySettingsForRole(workspace.role);
   const canContribute = canContributeQuickReplyKnowledgeForRole(workspace.role);
+  const [menuEnabled, setMenuEnabled] = useState(workspace.quickReplyMenuEnabled);
+  const [menuSaving, setMenuSaving] = useState(false);
+
+  async function toggleMenuEnabled() {
+    if (menuSaving) return;
+    const next = !menuEnabled;
+    setMenuEnabled(next);
+    setMenuSaving(true);
+    try {
+      await setWorkspaceQuickReplyMenuEnabled(workspace.id, next);
+    } catch {
+      setMenuEnabled(!next);
+    } finally {
+      setMenuSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!settings) return;
@@ -1745,6 +1762,25 @@ function QuickReplySettingsSection({
           <span className="quick-reply-settings-main-icon" aria-hidden="true">✦</span>
           <h2>Quick Reply Settings</h2>
         </div>
+
+        {canEditCore ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "12px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--panel)", marginBottom: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+              <strong style={{ fontSize: 14 }}>Show &ldquo;AI Replies&rdquo; in the menu</strong>
+              <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Turn this off to hide the AI Replies item from your main menu.</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={menuEnabled}
+              onClick={toggleMenuEnabled}
+              disabled={menuSaving}
+              style={{ flexShrink: 0, width: 46, height: 26, borderRadius: 999, border: "none", cursor: menuSaving ? "default" : "pointer", background: menuEnabled ? "#34c759" : "#c7ccd1", position: "relative", transition: "background .15s" }}
+            >
+              <span style={{ position: "absolute", top: 3, left: menuEnabled ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", transition: "left .15s" }} />
+            </button>
+          </div>
+        ) : null}
 
         <div className="quick-reply-engine-block">
           <h3>Your Reply Engine</h3>
