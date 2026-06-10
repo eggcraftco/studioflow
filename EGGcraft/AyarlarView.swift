@@ -7815,7 +7815,8 @@ struct AdminInsightsView: View {
                                 VStack(spacing: 0) {
                                     ForEach(Array(attention.enumerated()), id: \.offset) { _, workspace in
                                         let plan = workspace["plan"] as? String ?? ""
-                                        valueRow(workspace["name"] as? String ?? "?", t("no orders in 30 days", lang: seciliDil), dotColor: .orange)
+                                        let planLabel = planLabels[plan] ?? plan
+                                        valueRow((workspace["name"] as? String ?? "?") + " · " + planLabel, t("no orders in 30 days", lang: seciliDil), dotColor: .orange)
                                     }
                                 }
                             }
