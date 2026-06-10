@@ -16955,3 +16955,125 @@ exports.assignInvoiceNumber = onCall({ region: "europe-west2" }, async (request)
   console.log("assignInvoiceNumber", { companyId, orderId, uid, invoiceNumber });
   return { ok: true, invoiceNumber };
 });
+
+// ---------------------------------------------------------------------------
+// Public site visitor statistics
+// Anonymous, aggregate-only counters: no cookies, no IPs, no user identifiers.
+// Daily doc: siteStats/{YYYY-MM-DD} with increment maps. Written only by the
+// beacon endpoint below; read only by support admins via getSiteStats.
+// ---------------------------------------------------------------------------
+
+const SITE_STATS_ALLOWED_ORIGINS = new Set([
+  "https://nivadesk.app",
+  "https://www.nivadesk.app"
+]);
+
+function siteStatsFieldKey(value, fallback = "other", maxLength = 60) {
+  const cleaned = String(value || "")
+    .trim()
+    .toLowerCase()
+    .slice(0, maxLength)
+    .replace(/[.~/*\[\]]/g, "_");
+  return cleaned || fallback;
+}
+
+function siteStatsDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
+}
+
+exports.recordSiteVisit = onRequest({ region: "europe-west2" }, async (req, res) => {
+  const origin = String(req.headers.origin || "");
+  if (SITE_STATS_ALLOWED_ORIGINS.has(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+  }
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
+  try {
+    if (req.method !== "POST") {
+      res.status(200).json({ ok: true, message: "Site stats beacon. Use POST." });
+      return;
+    }
+
+    const userAgent = String(req.headers["user-agent"] || "");
+    if (/bot|crawl|spider|preview|lighthouse|headless/i.test(userAgent)) {
+      res.status(200).json({ ok: true, skipped: "bot" });
+      return;
+    }
+
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const pageKey = siteStatsFieldKey(body.path, "unknown");
+    const deviceKey = ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop";
+    const languageKey = siteStatsFieldKey(String(body.language || "").slice(0, 8), "unknown", 8);
+    const newSession = body.newSession === true;
+
+    let referrerKey = "";
+    if (newSession) {
+      const rawReferrer = String(body.referrer || "").trim();
+      if (!rawReferrer) {
+        referrerKey = "direct";
+      } else {
+        try {
+          const host = new URL(rawReferrer).hostname.replace(/^www\./, "");
+          referrerKey = host.includes("nivadesk") ? "" : siteStatsFieldKey(host, "other", 60);
+        } catch {
+          referrerKey = "other";
+        }
+      }
+    }
+
+    const inc = admin.firestore.FieldValue.increment(1);
+    const update = {
+      total: inc,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      pages: { [pageKey]: inc },
+      devices: { [deviceKey]: inc },
+      languages: { [languageKey]: inc }
+    };
+    if (newSession) {
+      update.sessions = inc;
+      if (referrerKey) update.referrers = { [referrerKey]: inc };
+    }
+
+    await admin.firestore().collection("siteStats").doc(siteStatsDateKey()).set(update, { merge: true });
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("recordSiteVisit error:", error?.message || error);
+    res.status(200).json({ ok: false });
+  }
+});
+
+exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Site statistics are restricted to NivaDesk admins.");
+  }
+
+  const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 90);
+  const dateKeys = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
+  }
+
+  const refs = dateKeys.map((key) => admin.firestore().collection("siteStats").doc(key));
+  const snaps = await admin.firestore().getAll(...refs);
+
+  const daysOut = snaps.map((snap, index) => {
+    const data = snap.exists ? snap.data() : {};
+    return {
+      date: dateKeys[index],
+      total: Number(data.total || 0),
+      sessions: Number(data.sessions || 0),
+      pages: data.pages || {},
+      devices: data.devices || {},
+      languages: data.languages || {},
+      referrers: data.referrers || {}
+    };
+  });
+
+  return { ok: true, isSupportAdmin: true, days: daysOut };
+});

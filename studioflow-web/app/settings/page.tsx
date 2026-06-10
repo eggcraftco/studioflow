@@ -9,7 +9,8 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { auth } from "@/lib/firebase/client";
+import { auth, functions } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
 import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -87,6 +88,7 @@ type SettingsSectionId =
   | "plan-access"
   | "team-access"
   | "support-tickets"
+  | "admin-stats"
   | "about";
 
 type SettingsSection = {
@@ -124,8 +126,15 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team" },
-  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" }
+  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" },
+  { id: "admin-stats", title: "Site Statistics", appKey: "Site Statistics", description: "Public website visitors and traffic (NivaDesk admin).", icon: "data" }
 ];
+
+const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com"]);
+
+function isNivaDeskAdminEmail(email: string | null | undefined) {
+  return Boolean(email && NIVADESK_ADMIN_EMAILS.has(email.trim().toLowerCase()));
+}
 
 function formatStorageFromMB(valueMB: number) {
   if (!Number.isFinite(valueMB) || valueMB <= 0) return "0 MB";
@@ -185,6 +194,9 @@ function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
+  // Visibility for admin-stats is decided by the signed-in email (see
+  // visibleSections); the backend enforces the same allowlist regardless.
+  if (sectionId === "admin-stats") return true;
   if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
 
   const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
@@ -324,8 +336,11 @@ export default function SettingsPage() {
   }, [user]);
 
   const visibleSections = useMemo(
-    () => SETTINGS_SECTIONS.filter(section => canSeeSettingsSection(workspace, section.id)),
-    [workspace]
+    () => SETTINGS_SECTIONS.filter(section => {
+      if (section.id === "admin-stats" && !isNivaDeskAdminEmail(user?.email)) return false;
+      return canSeeSettingsSection(workspace, section.id);
+    }),
+    [workspace, user]
   );
   const selectedSection = useMemo(
     () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "general") ?? SETTINGS_SECTIONS[0],
@@ -518,6 +533,8 @@ function renderSettingsSection({
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
+    case "admin-stats":
+      return <AdminSiteStatsSection />;
     case "about":
       return <AboutSection workspace={workspace} />;
   }
@@ -4496,6 +4513,144 @@ function formatSupportDate(value: number) {
   }).format(new Date(value));
 }
 
+
+type SiteStatsDay = {
+  date: string;
+  total: number;
+  sessions: number;
+  pages: Record<string, number>;
+  devices: Record<string, number>;
+  languages: Record<string, number>;
+  referrers: Record<string, number>;
+};
+
+function sumStatsField(days: SiteStatsDay[], field: "total" | "sessions") {
+  return days.reduce((acc, day) => acc + (Number(day[field]) || 0), 0);
+}
+
+function topStatsEntries(days: SiteStatsDay[], field: "pages" | "devices" | "languages" | "referrers", limit = 6) {
+  const merged = new Map<string, number>();
+  for (const day of days) {
+    for (const [key, value] of Object.entries(day[field] || {})) {
+      merged.set(key, (merged.get(key) || 0) + (Number(value) || 0));
+    }
+  }
+  return Array.from(merged.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit);
+}
+
+function StatsBreakdownCard({ title, entries }: { title: string; entries: [string, number][] }) {
+  const max = entries.length ? entries[0][1] : 0;
+  return (
+    <section className="card app-card">
+      <CardTitle icon="dashboard" eyebrow="Visitors" title={title} />
+      {entries.length === 0 ? (
+        <p className="muted-copy">No data yet.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {entries.map(([key, value]) => (
+            <div key={key} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 56px", alignItems: "center", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 650 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{key}</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden", marginTop: 4 }}>
+                  <span style={{ display: "block", height: "100%", width: `${max ? Math.max(6, Math.round((value / max) * 100)) : 0}%`, borderRadius: 999, background: "#0a84ff" }} />
+                </div>
+              </div>
+              <strong style={{ fontSize: 13, textAlign: "right" }}>{value.toLocaleString()}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminSiteStatsSection() {
+  const [range, setRange] = useState(30);
+  const [days, setDays] = useState<SiteStatsDay[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ days: number }, { ok: boolean; days: SiteStatsDay[] }>(functions, "getSiteStats");
+    callable({ days: range })
+      .then(result => {
+        if (!cancelled) setDays(result.data?.days ?? []);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load site statistics.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range]);
+
+  const loaded = days ?? [];
+  const today = loaded.length ? loaded[loaded.length - 1] : null;
+  const last7 = loaded.slice(-7);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Public website statistics" />
+        <p className="muted-copy">Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.</p>
+        <div style={{ display: "flex", gap: 8, margin: "10px 0 14px" }}>
+          {[7, 30, 90].map(option => (
+            <button
+              key={option}
+              type="button"
+              className="button"
+              onClick={() => setRange(option)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 700,
+                background: range === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+                color: range === option ? "#fff" : "var(--text)"
+              }}
+            >
+              {option}d
+            </button>
+          ))}
+        </div>
+        {loading ? <p className="muted-copy">Loading statistics...</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+        {!loading && !error ? (
+          <div className="settings-mini-grid">
+            <InfoTile label="Today · page views" value={(today?.total ?? 0).toLocaleString()} />
+            <InfoTile label="Today · visitors" value={(today?.sessions ?? 0).toLocaleString()} />
+            <InfoTile label="Last 7 days · views" value={sumStatsField(last7, "total").toLocaleString()} />
+            <InfoTile label="Last 7 days · visitors" value={sumStatsField(last7, "sessions").toLocaleString()} />
+            <InfoTile label={`Last ${range} days · views`} value={sumStatsField(loaded, "total").toLocaleString()} />
+            <InfoTile label={`Last ${range} days · visitors`} value={sumStatsField(loaded, "sessions").toLocaleString()} />
+          </div>
+        ) : null}
+      </section>
+
+      {!loading && !error ? (
+        <>
+          <StatsBreakdownCard title="Top pages" entries={topStatsEntries(loaded, "pages")} />
+          <StatsBreakdownCard title="Devices" entries={topStatsEntries(loaded, "devices", 3)} />
+          <StatsBreakdownCard title="Visitor languages" entries={topStatsEntries(loaded, "languages")} />
+          <StatsBreakdownCard title="Traffic sources" entries={topStatsEntries(loaded, "referrers")} />
+        </>
+      ) : null}
+
+      <section className="card app-card">
+        <CardTitle icon="notes" eyebrow="Support" title="Support inbox" />
+        <p className="muted-copy">Messages sent via Contact NivaDesk Support appear in the Support / Tickets section — as an admin you see every user&apos;s tickets there.</p>
+      </section>
+    </div>
+  );
+}
 
 function AboutSection({ workspace }: { workspace: WorkspaceContext }) {
   return (

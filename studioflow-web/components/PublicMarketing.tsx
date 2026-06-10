@@ -8,6 +8,7 @@ import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
 import {
   PLAN_ENTITLEMENTS,
   storageLimitLabel,
@@ -902,6 +903,7 @@ function PublicShellContent({ children }: { children: ReactNode }) {
 
   return (
     <div className="public-site" dir={dir}>
+      <SiteVisitBeacon />
       <PublicHeader />
       <main>{children}</main>
       <PublicFooter />
