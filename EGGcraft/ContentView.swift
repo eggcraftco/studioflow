@@ -12169,12 +12169,14 @@ struct AccountProfileView: View {
                         workspaceLogoCard
                     }
                     securityCard
+                    deleteAccountCard
                 case .profileWorkspace:
                     profileCard
                 case .workspaceLogo:
                     workspaceLogoCard
                 case .signInSecurity:
                     securityCard
+                    deleteAccountCard
                 case .planAccess:
                     planAndAccessCard
                     if authVM.isCompanyOwner {
@@ -13398,6 +13400,58 @@ struct AccountProfileView: View {
         }
         .buttonStyle(.plain)
         .disabled(authVM.isProfileLoading)
+    }
+
+    @State private var deleteAccountConfirmText = ""
+    @State private var deletingAccount = false
+    @State private var deleteAccountError = ""
+
+    private var deleteAccountCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(t("Delete account", lang: seciliDil), icon: "trash.fill")
+            Text(t("Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            TextField(t("Type DELETE to confirm", lang: seciliDil), text: $deleteAccountConfirmText)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Color.primary.opacity(0.05))
+                .cornerRadius(8)
+                .autocorrectionDisabled(true)
+            if !deleteAccountError.isEmpty {
+                Text(deleteAccountError)
+                    .font(.system(size: 12))
+                    .foregroundColor(.red)
+            }
+            Button {
+                deletingAccount = true
+                deleteAccountError = ""
+                Functions.functions(region: "europe-west2").httpsCallable("deleteMyAccount").call(["confirmation": "DELETE"]) { _, error in
+                    Task { @MainActor in
+                        deletingAccount = false
+                        if let error {
+                            deleteAccountError = error.localizedDescription
+                        } else {
+                            authVM.logout()
+                        }
+                    }
+                }
+            } label: {
+                Text(deletingAccount ? t("Deleting...", lang: seciliDil) : t("Delete my account", lang: seciliDil))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(deleteAccountConfirmText.trimmingCharacters(in: .whitespaces).uppercased() == "DELETE" ? Color.red : Color.gray)
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .disabled(deletingAccount || deleteAccountConfirmText.trimmingCharacters(in: .whitespaces).uppercased() != "DELETE")
+        }
+        .padding(18)
+        .background(Color.red.opacity(0.05))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.35), lineWidth: 1))
+        .cornerRadius(12)
     }
 
     private var securityCard: some View {

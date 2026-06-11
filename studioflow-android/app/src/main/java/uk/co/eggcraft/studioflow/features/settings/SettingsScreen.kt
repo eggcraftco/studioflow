@@ -1955,6 +1955,10 @@ private fun AccountDetail(
         }
     }
 
+    if (includeSecurity) {
+        DeleteAccountCard(onSignOut = onSignOut)
+    }
+
     if (pendingLogo != null) {
         AlertDialog(
             onDismissRequest = { pendingLogo = null },
@@ -5815,6 +5819,69 @@ private fun AIHubLookupPage(t: (String) -> String) {
                     AIHubRow(t("Customers"), insightsInt(workspace, "customersTotal").toString())
                     AIHubRow(t("Storage"), aiHubBytes(insightsInt(workspace, "storageBytes")) + " / ${insightsInt(workspace, "storageLimitMB")} MB")
                 }
+            }
+        }
+    }
+}
+
+
+// In-app account deletion (App Store / Play policy compliance).
+@Composable
+private fun DeleteAccountCard(onSignOut: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var confirmText by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf("") }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val canDelete = confirmText.trim().uppercase() == "DELETE"
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(t("Delete account"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+            Text(
+                t("Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = confirmText,
+                onValueChange = { confirmText = it },
+                label = { Text(t("Type DELETE to confirm")) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (errorText.isNotBlank()) {
+                Text(errorText, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = {
+                    deleting = true
+                    errorText = ""
+                    scope.launch {
+                        try {
+                            com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                                .getHttpsCallable("deleteMyAccount")
+                                .call(mapOf("confirmation" to "DELETE"))
+                                .await()
+                            onSignOut()
+                        } catch (error: Exception) {
+                            errorText = error.message ?: "Could not delete the account."
+                            deleting = false
+                        }
+                    }
+                },
+                enabled = canDelete && !deleting,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(if (deleting) t("Deleting...") else t("Delete my account"), fontWeight = FontWeight.Bold)
             }
         }
     }

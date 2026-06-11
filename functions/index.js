@@ -18472,3 +18472,152 @@ exports.getAdminLookup = onCall({ region: "europe-west2", timeoutSeconds: 120 },
 
   throw new HttpsError("invalid-argument", "Unknown mode.");
 });
+
+// TEMPORARY one-off: set the Auth email action URL via Identity Toolkit Admin
+// API (console UI was erroring). Remove after use.
+exports.nvOneOffSetActionUrl = onRequest({ region: "europe-west2" }, async (req, res) => {
+  if (String(req.query.key || "") !== "1521c47c82210b1dd8b98ffdd444168b5ffe9d589cf42436") {
+    res.status(403).json({ ok: false });
+    return;
+  }
+  try {
+    const { GoogleAuth } = require("google-auth-library");
+    const authClient = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+    const client = await authClient.getClient();
+    if (req.query.get === "1") {
+      const current = await client.request({
+        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config",
+        method: "GET"
+      });
+      res.status(200).json({
+        ok: true,
+        authorizedDomains: current.data?.authorizedDomains || [],
+        notification: current.data?.notification || null
+      });
+      return;
+    }
+    if (req.query.dns === "1") {
+      const response = await client.request({
+        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=notification.sendEmail.dnsInfo.useCustomDomain,notification.sendEmail.dnsInfo.pendingCustomDomain",
+        method: "PATCH",
+        data: { notification: { sendEmail: { dnsInfo: { useCustomDomain: true, pendingCustomDomain: "nivadesk.app" } } } }
+      });
+      res.status(200).json({ ok: true, dnsInfo: response.data?.notification?.sendEmail?.dnsInfo || null });
+      return;
+    }
+    if (req.query.wide === "1") {
+      const current = await client.request({
+        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config",
+        method: "GET"
+      });
+      const sendEmail = current.data?.notification?.sendEmail || {};
+      sendEmail.callbackUri = "https://nivadesk.app/auth/action";
+      const response = await client.request({
+        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=notification.sendEmail",
+        method: "PATCH",
+        data: { notification: { sendEmail } }
+      });
+      res.status(200).json({ ok: true, callbackUri: response.data?.notification?.sendEmail?.callbackUri || null });
+      return;
+    }
+    if (req.query.addDomain === "1") {
+      const current = await client.request({
+        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config",
+        method: "GET"
+      });
+      const domains = new Set(current.data?.authorizedDomains || []);
+      domains.add("nivadesk.app");
+      const response = await client.request({
+        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=authorizedDomains",
+        method: "PATCH",
+        data: { authorizedDomains: Array.from(domains) }
+      });
+      res.status(200).json({ ok: true, authorizedDomains: response.data?.authorizedDomains || [] });
+      return;
+    }
+    const url = "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=notification.sendEmail.callbackUri";
+    const response = await client.request({
+      url,
+      method: "PATCH",
+      data: { notification: { sendEmail: { callbackUri: "https://nivadesk.app/auth/action" } } }
+    });
+    res.status(200).json({ ok: true, callbackUri: response.data?.notification?.sendEmail?.callbackUri || null });
+  } catch (error) {
+    res.status(200).json({ ok: false, error: error?.message || String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// In-app account deletion (App Store guideline 5.1.1(v) compliance).
+// Deletes the caller's OWN workspace (orders, customers, notes, messages,
+// files, all subcollections), removes their memberships from other
+// workspaces, then deletes the Firebase Auth user.
+// ---------------------------------------------------------------------------
+
+exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+  const uid = String(request.auth?.uid || "").trim();
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const confirmation = String(request.data?.confirmation || "").trim().toUpperCase();
+  if (confirmation !== "DELETE") {
+    throw new HttpsError("failed-precondition", "Type DELETE to confirm this action.");
+  }
+
+  const db = admin.firestore();
+
+  // 1) Memberships in OTHER workspaces — capture before user doc is wiped.
+  let otherMemberships = [];
+  try {
+    const accessSnap = await db.collection("users").doc(uid).collection("workspaceAccess").get();
+    otherMemberships = accessSnap.docs.map((doc) => doc.id).filter((id) => id && id !== uid);
+  } catch (error) {
+    console.warn("deleteMyAccount memberships read failed:", error?.message || error);
+  }
+  for (const companyId of otherMemberships) {
+    try {
+      await db.collection("companies").doc(companyId).update({
+        memberUids: admin.firestore.FieldValue.arrayRemove(uid),
+        [`memberRoles.${uid}`]: admin.firestore.FieldValue.delete(),
+        [`members.${uid}`]: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.warn("deleteMyAccount membership cleanup failed:", companyId, error?.message || error);
+    }
+  }
+
+  // 2) Own workspace top-level documents (collections keyed by companyId).
+  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets"]) {
+    try {
+      await deleteWorkspaceCollectionDocuments(collection, uid);
+    } catch (error) {
+      console.warn(`deleteMyAccount ${collection} cleanup failed:`, error?.message || error);
+    }
+  }
+
+  // 3) Own workspace doc + every nested subcollection, then the user doc tree.
+  try {
+    await db.recursiveDelete(db.collection("companies").doc(uid));
+  } catch (error) {
+    console.warn("deleteMyAccount company recursiveDelete failed:", error?.message || error);
+  }
+  try {
+    await db.recursiveDelete(db.collection("users").doc(uid));
+  } catch (error) {
+    console.warn("deleteMyAccount user recursiveDelete failed:", error?.message || error);
+  }
+
+  // 4) Uploaded files (client files, design images, support/message files).
+  try {
+    await admin.storage().bucket().deleteFiles({ prefix: `companies/${uid}/`, force: true });
+  } catch (error) {
+    console.warn("deleteMyAccount storage cleanup failed:", error?.message || error);
+  }
+
+  // 5) Finally the Auth account itself.
+  await admin.auth().deleteUser(uid);
+
+  console.log("deleteMyAccount completed", { uid, otherMemberships: otherMemberships.length });
+  return { ok: true };
+});
