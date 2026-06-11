@@ -99,6 +99,18 @@ struct LoginFeatureRotator: View {
         return sizes[wordIndex % sizes.count]
     }
 
+    // Caret: a tiny rounded square like the colourful order cards in the app.
+    // Colour and size shift subtly with each word; solid while typing/erasing,
+    // gently blinking while the word is held.
+    private func caretView(for word: String) -> some View {
+        RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+            .fill(caretColor)
+            .frame(width: caretSize, height: caretSize)
+            .opacity(isDeleting || charCount < word.count ? 0.9 : (holdTicks % 16 < 8 ? 0.7 : 0.15))
+            .animation(.easeInOut(duration: 0.3), value: wordIndex)
+            .padding(.leading, 3)
+    }
+
     private func tickHaptic(intensity: CGFloat = 0.75) {
         #if os(iOS)
         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -109,7 +121,11 @@ struct LoginFeatureRotator: View {
     var body: some View {
         let word = words[wordIndex % words.count]
         let typed = String(word.prefix(charCount))
+        // The invisible twin caret on the left keeps the WORD perfectly
+        // centred on screen — the visible caret hangs off to the right
+        // without pulling the text sideways.
         HStack(spacing: 2) {
+            caretView(for: word).hidden()
             Text(typed)
                 .font(.system(size: 21, weight: .heavy))
                 .foregroundStyle(
@@ -119,15 +135,7 @@ struct LoginFeatureRotator: View {
                         endPoint: .trailing
                     )
                 )
-            // Caret: a tiny rounded square like the colourful order cards in
-            // the app. Colour and size shift subtly with each word; solid while
-            // typing/erasing, gently blinking while the word is held.
-            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                .fill(caretColor)
-                .frame(width: caretSize, height: caretSize)
-                .opacity(isDeleting || charCount < word.count ? 0.9 : (holdTicks % 16 < 8 ? 0.7 : 0.15))
-                .animation(.easeInOut(duration: 0.3), value: wordIndex)
-                .padding(.leading, 3)
+            caretView(for: word)
         }
         .frame(height: 28)
         .onReceive(timer) { _ in
