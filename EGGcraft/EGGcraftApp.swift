@@ -82,7 +82,10 @@ struct StudioManagerApp: App {
         WindowGroup {
             Group {
                 if authVM.isLoggedIn {
-                    if authVM.isLocalUnlockSatisfied {
+                    if authVM.needsEmailVerification {
+                        EmailVerifyView(seciliDil: seciliDil)
+                            .environmentObject(authVM)
+                    } else if authVM.isLocalUnlockSatisfied {
                         if authVM.isWorkspaceReady {
                             ContentView()
                                 .id(authVM.interfaceSessionId)

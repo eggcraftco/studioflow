@@ -295,3 +295,82 @@ struct LoginView: View {
         }
     }
 }
+
+// MARK: - Email verification gate screen
+
+struct EmailVerifyView: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    let seciliDil: String
+    @State private var statusText = ""
+    @State private var busy = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("📬").font(.system(size: 42))
+            Text(t("Verify your email", lang: seciliDil))
+                .font(.system(size: 22, weight: .heavy))
+            Text(t("We sent a verification link to:", lang: seciliDil))
+                .font(.system(size: 13))
+                .foregroundColor(.gray)
+            Text(Auth.auth().currentUser?.email ?? "")
+                .font(.system(size: 14, weight: .bold))
+            Text(t("Click the link in that email, then come back here.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+
+            if !statusText.isEmpty {
+                Text(statusText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                busy = true
+                authVM.refreshEmailVerification { verified in
+                    busy = false
+                    if !verified {
+                        statusText = t("Not verified yet — click the link in the email first.", lang: seciliDil)
+                    }
+                }
+            } label: {
+                Text(t("I've verified — continue", lang: seciliDil))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
+            .disabled(busy)
+
+            Button {
+                busy = true
+                authVM.resendVerificationEmail { message in
+                    busy = false
+                    statusText = message
+                }
+            } label: {
+                Text(t("Resend email", lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
+            .disabled(busy)
+
+            Button(t("Sign Out", lang: seciliDil)) {
+                authVM.logout()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.gray)
+        }
+        .padding(30)
+        .frame(maxWidth: 380)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

@@ -24,6 +24,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -235,5 +237,89 @@ private fun GoogleGLogo(logoSize: androidx.compose.ui.unit.Dp = 18.dp) {
             topLeft = androidx.compose.ui.geometry.Offset(this.size.width / 2f, this.size.height / 2f - stroke / 2f),
             size = androidx.compose.ui.geometry.Size(this.size.width / 2f, stroke)
         )
+    }
+}
+
+
+// --- Email verification gate -------------------------------------------------
+
+fun firebaseUserNeedsEmailVerification(): Boolean {
+    val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return false
+    if (user.isEmailVerified) return false
+    return user.providerData.any { it.providerId == "password" }
+}
+
+@Composable
+fun EmailVerifyScreen(onVerified: () -> Unit, onSignOut: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var statusText by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: ""
+    val notVerifiedText = t("Not verified yet — click the link in the email first.")
+    val sentText = t("Verification email sent. Check your inbox.")
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(shape = RoundedCornerShape(22.dp), tonalElevation = 2.dp) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("📬", fontSize = 40.sp)
+                Text(t("Verify your email"), fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text(t("We sent a verification link to:"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                Text(email, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(
+                    t("Click the link in that email, then come back here."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                if (statusText.isNotBlank()) {
+                    Text(statusText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                            runCatching { user?.reload()?.await() }
+                            busy = false
+                            if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.isEmailVerified == true) {
+                                onVerified()
+                            } else {
+                                statusText = notVerifiedText
+                            }
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(t("I've verified — continue"), fontWeight = FontWeight.Bold) }
+                OutlinedButton(
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            runCatching {
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.sendEmailVerification()?.await()
+                            }
+                            busy = false
+                            statusText = sentText
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(t("Resend email"), fontWeight = FontWeight.SemiBold) }
+                TextButton(onClick = onSignOut) { Text(t("Sign Out")) }
+            }
+        }
     }
 }

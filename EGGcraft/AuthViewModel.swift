@@ -3368,3 +3368,38 @@ final class NVAppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegat
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
+
+// MARK: - Email verification gate
+
+extension AuthViewModel {
+    /// Email/password accounts must verify their address before entering the
+    /// app. OAuth users (Google, Apple) are already verified by the provider.
+    var needsEmailVerification: Bool {
+        guard let user = Auth.auth().currentUser else { return false }
+        guard !user.isEmailVerified else { return false }
+        return user.providerData.contains { $0.providerID == "password" }
+    }
+
+    func resendVerificationEmail(completion: @escaping (String) -> Void) {
+        guard let user = Auth.auth().currentUser else { return }
+        user.sendEmailVerification { error in
+            Task { @MainActor in
+                completion(error?.localizedDescription ?? "Verification email sent. Check your inbox.")
+            }
+        }
+    }
+
+    func refreshEmailVerification(completion: @escaping (Bool) -> Void) {
+        guard let user = Auth.auth().currentUser else { completion(true); return }
+        user.reload { _ in
+            Task { @MainActor in
+                let verified = Auth.auth().currentUser?.isEmailVerified ?? false
+                if verified {
+                    // Nudge SwiftUI to re-evaluate the gate.
+                    self.objectWillChange.send()
+                }
+                completion(verified)
+            }
+        }
+    }
+}

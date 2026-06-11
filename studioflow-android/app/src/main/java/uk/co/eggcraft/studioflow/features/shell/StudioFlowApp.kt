@@ -252,7 +252,7 @@ private fun StudioFlowAppContent(
     }
 
     LaunchedEffect(state.user?.uid, requireDeviceUnlock) {
-        when {
+    when {
             state.user == null -> {
                 localUnlockSatisfied = true
                 localUnlockMessage = ""
@@ -300,8 +300,15 @@ private fun StudioFlowAppContent(
         }
     }
 
+    var emailVerifiedOverride by androidx.compose.runtime.remember(state.user?.uid) { androidx.compose.runtime.mutableStateOf(false) }
+
     when {
         state.loading -> StudioLoadingScreen()
+        state.user != null && !emailVerifiedOverride && uk.co.eggcraft.studioflow.features.auth.firebaseUserNeedsEmailVerification() ->
+            uk.co.eggcraft.studioflow.features.auth.EmailVerifyScreen(
+                onVerified = { emailVerifiedOverride = true },
+                onSignOut = viewModel::signOut
+            )
         state.user == null -> LoginScreen(
             signingIn = state.signingIn,
             errorMessage = state.errorMessage,
