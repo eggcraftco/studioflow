@@ -54,13 +54,15 @@ private enum LoginCredentialStore {
 
 
 
-// Animated feature words above the sign-in card — mirrors the web login hero.
+// Animated feature words above the sign-in card — typewriter style with a
+// tiny haptic tick per letter on iPhone (mirrors the web login hero).
 struct LoginFeatureRotator: View {
     let seciliDil: String
 
     @State private var wordIndex = 0
-    @State private var wordVisible = true
-    private let timer = Timer.publish(every: 2.1, on: .main, in: .common).autoconnect()
+    @State private var charCount = 0
+    @State private var holdTicks = 0
+    private let timer = Timer.publish(every: 0.045, on: .main, in: .common).autoconnect()
 
     private var words: [String] {
         [
@@ -73,13 +75,19 @@ struct LoginFeatureRotator: View {
         ]
     }
 
+    private func tickHaptic() {
+        #if os(iOS)
+        let generator = UIImpactFeedbackGenerator(style: .soft)
+        generator.impactOccurred(intensity: 0.4)
+        #endif
+    }
+
     var body: some View {
-        HStack(spacing: 8) {
-            Text(t("Your studio:", lang: seciliDil))
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.gray)
-            Text(words[wordIndex % words.count])
-                .font(.system(size: 20, weight: .heavy))
+        let word = words[wordIndex % words.count]
+        let typed = String(word.prefix(charCount))
+        HStack(spacing: 2) {
+            Text(typed)
+                .font(.system(size: 21, weight: .heavy))
                 .foregroundStyle(
                     LinearGradient(
                         colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
@@ -87,15 +95,23 @@ struct LoginFeatureRotator: View {
                         endPoint: .trailing
                     )
                 )
-                .opacity(wordVisible ? 1 : 0)
-                .offset(y: wordVisible ? 0 : 6)
-                .animation(.easeInOut(duration: 0.26), value: wordVisible)
+            // Caret blinks while the word is "held", solid while typing.
+            Text("▍")
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundColor(.gray.opacity(charCount < word.count ? 0.8 : (holdTicks % 16 < 8 ? 0.65 : 0.0)))
         }
+        .frame(height: 28)
         .onReceive(timer) { _ in
-            wordVisible = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+            let current = words[wordIndex % words.count]
+            if charCount < current.count {
+                charCount += 1
+                tickHaptic()
+            } else if holdTicks < 32 {
+                holdTicks += 1
+            } else {
                 wordIndex = (wordIndex + 1) % words.count
-                wordVisible = true
+                charCount = 0
+                holdTicks = 0
             }
         }
     }
