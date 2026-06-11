@@ -7468,6 +7468,15 @@ struct ContentView: View {
                 }
             }
 
+            if canAccessFiles {
+                Button {
+                    aktifSekme = "Files"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Files", lang: seciliDil), systemImage: "folder.fill")
+                }
+            }
+
             if canAccessQuickReply {
                 Button {
                     aktifSekme = "QuickReply"
