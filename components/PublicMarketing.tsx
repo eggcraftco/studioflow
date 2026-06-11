@@ -889,7 +889,6 @@ function PublicFooter() {
           </section>
         </div>
         <div className="public-footer-meta">
-          <span>{t("footer.address")}</span>
           <span>{t("footer.rights")}</span>
         </div>
       </div>
