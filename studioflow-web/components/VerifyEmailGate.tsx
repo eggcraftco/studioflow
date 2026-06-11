@@ -7,10 +7,84 @@ import { useState } from "react";
 import { sendEmailVerification, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 
-export function emailVerificationRequired(user: User | null | undefined) {
+const VERIFICATION_GRACE_DAYS = 3;
+
+export function emailVerificationPending(user: User | null | undefined) {
   if (!user) return false;
   if (user.emailVerified) return false;
   return user.providerData.some(provider => provider.providerId === "password");
+}
+
+// Industry-standard soft gate: new accounts get full access with a banner for
+// a few days; only stale unverified accounts hit the hard verification screen.
+export function emailVerificationRequired(user: User | null | undefined) {
+  if (!emailVerificationPending(user)) return false;
+  const createdMs = Date.parse(user?.metadata?.creationTime ?? "");
+  if (!Number.isFinite(createdMs)) return false;
+  return Date.now() - createdMs > VERIFICATION_GRACE_DAYS * 86400000;
+}
+
+export function VerifyEmailBanner({ user }: { user: User }) {
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [hiddenAfterVerify, setHiddenAfterVerify] = useState(false);
+
+  if (hiddenAfterVerify) return null;
+
+  async function resend() {
+    setBusy(true);
+    try {
+      await sendEmailVerification(user);
+      setStatus("Sent ✓");
+    } catch {
+      setStatus("Try again later");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function check() {
+    setBusy(true);
+    try {
+      await user.reload();
+      if (auth.currentUser?.emailVerified) {
+        setHiddenAfterVerify(true);
+        window.location.reload();
+      } else {
+        setStatus("Not verified yet");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+        padding: "9px 14px",
+        background: "#fff7e6",
+        borderBottom: "1px solid #f1d9a7",
+        color: "#7a5200",
+        fontSize: 13,
+        fontWeight: 650
+      }}
+    >
+      <span>📬 Verify your email ({user.email}) to keep full access.</span>
+      <button type="button" onClick={() => void resend()} disabled={busy} style={{ border: "1px solid #d9b96a", background: "#fff", borderRadius: 999, padding: "4px 12px", fontWeight: 700, cursor: "pointer", color: "#7a5200" }}>
+        Resend
+      </button>
+      <button type="button" onClick={() => void check()} disabled={busy} style={{ border: 0, background: "transparent", fontWeight: 800, cursor: "pointer", color: "#7a5200", textDecoration: "underline" }}>
+        I&apos;ve verified
+      </button>
+      {status ? <span style={{ fontWeight: 800 }}>{status}</span> : null}
+    </div>
+  );
 }
 
 export function VerifyEmailScreen({ user }: { user: User }) {

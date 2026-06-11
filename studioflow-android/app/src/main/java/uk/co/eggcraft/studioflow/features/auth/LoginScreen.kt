@@ -246,7 +246,11 @@ private fun GoogleGLogo(logoSize: androidx.compose.ui.unit.Dp = 18.dp) {
 fun firebaseUserNeedsEmailVerification(): Boolean {
     val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return false
     if (user.isEmailVerified) return false
-    return user.providerData.any { it.providerId == "password" }
+    if (user.providerData.none { it.providerId == "password" }) return false
+    // Industry-standard grace period: new accounts get full access for a few
+    // days; only stale unverified accounts hit the hard gate.
+    val createdMs = user.metadata?.creationTimestamp ?: return false
+    return System.currentTimeMillis() - createdMs > 3L * 86400000L
 }
 
 @Composable

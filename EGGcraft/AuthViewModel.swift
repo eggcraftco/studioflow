@@ -3377,7 +3377,11 @@ extension AuthViewModel {
     var needsEmailVerification: Bool {
         guard let user = Auth.auth().currentUser else { return false }
         guard !user.isEmailVerified else { return false }
-        return user.providerData.contains { $0.providerID == "password" }
+        guard user.providerData.contains(where: { $0.providerID == "password" }) else { return false }
+        // Industry-standard grace period: new accounts get full access for a
+        // few days; only stale unverified accounts hit the hard gate.
+        guard let created = user.metadata.creationDate else { return false }
+        return Date().timeIntervalSince(created) > 3 * 86400
     }
 
     func resendVerificationEmail(completion: @escaping (String) -> Void) {
