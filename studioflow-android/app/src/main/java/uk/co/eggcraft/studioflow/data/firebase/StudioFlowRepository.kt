@@ -92,7 +92,12 @@ class StudioFlowRepository(
                     .build()
             ).await()
         }
-        runCatching { user.sendEmailVerification().await() }
+        runCatching {
+            val settings = com.google.firebase.auth.ActionCodeSettings.newBuilder()
+                .setUrl("https://nivadesk.app/login")
+                .build()
+            user.sendEmailVerification(settings).await()
+        }
         // Seed the new workspace with the chosen studio name and owner details.
         runCatching {
             db.collection("companies").document(user.uid).set(

@@ -1022,7 +1022,9 @@ class AuthViewModel: ObservableObject {
                 let changeRequest = user.createProfileChangeRequest()
                 changeRequest.displayName = cleanFullName
                 changeRequest.commitChanges(completion: nil)
-                user.sendEmailVerification(completion: nil)
+                let actionSettings = ActionCodeSettings()
+                actionSettings.url = URL(string: "https://nivadesk.app/login")
+                user.sendEmailVerification(with: actionSettings, completion: nil)
 
                 // Seed the new workspace with the chosen studio name and owner
                 // details so it never shows up as a bare "My Studio".
@@ -3386,7 +3388,9 @@ extension AuthViewModel {
 
     func resendVerificationEmail(completion: @escaping (String) -> Void) {
         guard let user = Auth.auth().currentUser else { return }
-        user.sendEmailVerification { error in
+        let actionSettings = ActionCodeSettings()
+        actionSettings.url = URL(string: "https://nivadesk.app/login")
+        user.sendEmailVerification(with: actionSettings) { error in
             Task { @MainActor in
                 completion(error?.localizedDescription ?? "Verification email sent. Check your inbox.")
             }

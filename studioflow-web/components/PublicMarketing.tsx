@@ -2093,7 +2093,7 @@ export function PublicSignupPage() {
         if (!currentUser) {
           const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
           // Non-blocking email verification — standard account-security hygiene.
-          void sendEmailVerification(credential.user).catch(() => undefined);
+          void sendEmailVerification(credential.user, { url: "https://nivadesk.app/login" }).catch(() => undefined);
           currentUser = credential.user;
         }
         if (currentUser.displayName !== cleanFullName) {

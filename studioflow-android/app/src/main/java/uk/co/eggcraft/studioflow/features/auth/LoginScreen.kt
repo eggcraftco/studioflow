@@ -312,7 +312,11 @@ fun EmailVerifyScreen(onVerified: () -> Unit, onSignOut: () -> Unit) {
                         busy = true
                         scope.launch {
                             runCatching {
-                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.sendEmailVerification()?.await()
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.sendEmailVerification(
+                                    com.google.firebase.auth.ActionCodeSettings.newBuilder()
+                                        .setUrl("https://nivadesk.app/login")
+                                        .build()
+                                )?.await()
                             }
                             busy = false
                             statusText = sentText
