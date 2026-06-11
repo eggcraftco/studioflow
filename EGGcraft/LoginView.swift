@@ -81,6 +81,24 @@ struct LoginFeatureRotator: View {
         ]
     }
 
+    // Soft order-card palette; one colour per word, cycling.
+    private var caretColor: Color {
+        let palette: [Color] = [
+            Color(red: 0.38, green: 0.65, blue: 0.98),
+            Color(red: 0.45, green: 0.80, blue: 0.55),
+            Color(red: 0.98, green: 0.72, blue: 0.40),
+            Color(red: 0.93, green: 0.55, blue: 0.65),
+            Color(red: 0.66, green: 0.55, blue: 0.95),
+            Color(red: 0.42, green: 0.78, blue: 0.80)
+        ]
+        return palette[wordIndex % palette.count]
+    }
+
+    private var caretSize: CGFloat {
+        let sizes: [CGFloat] = [12, 15, 13, 16, 12.5, 14]
+        return sizes[wordIndex % sizes.count]
+    }
+
     private func tickHaptic(intensity: CGFloat = 0.75) {
         #if os(iOS)
         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -101,20 +119,15 @@ struct LoginFeatureRotator: View {
                         endPoint: .trailing
                     )
                 )
-            // Brush-tip caret: the studio "paints" each letter. Solid while
-            // typing/erasing, blinks while the word is held.
-            Image(systemName: "paintbrush.pointed.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .rotationEffect(.degrees(18))
-                .opacity(isDeleting || charCount < word.count ? 0.95 : (holdTicks % 16 < 8 ? 0.75 : 0.0))
-                .offset(y: -1)
+            // Caret: a tiny rounded square like the colourful order cards in
+            // the app. Colour and size shift subtly with each word; solid while
+            // typing/erasing, gently blinking while the word is held.
+            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                .fill(caretColor)
+                .frame(width: caretSize, height: caretSize)
+                .opacity(isDeleting || charCount < word.count ? 0.9 : (holdTicks % 16 < 8 ? 0.7 : 0.15))
+                .animation(.easeInOut(duration: 0.3), value: wordIndex)
+                .padding(.leading, 3)
         }
         .frame(height: 28)
         .onReceive(timer) { _ in
