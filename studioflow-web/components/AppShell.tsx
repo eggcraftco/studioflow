@@ -565,6 +565,37 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [lastCloudSyncDate, setLastCloudSyncDate] = useState<Date | null>(null);
   const [syncInfoOpen, setSyncInfoOpen] = useState(false);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
+
+  // Anonymous in-app presence heartbeat: powers the admin "In App Now"
+  // counter. Random per-session id, no user identifiers, production only.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!user) return;
+    if (!window.location.hostname.endsWith("nivadesk.app")) return;
+
+    const ping = () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        let id = window.sessionStorage.getItem("nv_app_presence");
+        if (!id) {
+          id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).toLowerCase();
+          window.sessionStorage.setItem("nv_app_presence", id);
+        }
+        const body = JSON.stringify({ kind: "heartbeat", scope: "app", platform: "web", sessionId: id, path: window.location.pathname });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", new Blob([body], { type: "application/json" }));
+        } else {
+          void fetch("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true });
+        }
+      } catch {
+        // Presence is best-effort.
+      }
+    };
+
+    ping();
+    const interval = window.setInterval(ping, 30000);
+    return () => window.clearInterval(interval);
+  }, [user]);
   const [notifications, setNotifications] = useState<
     import("@/lib/studioflow/notifications").StudioActivityNotification[]
   >([]);

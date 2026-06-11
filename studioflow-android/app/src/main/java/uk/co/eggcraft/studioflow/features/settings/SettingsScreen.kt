@@ -5291,7 +5291,8 @@ private fun AdminInsightsDetail() {
                     Triple(t("Active Workspaces"), insightsInt(data, "workspaces", "active30d"), t("order in last 30 days")),
                     Triple(t("Paid Subscriptions"), insightsInt(data, "workspaces", "paid"), ""),
                     Triple(t("Est. MRR"), insightsInt(data, "revenue", "mrr"), t("estimate — billing not live")),
-                    Triple(t("On Site Now"), insightsInt(data, "site", "liveVisitors"), "${insightsInt(data, "site", "today", "sessions")} " + t("visitors today"))
+                    Triple(t("On Site Now"), insightsInt(data, "site", "liveVisitors"), "${insightsInt(data, "site", "today", "sessions")} " + t("visitors today")),
+                    Triple(t("In App Now"), insightsInt(data, "site", "appNow"), t("live app users"))
                 )
                 tiles.chunked(2).forEach { rowTiles ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

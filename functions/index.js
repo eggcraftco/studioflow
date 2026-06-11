@@ -17037,9 +17037,14 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
     if (body.kind === "heartbeat") {
       const sessionKey = sitePresenceSessionKey(body.sessionId);
       if (sessionKey) {
-        await admin.firestore().collection("sitePresence").doc(sessionKey).set({
+        // scope "app" = signed-in product usage (web app, Mac, iOS, Android);
+        // default scope = anonymous public-site visitors.
+        const isApp = body.scope === "app";
+        const platform = ["web", "mac", "ios", "android"].includes(body.platform) ? body.platform : "web";
+        await admin.firestore().collection(isApp ? "appPresence" : "sitePresence").doc(sessionKey).set({
           lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
-          path: siteStatsFieldKey(body.path, "unknown")
+          path: siteStatsFieldKey(body.path, "unknown"),
+          ...(isApp ? { platform } : {})
         }, { merge: true });
       }
       res.status(200).json({ ok: true });
@@ -17229,13 +17234,43 @@ exports.getSitePresence = onCall({ region: "europe-west2" }, async (request) => 
     console.warn("sitePresence cleanup failed:", error?.message || error);
   }
 
+  // In-app presence (signed-in users across web app, Mac, iOS, Android).
+  let appActive = 0;
+  const appPlatforms = {};
+  try {
+    const appSnap = await admin.firestore()
+      .collection("appPresence")
+      .where("lastSeenAt", ">=", activeCutoff)
+      .limit(500)
+      .get();
+    appActive = appSnap.size;
+    appSnap.docs.forEach((doc) => {
+      const platform = String(doc.data()?.platform || "web");
+      appPlatforms[platform] = (appPlatforms[platform] || 0) + 1;
+    });
+    const staleCutoff = admin.firestore.Timestamp.fromMillis(now - 15 * 60 * 1000);
+    const staleSnap = await admin.firestore()
+      .collection("appPresence")
+      .where("lastSeenAt", "<", staleCutoff)
+      .limit(100)
+      .get();
+    if (!staleSnap.empty) {
+      const batch = admin.firestore().batch();
+      staleSnap.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+  } catch (error) {
+    console.warn("appPresence failed:", error?.message || error);
+  }
+
   return {
     ok: true,
     active: snap.size,
     pages: Object.entries(pages)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
-      .map(([path, count]) => ({ path, count }))
+      .map(([path, count]) => ({ path, count })),
+    app: { active: appActive, platforms: appPlatforms }
   };
 });
 
@@ -17415,12 +17450,18 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     console.warn("getAdminInsights siteStats failed:", error?.message || error);
   }
   let liveVisitors = 0;
+  let appNow = 0;
+  const appPlatforms = {};
   try {
-    const presenceSnap = await db.collection("sitePresence")
-      .where("lastSeenAt", ">=", admin.firestore.Timestamp.fromMillis(now - 2 * 60 * 1000))
-      .limit(500)
-      .get();
+    const cutoff = admin.firestore.Timestamp.fromMillis(now - 2 * 60 * 1000);
+    const presenceSnap = await db.collection("sitePresence").where("lastSeenAt", ">=", cutoff).limit(500).get();
     liveVisitors = presenceSnap.size;
+    const appSnap = await db.collection("appPresence").where("lastSeenAt", ">=", cutoff).limit(500).get();
+    appNow = appSnap.size;
+    appSnap.docs.forEach((doc) => {
+      const platform = String(doc.data()?.platform || "web");
+      appPlatforms[platform] = (appPlatforms[platform] || 0) + 1;
+    });
   } catch (error) {
     console.warn("getAdminInsights presence failed:", error?.message || error);
   }
@@ -17473,7 +17514,9 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     },
     site: {
       today: siteToday,
-      liveVisitors
+      liveVisitors,
+      appNow,
+      appPlatforms
     }
   };
 });

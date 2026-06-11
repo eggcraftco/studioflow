@@ -7733,6 +7733,7 @@ struct AdminInsightsView: View {
                         kpi(t("Paid Subscriptions", lang: seciliDil), "\(intAt(["workspaces", "paid"]))")
                         kpi(t("Est. MRR", lang: seciliDil), "£\(intAt(["revenue", "mrr"]))", hint: t("estimate — billing not live", lang: seciliDil))
                         kpi(t("On Site Now", lang: seciliDil), "\(intAt(["site", "liveVisitors"]))", hint: "\(intAt(["site", "today", "sessions"])) " + t("visitors today", lang: seciliDil))
+                        kpi(t("In App Now", lang: seciliDil), "\(intAt(["site", "appNow"]))", hint: t("live app users", lang: seciliDil))
                     }
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {

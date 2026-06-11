@@ -221,6 +221,32 @@ private fun StudioFlowAppContent(
         }
     }
 
+    // Anonymous in-app presence heartbeat for the admin "In App Now" counter.
+    // Random per-launch session id only — no user identifiers.
+    LaunchedEffect(Unit) {
+        val sessionId = java.util.UUID.randomUUID().toString().lowercase()
+        while (true) {
+            if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        val url = java.net.URL("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit")
+                        val connection = url.openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "POST"
+                        connection.setRequestProperty("Content-Type", "application/json")
+                        connection.doOutput = true
+                        connection.connectTimeout = 8000
+                        connection.readTimeout = 8000
+                        val body = """{"kind":"heartbeat","scope":"app","platform":"android","sessionId":"$sessionId","path":""}"""
+                        connection.outputStream.use { it.write(body.toByteArray()) }
+                        connection.inputStream.close()
+                        connection.disconnect()
+                    }
+                }
+            }
+            kotlinx.coroutines.delay(30000)
+        }
+    }
+
     LaunchedEffect(state.workspace?.id, state.workspace?.role) {
         viewModel.refreshPersonalInterfaceSettings()
     }

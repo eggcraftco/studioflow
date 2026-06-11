@@ -5010,7 +5010,7 @@ type AdminInsights = {
   chatgpt: { connectedWorkspaces: number; activeTokens: number; tokens30d: number };
   attention: { inactivePaidWorkspaces: { id: string; name: string; plan: string }[] };
   heartbeat: { lastOrderAtMs: number | null; lastSupportAtMs: number | null; lastSiteBeaconAtMs: number | null };
-  site: { today: { total: number; sessions: number }; liveVisitors: number };
+  site: { today: { total: number; sessions: number }; liveVisitors: number; appNow: number; appPlatforms: Record<string, number> };
 };
 
 const ADMIN_PLAN_LABELS: Record<string, string> = {
@@ -6411,6 +6411,7 @@ function AdminInsightsSection() {
         {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
         {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
         {adminKpiTile("On Site Now", data.site.liveVisitors.toLocaleString(), `${data.site.today.sessions} visitors today`)}
+        {adminKpiTile("In App Now", (data.site.appNow ?? 0).toLocaleString(), Object.entries(data.site.appPlatforms ?? {}).map(([key, value]) => `${key} ${value}`).join(" · ") || "web / mac / ios / android")}
       </div>
 
       <div className="site-stats-panels">

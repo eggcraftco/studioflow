@@ -5730,3 +5730,52 @@ private extension String {
     /// for per-user language/theme resolution.
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
+
+// MARK: - In-app presence heartbeat (admin "In App Now" counter)
+
+/// Sends an anonymous heartbeat every 30 seconds while the app runs so the
+/// NivaDesk admin dashboard can show how many people are using the app live.
+/// No user identifiers are sent — only a random per-launch session id.
+final class AppPresenceHeartbeat {
+    static let shared = AppPresenceHeartbeat()
+    private var timer: Timer?
+    private let sessionId = UUID().uuidString.lowercased()
+
+    private var platform: String {
+        #if os(macOS)
+        return "mac"
+        #else
+        return "ios"
+        #endif
+    }
+
+    func start() {
+        guard timer == nil else { return }
+        ping()
+        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.ping()
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func ping() {
+        guard Auth.auth().currentUser != nil else { return }
+        guard let url = URL(string: "https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let payload: [String: Any] = [
+            "kind": "heartbeat",
+            "scope": "app",
+            "platform": platform,
+            "sessionId": sessionId,
+            "path": ""
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        URLSession.shared.dataTask(with: request).resume()
+    }
+}

@@ -103,6 +103,7 @@ struct StudioManagerApp: App {
             }
             .onAppear {
                 syncFirebaseWorkspace()
+                AppPresenceHeartbeat.shared.start()
             }
             .onChange(of: authVM.currentCompanyId) { _, _ in
                 syncFirebaseWorkspace()
