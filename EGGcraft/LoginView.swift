@@ -128,19 +128,27 @@ struct LoginFeatureRotator: View {
         let typed = String(word.prefix(charCount))
         // The invisible twin caret on the left keeps the WORD perfectly
         // centred on screen — the visible caret hangs off to the right
-        // without pulling the text sideways.
-        HStack(spacing: 2) {
-            caretView(for: word).hidden()
-            Text(typed)
-                .font(.system(size: 27, weight: .heavy))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-            caretView(for: word)
+        // without pulling the text sideways. When the word is fully erased,
+        // the caret alone takes centre stage.
+        Group {
+            if typed.isEmpty {
+                caretView(for: word)
+                    .padding(.leading, 0)
+            } else {
+                HStack(spacing: 2) {
+                    caretView(for: word).hidden()
+                    Text(typed)
+                        .font(.system(size: 27, weight: .heavy))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                    caretView(for: word)
+                }
+            }
         }
         .frame(height: 36)
         .onReceive(timer) { _ in
