@@ -62,6 +62,7 @@ import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -136,7 +137,8 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Notifications("Notifications", Icons.Filled.Notifications, "notifications"),
     Notes("Notes", Icons.AutoMirrored.Filled.Note, "notes"),
     QuickReply("AI Replies", Icons.Outlined.AutoAwesome, "quickReply"),
-    Settings("Settings", Icons.Filled.Settings, "settings")
+    Settings("Settings", Icons.Filled.Settings, "settings"),
+    Insights("Insights", Icons.Filled.Dashboard, "insights")
 }
 
 private enum class HeaderCloudState {
@@ -263,15 +265,21 @@ fun StudioFlowMainScreen(
         StudioSection.Messages,
         StudioSection.Notes,
         StudioSection.QuickReply,
-        StudioSection.Settings
+        StudioSection.Settings,
+        StudioSection.Insights
     )
     val availableSections = preferredSectionOrder.filter { item ->
         val planAllowsSection = item != StudioSection.Messages ||
             state.workspace?.billingPlan == StudioBillingPlan.TeamMonthly
         val menuAllowsSection = item != StudioSection.QuickReply ||
             (state.workspace?.quickReplyMenuEnabled ?: true)
-        planAllowsSection && menuAllowsSection &&
-            (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
+        val adminAllowsSection = item != StudioSection.Insights || mainScreenIsNivaDeskAdmin()
+        if (item == StudioSection.Insights) {
+            adminAllowsSection
+        } else {
+            planAllowsSection && menuAllowsSection &&
+                (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
+        }
     }
     val activeSection = section.takeIf { it in availableSections } ?: availableSections.firstOrNull()
 
@@ -1095,6 +1103,7 @@ private fun StudioSectionContent(
                 state = state,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
             )
+            StudioSection.Insights -> uk.co.eggcraft.studioflow.features.settings.AdminInsightsHubScreen()
             StudioSection.Settings -> SettingsScreen(
                 state = state,
                 initialSectionKey = settingsInitialSectionKey,
@@ -2086,4 +2095,11 @@ fun SearchBarLike(text: String = "Search...") {
             Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 18.sp)
         }
     }
+}
+
+
+private fun mainScreenIsNivaDeskAdmin(): Boolean {
+    val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+        ?.trim()?.lowercase() ?: return false
+    return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
 }

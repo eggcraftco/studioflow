@@ -89,6 +89,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -365,8 +367,6 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
-        SettingsSection("siteStats", "Site Statistics", "Public website visitors and traffic (NivaDesk admin).", Icons.Filled.Storage),
-        SettingsSection("adminInsights", "Admin Insights", "Users, plans, revenue and usage across all of NivaDesk (admin).", Icons.Filled.CreditCard),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
         SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel)
@@ -380,8 +380,6 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
                 "legal" -> true
-                "siteStats" -> isNivaDeskAdminAccount()
-                "adminInsights" -> isNivaDeskAdminAccount()
                 else -> false
             }
         } else {
@@ -405,8 +403,6 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "team" -> access?.settingsTeamAccess != false
                 "about" -> access?.settingsGeneral != false
                 "legal" -> true
-                "siteStats" -> isNivaDeskAdminAccount()
-                "adminInsights" -> isNivaDeskAdminAccount()
                 else -> false
             }
         }
@@ -539,8 +535,6 @@ private fun SettingsDetailScreen(
                     includeSecurity = true
                 )
                 "support" -> SupportTicketsDetail(state)
-                "siteStats" -> SiteStatsAdminDetail()
-                "adminInsights" -> AdminInsightsDetail()
                 "plan" -> PlanAccessDetail(
                     state = state,
                     onUpdateWorkspaceBillingPlan = onUpdateWorkspaceBillingPlan,
@@ -5369,6 +5363,428 @@ private fun AdminInsightsDetail() {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// --- NivaDesk admin: top-level Insights hub with left sidebar ---------------
+
+private val aiHubPlanLabels = mapOf("demo" to "Free Demo", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
+private val aiHubPlanColors = mapOf(
+    "demo" to Color(0xFF8A5CF6),
+    "lifetime_lite" to Color(0xFF0A84FF),
+    "pro_monthly" to Color(0xFF30D158),
+    "team_monthly" to Color(0xFFFF9F0A)
+)
+
+private fun aiHubDate(ms: Int): String {
+    if (ms <= 0) return "—"
+    return java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK).format(java.util.Date(ms.toLong()))
+}
+
+private fun aiHubBytes(bytes: Int): String {
+    val value = bytes.toDouble()
+    return when {
+        value >= 1073741824 -> String.format(java.util.Locale.UK, "%.2f GB", value / 1073741824)
+        value >= 1048576 -> String.format(java.util.Locale.UK, "%.1f MB", value / 1048576)
+        value >= 1024 -> "${(value / 1024).toInt()} KB"
+        else -> "$bytes B"
+    }
+}
+
+@Composable
+private fun AIHubCard(title: String, content: @Composable () -> Unit) {
+    Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun AIHubRow(label: String, value: String, dot: Color? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (dot != null) {
+            Surface(color = dot, shape = RoundedCornerShape(50), modifier = Modifier.size(8.dp)) {}
+        }
+        Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun AIHubTiles(tiles: List<Triple<String, String, String>>) {
+    tiles.chunked(2).forEach { rowTiles ->
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            rowTiles.forEach { (label, value, hint) ->
+                Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                        if (hint.isNotEmpty()) {
+                            Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            if (rowTiles.size == 1) Spacer(modifier = Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun AIHubLoader(functionName: String, content: @Composable (Map<String, Any?>) -> Unit) {
+    var loading by remember(functionName) { mutableStateOf(true) }
+    var errorText by remember(functionName) { mutableStateOf("") }
+    var data by remember(functionName) { mutableStateOf<Map<String, Any?>>(emptyMap()) }
+
+    LaunchedEffect(functionName) {
+        try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                .getHttpsCallable(functionName)
+                .call(emptyMap<String, Any>())
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            data = result.data as? Map<String, Any?> ?: emptyMap()
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not load."
+        }
+        loading = false
+    }
+
+    when {
+        loading -> CircularProgressIndicator(modifier = Modifier.padding(vertical = 16.dp))
+        errorText.isNotEmpty() -> Text(errorText, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        else -> content(data)
+    }
+}
+
+@Composable
+fun AdminInsightsHubScreen() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val pages = listOf("Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics")
+    var selection by remember { mutableStateOf("Overview") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            items(pages.size) { index ->
+                val item = pages[index]
+                FilterChip(selected = selection == item, onClick = { selection = item }, label = { Text(t(item)) })
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            when (selection) {
+                "Users & Workspaces" -> AIHubUsersPage(t)
+                "Subscriptions" -> AIHubSubscriptionsPage(t)
+                "Revenue" -> AIHubRevenuePage(t)
+                "Plans" -> AIHubPlansPage(t)
+                "Feature Usage" -> AIHubFeaturesPage(t)
+                "Storage" -> AIHubStoragePage(t)
+                "User Lookup" -> AIHubLookupPage(t)
+                "Global Statistics" -> SiteStatsAdminDetail()
+                else -> AdminInsightsDetail()
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun AIHubUsersPage(t: (String) -> String) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("Users & Workspaces"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AIHubLoader("getAdminUsersWorkspacesDetail") { data ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AIHubTiles(listOf(
+                    Triple(t("Total Users"), insightsInt(data, "users", "total").toString(), "+${insightsInt(data, "users", "new30d")} · 30d"),
+                    Triple(t("Active Users (30d)"), insightsInt(data, "users", "active30d").toString(), ""),
+                    Triple(t("Active Workspaces"), insightsInt(data, "workspaces", "active30d").toString(), ""),
+                    Triple(t("Inactive Workspaces"), insightsInt(data, "workspaces", "inactive").toString(), "")
+                ))
+                AIHubCard(t("Quick Stats")) {
+                    AIHubRow(t("Users in multiple workspaces"), insightsInt(data, "quick", "usersWithMultipleWorkspaces").toString())
+                    AIHubRow(t("New users this week"), insightsInt(data, "users", "new7d").toString())
+                    AIHubRow(t("Never logged in"), insightsInt(data, "users", "neverLoggedIn").toString())
+                }
+                AIHubCard(t("Top Workspaces by Activity")) {
+                    insightsList(insightsMap(data)["topWorkspaces"]).forEach { workspace ->
+                        val plan = workspace["plan"] as? String ?: "demo"
+                        AIHubRow(
+                            (workspace["name"] as? String ?: "?") + " · " + (aiHubPlanLabels[plan] ?: plan),
+                            "${insightsInt(workspace, "orders30d")} " + t("orders"),
+                            aiHubPlanColors[plan]
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIHubSubscriptionsPage(t: (String) -> String) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("Subscriptions"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AIHubLoader("getAdminSubscriptionsDetail") { data ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AIHubTiles(listOf(
+                    Triple(t("Active Subscriptions"), insightsInt(data, "subscriptions", "paidTotal").toString(), ""),
+                    Triple(t("New Subscriptions (30d)"), insightsInt(data, "subscriptions", "paidNew30d").toString(), ""),
+                    Triple(t("Free Demo Workspaces"), insightsInt(data, "subscriptions", "freeDemo").toString(), "")
+                ))
+                AIHubCard(t("Recent Subscriptions")) {
+                    insightsList(insightsMap(data)["recent"]).forEach { item ->
+                        val plan = item["plan"] as? String ?: "demo"
+                        AIHubRow(
+                            (item["name"] as? String ?: "?") + " · " + (aiHubPlanLabels[plan] ?: plan),
+                            "£${insightsInt(item, "monthlyGbp")}/mo · " + aiHubDate(insightsInt(item, "createdAtMs")),
+                            aiHubPlanColors[plan]
+                        )
+                    }
+                }
+                AIHubCard(t("Plan Source Distribution")) {
+                    insightsList(insightsMap(data)["sources"]).forEach { item ->
+                        AIHubRow(item["source"] as? String ?: "?", insightsInt(item, "count").toString())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIHubRevenuePage(t: (String) -> String) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("Revenue"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AIHubLoader("getAdminRevenueDetail") { data ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AIHubTiles(listOf(
+                    Triple(t("Est. MRR"), "£${insightsInt(data, "revenue", "mrr")}", t("estimate — billing not live")),
+                    Triple(t("Est. ARR"), "£${insightsInt(data, "revenue", "arr")}", ""),
+                    Triple(t("Paid Workspaces"), insightsInt(data, "revenue", "paidTotal").toString(), ""),
+                    Triple(t("Extra Seats"), insightsInt(data, "revenue", "seatCount").toString(), "£${insightsInt(data, "revenue", "seatsMrr")}/mo")
+                ))
+                AIHubCard(t("Top Paying Workspaces (Est.)")) {
+                    insightsList(insightsMap(data)["topPaying"]).forEach { item ->
+                        val plan = item["plan"] as? String ?: "demo"
+                        AIHubRow(
+                            (item["name"] as? String ?: "?") + " · " + (aiHubPlanLabels[plan] ?: plan),
+                            "£${insightsInt(item, "totalGbp")}/mo",
+                            aiHubPlanColors[plan]
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIHubPlansPage(t: (String) -> String) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("Plans"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AIHubLoader("getAdminPlansDetail") { data ->
+            val stats = insightsMap(insightsMap(data)["stats"])
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AIHubCard(t("Plan Distribution")) {
+                    listOf("demo", "lifetime_lite", "pro_monthly", "team_monthly").forEach { plan ->
+                        val bucket = insightsMap(stats[plan])
+                        AIHubRow(
+                            aiHubPlanLabels[plan] ?: plan,
+                            "${insightsInt(bucket, "workspaces")} · ${insightsInt(bucket, "active30d")} " + t("active"),
+                            aiHubPlanColors[plan]
+                        )
+                    }
+                }
+                AIHubCard(t("Plan Comparison")) {
+                    insightsList(insightsMap(data)["comparison"]).forEach { plan ->
+                        AIHubRow(
+                            plan["label"] as? String ?: "?",
+                            "${plan["storage"] as? String ?: "?"} · £${insightsInt(plan, "monthly")}/mo",
+                            aiHubPlanColors[plan["plan"] as? String ?: ""]
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIHubFeaturesPage(t: (String) -> String) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("Feature Usage"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AIHubLoader("getAdminFeatureUsageDetail") { data ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AIHubCard(t("Feature Usage (30d)")) {
+                    insightsList(insightsMap(data)["features"]).forEach { feature ->
+                        AIHubRow(
+                            feature["label"] as? String ?: "?",
+                            "${insightsInt(feature, "count30d")} · ${insightsInt(feature, "activeWorkspaces")} ws"
+                        )
+                    }
+                }
+                AIHubCard(t("Feature Adoption Funnel")) {
+                    AIHubRow(t("Workspaces"), insightsInt(data, "funnel", "workspaces").toString())
+                    AIHubRow(t("Added a customer"), insightsInt(data, "funnel", "withCustomer").toString())
+                    AIHubRow(t("Created an order"), insightsInt(data, "funnel", "withOrder").toString())
+                    AIHubRow(t("Connected ChatGPT App"), insightsInt(data, "funnel", "chatgptConnected").toString())
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIHubStoragePage(t: (String) -> String) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("Storage"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AIHubLoader("getAdminStorageDetail") { data ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AIHubTiles(listOf(
+                    Triple(t("Total Used"), aiHubBytes(insightsInt(data, "totals", "totalBytes")), ""),
+                    Triple(t("Total Files"), insightsInt(data, "totals", "fileCount").toString(), ""),
+                    Triple(t("Uploaded (30d)"), aiHubBytes(insightsInt(data, "totals", "uploaded30dBytes")), ""),
+                    Triple(t("Near Limit (≥80%)"), insightsInt(data, "totals", "nearLimitCount").toString(), "")
+                ))
+                AIHubCard(t("Top Workspaces by Storage")) {
+                    insightsList(insightsMap(data)["topWorkspaces"]).forEach { workspace ->
+                        val plan = workspace["plan"] as? String ?: "demo"
+                        AIHubRow(
+                            workspace["name"] as? String ?: "?",
+                            aiHubBytes(insightsInt(workspace, "bytes")),
+                            aiHubPlanColors[plan]
+                        )
+                    }
+                }
+                AIHubCard(t("Recent Uploads")) {
+                    insightsList(insightsMap(data)["recentUploads"]).forEach { file ->
+                        AIHubRow(
+                            file["fileName"] as? String ?: "?",
+                            aiHubBytes(insightsInt(file, "sizeBytes")) + " · " + aiHubDate(insightsInt(file, "uploadedAtMs"))
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIHubLookupPage(t: (String) -> String) {
+    var query by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf("") }
+    var users by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var workspaces by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var detail by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var detailKind by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    fun call(payload: Map<String, Any>, onDone: (Map<String, Any?>) -> Unit) {
+        scope.launch {
+            try {
+                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                    .getHttpsCallable("getAdminLookup")
+                    .call(payload)
+                    .await()
+                @Suppress("UNCHECKED_CAST")
+                onDone(result.data as? Map<String, Any?> ?: emptyMap())
+            } catch (error: Exception) {
+                errorText = error.message ?: "Failed."
+            }
+            searching = false
+        }
+    }
+
+    Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t("User Lookup"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(t("Email, name or workspace...")) },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            Button(onClick = {
+                if (query.trim().length >= 2) {
+                    searching = true
+                    errorText = ""
+                    detail = null
+                    detailKind = null
+                    call(mapOf("mode" to "search", "query" to query.trim())) { data ->
+                        @Suppress("UNCHECKED_CAST")
+                        users = data["users"] as? List<Map<String, Any?>> ?: emptyList()
+                        @Suppress("UNCHECKED_CAST")
+                        workspaces = data["workspaces"] as? List<Map<String, Any?>> ?: emptyList()
+                    }
+                }
+            }, enabled = !searching) { Text(t("Search")) }
+        }
+        if (errorText.isNotEmpty()) Text(errorText, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+
+        if (detailKind == null) {
+            if (users.isNotEmpty()) AIHubCard(t("Users")) {
+                users.forEach { user ->
+                    TextButton(onClick = {
+                        detailKind = "user"
+                        call(mapOf("mode" to "user", "uid" to (user["uid"] as? String ?: ""))) { detail = it }
+                    }) { Text(user["email"] as? String ?: "?", maxLines = 1) }
+                }
+            }
+            if (workspaces.isNotEmpty()) AIHubCard(t("Workspaces")) {
+                workspaces.forEach { workspace ->
+                    TextButton(onClick = {
+                        detailKind = "workspace"
+                        call(mapOf("mode" to "workspace", "companyId" to (workspace["id"] as? String ?: ""))) { detail = it }
+                    }) { Text((workspace["name"] as? String ?: "?") + " · " + (aiHubPlanLabels[workspace["plan"] as? String ?: ""] ?: ""), maxLines = 1) }
+                }
+            }
+        } else {
+            TextButton(onClick = { detailKind = null; detail = null }) { Text("← " + t("Results")) }
+            val current = detail
+            if (current == null) {
+                CircularProgressIndicator(modifier = Modifier.padding(8.dp))
+            } else if (detailKind == "user") {
+                val user = insightsMap(current["user"])
+                AIHubCard(t("User Statistics")) {
+                    AIHubRow(t("Email"), user["email"] as? String ?: "—")
+                    AIHubRow(t("Signed up"), aiHubDate(insightsInt(user, "createdAtMs")))
+                    AIHubRow(t("Last sign-in"), aiHubDate(insightsInt(user, "lastSignInMs")))
+                    AIHubRow(t("Support tickets"), insightsInt(user, "ticketsCreated").toString())
+                }
+                AIHubCard(t("Workspaces")) {
+                    insightsList(current["memberships"]).forEach { membership ->
+                        val plan = membership["plan"] as? String ?: "demo"
+                        AIHubRow((membership["name"] as? String ?: "?") + " · " + (membership["role"] as? String ?: ""), aiHubPlanLabels[plan] ?: plan, aiHubPlanColors[plan])
+                    }
+                }
+            } else {
+                val workspace = insightsMap(current["workspace"])
+                AIHubCard(t("Workspace Statistics")) {
+                    AIHubRow(t("Workspace"), workspace["name"] as? String ?: "—")
+                    AIHubRow(t("Owner"), workspace["ownerEmail"] as? String ?: "—")
+                    AIHubRow(t("Plan"), aiHubPlanLabels[workspace["plan"] as? String ?: ""] ?: "—")
+                    AIHubRow(t("Members"), insightsInt(workspace, "members").toString())
+                    AIHubRow(t("Orders (total)"), insightsInt(workspace, "ordersTotal").toString())
+                    AIHubRow(t("Orders (30d)"), insightsInt(workspace, "orders30d").toString())
+                    AIHubRow(t("Customers"), insightsInt(workspace, "customersTotal").toString())
+                    AIHubRow(t("Storage"), aiHubBytes(insightsInt(workspace, "storageBytes")) + " / ${insightsInt(workspace, "storageLimitMB")} MB")
                 }
             }
         }
