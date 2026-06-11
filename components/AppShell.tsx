@@ -15,6 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
+import { emailVerificationRequired, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { auth } from "@/lib/firebase/client";
 import {
@@ -537,6 +538,10 @@ function WorkspaceOnboardingScreen({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const shellAlreadyMounted = useContext(AppShellMountedContext);
+  const { user } = useAuth();
+  if (emailVerificationRequired(user)) {
+    return <VerifyEmailScreen user={user!} />;
+  }
   if (shellAlreadyMounted) return <>{children}</>;
   return <AppShellFrame>{children}</AppShellFrame>;
 }
