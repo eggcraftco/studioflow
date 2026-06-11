@@ -17963,3 +17963,65 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
     color: #e0302f;
   }
 }
+
+/* Admin Insights hub (top-level admin area) */
+.admin-hub-grid {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 18px;
+}
+
+.admin-hub-sidebar {
+  display: grid;
+  gap: 4px;
+  position: sticky;
+  top: 84px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.admin-hub-link {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.admin-hub-link.active {
+  background: rgba(10, 132, 255, 0.12);
+  color: #0a84ff;
+}
+
+.admin-hub-content {
+  min-width: 0;
+}
+
+@media (max-width: 980px) {
+  .admin-hub-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .admin-hub-sidebar {
+    position: static;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .admin-hub-link {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 12.5px;
+  }
+}
