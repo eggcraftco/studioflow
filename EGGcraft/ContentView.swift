@@ -9833,6 +9833,7 @@ struct ContentView: View {
         case "Messages": return canAccessMessages
         case "Notes": return canAccessNotes
         case "Settings": return canAccessSettings
+        case "Insights": return isNivaDeskInsightsAdmin
         default: return false
         }
     }
