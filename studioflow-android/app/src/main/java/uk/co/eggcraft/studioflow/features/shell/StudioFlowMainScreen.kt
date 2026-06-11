@@ -260,10 +260,10 @@ fun StudioFlowMainScreen(
         StudioSection.Orders,
         StudioSection.Dashboard,
         StudioSection.Schedule,
+        StudioSection.Notes,
         StudioSection.Customers,
         StudioSection.Files,
         StudioSection.Messages,
-        StudioSection.Notes,
         StudioSection.QuickReply,
         StudioSection.Settings,
         StudioSection.Insights

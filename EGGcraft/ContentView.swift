@@ -7458,6 +7458,14 @@ struct ContentView: View {
                     Label(t("Schedule", lang: seciliDil), systemImage: "calendar")
                 }
             }
+            if canAccessNotes {
+                Button {
+                    aktifSekme = "Notes"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Notes", lang: seciliDil), systemImage: "note.text")
+                }
+            }
 
             if canAccessCustomers {
                 Button {
@@ -7495,14 +7503,6 @@ struct ContentView: View {
                 }
             }
 
-            if canAccessNotes {
-                Button {
-                    aktifSekme = "Notes"
-                    phoneShowsOrderDetail = false
-                } label: {
-                    Label(t("Notes", lang: seciliDil), systemImage: "note.text")
-                }
-            }
 
             Button {
                 phoneShowsOrderDetail = false
@@ -7804,6 +7804,9 @@ struct ContentView: View {
             }
             if canAccessSchedule {
                 UstMenuButonu(title: t("Schedule", lang: seciliDil), icon: "calendar", isSelected: aktifSekme == "Schedule") { aktifSekme = "Schedule" }
+            if canAccessNotes {
+                UstMenuButonu(title: t("Notes", lang: seciliDil), icon: "note.text", isSelected: aktifSekme == "Notes") { aktifSekme = "Notes" }
+            }
             }
             if canAccessCustomers {
                 UstMenuButonu(title: t("Customers", lang: seciliDil), icon: "person.2.fill", isSelected: aktifSekme == "Customers") { aktifSekme = "Customers" }
@@ -7816,9 +7819,6 @@ struct ContentView: View {
             }
             if canAccessMessages {
                 messagesTopNavigationButton
-            }
-            if canAccessNotes {
-                UstMenuButonu(title: t("Notes", lang: seciliDil), icon: "note.text", isSelected: aktifSekme == "Notes") { aktifSekme = "Notes" }
             }
             if canAccessSettings {
                 UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
