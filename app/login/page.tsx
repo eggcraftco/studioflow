@@ -107,7 +107,12 @@ function LoginPageContent() {
           t("auth.rotator.w3"),
           t("auth.rotator.w4"),
           t("auth.rotator.w5"),
-          t("auth.rotator.w6")
+          t("auth.rotator.w6"),
+          t("auth.rotator.w7"),
+          t("auth.rotator.w8"),
+          t("auth.rotator.w9"),
+          t("auth.rotator.w10"),
+          t("auth.rotator.w11")
         ]}
       />
 
