@@ -7650,6 +7650,14 @@ private func aiBytes(_ bytes: Int) -> String {
     return "\(bytes) B"
 }
 
+private func aiPlatformHint(_ platforms: [String: Any]) -> String {
+    var parts: [String] = []
+    for (key, value) in platforms {
+        parts.append(key + " " + String(aiInt(value)))
+    }
+    return parts.sorted().joined(separator: " · ")
+}
+
 private func aiCall(_ name: String, _ payload: [String: Any], completion: @escaping ([String: Any]?, String?) -> Void) {
     Functions.functions(region: "europe-west2").httpsCallable(name).call(payload) { result, error in
         DispatchQueue.main.async {
@@ -7873,7 +7881,7 @@ private struct AIOverviewView: View {
                         AIKpiTile(label: t("Workspaces", lang: seciliDil), value: "\(aiInt(data, "workspaces", "total"))", hint: "+\(aiInt(data, "workspaces", "new30d")) · 30d")
                         AIKpiTile(label: t("Paid Subscriptions", lang: seciliDil), value: "\(aiInt(data, "workspaces", "paid"))")
                         AIKpiTile(label: t("On Site Now", lang: seciliDil), value: "\(aiInt(data, "site", "liveVisitors"))", hint: "\(aiInt(data, "site", "today", "sessions")) " + t("visitors today", lang: seciliDil))
-                        AIKpiTile(label: t("In App Now", lang: seciliDil), value: "\(aiInt(data, "site", "appNow"))", hint: aiMap(data, "site", "appPlatforms").map { "\($0.key) \(aiInt($0.value))" }.sorted().joined(separator: " · "))
+                        AIKpiTile(label: t("In App Now", lang: seciliDil), value: String(aiInt(data, "site", "appNow")), hint: aiPlatformHint(aiMap(data, "site", "appPlatforms")))
                     }
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
@@ -7988,11 +7996,9 @@ private struct AIUsersDetailView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(aiList(data, "topWorkspaces").enumerated()), id: \.offset) { _, workspace in
                                     let plan = workspace["plan"] as? String ?? "demo"
-                                    AIRowView(
-                                        label: (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
-                                        value: "\(aiInt(workspace, "orders30d")) " + t("orders", lang: seciliDil) + " · " + aiDate(aiInt(workspace, "lastOrderAtMs")),
-                                        dot: aiPlanColors[plan] ?? .gray
-                                    )
+                                    let rowLabel: String = (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan)
+                                    let rowValue: String = String(aiInt(workspace, "orders30d")) + " " + t("orders", lang: seciliDil) + " · " + aiDate(aiInt(workspace, "lastOrderAtMs"))
+                                    AIRowView(label: rowLabel, value: rowValue, dot: aiPlanColors[plan] ?? .gray)
                                 }
                             }
                         }
@@ -8047,11 +8053,9 @@ private struct AISubscriptionsDetailView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(aiList(data, "recent").enumerated()), id: \.offset) { _, item in
                                     let plan = item["plan"] as? String ?? "demo"
-                                    AIRowView(
-                                        label: (item["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
-                                        value: "£\(aiInt(item, "monthlyGbp"))/mo · " + aiDate(aiInt(item, "createdAtMs")),
-                                        dot: aiPlanColors[plan] ?? .gray
-                                    )
+                                    let rowLabel: String = (item["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan)
+                                    let rowValue: String = "£" + String(aiInt(item, "monthlyGbp")) + "/mo · " + aiDate(aiInt(item, "createdAtMs"))
+                                    AIRowView(label: rowLabel, value: rowValue, dot: aiPlanColors[plan] ?? .gray)
                                 }
                             }
                         }
@@ -8162,10 +8166,13 @@ private struct AIPlansDetailView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
                         ForEach(aiPlanOrder, id: \.self) { plan in
                             let bucket = aiMap(stats, plan)
+                            let workspaceCount: Int = aiInt(bucket, "workspaces")
+                            let percentValue: Int = Int(Double(workspaceCount) / Double(total) * 100)
+                            let hintText: String = String(percentValue) + "% · " + String(aiInt(bucket, "active30d")) + " " + t("active", lang: seciliDil) + " · +" + String(aiInt(bucket, "newThisMonth"))
                             AIKpiTile(
                                 label: aiPlanLabels[plan] ?? plan,
-                                value: "\(aiInt(bucket, "workspaces"))",
-                                hint: "\(Int(Double(aiInt(bucket, "workspaces")) / Double(total) * 100))% · \(aiInt(bucket, "active30d")) " + t("active", lang: seciliDil) + " · +\(aiInt(bucket, "newThisMonth"))",
+                                value: String(workspaceCount),
+                                hint: hintText,
                                 labelColor: aiPlanColors[plan] ?? .gray
                             )
                         }
@@ -8188,11 +8195,16 @@ private struct AIPlansDetailView: View {
                         VStack(spacing: 0) {
                             ForEach(Array(aiList(data, "comparison").enumerated()), id: \.offset) { _, plan in
                                 let key = plan["plan"] as? String ?? ""
+                                let ordersPart: String = aiStr(plan, "orders") + " " + t("orders", lang: seciliDil)
+                                let customersPart: String = aiStr(plan, "customers") + " " + t("customers", lang: seciliDil)
+                                let seatsPart: String = aiStr(plan, "seats") + " " + t("seats", lang: seciliDil)
+                                let pricePart: String = "£" + String(aiInt(plan, "monthly")) + "/mo · £" + String(aiInt(plan, "yearly")) + "/yr"
+                                let detailLine: String = [ordersPart, customersPart, aiStr(plan, "storage"), seatsPart, pricePart].joined(separator: " · ")
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(aiStr(plan, "label"))
                                         .font(.system(size: 12.5, weight: .bold))
                                         .foregroundColor(aiPlanColors[key] ?? .primary)
-                                    Text("\(aiStr(plan, "orders")) " + t("orders", lang: seciliDil) + " · \(aiStr(plan, "customers")) " + t("customers", lang: seciliDil) + " · \(aiStr(plan, "storage")) · \(aiStr(plan, "seats")) " + t("seats", lang: seciliDil) + " · £\(aiInt(plan, "monthly"))/mo · £\(aiInt(plan, "yearly"))/yr")
+                                    Text(detailLine)
                                         .font(.system(size: 11))
                                         .foregroundColor(.gray)
                                 }
@@ -8280,7 +8292,8 @@ private struct AIFeatureUsageDetailView: View {
                                         HStack {
                                             Text("\(index + 1). " + step.0).font(.system(size: 11.5, weight: .semibold))
                                             Spacer()
-                                            Text("\(step.1) (\(Int(Double(step.1) / Double(maxValue) * 100))%)")
+                                            let stepPercent: Int = Int(Double(step.1) / Double(maxValue) * 100)
+                                            Text(String(step.1) + " (" + String(stepPercent) + "%)")
                                                 .font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
                                         }
                                         GeometryReader { geo in
@@ -8365,11 +8378,8 @@ private struct AIStorageDetailView: View {
                                 VStack(spacing: 0) {
                                     ForEach(Array(warnings.enumerated()), id: \.offset) { _, workspace in
                                         let percent = aiDouble(workspace, "percent")
-                                        AIRowView(
-                                            label: workspace["name"] as? String ?? "?",
-                                            value: aiBytes(aiInt(workspace, "bytes")) + " · \(String(format: "%.1f", percent))%",
-                                            dot: percent >= 95 ? .red : .orange
-                                        )
+                                        let rowValue: String = aiBytes(aiInt(workspace, "bytes")) + " · " + String(format: "%.1f", percent) + "%"
+                                        AIRowView(label: workspace["name"] as? String ?? "?", value: rowValue, dot: percent >= 95 ? .red : .orange)
                                     }
                                 }
                             }
@@ -8378,11 +8388,9 @@ private struct AIStorageDetailView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(aiList(data, "topWorkspaces").enumerated()), id: \.offset) { _, workspace in
                                     let plan = workspace["plan"] as? String ?? "demo"
-                                    AIRowView(
-                                        label: (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
-                                        value: aiBytes(aiInt(workspace, "bytes")) + " · \(aiInt(workspace, "files")) " + t("files", lang: seciliDil),
-                                        dot: aiPlanColors[plan] ?? .gray
-                                    )
+                                    let rowLabel: String = (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan)
+                                    let rowValue: String = aiBytes(aiInt(workspace, "bytes")) + " · " + String(aiInt(workspace, "files")) + " " + t("files", lang: seciliDil)
+                                    AIRowView(label: rowLabel, value: rowValue, dot: aiPlanColors[plan] ?? .gray)
                                 }
                             }
                         }
@@ -8578,7 +8586,8 @@ private struct AILookupDetailView: View {
                                         }
                                     }
                                     .frame(height: 9)
-                                    Text(aiBytes(aiInt(workspace, "storageBytes")) + " / \(aiInt(workspace, "storageLimitMB")) MB (\(String(format: "%.1f", percent))%)")
+                                    let storageLine: String = aiBytes(aiInt(workspace, "storageBytes")) + " / " + String(aiInt(workspace, "storageLimitMB")) + " MB (" + String(format: "%.1f", percent) + "%)"
+                                    Text(storageLine)
                                         .font(.system(size: 11, weight: .semibold))
                                 }
                             }
