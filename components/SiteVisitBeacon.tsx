@@ -25,10 +25,14 @@ function sessionId(): string {
 function sendBeaconPayload(payload: Record<string, unknown>) {
   const body = JSON.stringify(payload);
   try {
+    // text/plain keeps this a "simple" request (no CORS preflight), which is
+    // required for sendBeacon to work in Safari. The server parses the string.
+    let sent = false;
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(BEACON_URL, new Blob([body], { type: "application/json" }));
-    } else {
-      fetch(BEACON_URL, { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true });
+      sent = navigator.sendBeacon(BEACON_URL, new Blob([body], { type: "text/plain" }));
+    }
+    if (!sent) {
+      void fetch(BEACON_URL, { method: "POST", body, headers: { "Content-Type": "text/plain" }, keepalive: true });
     }
   } catch {
     // Stats are best-effort; never break the page.
