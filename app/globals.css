@@ -18105,3 +18105,8 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
 .public-signup-form .auth-provider-stack {
   margin-bottom: 6px;
 }
+
+@keyframes auth-caret-blink {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.15; }
+}
