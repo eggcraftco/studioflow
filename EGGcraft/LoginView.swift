@@ -117,6 +117,24 @@ struct LoginView: View {
                             .foregroundColor(.gray)
 
                         Button {
+                            authVM.signInWithApple()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 17, weight: .semibold))
+                                Text(t("Continue with Apple", lang: seciliDil))
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.black)
+                            .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(authVM.isLoading)
+
+                        Button {
                             authVM.signInWithGoogle()
                         } label: {
                             HStack(spacing: 10) {

@@ -3209,3 +3209,121 @@ class AuthViewModel: ObservableObject {
         }
     }
 }
+
+// MARK: - Sign in with Apple
+
+import AuthenticationServices
+import CryptoKit
+
+private var nvAppleSignInCoordinator: NVAppleSignInCoordinator?
+
+extension AuthViewModel {
+    var isAppleSignInAvailable: Bool { true }
+
+    func signInWithApple() {
+        let rawNonce = NVAppleSignInCoordinator.randomNonce()
+        isLoading = true
+        errorMessage = ""
+        bypassNextLocalUnlockAfterInteractiveSignIn = true
+
+        let coordinator = NVAppleSignInCoordinator(rawNonce: rawNonce) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let credential):
+                    Auth.auth().signIn(with: credential) { [weak self] _, authError in
+                        Task { @MainActor in
+                            guard let self else { return }
+                            self.isLoading = false
+                            if let authError {
+                                self.bypassNextLocalUnlockAfterInteractiveSignIn = false
+                                self.errorMessage = authError.localizedDescription
+                            }
+                            nvAppleSignInCoordinator = nil
+                        }
+                    }
+                case .failure(let error):
+                    self.isLoading = false
+                    self.bypassNextLocalUnlockAfterInteractiveSignIn = false
+                    let nsError = error as NSError
+                    // User-cancelled flows stay silent.
+                    if nsError.domain != ASAuthorizationError.errorDomain || nsError.code != ASAuthorizationError.canceled.rawValue {
+                        self.errorMessage = error.localizedDescription
+                    }
+                    nvAppleSignInCoordinator = nil
+                }
+            }
+        }
+        nvAppleSignInCoordinator = coordinator
+        coordinator.start()
+    }
+}
+
+final class NVAppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private let rawNonce: String
+    private let completion: (Result<AuthCredential, Error>) -> Void
+
+    init(rawNonce: String, completion: @escaping (Result<AuthCredential, Error>) -> Void) {
+        self.rawNonce = rawNonce
+        self.completion = completion
+    }
+
+    func start() {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = Self.sha256(rawNonce)
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        controller.performRequests()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let appleCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = appleCredential.identityToken,
+              let idToken = String(data: tokenData, encoding: .utf8) else {
+            completion(.failure(NSError(domain: "NivaDesk", code: -1, userInfo: [NSLocalizedDescriptionKey: "Apple Sign-In could not return a valid token."])))
+            return
+        }
+        let credential = OAuthProvider.credential(
+            providerID: AuthProviderID.apple,
+            idToken: idToken,
+            rawNonce: rawNonce
+        )
+        completion(.success(credential))
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        completion(.failure(error))
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        #if os(macOS)
+        return NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first ?? ASPresentationAnchor()
+        #else
+        let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene
+        return scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first ?? ASPresentationAnchor()
+        #endif
+    }
+
+    static func randomNonce(length: Int = 32) -> String {
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remaining = length
+        while remaining > 0 {
+            var random: UInt8 = 0
+            if SecRandomCopyBytes(kSecRandomDefault, 1, &random) == errSecSuccess {
+                if random < charset.count {
+                    result.append(charset[Int(random)])
+                    remaining -= 1
+                }
+            }
+        }
+        return result
+    }
+
+    static func sha256(_ input: String) -> String {
+        let hash = SHA256.hash(data: Data(input.utf8))
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
