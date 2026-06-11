@@ -176,23 +176,15 @@ struct LoginFeatureRotator: View {
     }
 }
 
-// Official-style multicolour Google "G" mark drawn natively.
+// Official Google "G" mark (exact brand asset).
 struct GoogleGLogo: View {
     var size: CGFloat = 17
 
     var body: some View {
-        let lineWidth = size * 0.22
-        ZStack {
-            Circle().trim(from: 0.00, to: 0.25).stroke(Color(red: 0.26, green: 0.52, blue: 0.96), style: StrokeStyle(lineWidth: lineWidth))
-            Circle().trim(from: 0.25, to: 0.50).stroke(Color(red: 0.20, green: 0.66, blue: 0.33), style: StrokeStyle(lineWidth: lineWidth))
-            Circle().trim(from: 0.50, to: 0.75).stroke(Color(red: 0.98, green: 0.74, blue: 0.02), style: StrokeStyle(lineWidth: lineWidth))
-            Circle().trim(from: 0.75, to: 1.00).stroke(Color(red: 0.92, green: 0.26, blue: 0.21), style: StrokeStyle(lineWidth: lineWidth))
-            Rectangle()
-                .fill(Color(red: 0.26, green: 0.52, blue: 0.96))
-                .frame(width: size * 0.5 + lineWidth / 2, height: lineWidth)
-                .offset(x: size * 0.25 + lineWidth / 4)
-        }
-        .frame(width: size, height: size)
+        Image("GoogleGLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
     }
 }
 

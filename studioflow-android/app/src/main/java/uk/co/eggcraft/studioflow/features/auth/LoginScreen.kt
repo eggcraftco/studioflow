@@ -217,29 +217,15 @@ fun LoginScreen(
 }
 
 
-// Official-style multicolour Google "G" mark drawn natively.
+// Official Google "G" mark (exact brand vector).
 @Composable
 private fun GoogleGLogo(logoSize: androidx.compose.ui.unit.Dp = 18.dp) {
-    androidx.compose.foundation.Canvas(modifier = Modifier.size(logoSize)) {
-        val stroke = this.size.minDimension * 0.22f
-        val inset = stroke / 2
-        val arcSize = androidx.compose.ui.geometry.Size(this.size.width - stroke, this.size.height - stroke)
-        val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
-        val style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-        val blue = androidx.compose.ui.graphics.Color(0xFF4285F4)
-        drawArc(blue, startAngle = -45f, sweepAngle = 90f, useCenter = false, topLeft = topLeft, size = arcSize, style = style)
-        drawArc(androidx.compose.ui.graphics.Color(0xFF34A853), startAngle = 45f, sweepAngle = 90f, useCenter = false, topLeft = topLeft, size = arcSize, style = style)
-        drawArc(androidx.compose.ui.graphics.Color(0xFFFBBC05), startAngle = 135f, sweepAngle = 90f, useCenter = false, topLeft = topLeft, size = arcSize, style = style)
-        drawArc(androidx.compose.ui.graphics.Color(0xFFEA4335), startAngle = 225f, sweepAngle = 90f, useCenter = false, topLeft = topLeft, size = arcSize, style = style)
-        // Horizontal blue bar into the centre (the G's crossbar).
-        drawRect(
-            color = blue,
-            topLeft = androidx.compose.ui.geometry.Offset(this.size.width / 2f, this.size.height / 2f - stroke / 2f),
-            size = androidx.compose.ui.geometry.Size(this.size.width / 2f, stroke)
-        )
-    }
+    Image(
+        painter = painterResource(id = uk.co.eggcraft.studioflow.R.drawable.ic_google_g),
+        contentDescription = null,
+        modifier = Modifier.size(logoSize)
+    )
 }
-
 
 // --- Email verification gate -------------------------------------------------
 
