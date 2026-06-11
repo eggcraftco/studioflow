@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
@@ -16,7 +16,21 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Persistent IndexedDB cache: repeat visits render instantly from disk while
+// the network refreshes in the background (matches the native apps' behaviour).
+function createDb() {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+  } catch {
+    // Already initialized (e.g. Fast Refresh) — reuse the existing instance.
+    return getFirestore(app);
+  }
+}
+
+export const db = createDb();
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "europe-west2");
 export const googleProvider = new GoogleAuthProvider();
