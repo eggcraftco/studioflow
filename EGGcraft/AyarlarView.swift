@@ -7596,238 +7596,328 @@ struct SiteStatsAdminView: View {
     }
 }
 
-// MARK: - NivaDesk admin: cross-workspace Admin Insights
+
+// MARK: - NivaDesk admin: cross-workspace Admin Insights (drill-in pages)
+
+private let aiPlanLabels: [String: String] = ["demo": "Free Demo", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
+private let aiPlanColors: [String: Color] = ["demo": .purple, "lifetime_lite": .blue, "pro_monthly": .green, "team_monthly": .orange]
+private let aiPlanOrder = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+
+private func aiAny(_ root: Any?, _ path: [String]) -> Any? {
+    var node = root
+    for key in path { node = (node as? [String: Any])?[key] }
+    return node
+}
+
+private func aiInt(_ root: Any?, _ path: String...) -> Int {
+    let node = aiAny(root, path)
+    if let number = node as? Int { return number }
+    if let number = node as? Double { return Int(number) }
+    if let number = node as? NSNumber { return number.intValue }
+    return 0
+}
+
+private func aiDouble(_ root: Any?, _ path: String...) -> Double {
+    let node = aiAny(root, path)
+    if let number = node as? Double { return number }
+    if let number = node as? Int { return Double(number) }
+    if let number = node as? NSNumber { return number.doubleValue }
+    return 0
+}
+
+private func aiStr(_ root: Any?, _ path: String...) -> String {
+    aiAny(root, path) as? String ?? ""
+}
+
+private func aiList(_ root: Any?, _ path: String...) -> [[String: Any]] {
+    aiAny(root, path) as? [[String: Any]] ?? []
+}
+
+private func aiMap(_ root: Any?, _ path: String...) -> [String: Any] {
+    aiAny(root, path) as? [String: Any] ?? [:]
+}
+
+private func aiDate(_ ms: Int) -> String {
+    guard ms > 0 else { return "—" }
+    return Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .omitted)
+}
+
+private func aiBytes(_ bytes: Int) -> String {
+    let value = Double(bytes)
+    if value >= 1073741824 { return String(format: "%.2f GB", value / 1073741824) }
+    if value >= 1048576 { return String(format: "%.1f MB", value / 1048576) }
+    if value >= 1024 { return "\(Int(value / 1024)) KB" }
+    return "\(bytes) B"
+}
+
+private func aiCall(_ name: String, _ payload: [String: Any], completion: @escaping ([String: Any]?, String?) -> Void) {
+    Functions.functions(region: "europe-west2").httpsCallable(name).call(payload) { result, error in
+        DispatchQueue.main.async {
+            if let error = error { completion(nil, error.localizedDescription); return }
+            completion(result?.data as? [String: Any] ?? [:], nil)
+        }
+    }
+}
+
+private struct AICard<Content: View>: View {
+    @Environment(\.colorScheme) var colorScheme
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.system(size: 13, weight: .bold))
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(14)
+    }
+}
+
+private struct AIKpiTile: View {
+    @Environment(\.colorScheme) var colorScheme
+    let label: String
+    let value: String
+    var hint: String = ""
+    var labelColor: Color = .gray
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 11, weight: .semibold)).foregroundColor(labelColor)
+            Text(value).font(.system(size: 21, weight: .heavy)).foregroundColor(.primary)
+            if !hint.isEmpty {
+                Text(hint).font(.system(size: 10)).foregroundColor(.gray.opacity(0.75))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(12)
+    }
+}
+
+private struct AIRowView: View {
+    let label: String
+    let value: String
+    var dot: Color? = nil
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let dot { Circle().fill(dot).frame(width: 8, height: 8) }
+            Text(label).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+            Spacer()
+            Text(value).font(.system(size: 12.5, weight: .bold))
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+private struct AIDonutView: View {
+    let slices: [SiteStatSlice]
+    let center: String
+
+    var body: some View {
+        let total = max(slices.reduce(0) { $0 + $1.value }, 1)
+        HStack(alignment: .center, spacing: 18) {
+            Chart(slices) { slice in
+                SectorMark(angle: .value("v", slice.value), innerRadius: .ratio(0.62), angularInset: 1.5)
+                    .foregroundStyle(slice.color)
+                    .cornerRadius(3)
+            }
+            .frame(width: 110, height: 110)
+            .overlay(
+                VStack(spacing: 1) {
+                    Text(center).font(.system(size: 9, weight: .semibold)).foregroundColor(.gray)
+                    Text("\(total)").font(.system(size: 14, weight: .heavy))
+                }
+            )
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(slices) { slice in
+                    AIRowView(label: slice.label, value: "\(slice.value) · \(Int(Double(slice.value) / Double(total) * 100))%", dot: slice.color)
+                }
+            }
+        }
+    }
+}
+
+private struct AIHeatmapView: View {
+    let grid: [[Int]]
+    private let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    var body: some View {
+        let maxValue = max(grid.flatMap { $0 }.max() ?? 1, 1)
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(grid.enumerated()), id: \.offset) { dayIndex, row in
+                    HStack(spacing: 3) {
+                        Text(days[min(dayIndex, 6)])
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.gray)
+                            .frame(width: 28, alignment: .leading)
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, value in
+                            RoundedRectangle(cornerRadius: 2.5)
+                                .fill(value == 0 ? Color.primary.opacity(0.06) : Color.purple.opacity(0.25 + Double(value) / Double(maxValue) * 0.75))
+                                .frame(width: 13, height: 13)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct AICrumb: View {
+    let title: String
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Button(action: onBack) {
+                Text("Admin Insights").font(.system(size: 11, weight: .bold)).foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
+            Text("›").font(.system(size: 11)).foregroundColor(.gray)
+            Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(.gray)
+        }
+    }
+}
+
+private enum AIPage: String, CaseIterable {
+    case users = "Users & Workspaces"
+    case subscriptions = "Subscriptions"
+    case revenue = "Revenue"
+    case plans = "Plans"
+    case features = "Feature Usage"
+    case storage = "Storage"
+    case lookup = "User Lookup"
+}
 
 struct AdminInsightsView: View {
-    @Environment(\.colorScheme) var colorScheme
     let seciliDil: String
+    @State private var page: AIPage? = nil
+
+    var body: some View {
+        Group {
+            switch page {
+            case .users: AIUsersDetailView(seciliDil: seciliDil) { page = nil }
+            case .subscriptions: AISubscriptionsDetailView(seciliDil: seciliDil) { page = nil }
+            case .revenue: AIRevenueDetailView(seciliDil: seciliDil) { page = nil }
+            case .plans: AIPlansDetailView(seciliDil: seciliDil) { page = nil }
+            case .features: AIFeatureUsageDetailView(seciliDil: seciliDil) { page = nil }
+            case .storage: AIStorageDetailView(seciliDil: seciliDil) { page = nil }
+            case .lookup: AILookupDetailView(seciliDil: seciliDil) { page = nil }
+            case nil: AIOverviewView(seciliDil: seciliDil) { page = $0 }
+            }
+        }
+    }
+}
+
+private struct AIOverviewView: View {
+    let seciliDil: String
+    let onNavigate: (AIPage) -> Void
 
     @State private var loading = true
     @State private var errorText = ""
     @State private var data: [String: Any] = [:]
 
-    private var cardBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
-    }
-
-    private func intAt(_ path: [String]) -> Int {
-        var node: Any? = data
-        for key in path {
-            node = (node as? [String: Any])?[key]
-        }
-        if let number = node as? Int { return number }
-        if let number = node as? Double { return Int(number) }
-        if let number = node as? NSNumber { return number.intValue }
-        return 0
-    }
-
-    private func listAt(_ path: [String]) -> [[String: Any]] {
-        var node: Any? = data
-        for key in path {
-            node = (node as? [String: Any])?[key]
-        }
-        return node as? [[String: Any]] ?? []
-    }
-
     private func load() {
         loading = true
         errorText = ""
-        Functions.functions(region: "europe-west2").httpsCallable("getAdminInsights").call([:]) { result, error in
-            DispatchQueue.main.async {
-                loading = false
-                if let error = error {
-                    errorText = error.localizedDescription
-                    return
-                }
-                data = result?.data as? [String: Any] ?? [:]
-            }
+        aiCall("getAdminInsights", [:]) { result, error in
+            loading = false
+            if let error { errorText = error; return }
+            data = result ?? [:]
         }
-    }
-
-    private let planLabels: [String: String] = ["demo": "Free Demo", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
-    private let planColors: [String: Color] = ["demo": .purple, "lifetime_lite": .blue, "pro_monthly": .green, "team_monthly": .orange]
-
-    private func kpi(_ label: String, _ value: String, hint: String = "") -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.gray)
-            Text(value)
-                .font(.system(size: 21, weight: .heavy))
-                .foregroundColor(.primary)
-            if !hint.isEmpty {
-                Text(hint)
-                    .font(.system(size: 10))
-                    .foregroundColor(.gray.opacity(0.75))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(cardBackground)
-        .cornerRadius(12)
-    }
-
-    private func panelCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold))
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(cardBackground)
-        .cornerRadius(14)
-    }
-
-    private func valueRow(_ label: String, _ value: String, dotColor: Color? = nil) -> some View {
-        HStack(spacing: 8) {
-            if let dotColor {
-                Circle().fill(dotColor).frame(width: 8, height: 8)
-            }
-            Text(label)
-                .font(.system(size: 12.5, weight: .semibold))
-                .lineLimit(1)
-            Spacer()
-            Text(value)
-                .font(.system(size: 12.5, weight: .bold))
-        }
-        .padding(.vertical, 5)
-    }
-
-    private func timeText(_ ms: Int) -> String {
-        guard ms > 0 else { return "—" }
-        return Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened)
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(t("Admin Insights", lang: seciliDil))
-                            .font(.system(size: 20, weight: .heavy))
+                        Text(t("Admin Insights", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
                         Text(t("Live overview across all NivaDesk users and workspaces.", lang: seciliDil))
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
+                            .font(.system(size: 11)).foregroundColor(.gray)
                     }
                     Spacer()
                     Button(action: load) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.gray)
+                    .buttonStyle(.plain).foregroundColor(.gray)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], spacing: 8) {
+                    ForEach(AIPage.allCases, id: \.rawValue) { item in
+                        Button(action: { onNavigate(item) }) {
+                            Text(t(item.rawValue, lang: seciliDil) + " →")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(item == .lookup ? .green : .blue)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background((item == .lookup ? Color.green : Color.blue).opacity(0.10))
+                                .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 if loading {
                     HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
                 } else if !errorText.isEmpty {
-                    Text(errorText)
-                        .font(.system(size: 12))
-                        .foregroundColor(.red)
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
-                        kpi(t("Total Users", lang: seciliDil), "\(intAt(["users", "total"]))", hint: "+\(intAt(["users", "new30d"])) · 30d")
-                        kpi(t("Workspaces", lang: seciliDil), "\(intAt(["workspaces", "total"]))", hint: "+\(intAt(["workspaces", "new30d"])) · 30d")
-                        kpi(t("Active Workspaces", lang: seciliDil), "\(intAt(["workspaces", "active30d"]))", hint: t("order in last 30 days", lang: seciliDil))
-                        kpi(t("Paid Subscriptions", lang: seciliDil), "\(intAt(["workspaces", "paid"]))")
-                        kpi(t("Est. MRR", lang: seciliDil), "£\(intAt(["revenue", "mrr"]))", hint: t("estimate — billing not live", lang: seciliDil))
-                        kpi(t("On Site Now", lang: seciliDil), "\(intAt(["site", "liveVisitors"]))", hint: "\(intAt(["site", "today", "sessions"])) " + t("visitors today", lang: seciliDil))
-                        kpi(t("In App Now", lang: seciliDil), "\(intAt(["site", "appNow"]))", hint: t("live app users", lang: seciliDil))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        AIKpiTile(label: t("Total Users", lang: seciliDil), value: "\(aiInt(data, "users", "total"))", hint: "+\(aiInt(data, "users", "new30d")) · 30d")
+                        AIKpiTile(label: t("Workspaces", lang: seciliDil), value: "\(aiInt(data, "workspaces", "total"))", hint: "+\(aiInt(data, "workspaces", "new30d")) · 30d")
+                        AIKpiTile(label: t("Paid Subscriptions", lang: seciliDil), value: "\(aiInt(data, "workspaces", "paid"))")
+                        AIKpiTile(label: t("On Site Now", lang: seciliDil), value: "\(aiInt(data, "site", "liveVisitors"))", hint: "\(aiInt(data, "site", "today", "sessions")) " + t("visitors today", lang: seciliDil))
+                        AIKpiTile(label: t("In App Now", lang: seciliDil), value: "\(aiInt(data, "site", "appNow"))", hint: aiMap(data, "site", "appPlatforms").map { "\($0.key) \(aiInt($0.value))" }.sorted().joined(separator: " · "))
                     }
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
-                        panelCard(t("Plan Distribution", lang: seciliDil)) {
-                            let counts = (data["workspaces"] as? [String: Any])?["planCounts"] as? [String: Any] ?? [:]
-                            let slices = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"].compactMap { key -> SiteStatSlice? in
-                                let value = (counts[key] as? NSNumber)?.intValue ?? (counts[key] as? Int ?? 0)
-                                guard value > 0 else { return nil }
-                                return SiteStatSlice(id: key, label: planLabels[key] ?? key, value: value, color: planColors[key] ?? .gray)
+                        AICard(title: t("ChatGPT App Usage", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                AIRowView(label: t("Connected workspaces", lang: seciliDil), value: "\(aiInt(data, "chatgpt", "connectedWorkspaces"))")
+                                AIRowView(label: t("Active OAuth tokens", lang: seciliDil), value: "\(aiInt(data, "chatgpt", "activeTokens"))")
+                                AIRowView(label: t("Tokens issued (30d)", lang: seciliDil), value: "\(aiInt(data, "chatgpt", "tokens30d"))")
                             }
-                            if slices.isEmpty {
-                                Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
-                            } else {
-                                let total = max(slices.reduce(0) { $0 + $1.value }, 1)
-                                HStack(alignment: .center, spacing: 18) {
-                                    Chart(slices) { slice in
-                                        SectorMark(angle: .value("v", slice.value), innerRadius: .ratio(0.62), angularInset: 1.5)
-                                            .foregroundStyle(slice.color)
-                                            .cornerRadius(3)
-                                    }
-                                    .frame(width: 110, height: 110)
-                                    VStack(alignment: .leading, spacing: 7) {
-                                        ForEach(slices) { slice in
-                                            valueRow(slice.label, "\(slice.value) · \(Int(Double(slice.value) / Double(total) * 100))%", dotColor: slice.color)
-                                        }
-                                    }
+                        }
+                        AICard(title: t("Support Tickets", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                AIRowView(label: t("Open", lang: seciliDil), value: "\(aiInt(data, "support", "open"))", dot: .orange)
+                                AIRowView(label: t("In progress", lang: seciliDil), value: "\(aiInt(data, "support", "inProgress"))", dot: .blue)
+                                AIRowView(label: t("All time", lang: seciliDil), value: "\(aiInt(data, "support", "total"))")
+                            }
+                        }
+                        AICard(title: t("Newest Workspaces", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "workspaces", "newest").enumerated()), id: \.offset) { _, workspace in
+                                    let plan = workspace["plan"] as? String ?? "demo"
+                                    AIRowView(label: workspace["name"] as? String ?? "?", value: aiPlanLabels[plan] ?? plan, dot: aiPlanColors[plan] ?? .gray)
                                 }
                             }
                         }
-
-                        panelCard(t("Feature Usage", lang: seciliDil)) {
-                            VStack(spacing: 0) {
-                                valueRow(t("Orders (total)", lang: seciliDil), "\(intAt(["usage", "ordersTotal"]))")
-                                valueRow(t("Orders this month", lang: seciliDil), "\(intAt(["usage", "ordersThisMonth"]))")
-                                valueRow(t("Customers", lang: seciliDil), "\(intAt(["usage", "customersTotal"]))")
-                                valueRow(t("Notes", lang: seciliDil), "\(intAt(["usage", "notesTotal"]))")
-                                valueRow(t("Notes with reminders", lang: seciliDil), "\(intAt(["usage", "remindersTotal"]))")
-                                valueRow(t("Messages", lang: seciliDil), "\(intAt(["usage", "messagesTotal"]))")
-                                valueRow(t("Workspace tickets", lang: seciliDil), "\(intAt(["usage", "workspaceTicketsTotal"]))")
-                            }
-                        }
-
-                        panelCard(t("ChatGPT App Usage", lang: seciliDil)) {
-                            VStack(spacing: 0) {
-                                valueRow(t("Connected workspaces", lang: seciliDil), "\(intAt(["chatgpt", "connectedWorkspaces"]))")
-                                valueRow(t("Active OAuth tokens", lang: seciliDil), "\(intAt(["chatgpt", "activeTokens"]))")
-                                valueRow(t("Tokens issued (30d)", lang: seciliDil), "\(intAt(["chatgpt", "tokens30d"]))")
-                            }
-                        }
-
-                        panelCard(t("Support Tickets", lang: seciliDil)) {
-                            VStack(spacing: 0) {
-                                valueRow(t("Open", lang: seciliDil), "\(intAt(["support", "open"]))", dotColor: .orange)
-                                valueRow(t("In progress", lang: seciliDil), "\(intAt(["support", "inProgress"]))", dotColor: .blue)
-                                valueRow(t("All time", lang: seciliDil), "\(intAt(["support", "total"]))")
-                            }
-                        }
-
-                        panelCard(t("Newest Workspaces", lang: seciliDil)) {
-                            let newest = listAt(["workspaces", "newest"])
-                            if newest.isEmpty {
-                                Text(t("No workspaces yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
-                            } else {
-                                VStack(spacing: 0) {
-                                    ForEach(Array(newest.enumerated()), id: \.offset) { _, workspace in
-                                        let plan = workspace["plan"] as? String ?? "demo"
-                                        valueRow(workspace["name"] as? String ?? "?", planLabels[plan] ?? plan, dotColor: planColors[plan] ?? .gray)
-                                    }
-                                }
-                            }
-                        }
-
-                        panelCard(t("Workspaces Requiring Attention", lang: seciliDil)) {
-                            let attention = listAt(["attention", "inactivePaidWorkspaces"])
+                        AICard(title: t("Workspaces Requiring Attention", lang: seciliDil)) {
+                            let attention = aiList(data, "attention", "inactivePaidWorkspaces")
                             if attention.isEmpty {
                                 Text(t("All paid workspaces created an order in the last 30 days.", lang: seciliDil) + " ✓")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.green)
+                                    .font(.system(size: 12)).foregroundColor(.green)
                             } else {
                                 VStack(spacing: 0) {
                                     ForEach(Array(attention.enumerated()), id: \.offset) { _, workspace in
                                         let plan = workspace["plan"] as? String ?? ""
-                                        let planLabel = planLabels[plan] ?? plan
-                                        valueRow((workspace["name"] as? String ?? "?") + " · " + planLabel, t("no orders in 30 days", lang: seciliDil), dotColor: .orange)
+                                        AIRowView(label: (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan), value: t("no orders in 30 days", lang: seciliDil), dot: .orange)
                                     }
                                 }
                             }
                         }
-
-                        panelCard(t("Service Heartbeat", lang: seciliDil)) {
+                        AICard(title: t("Service Heartbeat", lang: seciliDil)) {
                             VStack(spacing: 0) {
-                                valueRow(t("Last order created", lang: seciliDil), timeText(intAt(["heartbeat", "lastOrderAtMs"])))
-                                valueRow(t("Last site visit", lang: seciliDil), timeText(intAt(["heartbeat", "lastSiteBeaconAtMs"])))
-                                valueRow(t("Last support ticket", lang: seciliDil), timeText(intAt(["heartbeat", "lastSupportAtMs"])))
+                                AIRowView(label: t("Last order created", lang: seciliDil), value: aiDate(aiInt(data, "heartbeat", "lastOrderAtMs")))
+                                AIRowView(label: t("Last site visit", lang: seciliDil), value: aiDate(aiInt(data, "heartbeat", "lastSiteBeaconAtMs")))
+                                AIRowView(label: t("Last support ticket", lang: seciliDil), value: aiDate(aiInt(data, "heartbeat", "lastSupportAtMs")))
                             }
                         }
                     }
@@ -7836,5 +7926,667 @@ struct AdminInsightsView: View {
             .padding(.bottom, 24)
         }
         .onAppear { load() }
+    }
+}
+
+// MARK: Admin Insights detail pages (Mac)
+
+private struct AIUsersDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("Users & Workspaces", lang: seciliDil), onBack: onBack)
+                Text(t("Users & Workspaces", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        AIKpiTile(label: t("Total Users", lang: seciliDil), value: "\(aiInt(data, "users", "total"))", hint: "+\(aiInt(data, "users", "new30d")) · 30d")
+                        AIKpiTile(label: t("Active Users (30d)", lang: seciliDil), value: "\(aiInt(data, "users", "active30d"))", hint: "\(aiInt(data, "users", "active7d")) " + t("this week", lang: seciliDil))
+                        AIKpiTile(label: t("New Users (30d)", lang: seciliDil), value: "\(aiInt(data, "users", "new30d"))", hint: "\(aiInt(data, "users", "new7d")) " + t("this week", lang: seciliDil))
+                        AIKpiTile(label: t("Active Workspaces", lang: seciliDil), value: "\(aiInt(data, "workspaces", "active30d"))")
+                        AIKpiTile(label: t("Inactive Workspaces", lang: seciliDil), value: "\(aiInt(data, "workspaces", "inactive"))")
+                    }
+
+                    AICard(title: t("User Growth", lang: seciliDil)) {
+                        let growth = aiList(data, "growth")
+                        if growth.isEmpty {
+                            Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                        } else {
+                            Chart(Array(growth.enumerated()), id: \.offset) { item in
+                                AreaMark(x: .value("i", item.offset), y: .value("v", aiInt(item.element, "cumulative")))
+                                    .foregroundStyle(LinearGradient(colors: [Color.purple.opacity(0.25), Color.purple.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                                LineMark(x: .value("i", item.offset), y: .value("v", aiInt(item.element, "cumulative")))
+                                    .foregroundStyle(Color.purple)
+                                    .lineStyle(StrokeStyle(lineWidth: 2))
+                            }
+                            .chartXAxis(.hidden)
+                            .frame(height: 180)
+                            Text(t("Cumulative registered users, last 60 days.", lang: seciliDil))
+                                .font(.system(size: 10)).foregroundColor(.gray)
+                        }
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        AICard(title: t("Quick Stats", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                AIRowView(label: t("Avg workspaces per user", lang: seciliDil), value: String(format: "%.2f", aiDouble(data, "quick", "avgWorkspacesPerUser")))
+                                AIRowView(label: t("Users in multiple workspaces", lang: seciliDil), value: "\(aiInt(data, "quick", "usersWithMultipleWorkspaces"))")
+                                AIRowView(label: t("Never logged in", lang: seciliDil), value: "\(aiInt(data, "users", "neverLoggedIn"))")
+                            }
+                        }
+                        AICard(title: t("Top Workspaces by Activity", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "topWorkspaces").enumerated()), id: \.offset) { _, workspace in
+                                    let plan = workspace["plan"] as? String ?? "demo"
+                                    AIRowView(
+                                        label: (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
+                                        value: "\(aiInt(workspace, "orders30d")) " + t("orders", lang: seciliDil) + " · " + aiDate(aiInt(workspace, "lastOrderAtMs")),
+                                        dot: aiPlanColors[plan] ?? .gray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear {
+            aiCall("getAdminUsersWorkspacesDetail", [:]) { result, error in
+                loading = false
+                if let error { errorText = error; return }
+                data = result ?? [:]
+            }
+        }
+    }
+}
+
+private struct AISubscriptionsDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("Subscriptions", lang: seciliDil), onBack: onBack)
+                Text(t("Subscriptions", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        AIKpiTile(label: t("Active Subscriptions", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "paidTotal"))")
+                        AIKpiTile(label: t("New Subscriptions (30d)", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "paidNew30d"))")
+                        AIKpiTile(label: t("Free Demo Workspaces", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "freeDemo"))")
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        AICard(title: t("Plan Source Distribution", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "sources").enumerated()), id: \.offset) { _, item in
+                                    AIRowView(label: aiStr(item, "source"), value: "\(aiInt(item, "count"))")
+                                }
+                            }
+                        }
+                        AICard(title: t("Recent Subscriptions", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "recent").enumerated()), id: \.offset) { _, item in
+                                    let plan = item["plan"] as? String ?? "demo"
+                                    AIRowView(
+                                        label: (item["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
+                                        value: "£\(aiInt(item, "monthlyGbp"))/mo · " + aiDate(aiInt(item, "createdAtMs")),
+                                        dot: aiPlanColors[plan] ?? .gray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text(aiStr(data, "note")).font(.system(size: 10)).foregroundColor(.gray)
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear {
+            aiCall("getAdminSubscriptionsDetail", [:]) { result, error in
+                loading = false
+                if let error { errorText = error; return }
+                data = result ?? [:]
+            }
+        }
+    }
+}
+
+private struct AIRevenueDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("Revenue", lang: seciliDil), onBack: onBack)
+                Text(t("Revenue", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        AIKpiTile(label: t("Est. MRR", lang: seciliDil), value: "£\(aiInt(data, "revenue", "mrr"))", hint: t("estimate — billing not live", lang: seciliDil))
+                        AIKpiTile(label: t("Est. ARR", lang: seciliDil), value: "£\(aiInt(data, "revenue", "arr"))")
+                        AIKpiTile(label: t("Est. ARPU", lang: seciliDil), value: String(format: "£%.2f", aiDouble(data, "revenue", "arpu")))
+                        AIKpiTile(label: t("Paid Workspaces", lang: seciliDil), value: "\(aiInt(data, "revenue", "paidTotal"))")
+                        AIKpiTile(label: t("Extra Seats", lang: seciliDil), value: "\(aiInt(data, "revenue", "seatCount"))", hint: "£\(aiInt(data, "revenue", "seatsMrr"))/mo")
+                        AIKpiTile(label: t("Storage Add-ons", lang: seciliDil), value: "\(aiInt(data, "revenue", "storageAddonCount"))", hint: "£\(aiInt(data, "revenue", "storageMrr"))/mo")
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        AICard(title: t("Est. Revenue by Plan", lang: seciliDil)) {
+                            let byPlan = aiMap(data, "revenue", "mrrByPlan")
+                            let slices = ["lifetime_lite", "pro_monthly", "team_monthly"].compactMap { key -> SiteStatSlice? in
+                                let value = aiInt(byPlan, key)
+                                guard value > 0 else { return nil }
+                                return SiteStatSlice(id: key, label: aiPlanLabels[key] ?? key, value: value, color: aiPlanColors[key] ?? .gray)
+                            }
+                            if slices.isEmpty {
+                                Text(t("No paid subscriptions yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                AIDonutView(slices: slices, center: "£/mo")
+                            }
+                        }
+                        AICard(title: t("Top Paying Workspaces (Est.)", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "topPaying").enumerated()), id: \.offset) { _, item in
+                                    let plan = item["plan"] as? String ?? "demo"
+                                    AIRowView(
+                                        label: (item["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
+                                        value: "£\(aiInt(item, "totalGbp"))/mo",
+                                        dot: aiPlanColors[plan] ?? .gray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear {
+            aiCall("getAdminRevenueDetail", [:]) { result, error in
+                loading = false
+                if let error { errorText = error; return }
+                data = result ?? [:]
+            }
+        }
+    }
+}
+
+private struct AIPlansDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("Plans", lang: seciliDil), onBack: onBack)
+                Text(t("Plans", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    let stats = aiMap(data, "stats")
+                    let total = max(aiInt(data, "totalWorkspaces"), 1)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        ForEach(aiPlanOrder, id: \.self) { plan in
+                            let bucket = aiMap(stats, plan)
+                            AIKpiTile(
+                                label: aiPlanLabels[plan] ?? plan,
+                                value: "\(aiInt(bucket, "workspaces"))",
+                                hint: "\(Int(Double(aiInt(bucket, "workspaces")) / Double(total) * 100))% · \(aiInt(bucket, "active30d")) " + t("active", lang: seciliDil) + " · +\(aiInt(bucket, "newThisMonth"))",
+                                labelColor: aiPlanColors[plan] ?? .gray
+                            )
+                        }
+                    }
+
+                    AICard(title: t("Plan Distribution", lang: seciliDil)) {
+                        let slices = aiPlanOrder.compactMap { key -> SiteStatSlice? in
+                            let value = aiInt(aiMap(stats, key), "workspaces")
+                            guard value > 0 else { return nil }
+                            return SiteStatSlice(id: key, label: aiPlanLabels[key] ?? key, value: value, color: aiPlanColors[key] ?? .gray)
+                        }
+                        if slices.isEmpty {
+                            Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                        } else {
+                            AIDonutView(slices: slices, center: t("Total", lang: seciliDil))
+                        }
+                    }
+
+                    AICard(title: t("Plan Comparison", lang: seciliDil)) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(aiList(data, "comparison").enumerated()), id: \.offset) { _, plan in
+                                let key = plan["plan"] as? String ?? ""
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(aiStr(plan, "label"))
+                                        .font(.system(size: 12.5, weight: .bold))
+                                        .foregroundColor(aiPlanColors[key] ?? .primary)
+                                    Text("\(aiStr(plan, "orders")) " + t("orders", lang: seciliDil) + " · \(aiStr(plan, "customers")) " + t("customers", lang: seciliDil) + " · \(aiStr(plan, "storage")) · \(aiStr(plan, "seats")) " + t("seats", lang: seciliDil) + " · £\(aiInt(plan, "monthly"))/mo · £\(aiInt(plan, "yearly"))/yr")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.gray)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear {
+            aiCall("getAdminPlansDetail", [:]) { result, error in
+                loading = false
+                if let error { errorText = error; return }
+                data = result ?? [:]
+            }
+        }
+    }
+}
+
+private struct AIFeatureUsageDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    private let featureColors: [Color] = [.purple, .blue, .green, .orange]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("Feature Usage", lang: seciliDil), onBack: onBack)
+                Text(t("Feature Usage", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    let features = aiList(data, "features")
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        ForEach(Array(features.enumerated()), id: \.offset) { _, feature in
+                            AIKpiTile(
+                                label: aiStr(feature, "label"),
+                                value: "\(aiInt(feature, "count30d"))",
+                                hint: "30d · \(aiInt(feature, "total")) " + t("all-time", lang: seciliDil)
+                            )
+                        }
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        AICard(title: t("Feature Usage Distribution (30d)", lang: seciliDil)) {
+                            let slices = features.enumerated().compactMap { index, feature -> SiteStatSlice? in
+                                let value = aiInt(feature, "count30d")
+                                guard value > 0 else { return nil }
+                                return SiteStatSlice(id: aiStr(feature, "key"), label: aiStr(feature, "label"), value: value, color: featureColors[index % featureColors.count])
+                            }
+                            if slices.isEmpty {
+                                Text(t("No activity in the last 30 days.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                AIDonutView(slices: slices, center: t("Actions", lang: seciliDil))
+                            }
+                        }
+                        AICard(title: t("Active Workspaces by Feature (30d)", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(features.enumerated()), id: \.offset) { index, feature in
+                                    AIRowView(label: aiStr(feature, "label"), value: "\(aiInt(feature, "activeWorkspaces"))", dot: featureColors[index % featureColors.count])
+                                }
+                            }
+                        }
+                        AICard(title: t("Feature Adoption Funnel", lang: seciliDil)) {
+                            let steps: [(String, Int)] = [
+                                (t("Workspaces", lang: seciliDil), aiInt(data, "funnel", "workspaces")),
+                                (t("Added a customer", lang: seciliDil), aiInt(data, "funnel", "withCustomer")),
+                                (t("Created an order", lang: seciliDil), aiInt(data, "funnel", "withOrder")),
+                                (t("Connected ChatGPT App", lang: seciliDil), aiInt(data, "funnel", "chatgptConnected"))
+                            ]
+                            let maxValue = max(steps.first?.1 ?? 1, 1)
+                            VStack(spacing: 8) {
+                                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        HStack {
+                                            Text("\(index + 1). " + step.0).font(.system(size: 11.5, weight: .semibold))
+                                            Spacer()
+                                            Text("\(step.1) (\(Int(Double(step.1) / Double(maxValue) * 100))%)")
+                                                .font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
+                                        }
+                                        GeometryReader { geo in
+                                            ZStack(alignment: .leading) {
+                                                Capsule().fill(Color.primary.opacity(0.07))
+                                                Capsule().fill(featureColors[index % featureColors.count])
+                                                    .frame(width: max(geo.size.width * CGFloat(step.1) / CGFloat(maxValue), 6))
+                                            }
+                                        }
+                                        .frame(height: 8)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AICard(title: t("Feature Usage by Time of Day", lang: seciliDil)) {
+                        AIHeatmapView(grid: (data["heatmap"] as? [[Any]] ?? []).map { row in row.map { aiInt($0) } })
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear {
+            aiCall("getAdminFeatureUsageDetail", [:]) { result, error in
+                loading = false
+                if let error { errorText = error; return }
+                data = result ?? [:]
+            }
+        }
+    }
+}
+
+private struct AIStorageDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var data: [String: Any] = [:]
+
+    private let typeColors: [String: Color] = ["Images": .purple, "Documents": .blue, "Videos": .green, "Audio": .orange, "Other": .gray]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("Storage", lang: seciliDil), onBack: onBack)
+                Text(t("Storage", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                if loading {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
+                } else if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        AIKpiTile(label: t("Total Used", lang: seciliDil), value: aiBytes(aiInt(data, "totals", "totalBytes")))
+                        AIKpiTile(label: t("Total Files", lang: seciliDil), value: "\(aiInt(data, "totals", "fileCount"))")
+                        AIKpiTile(label: t("Avg. File Size", lang: seciliDil), value: aiBytes(aiInt(data, "totals", "avgFileBytes")))
+                        AIKpiTile(label: t("Uploaded (30d)", lang: seciliDil), value: aiBytes(aiInt(data, "totals", "uploaded30dBytes")), hint: "\(aiInt(data, "totals", "uploaded30dCount")) " + t("files", lang: seciliDil))
+                        AIKpiTile(label: t("Near Limit (≥80%)", lang: seciliDil), value: "\(aiInt(data, "totals", "nearLimitCount"))")
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        AICard(title: t("Usage by File Type", lang: seciliDil)) {
+                            let typeBytes = aiMap(data, "typeBytes")
+                            let slices = typeBytes.keys.sorted { aiInt(typeBytes, $0) > aiInt(typeBytes, $1) }.compactMap { key -> SiteStatSlice? in
+                                let mb = aiInt(typeBytes, key) / 1048576
+                                guard aiInt(typeBytes, key) > 0 else { return nil }
+                                return SiteStatSlice(id: key, label: key, value: max(mb, 1), color: typeColors[key] ?? .gray)
+                            }
+                            if slices.isEmpty {
+                                Text(t("No files yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                AIDonutView(slices: slices, center: "MB")
+                            }
+                        }
+                        AICard(title: t("Storage Warnings", lang: seciliDil)) {
+                            let warnings = aiList(data, "nearLimit")
+                            if warnings.isEmpty {
+                                Text(t("No workspace is above 80% of its storage limit.", lang: seciliDil) + " ✓")
+                                    .font(.system(size: 12)).foregroundColor(.green)
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(warnings.enumerated()), id: \.offset) { _, workspace in
+                                        let percent = aiDouble(workspace, "percent")
+                                        AIRowView(
+                                            label: workspace["name"] as? String ?? "?",
+                                            value: aiBytes(aiInt(workspace, "bytes")) + " · \(String(format: "%.1f", percent))%",
+                                            dot: percent >= 95 ? .red : .orange
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        AICard(title: t("Top Workspaces by Storage", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "topWorkspaces").enumerated()), id: \.offset) { _, workspace in
+                                    let plan = workspace["plan"] as? String ?? "demo"
+                                    AIRowView(
+                                        label: (workspace["name"] as? String ?? "?") + " · " + (aiPlanLabels[plan] ?? plan),
+                                        value: aiBytes(aiInt(workspace, "bytes")) + " · \(aiInt(workspace, "files")) " + t("files", lang: seciliDil),
+                                        dot: aiPlanColors[plan] ?? .gray
+                                    )
+                                }
+                            }
+                        }
+                        AICard(title: t("Recent Uploads", lang: seciliDil)) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(aiList(data, "recentUploads").enumerated()), id: \.offset) { _, file in
+                                    AIRowView(
+                                        label: aiStr(file, "fileName"),
+                                        value: aiBytes(aiInt(file, "sizeBytes")) + " · " + aiDate(aiInt(file, "uploadedAtMs")),
+                                        dot: typeColors[aiStr(file, "type")] ?? .gray
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    AICard(title: t("Uploads by Time of Day (30d)", lang: seciliDil)) {
+                        AIHeatmapView(grid: (data["heatmap"] as? [[Any]] ?? []).map { row in row.map { aiInt($0) } })
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear {
+            aiCall("getAdminStorageDetail", [:]) { result, error in
+                loading = false
+                if let error { errorText = error; return }
+                data = result ?? [:]
+            }
+        }
+    }
+}
+
+private struct AILookupDetailView: View {
+    let seciliDil: String
+    let onBack: () -> Void
+
+    @State private var query = ""
+    @State private var searching = false
+    @State private var errorText = ""
+    @State private var users: [[String: Any]] = []
+    @State private var workspaces: [[String: Any]] = []
+    @State private var searched = false
+    @State private var detail: [String: Any]? = nil
+    @State private var detailKind: String? = nil
+    @State private var detailLoading = false
+
+    private func runSearch() {
+        let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard clean.count >= 2 else { errorText = t("Enter at least 2 characters.", lang: seciliDil); return }
+        searching = true
+        errorText = ""
+        detail = nil
+        detailKind = nil
+        aiCall("getAdminLookup", ["mode": "search", "query": clean]) { result, error in
+            searching = false
+            if let error { errorText = error; return }
+            users = result?["users"] as? [[String: Any]] ?? []
+            workspaces = result?["workspaces"] as? [[String: Any]] ?? []
+            searched = true
+        }
+    }
+
+    private func openDetail(kind: String, id: String) {
+        detailLoading = true
+        detailKind = kind
+        detail = nil
+        let payload: [String: Any] = kind == "user" ? ["mode": "user", "uid": id] : ["mode": "workspace", "companyId": id]
+        aiCall("getAdminLookup", payload) { result, error in
+            detailLoading = false
+            if let error { errorText = error; return }
+            detail = result
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AICrumb(title: t("User Lookup", lang: seciliDil), onBack: onBack)
+                Text(t("User Lookup", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+
+                HStack(spacing: 8) {
+                    TextField(t("Email, name or workspace...", lang: seciliDil), text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .padding(.vertical, 9)
+                        .padding(.horizontal, 12)
+                        .background(Color.primary.opacity(0.05))
+                        .cornerRadius(10)
+                        .onSubmit { runSearch() }
+                    Button(action: runSearch) {
+                        Text(searching ? t("Searching...", lang: seciliDil) : t("Search", lang: seciliDil))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.vertical, 9)
+                            .padding(.horizontal, 16)
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(searching)
+                }
+                if !errorText.isEmpty {
+                    Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                }
+
+                if searched && detailKind == nil {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
+                        AICard(title: t("Users", lang: seciliDil) + " (\(users.count))") {
+                            VStack(spacing: 0) {
+                                ForEach(Array(users.enumerated()), id: \.offset) { _, user in
+                                    Button(action: { openDetail(kind: "user", id: aiStr(user, "uid")) }) {
+                                        AIRowView(label: aiStr(user, "email"), value: aiDate(aiInt(user, "lastSignInMs")), dot: .blue)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                if users.isEmpty {
+                                    Text(t("No matching users.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        AICard(title: t("Workspaces", lang: seciliDil) + " (\(workspaces.count))") {
+                            VStack(spacing: 0) {
+                                ForEach(Array(workspaces.enumerated()), id: \.offset) { _, workspace in
+                                    let plan = workspace["plan"] as? String ?? "demo"
+                                    Button(action: { openDetail(kind: "workspace", id: aiStr(workspace, "id")) }) {
+                                        AIRowView(label: aiStr(workspace, "name"), value: aiPlanLabels[plan] ?? plan, dot: aiPlanColors[plan] ?? .gray)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                if workspaces.isEmpty {
+                                    Text(t("No matching workspaces.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let kind = detailKind {
+                    AICard(title: kind == "user" ? t("User Statistics", lang: seciliDil) : t("Workspace Statistics", lang: seciliDil)) {
+                        Button(action: { detailKind = nil; detail = nil }) {
+                            Text("← " + t("Results", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(.blue)
+                        }
+                        .buttonStyle(.plain)
+
+                        if detailLoading {
+                            ProgressView().padding(.vertical, 12)
+                        } else if let detail {
+                            if kind == "user" {
+                                let user = aiMap(detail, "user")
+                                VStack(spacing: 0) {
+                                    AIRowView(label: t("Email", lang: seciliDil), value: aiStr(user, "email"))
+                                    AIRowView(label: t("Name", lang: seciliDil), value: aiStr(user, "displayName").isEmpty ? "—" : aiStr(user, "displayName"))
+                                    AIRowView(label: t("Signed up", lang: seciliDil), value: aiDate(aiInt(user, "createdAtMs")))
+                                    AIRowView(label: t("Last sign-in", lang: seciliDil), value: aiDate(aiInt(user, "lastSignInMs")))
+                                    AIRowView(label: t("Support tickets", lang: seciliDil), value: "\(aiInt(user, "ticketsCreated"))")
+                                }
+                                Text(t("Workspaces", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
+                                VStack(spacing: 0) {
+                                    ForEach(Array(aiList(detail, "memberships").enumerated()), id: \.offset) { _, membership in
+                                        let plan = membership["plan"] as? String ?? "demo"
+                                        Button(action: { openDetail(kind: "workspace", id: aiStr(membership, "companyId")) }) {
+                                            AIRowView(label: aiStr(membership, "name") + " · " + aiStr(membership, "role"), value: aiPlanLabels[plan] ?? plan, dot: aiPlanColors[plan] ?? .gray)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            } else {
+                                let workspace = aiMap(detail, "workspace")
+                                let percent = aiDouble(workspace, "storagePercent")
+                                VStack(spacing: 0) {
+                                    AIRowView(label: t("Workspace", lang: seciliDil), value: aiStr(workspace, "name"))
+                                    AIRowView(label: t("Owner", lang: seciliDil), value: aiStr(workspace, "ownerEmail").isEmpty ? "—" : aiStr(workspace, "ownerEmail"))
+                                    AIRowView(label: t("Plan", lang: seciliDil), value: aiPlanLabels[aiStr(workspace, "plan")] ?? aiStr(workspace, "plan"))
+                                    AIRowView(label: t("Members", lang: seciliDil), value: "\(aiInt(workspace, "members"))")
+                                    AIRowView(label: t("Created", lang: seciliDil), value: aiDate(aiInt(workspace, "createdAtMs")))
+                                    AIRowView(label: t("Last order", lang: seciliDil), value: aiDate(aiInt(workspace, "lastOrderAtMs")))
+                                    AIRowView(label: t("Orders (total)", lang: seciliDil), value: "\(aiInt(workspace, "ordersTotal"))")
+                                    AIRowView(label: t("Orders (30d)", lang: seciliDil), value: "\(aiInt(workspace, "orders30d"))")
+                                    AIRowView(label: t("Customers", lang: seciliDil), value: "\(aiInt(workspace, "customersTotal"))")
+                                    AIRowView(label: t("Messages", lang: seciliDil), value: "\(aiInt(workspace, "messagesTotal"))")
+                                    AIRowView(label: t("Support tickets", lang: seciliDil), value: "\(aiInt(workspace, "supportTotal"))")
+                                    AIRowView(label: t("Files", lang: seciliDil), value: "\(aiInt(workspace, "storageFiles"))")
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(t("Storage", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
+                                    GeometryReader { geo in
+                                        ZStack(alignment: .leading) {
+                                            Capsule().fill(Color.primary.opacity(0.08))
+                                            Capsule()
+                                                .fill(percent >= 95 ? Color.red : percent >= 80 ? Color.orange : Color.blue)
+                                                .frame(width: max(geo.size.width * CGFloat(min(percent, 100)) / 100, 4))
+                                        }
+                                    }
+                                    .frame(height: 9)
+                                    Text(aiBytes(aiInt(workspace, "storageBytes")) + " / \(aiInt(workspace, "storageLimitMB")) MB (\(String(format: "%.1f", percent))%)")
+                                        .font(.system(size: 11, weight: .semibold))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
     }
 }
