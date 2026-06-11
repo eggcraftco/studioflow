@@ -582,10 +582,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           window.sessionStorage.setItem("nv_app_presence", id);
         }
         const body = JSON.stringify({ kind: "heartbeat", scope: "app", platform: "web", sessionId: id, path: window.location.pathname });
+        let sent = false;
         if (navigator.sendBeacon) {
-          navigator.sendBeacon("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", new Blob([body], { type: "application/json" }));
-        } else {
-          void fetch("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true });
+          sent = navigator.sendBeacon("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", new Blob([body], { type: "text/plain" }));
+        }
+        if (!sent) {
+          void fetch("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", { method: "POST", body, headers: { "Content-Type": "text/plain" }, keepalive: true });
         }
       } catch {
         // Presence is best-effort.
