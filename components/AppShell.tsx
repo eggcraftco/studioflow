@@ -49,6 +49,7 @@ import {
   saveWorkspaceOnboardingSkip,
   saveWorkspaceOnboardingTemplate,
   workspaceOnboardingPromptSeed,
+  isWorkspaceOnboardingPromptSeed,
   WORKSPACE_ONBOARDING_BUSINESS_TYPES,
 } from "@/lib/studioflow/workspaceOnboarding";
 import {
@@ -1285,9 +1286,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           onBusinessTypeChange={(nextType) => {
             setOnboardingBusinessType(nextType);
             setOnboardingPrompt((current) =>
-              current.trim()
-                ? current
-                : workspaceOnboardingPromptSeed(nextType),
+              isWorkspaceOnboardingPromptSeed(current)
+                ? workspaceOnboardingPromptSeed(nextType)
+                : current,
             );
             setOnboardingError("");
           }}
