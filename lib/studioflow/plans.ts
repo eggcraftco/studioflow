@@ -49,7 +49,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       financial_basic: true,
       financial_advanced: false,
       client_files: false,
-      card_customization: false,
+      card_customization: true,
       team_access: false,
       storage_addons: false,
       workspace_logo_upload: false,
