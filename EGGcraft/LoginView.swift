@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseAuth
+import Combine
 import Security
 
 private enum LoginCredentialStore {
@@ -51,6 +52,54 @@ private enum LoginCredentialStore {
     }
 }
 
+
+
+// Animated feature words above the sign-in card — mirrors the web login hero.
+struct LoginFeatureRotator: View {
+    let seciliDil: String
+
+    @State private var wordIndex = 0
+    @State private var wordVisible = true
+    private let timer = Timer.publish(every: 2.1, on: .main, in: .common).autoconnect()
+
+    private var words: [String] {
+        [
+            t("Orders", lang: seciliDil),
+            t("Customers", lang: seciliDil),
+            t("Client Files", lang: seciliDil),
+            t("Live Tracking", lang: seciliDil),
+            t("Team & Tasks", lang: seciliDil),
+            t("One calm workspace", lang: seciliDil)
+        ]
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(t("Your studio:", lang: seciliDil))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.gray)
+            Text(words[wordIndex % words.count])
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .opacity(wordVisible ? 1 : 0)
+                .offset(y: wordVisible ? 0 : 6)
+                .animation(.easeInOut(duration: 0.26), value: wordVisible)
+        }
+        .onReceive(timer) { _ in
+            wordVisible = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+                wordIndex = (wordIndex + 1) % words.count
+                wordVisible = true
+            }
+        }
+    }
+}
 
 // Official-style multicolour Google "G" mark drawn natively.
 struct GoogleGLogo: View {
@@ -135,6 +184,9 @@ struct LoginView: View {
                             .frame(maxWidth: 280, maxHeight: 78)
                             .padding(.bottom, 8)
                             .accessibilityLabel("NivaDesk")
+
+                        LoginFeatureRotator(seciliDil: seciliDil)
+                            .padding(.bottom, 2)
 
                         Text(isLoginMode ? t("Sign in to your workspace", lang: seciliDil) : t("Create a new workspace", lang: seciliDil))
                             .font(.system(size: 14))
