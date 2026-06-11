@@ -706,14 +706,21 @@ async function readWorkspaceDocument(companyId: string) {
 }
 
 export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContext> {
-  const userSnapshot = await getDoc(doc(db, "users", uid));
+  // Speed: read the user doc and the (most likely) own workspace doc in
+  // parallel. Most accounts have activeCompanyId === uid, so this saves a full
+  // network round trip; members of someone else's workspace fall back to one
+  // extra read below.
+  const [userSnapshot, ownWorkspaceSnapshot] = await Promise.all([
+    getDoc(doc(db, "users", uid)),
+    readWorkspaceDocument(uid)
+  ]);
   const userData = userSnapshot.exists() ? userSnapshot.data() : {};
   let companyId = stringValue(userData.activeCompanyId, uid);
 
-  let companySnapshot = await readWorkspaceDocument(companyId);
+  let companySnapshot = companyId === uid ? ownWorkspaceSnapshot : await readWorkspaceDocument(companyId);
   if (!companySnapshot && companyId !== uid) {
     companyId = uid;
-    companySnapshot = await readWorkspaceDocument(companyId);
+    companySnapshot = ownWorkspaceSnapshot;
   }
 
   const companyData = companySnapshot?.data() ?? {};
