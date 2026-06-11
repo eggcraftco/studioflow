@@ -4257,7 +4257,7 @@ private val StudioBillingPlan.hasTeamAccess: Boolean
     get() = this == StudioBillingPlan.TeamMonthly
 
 private val StudioBillingPlan.hasCardCustomization: Boolean
-    get() = this != StudioBillingPlan.Demo
+    get() = true
 
 private val StudioBillingPlan.hasAdvancedFinance: Boolean
     get() = this == StudioBillingPlan.ProMonthly || this == StudioBillingPlan.TeamMonthly

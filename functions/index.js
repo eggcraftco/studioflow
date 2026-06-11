@@ -1813,7 +1813,7 @@ const PLAN_ENTITLEMENTS = {
     financialCardsEnabled: true,
     materialsInventoryCardsEnabled: false,
     historyLogEnabled: false,
-    cardCustomizationEnabled: false,
+    cardCustomizationEnabled: true,
     scheduleAdvancedFiltersEnabled: false,
     scheduleLongRangeEnabled: false,
     scheduleTeamViewEnabled: false,
