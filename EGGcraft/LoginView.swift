@@ -79,6 +79,8 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isLoginMode = true
+    @State private var signupFullName = ""
+    @State private var signupStudioName = ""
     @State private var lastAutofilledEmail = ""
     @FocusState private var focusedField: LoginField?
 
@@ -102,7 +104,7 @@ struct LoginView: View {
         } else {
             let submittedEmail = email
             let submittedPassword = password
-            authVM.register(email: submittedEmail, sifre: submittedPassword) {
+            authVM.register(fullName: signupFullName, studioName: signupStudioName, email: submittedEmail, sifre: submittedPassword) {
                 LoginCredentialStore.save(email: submittedEmail, password: submittedPassword)
             }
         }
@@ -189,6 +191,22 @@ struct LoginView: View {
                         }
 
                         VStack(spacing: 15) {
+                            if !isLoginMode {
+                                TextField(t("Full Name", lang: seciliDil), text: $signupFullName)
+                                    .textFieldStyle(.plain)
+                                    .padding()
+                                    .background(Color.primary.opacity(0.05))
+                                    .cornerRadius(8)
+                                    .textContentType(.name)
+                                    .autocorrectionDisabled(true)
+                                TextField(t("Studio / Workspace Name", lang: seciliDil), text: $signupStudioName)
+                                    .textFieldStyle(.plain)
+                                    .padding()
+                                    .background(Color.primary.opacity(0.05))
+                                    .cornerRadius(8)
+                                    .textContentType(.organizationName)
+                                    .autocorrectionDisabled(true)
+                            }
                             TextField(t("Email Address", lang: seciliDil), text: $email)
                                 .focused($focusedField, equals: .email)
                                 .textFieldStyle(.plain)

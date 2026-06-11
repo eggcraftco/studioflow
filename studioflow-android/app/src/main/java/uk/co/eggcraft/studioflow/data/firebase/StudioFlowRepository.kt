@@ -81,6 +81,32 @@ class StudioFlowRepository(
         auth.signInWithEmailAndPassword(email.trim(), password).await()
     }
 
+    suspend fun register(fullName: String, studioName: String, email: String, password: String) {
+        val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
+        val user = result.user ?: return
+        // Account hygiene: profile name + verification email (non-blocking).
+        runCatching {
+            user.updateProfile(
+                com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                    .setDisplayName(fullName.trim())
+                    .build()
+            ).await()
+        }
+        runCatching { user.sendEmailVerification().await() }
+        // Seed the new workspace with the chosen studio name and owner details.
+        runCatching {
+            db.collection("companies").document(user.uid).set(
+                mapOf(
+                    "name" to studioName.trim(),
+                    "companyName" to studioName.trim(),
+                    "ownerDisplayName" to fullName.trim(),
+                    "ownerEmail" to email.trim()
+                ),
+                com.google.firebase.firestore.SetOptions.merge()
+            ).await()
+        }
+    }
+
     suspend fun signInWithGoogleIdToken(idToken: String) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).await()

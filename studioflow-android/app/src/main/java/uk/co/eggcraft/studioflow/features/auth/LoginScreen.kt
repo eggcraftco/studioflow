@@ -23,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,12 +48,19 @@ fun LoginScreen(
     signingIn: Boolean,
     errorMessage: String,
     onSignIn: (String, String) -> Unit,
+    onRegister: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onGoogleSignIn: () -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var isLoginMode by remember { mutableStateOf(true) }
+    var fullName by remember { mutableStateOf("") }
+    var studioName by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf("") }
+    val passwordsMismatchText = t("Passwords do not match.")
 
     Box(
         modifier = Modifier
@@ -81,7 +89,7 @@ fun LoginScreen(
                     contentScale = ContentScale.Fit
                 )
                 Text(
-                    text = t("Sign in with the same account you use on iPhone, iPad, Mac or web."),
+                    text = if (isLoginMode) t("Sign in with the same account you use on iPhone, iPad, Mac or web.") else t("Create a new workspace"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -113,6 +121,22 @@ fun LoginScreen(
                     )
                     HorizontalDivider(modifier = Modifier.weight(1f))
                 }
+                if (!isLoginMode) {
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(t("Full Name")) },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = studioName,
+                        onValueChange = { studioName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(t("Studio / Workspace Name")) },
+                        singleLine = true
+                    )
+                }
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -130,17 +154,37 @@ fun LoginScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                 )
-                if (errorMessage.isNotBlank()) {
+                if (errorMessage.isNotBlank() || localError.isNotBlank()) {
                     Text(
-                        text = errorMessage,
+                        text = if (localError.isNotBlank()) localError else errorMessage,
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
+                if (!isLoginMode) {
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(t("Confirm Password")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Button(
-                    onClick = { onSignIn(email, password) },
+                    onClick = {
+                        if (isLoginMode) {
+                            onSignIn(email, password)
+                        } else if (password != confirmPassword) {
+                            localError = passwordsMismatchText
+                        } else {
+                            localError = ""
+                            onRegister(fullName, studioName, email, password)
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
@@ -150,8 +194,20 @@ fun LoginScreen(
                     if (signingIn) {
                         CircularProgressIndicator(strokeWidth = 2.dp)
                     } else {
-                        Text(t("Sign In"), fontWeight = FontWeight.Bold)
+                        Text(if (isLoginMode) t("Sign In") else t("Create Account"), fontWeight = FontWeight.Bold)
                     }
+                }
+                TextButton(
+                    onClick = {
+                        isLoginMode = !isLoginMode
+                        localError = ""
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (isLoginMode) t("Don't have an account? Create one") else t("Already have an account? Sign In"),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }

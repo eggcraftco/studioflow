@@ -245,6 +245,30 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    fun register(fullName: String, studioName: String, email: String, password: String) {
+        if (fullName.trim().length < 2 || studioName.trim().length < 2) {
+            mutableState.update { it.copy(errorMessage = "Please enter your name and studio name.") }
+            return
+        }
+        if (email.isBlank()) {
+            mutableState.update { it.copy(errorMessage = "Email is required.") }
+            return
+        }
+        if (password.length < 8 || !password.any { ch -> ch.isLetter() } || !password.any { ch -> ch.isDigit() }) {
+            mutableState.update { it.copy(errorMessage = "Password must be at least 8 characters and include a letter and a number.") }
+            return
+        }
+        viewModelScope.launch {
+            mutableState.update { it.copy(signingIn = true, errorMessage = "") }
+            runCatching { repository.register(fullName, studioName, email, password) }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(signingIn = false, loading = false, errorMessage = error.message ?: "Could not create the account.")
+                    }
+                }
+        }
+    }
+
     fun signIn(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {
             mutableState.update { it.copy(errorMessage = "Email and password are required.") }

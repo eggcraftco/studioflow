@@ -976,10 +976,26 @@ class AuthViewModel: ObservableObject {
         }
     }
 
-    func register(email: String, sifre: String, onSuccess: (() -> Void)? = nil) {
+    func register(fullName: String = "", studioName: String = "", email: String, sifre: String, onSuccess: (() -> Void)? = nil) {
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanFullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanStudioName = studioName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanEmail.isEmpty, !sifre.isEmpty else {
             errorMessage = "Please enter your email address and password."
+            return
+        }
+        guard cleanFullName.count >= 2 else {
+            errorMessage = "Please enter your full name."
+            return
+        }
+        guard cleanStudioName.count >= 2 else {
+            errorMessage = "Please enter your studio or workspace name."
+            return
+        }
+        guard sifre.count >= 8,
+              sifre.rangeOfCharacter(from: .letters) != nil,
+              sifre.rangeOfCharacter(from: .decimalDigits) != nil else {
+            errorMessage = "Password must be at least 8 characters and include a letter and a number."
             return
         }
 
@@ -987,14 +1003,39 @@ class AuthViewModel: ObservableObject {
         errorMessage = ""
         bypassNextLocalUnlockAfterInteractiveSignIn = true
 
-        Auth.auth().createUser(withEmail: cleanEmail, password: sifre) { [weak self] _, error in
+        Auth.auth().createUser(withEmail: cleanEmail, password: sifre) { [weak self] result, error in
             Task { @MainActor in
-                self?.isLoading = false
                 if let error = error {
+                    self?.isLoading = false
                     self?.bypassNextLocalUnlockAfterInteractiveSignIn = false
                     self?.errorMessage = error.localizedDescription
-                } else {
+                    return
+                }
+
+                guard let user = result?.user else {
+                    self?.isLoading = false
                     onSuccess?()
+                    return
+                }
+
+                // Account hygiene: profile name + verification email (non-blocking).
+                let changeRequest = user.createProfileChangeRequest()
+                changeRequest.displayName = cleanFullName
+                changeRequest.commitChanges(completion: nil)
+                user.sendEmailVerification(completion: nil)
+
+                // Seed the new workspace with the chosen studio name and owner
+                // details so it never shows up as a bare "My Studio".
+                Firestore.firestore().collection("companies").document(user.uid).setData([
+                    "name": cleanStudioName,
+                    "companyName": cleanStudioName,
+                    "ownerDisplayName": cleanFullName,
+                    "ownerEmail": cleanEmail
+                ], merge: true) { _ in
+                    Task { @MainActor in
+                        self?.isLoading = false
+                        onSuccess?()
+                    }
                 }
             }
         }

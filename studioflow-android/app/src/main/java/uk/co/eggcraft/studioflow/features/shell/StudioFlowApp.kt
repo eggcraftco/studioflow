@@ -306,6 +306,7 @@ private fun StudioFlowAppContent(
             signingIn = state.signingIn,
             errorMessage = state.errorMessage,
             onSignIn = viewModel::signIn,
+            onRegister = viewModel::register,
             onGoogleSignIn = { startGoogleSignIn() }
         )
         requireDeviceUnlock && !localUnlockSatisfied -> LocalUnlockScreen(

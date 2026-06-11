@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import Link from "next/link";
 import { openCookiePreferences } from "@/lib/cookieConsent";
 import { usePathname, useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -2073,8 +2073,8 @@ export function PublicSignupPage() {
         setError(t("signup.error.required"));
         return;
       }
-      if (!auth.currentUser && password.length < 8) {
-        setError(t("signup.error.passwordLength"));
+      if (!auth.currentUser && (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))) {
+        setError(t("signup.error.passwordStrength"));
         return;
       }
       if (!auth.currentUser && password !== confirmPassword) {
@@ -2092,6 +2092,8 @@ export function PublicSignupPage() {
         let currentUser = auth.currentUser;
         if (!currentUser) {
           const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          // Non-blocking email verification — standard account-security hygiene.
+          void sendEmailVerification(credential.user).catch(() => undefined);
           currentUser = credential.user;
         }
         if (currentUser.displayName !== cleanFullName) {

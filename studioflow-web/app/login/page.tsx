@@ -165,6 +165,19 @@ function LoginPageContent() {
           </button>
         </form>
 
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px" }}>
+          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+          <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>{t("auth.newHere")}</span>
+          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+        </div>
+        <Link
+          href="/signup"
+          className="button secondary"
+          style={{ width: "100%", display: "flex", justifyContent: "center", textDecoration: "none" }}
+        >
+          {t("auth.createAccount")}
+        </Link>
+
         <p className="login-footnote">
           {t("login.footnotePrefix")} <Link href="/signup">{t("cta.startFree")}</Link> {t("login.footnoteOr")} <Link href="/pricing">{t("login.footnotePricing")}</Link>.
         </p>
