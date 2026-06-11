@@ -2,6 +2,7 @@ package uk.co.eggcraft.studioflow.features.auth
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,10 +88,11 @@ fun LoginScreen(
                     contentDescription = "NivaDesk",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(78.dp),
+                        .height(48.dp),
                     alignment = Alignment.CenterStart,
                     contentScale = ContentScale.Fit
                 )
+                LoginFeatureRotator()
                 Text(
                     text = if (isLoginMode) t("Sign in with the same account you use on iPhone, iPad, Mac or web.") else t("Create a new workspace"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -314,6 +317,91 @@ fun EmailVerifyScreen(onVerified: () -> Unit, onSignOut: () -> Unit) {
                 ) { Text(t("Resend email"), fontWeight = FontWeight.SemiBold) }
                 TextButton(onClick = onSignOut) { Text(t("Sign Out")) }
             }
+        }
+    }
+}
+
+
+// Typewriter feature words — letters tick in with a tiny haptic, hold, then
+// rewind-delete at 2x speed. Caret is a small rounded square like the app's
+// order cards, changing colour/size per word. Mirrors iPhone and web logins.
+@Composable
+private fun LoginFeatureRotator() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val words = listOf(
+        t("Dashboard"), t("Orders"), t("Schedule"), t("Customers"), t("Files"),
+        t("Tasks"), t("Tracking"), t("Notes"), t("Analytics"), t("AI Assistant"), t("Storage")
+    )
+    val caretColors = listOf(
+        Color(0xFF61A6FA), Color(0xFF73CC8C), Color(0xFFFAB866),
+        Color(0xFFED8CA6), Color(0xFFA98CF2), Color(0xFF6BC7CC)
+    )
+    val caretSizes = listOf(14.dp, 17.dp, 15.dp, 18.dp, 14.dp, 16.dp)
+
+    var wordIndex by remember { mutableStateOf(0) }
+    var charCount by remember { mutableStateOf(0) }
+    var holding by remember { mutableStateOf(false) }
+    val view = androidx.compose.ui.platform.LocalView.current
+
+    LaunchedEffect(Unit) {
+        var phase = 0 // 0 typing, 1 holding, 2 deleting, 3 pausing
+        var ticks = 0
+        while (true) {
+            kotlinx.coroutines.delay(45)
+            val word = words[wordIndex % words.size]
+            when (phase) {
+                0 -> if (charCount < word.length) {
+                    charCount += 1
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                } else { phase = 1; ticks = 0; holding = true }
+                1 -> { ticks += 1; if (ticks >= 55) { phase = 2; holding = false } }
+                2 -> if (charCount > 0) {
+                    charCount = maxOf(charCount - 2, 0)
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                } else { phase = 3; ticks = 0 }
+                3 -> { ticks += 1; if (ticks >= 20) { phase = 0; wordIndex = (wordIndex + 1) % words.size } }
+            }
+        }
+    }
+
+    val word = words[wordIndex % words.size]
+    val typed = word.take(charCount)
+    val caretColor = caretColors[wordIndex % caretColors.size]
+    val caretSize = caretSizes[wordIndex % caretSizes.size]
+    val caretAlpha = if (!holding) 0.9f else 0.5f
+
+    val caret: @Composable (Boolean) -> Unit = { hidden ->
+        Box(
+            modifier = Modifier
+                .size(caretSize)
+                .background(caretColor.copy(alpha = if (hidden) 0f else caretAlpha), RoundedCornerShape(4.dp))
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().height(38.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (typed.isEmpty()) {
+            caret(false)
+        } else {
+            caret(true)
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(
+                typed,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Black,
+                style = androidx.compose.ui.text.TextStyle(
+                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(Color(0xFF0A84FF), Color(0xFF8A5CF6), Color(0xFFD65BD6))
+                    )
+                ),
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+            caret(false)
         }
     }
 }
