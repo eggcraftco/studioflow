@@ -9,7 +9,8 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { auth } from "@/lib/firebase/client";
+import { auth, functions } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
 import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -2646,7 +2647,70 @@ function AccountSection({
           </div>
         ) : null}
       </section> : null}
+      <DeleteAccountCard />
     </div>
+  );
+}
+
+function DeleteAccountCard() {
+  const router = useRouter();
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleDelete() {
+    if (confirmText.trim().toUpperCase() !== "DELETE") {
+      setError('Type DELETE to confirm.');
+      return;
+    }
+    if (!window.confirm("This permanently deletes your account, your workspace, all orders, customers, notes and files. This cannot be undone. Continue?")) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const callable = httpsCallable<{ confirmation: string }, { ok: boolean }>(functions, "deleteMyAccount");
+      await callable({ confirmation: "DELETE" });
+      try {
+        await auth.signOut();
+      } catch {
+        // account already gone server-side
+      }
+      router.replace("/login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete the account.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card app-card" style={{ borderColor: "rgba(217, 45, 32, 0.4)" }}>
+      <CardTitle icon="lock" eyebrow="Danger zone" title="Delete account" />
+      <p className="muted-copy">
+        Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files).
+        This cannot be undone. Memberships in other teams&apos; workspaces are removed too.
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+        <input
+          className="input"
+          style={{ flex: "1 1 180px" }}
+          placeholder='Type DELETE to confirm'
+          value={confirmText}
+          onChange={event => setConfirmText(event.target.value)}
+          disabled={busy}
+        />
+        <button
+          type="button"
+          className="button"
+          style={{ background: "#d92d20", borderColor: "#d92d20" }}
+          onClick={() => void handleDelete()}
+          disabled={busy || confirmText.trim().toUpperCase() !== "DELETE"}
+        >
+          {busy ? "Deleting…" : "Delete my account"}
+        </button>
+      </div>
+      {error ? <p style={{ color: "var(--danger)", marginTop: 8 }}>{error}</p> : null}
+    </section>
   );
 }
 
