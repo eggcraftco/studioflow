@@ -62,15 +62,41 @@ export function workspaceOnboardingPromptSeed(type: string) {
   switch (type) {
     case "Custom Art Studio":
       return "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping.";
-    case "Photography Studio":
-      return "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes.";
+    case "Freelancer / Designer":
+      return "We deliver design and freelance projects. We need project brief, scope, reference files, revision rounds, client approval, deadline, final files and balance payment.";
     case "Repair Service":
       return "We repair customer items. We need model, serial number, issue reported, diagnostics, quote approval, parts order, repair, testing and collection or shipping.";
     case "Handmade Products":
       return "We make custom products. We need product type, size, colour, material, customer approval, production, packaging, shipping and balance payment.";
+    case "Photography Studio":
+      return "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes.";
+    case "Tailor / Alteration Studio":
+      return "We tailor and alter garments. We need garment type, measurements, fabric details, fitting appointments, alteration notes, deposit, final fitting and collection date.";
+    case "Jewellery Studio":
+      return "We create custom jewellery. We need metal, stone, size, design sketch, customer approval, deposit, casting, setting, polishing, quality check and delivery.";
+    case "Agency / Creative Studio":
+      return "We run creative client projects. We need project brief, deliverables, timeline, team assignment, draft versions, client feedback rounds, approval, launch and invoicing.";
+    case "Food / Bakery / Catering":
+      return "We prepare custom food orders. We need event date, servings, flavours, dietary notes, design reference, deposit, preparation, decoration and delivery or pickup.";
+    case "Beauty / Clinic / Wellness":
+      return "We manage client appointments and treatments. We need client details, treatment type, consultation notes, appointment date, payment, aftercare and follow-up reminders.";
+    case "Consultancy / Professional Service":
+      return "We deliver consultancy engagements. We need client details, scope, proposal, contract, milestones, meetings, deliverables, review and invoicing.";
+    case "General Small Business":
+      return "We handle customer orders. We need customer details, order items, pricing, deposit, preparation, quality check, delivery or pickup and balance payment.";
     default:
       return "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery.";
   }
+}
+
+export function isWorkspaceOnboardingPromptSeed(prompt: string) {
+  const trimmed = prompt.trim();
+  if (!trimmed) return true;
+  return (
+    WORKSPACE_ONBOARDING_BUSINESS_TYPES.some(
+      type => workspaceOnboardingPromptSeed(type) === trimmed,
+    ) || trimmed === "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
+  );
 }
 
 function onboardingPresetFor(rawText: string): WorkspaceOnboardingPreset {

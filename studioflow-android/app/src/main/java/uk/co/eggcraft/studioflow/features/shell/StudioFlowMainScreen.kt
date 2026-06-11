@@ -829,7 +829,7 @@ private fun WorkspaceOnboardingScreen(
                                         text = { Text(type) },
                                         onClick = {
                                             businessType = type
-                                            if (businessPrompt.isBlank()) businessPrompt = onboardingPromptSeed(type)
+                                            if (isOnboardingPromptSeed(businessPrompt)) businessPrompt = onboardingPromptSeed(type)
                                             menuOpen = false
                                         }
                                     )
@@ -909,11 +909,41 @@ private fun WorkspaceOnboardingScreen(
 private fun onboardingPromptSeed(type: String): String {
     return when (type) {
         "Custom Art Studio" -> "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping."
-        "Photography Studio" -> "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes."
+        "Freelancer / Designer" -> "We deliver design and freelance projects. We need project brief, scope, reference files, revision rounds, client approval, deadline, final files and balance payment."
         "Repair Service" -> "We repair customer items. We need model, serial number, issue reported, diagnostics, quote approval, parts order, repair, testing and collection or shipping."
         "Handmade Products" -> "We make custom products. We need product type, size, colour, material, customer approval, production, packaging, shipping and balance payment."
+        "Photography Studio" -> "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes."
+        "Tailor / Alteration Studio" -> "We tailor and alter garments. We need garment type, measurements, fabric details, fitting appointments, alteration notes, deposit, final fitting and collection date."
+        "Jewellery Studio" -> "We create custom jewellery. We need metal, stone, size, design sketch, customer approval, deposit, casting, setting, polishing, quality check and delivery."
+        "Agency / Creative Studio" -> "We run creative client projects. We need project brief, deliverables, timeline, team assignment, draft versions, client feedback rounds, approval, launch and invoicing."
+        "Food / Bakery / Catering" -> "We prepare custom food orders. We need event date, servings, flavours, dietary notes, design reference, deposit, preparation, decoration and delivery or pickup."
+        "Beauty / Clinic / Wellness" -> "We manage client appointments and treatments. We need client details, treatment type, consultation notes, appointment date, payment, aftercare and follow-up reminders."
+        "Consultancy / Professional Service" -> "We deliver consultancy engagements. We need client details, scope, proposal, contract, milestones, meetings, deliverables, review and invoicing."
+        "General Small Business" -> "We handle customer orders. We need customer details, order items, pricing, deposit, preparation, quality check, delivery or pickup and balance payment."
         else -> "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
     }
+}
+
+private val onboardingBusinessTypeNames = listOf(
+    "Custom Art Studio",
+    "Freelancer / Designer",
+    "Repair Service",
+    "Handmade Products",
+    "Photography Studio",
+    "Tailor / Alteration Studio",
+    "Jewellery Studio",
+    "Agency / Creative Studio",
+    "Food / Bakery / Catering",
+    "Beauty / Clinic / Wellness",
+    "Consultancy / Professional Service",
+    "General Small Business"
+)
+
+private fun isOnboardingPromptSeed(prompt: String): Boolean {
+    val trimmed = prompt.trim()
+    if (trimmed.isEmpty()) return true
+    return onboardingBusinessTypeNames.any { onboardingPromptSeed(it) == trimmed } ||
+        trimmed == "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
 }
 
 @Composable
