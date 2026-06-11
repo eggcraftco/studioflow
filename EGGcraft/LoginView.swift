@@ -101,10 +101,20 @@ struct LoginFeatureRotator: View {
                         endPoint: .trailing
                     )
                 )
-            // Caret blinks while the word is "held", solid while typing.
-            Text("▍")
-                .font(.system(size: 19, weight: .heavy))
-                .foregroundColor(.gray.opacity(isDeleting || charCount < word.count ? 0.8 : (holdTicks % 16 < 8 ? 0.65 : 0.0)))
+            // Brush-tip caret: the studio "paints" each letter. Solid while
+            // typing/erasing, blinks while the word is held.
+            Image(systemName: "paintbrush.pointed.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .rotationEffect(.degrees(18))
+                .opacity(isDeleting || charCount < word.count ? 0.95 : (holdTicks % 16 < 8 ? 0.75 : 0.0))
+                .offset(y: -1)
         }
         .frame(height: 28)
         .onReceive(timer) { _ in
