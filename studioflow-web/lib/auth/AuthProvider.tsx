@@ -146,8 +146,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Returning users on this device have already passed the workspace
+      // bootstrap — show the app immediately and re-run the check in the
+      // background. Only first-time sign-ins block on it (they genuinely need
+      // the workspace docs to exist before pages can query).
+      const readyKey = `nv_ws_ready_${currentUser.uid}`;
+      let alreadyReady = false;
+      try {
+        alreadyReady = window.localStorage.getItem(readyKey) === "1";
+      } catch {
+        // localStorage unavailable — fall back to the blocking path.
+      }
+
+      if (alreadyReady) {
+        setUser(currentUser);
+        setLoading(false);
+        void ensurePersonalWorkspace(currentUser).catch(error => {
+          console.warn("Background workspace check failed.", error);
+        });
+        return;
+      }
+
       setLoading(true);
       ensurePersonalWorkspace(currentUser)
+        .then(() => {
+          try {
+            window.localStorage.setItem(readyKey, "1");
+          } catch {
+            // Best-effort flag only.
+          }
+        })
         .catch(error => {
           console.warn("Could not ensure NivaDesk workspace for signed-in user.", error);
         })
