@@ -62,6 +62,7 @@ struct LoginFeatureRotator: View {
     @State private var wordIndex = 0
     @State private var charCount = 0
     @State private var holdTicks = 0
+    @State private var isDeleting = false
     private let timer = Timer.publish(every: 0.045, on: .main, in: .common).autoconnect()
 
     private var words: [String] {
@@ -75,10 +76,10 @@ struct LoginFeatureRotator: View {
         ]
     }
 
-    private func tickHaptic() {
+    private func tickHaptic(intensity: CGFloat = 0.75) {
         #if os(iOS)
-        let generator = UIImpactFeedbackGenerator(style: .soft)
-        generator.impactOccurred(intensity: 0.4)
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred(intensity: intensity)
         #endif
     }
 
@@ -98,20 +99,28 @@ struct LoginFeatureRotator: View {
             // Caret blinks while the word is "held", solid while typing.
             Text("▍")
                 .font(.system(size: 19, weight: .heavy))
-                .foregroundColor(.gray.opacity(charCount < word.count ? 0.8 : (holdTicks % 16 < 8 ? 0.65 : 0.0)))
+                .foregroundColor(.gray.opacity(isDeleting || charCount < word.count ? 0.8 : (holdTicks % 16 < 8 ? 0.65 : 0.0)))
         }
         .frame(height: 28)
         .onReceive(timer) { _ in
             let current = words[wordIndex % words.count]
-            if charCount < current.count {
+            if isDeleting {
+                // Rewind the typing animation, twice as fast as writing.
+                if charCount > 0 {
+                    charCount = max(charCount - 2, 0)
+                    tickHaptic(intensity: 0.45)
+                } else {
+                    isDeleting = false
+                    holdTicks = 0
+                    wordIndex = (wordIndex + 1) % words.count
+                }
+            } else if charCount < current.count {
                 charCount += 1
                 tickHaptic()
             } else if holdTicks < 32 {
                 holdTicks += 1
             } else {
-                wordIndex = (wordIndex + 1) % words.count
-                charCount = 0
-                holdTicks = 0
+                isDeleting = true
             }
         }
     }
