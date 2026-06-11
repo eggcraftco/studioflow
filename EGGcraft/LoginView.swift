@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 import Security
 
 private enum LoginCredentialStore {
