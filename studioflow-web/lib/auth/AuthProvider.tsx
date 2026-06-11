@@ -28,15 +28,26 @@ async function ensurePersonalWorkspace(currentUser: User) {
   const companyRef = doc(db, "companies", uid);
   const [userSnapshot, companySnapshot] = await Promise.all([getDoc(userRef), getDoc(companyRef)]);
   const userData = userSnapshot.exists() ? userSnapshot.data() : {};
-  const userPayload: Record<string, unknown> = {
-    uid,
-    email,
-    displayName,
-    photoURL,
-    updatedAt: serverTimestamp()
-  };
-  if (!cleanText(userData.activeCompanyId)) userPayload.activeCompanyId = uid;
-  await setDoc(userRef, userPayload, { merge: true });
+
+  // Only write when something actually changed — this runs on every app open,
+  // so unconditional writes would add latency and Firestore write costs.
+  const userNeedsWrite =
+    !userSnapshot.exists() ||
+    cleanText(userData.email) !== email ||
+    cleanText(userData.displayName) !== displayName ||
+    cleanText(userData.photoURL) !== photoURL ||
+    !cleanText(userData.activeCompanyId);
+  if (userNeedsWrite) {
+    const userPayload: Record<string, unknown> = {
+      uid,
+      email,
+      displayName,
+      photoURL,
+      updatedAt: serverTimestamp()
+    };
+    if (!cleanText(userData.activeCompanyId)) userPayload.activeCompanyId = uid;
+    await setDoc(userRef, userPayload, { merge: true });
+  }
 
   const ownerMember = {
     uid,
@@ -52,6 +63,20 @@ async function ensurePersonalWorkspace(currentUser: User) {
     const members = data.members && typeof data.members === "object" && !Array.isArray(data.members)
       ? data.members as Record<string, unknown>
       : {};
+    const memberUids = Array.isArray(data.memberUids) ? data.memberUids as unknown[] : [];
+    const memberRoles = data.memberRoles && typeof data.memberRoles === "object" && !Array.isArray(data.memberRoles)
+      ? data.memberRoles as Record<string, unknown>
+      : {};
+
+    const companyComplete =
+      cleanText(data.companyId) === uid &&
+      cleanText(data.appName) === "NivaDesk" &&
+      memberUids.includes(uid) &&
+      memberRoles[uid] === "owner" &&
+      Boolean(cleanText(data.ownerUid)) &&
+      Boolean(members[uid]);
+    if (companyComplete) return;
+
     const companyPayload: Record<string, unknown> = {
       companyId: uid,
       appName: "NivaDesk",
