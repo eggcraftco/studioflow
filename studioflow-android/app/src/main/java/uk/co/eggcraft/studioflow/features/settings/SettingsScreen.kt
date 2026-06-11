@@ -5578,6 +5578,35 @@ private fun AIHubRevenuePage(t: (String) -> String) {
                     Triple(t("Paid Workspaces"), insightsInt(data, "revenue", "paidTotal").toString(), ""),
                     Triple(t("Extra Seats"), insightsInt(data, "revenue", "seatCount").toString(), "£${insightsInt(data, "revenue", "seatsMrr")}/mo")
                 ))
+                AIHubCard(t("Extra Seat Buyers")) {
+                    val seatBuyers = insightsList(insightsMap(data["addons"])["seatWorkspaces"])
+                    if (seatBuyers.isEmpty()) {
+                        Text(t("No workspace has purchased extra seats yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        seatBuyers.forEach { item ->
+                            AIHubRow(
+                                item["name"] as? String ?: "?",
+                                "${insightsInt(item, "seats")} " + t("seats") + " · £${insightsInt(item, "monthlyGbp")}/mo",
+                                Color(0xFFFF9F0A)
+                            )
+                        }
+                    }
+                }
+                AIHubCard(t("Storage Add-on Buyers")) {
+                    val storageBuyers = insightsList(insightsMap(data["addons"])["storageWorkspaces"])
+                    if (storageBuyers.isEmpty()) {
+                        Text(t("No workspace has purchased a storage add-on yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        storageBuyers.forEach { item ->
+                            val gb = insightsInt(item, "addonGB")
+                            AIHubRow(
+                                item["name"] as? String ?: "?",
+                                "+$gb GB · £${insightsInt(item, "monthlyGbp")}/mo",
+                                if (gb >= 200) Color(0xFF8A5CF6) else Color(0xFF0A84FF)
+                            )
+                        }
+                    }
+                }
                 AIHubCard(t("Top Paying Workspaces (Est.)")) {
                     insightsList(insightsMap(data)["topPaying"]).forEach { item ->
                         val plan = item["plan"] as? String ?: "demo"

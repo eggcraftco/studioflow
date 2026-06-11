@@ -17808,6 +17808,10 @@ exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds:
   let storageAddonCount = 0;
   const mrrByPlan = { lifetime_lite: 0, pro_monthly: 0, team_monthly: 0 };
   const workspaces = [];
+  const seatWorkspaces = [];
+  const storageWorkspaces = [];
+  let storageAddon100 = 0;
+  let storageAddon200 = 0;
 
   companiesSnap.docs.forEach((doc) => {
     const data = doc.data() || {};
@@ -17825,6 +17829,23 @@ exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds:
     storageMrr += storageGbp;
     seatCount += seats;
     if (storageGbp > 0) storageAddonCount += 1;
+
+    const workspaceName = String(data.name || data.companyName || doc.id).slice(0, 60);
+    const ownerEmail = String(data.ownerEmail || data.email || "").slice(0, 80);
+    if (seats > 0) {
+      seatWorkspaces.push({ id: doc.id, name: workspaceName, ownerEmail, seats, monthlyGbp: seatGbp });
+    }
+    if (storageGbp > 0) {
+      const addonMB = activeStorageAddonMB(data);
+      if (addonMB >= 200000) storageAddon200 += 1; else storageAddon100 += 1;
+      storageWorkspaces.push({
+        id: doc.id,
+        name: workspaceName,
+        ownerEmail,
+        addonGB: addonMB >= 200000 ? 200 : 100,
+        monthlyGbp: storageGbp
+      });
+    }
     mrrByPlan[plan] = (mrrByPlan[plan] || 0) + base + (plan === "team_monthly" ? seatGbp : 0);
 
     workspaces.push({
@@ -17860,7 +17881,13 @@ exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds:
       seatCount,
       storageAddonCount
     },
-    topPaying: workspaces.slice(0, 8)
+    topPaying: workspaces.slice(0, 8),
+    addons: {
+      seatWorkspaces: seatWorkspaces.sort((a, b) => b.seats - a.seats).slice(0, 10),
+      storageWorkspaces: storageWorkspaces.sort((a, b) => b.monthlyGbp - a.monthlyGbp).slice(0, 10),
+      storageAddon100,
+      storageAddon200
+    }
   };
 });
 

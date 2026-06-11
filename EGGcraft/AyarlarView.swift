@@ -8089,6 +8089,33 @@ private struct AIRevenueDetailView: View {
                                 AIDonutView(slices: slices, center: "£/mo")
                             }
                         }
+                        AICard(title: t("Extra Seat Buyers", lang: seciliDil)) {
+                            let seatBuyers = aiList(data, "addons", "seatWorkspaces")
+                            if seatBuyers.isEmpty {
+                                Text(t("No workspace has purchased extra seats yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(seatBuyers.enumerated()), id: \.offset) { _, item in
+                                        let rowValue: String = String(aiInt(item, "seats")) + " " + t("seats", lang: seciliDil) + " · £" + String(aiInt(item, "monthlyGbp")) + "/mo"
+                                        AIRowView(label: item["name"] as? String ?? "?", value: rowValue, dot: .orange)
+                                    }
+                                }
+                            }
+                        }
+                        AICard(title: t("Storage Add-on Buyers", lang: seciliDil)) {
+                            let storageBuyers = aiList(data, "addons", "storageWorkspaces")
+                            if storageBuyers.isEmpty {
+                                Text(t("No workspace has purchased a storage add-on yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(storageBuyers.enumerated()), id: \.offset) { _, item in
+                                        let gb = aiInt(item, "addonGB")
+                                        let rowValue: String = "+" + String(gb) + " GB · £" + String(aiInt(item, "monthlyGbp")) + "/mo"
+                                        AIRowView(label: item["name"] as? String ?? "?", value: rowValue, dot: gb >= 200 ? .purple : .blue)
+                                    }
+                                }
+                            }
+                        }
                         AICard(title: t("Top Paying Workspaces (Est.)", lang: seciliDil)) {
                             VStack(spacing: 0) {
                                 ForEach(Array(aiList(data, "topPaying").enumerated()), id: \.offset) { _, item in
