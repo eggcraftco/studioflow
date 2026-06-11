@@ -14,6 +14,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { auth } from "@/lib/firebase/client";
 import {
@@ -69,7 +70,8 @@ type NavIconName =
   | "settings"
   | "activity"
   | "account"
-  | "signout";
+  | "signout"
+  | "insights";
 
 const NAV_ITEMS: Array<
   | { href: string; label: string; icon: NavIconName }
@@ -84,6 +86,7 @@ const NAV_ITEMS: Array<
   { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/quick-reply", label: "AI Replies", icon: "reply" },
   { href: "/settings", label: "Settings", icon: "settings" },
+  { href: "/admin", label: "Insights", icon: "insights" },
 ];
 
 const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
@@ -365,6 +368,12 @@ function NavIcon({ name }: { name: NavIconName }) {
       "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",
       "M16 17l5-5-5-5",
       "M21 12H9",
+    ],
+    insights: [
+      "M4 20V10",
+      "M10 20V4",
+      "M16 20v-7",
+      "M22 20H2",
     ],
   };
 
@@ -1359,6 +1368,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   "href" in item &&
                   item.href === "/quick-reply" &&
                   workspace?.quickReplyMenuEnabled === false
+                )
+                  return null;
+                if (
+                  "href" in item &&
+                  item.href === "/admin" &&
+                  !isNivaDeskAdminEmail(user?.email)
                 )
                   return null;
                 if ("href" in item) {
