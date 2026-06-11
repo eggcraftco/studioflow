@@ -9,6 +9,7 @@ import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
+import { AuthProviderButtons } from "@/components/AuthProviders";
 import {
   PLAN_ENTITLEMENTS,
   storageLimitLabel,
@@ -2150,6 +2151,26 @@ export function PublicSignupPage() {
             <span className="public-eyebrow">{t("signup.form.eyebrow")}</span>
             <h2>{t("signup.form.title")}</h2>
             <p>{t("signup.form.body")}</p>
+            {!user ? (
+              <>
+                <AuthProviderButtons
+                  appleLabel={t("auth.apple")}
+                  googleLabel={t("auth.google")}
+                  appleUnavailableMessage={t("auth.appleUnavailable")}
+                  disabled={submitting}
+                  onStart={() => setError(null)}
+                  onSuccess={() => setError(null)}
+                  onError={message => {
+                    if (message) setError(message);
+                  }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}>
+                  <div style={{ height: 1, background: "rgba(31,35,38,0.12)", flex: 1 }} />
+                  <span style={{ color: "var(--public-muted, #6b7280)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
+                  <div style={{ height: 1, background: "rgba(31,35,38,0.12)", flex: 1 }} />
+                </div>
+              </>
+            ) : null}
             <label>
               <span>{t("signup.form.fullName")}</span>
               <input autoComplete="name" value={fullName} onChange={event => setFullName(event.target.value)} required disabled={submitting} />
