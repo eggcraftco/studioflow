@@ -63,7 +63,12 @@ struct LoginFeatureRotator: View {
     @State private var charCount = 0
     @State private var holdTicks = 0
     @State private var isDeleting = false
+    @State private var pauseTicks = 0
     private let timer = Timer.publish(every: 0.045, on: .main, in: .common).autoconnect()
+    // Timing knobs (in 45 ms ticks): how long a finished word stays on screen,
+    // and the quiet gap after it has been erased before the next one types.
+    private let holdAfterTyping = 55   // ~2.5 s
+    private let pauseAfterDelete = 20  // ~0.9 s
 
     private var words: [String] {
         [
@@ -109,15 +114,18 @@ struct LoginFeatureRotator: View {
                 if charCount > 0 {
                     charCount = max(charCount - 2, 0)
                     tickHaptic(intensity: 0.45)
+                } else if pauseTicks < pauseAfterDelete {
+                    pauseTicks += 1
                 } else {
                     isDeleting = false
                     holdTicks = 0
+                    pauseTicks = 0
                     wordIndex = (wordIndex + 1) % words.count
                 }
             } else if charCount < current.count {
                 charCount += 1
                 tickHaptic()
-            } else if holdTicks < 32 {
+            } else if holdTicks < holdAfterTyping {
                 holdTicks += 1
             } else {
                 isDeleting = true
