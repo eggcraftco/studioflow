@@ -72,12 +72,17 @@ struct LoginFeatureRotator: View {
 
     private var words: [String] {
         [
+            t("Dashboard", lang: seciliDil),
             t("Orders", lang: seciliDil),
+            t("Schedule", lang: seciliDil),
             t("Customers", lang: seciliDil),
-            t("Client Files", lang: seciliDil),
-            t("Live Tracking", lang: seciliDil),
-            t("Team & Tasks", lang: seciliDil),
-            t("One calm workspace", lang: seciliDil)
+            t("Files", lang: seciliDil),
+            t("Tasks", lang: seciliDil),
+            t("Tracking", lang: seciliDil),
+            t("Notes", lang: seciliDil),
+            t("Analytics", lang: seciliDil),
+            t("AI Assistant", lang: seciliDil),
+            t("Storage", lang: seciliDil)
         ]
     }
 
