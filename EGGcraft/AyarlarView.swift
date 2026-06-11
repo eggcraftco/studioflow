@@ -342,10 +342,6 @@ struct AyarlarView: View {
             return workspaceAccessAllows("settingsGeneral")
         case "Support":
             return workspaceAccessAllows("settingsSupport")
-        case "Site Statistics":
-            return isNivaDeskSupportAdmin
-        case "Admin Insights":
-            return isNivaDeskSupportAdmin
         case "Legal":
             // Legal/policy links are always available to every signed-in user
             // (App Store / Play Store compliance requirement).
@@ -369,8 +365,6 @@ struct AyarlarView: View {
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
             ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
-            ("Site Statistics", t("Site Statistics", lang: seciliDil), "chart.bar.xaxis"),
-            ("Admin Insights", t("Admin Insights", lang: seciliDil), "chart.pie.fill"),
             ("Legal", t("Legal", lang: seciliDil), "doc.text.fill")
         ]
 
@@ -577,10 +571,6 @@ struct AyarlarView: View {
             return t("Members, roles and workspace requests.", lang: seciliDil)
         case "Message Settings":
             return t("Direct messages, group chats and attachment permissions.", lang: seciliDil)
-        case "Site Statistics":
-            return t("Public website visitors and traffic (NivaDesk admin).", lang: seciliDil)
-        case "Admin Insights":
-            return t("Users, plans, revenue and usage across all of NivaDesk (admin).", lang: seciliDil)
         case "Legal":
             return t("Privacy, terms and policy documents.", lang: seciliDil)
         default:
@@ -613,8 +603,6 @@ struct AyarlarView: View {
             else if seciliAyarSekmesi == "Team Access" { AccountProfileView(sectionMode: .teamAccess) }
             else if seciliAyarSekmesi == "Message Settings" { messageWorkspaceSettingsAyari }
             else if seciliAyarSekmesi == "Support" { supportTicketsAyari }
-            else if seciliAyarSekmesi == "Site Statistics" { SiteStatsAdminView(seciliDil: seciliDil) }
-            else if seciliAyarSekmesi == "Admin Insights" { AdminInsightsView(seciliDil: seciliDil) }
             else if seciliAyarSekmesi == "Legal" { legalLinksAyari }
         }
     }
@@ -7856,21 +7844,6 @@ private struct AIOverviewView: View {
                     .buttonStyle(.plain).foregroundColor(.gray)
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], spacing: 8) {
-                    ForEach(AIPage.allCases, id: \.rawValue) { item in
-                        Button(action: { onNavigate(item) }) {
-                            Text(t(item.rawValue, lang: seciliDil) + " →")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(item == .lookup ? .green : .blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background((item == .lookup ? Color.green : Color.blue).opacity(0.10))
-                                .cornerRadius(10)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
                 if loading {
                     HStack { Spacer(); ProgressView().padding(.vertical, 40); Spacer() }
                 } else if !errorText.isEmpty {
@@ -8596,6 +8569,87 @@ private struct AILookupDetailView: View {
                 }
             }
             .padding(.bottom, 24)
+        }
+    }
+}
+
+
+// MARK: - Admin hub: top-level Insights area with left sidebar
+
+struct AdminHubView: View {
+    @Environment(\.colorScheme) var colorScheme
+    let seciliDil: String
+
+    @State private var selection: String = "Overview"
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hubSizeClass
+    private var hubCompact: Bool { hubSizeClass == .compact }
+    #else
+    private var hubCompact: Bool { false }
+    #endif
+
+    private var pages: [String] {
+        ["Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics"]
+    }
+
+    private func sidebarButton(_ item: String) -> some View {
+        Button(action: { selection = item }) {
+            Text(t(item, lang: seciliDil))
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundColor(selection == item ? .blue : .primary)
+                .frame(maxWidth: hubCompact ? nil : .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 11)
+                .background(selection == item ? Color.blue.opacity(0.12) : Color.clear)
+                .cornerRadius(9)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var hubContent: some View {
+        switch selection {
+        case "Users & Workspaces": AIUsersDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "Subscriptions": AISubscriptionsDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "Revenue": AIRevenueDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "Plans": AIPlansDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "Feature Usage": AIFeatureUsageDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "Storage": AIStorageDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "User Lookup": AILookupDetailView(seciliDil: seciliDil) { selection = "Overview" }
+        case "Global Statistics": SiteStatsAdminView(seciliDil: seciliDil)
+        default:
+            AIOverviewView(seciliDil: seciliDil) { page in
+                selection = page.rawValue
+            }
+        }
+    }
+
+    var body: some View {
+        if hubCompact {
+            VStack(spacing: 10) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 5) {
+                        ForEach(pages, id: \.self) { sidebarButton($0) }
+                    }
+                    .padding(.vertical, 4)
+                }
+                hubContent
+            }
+            .padding(.top, 8)
+        } else {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(pages, id: \.self) { sidebarButton($0) }
+                    Spacer()
+                }
+                .frame(width: 190)
+                .padding(10)
+                .background(colorScheme == .dark ? Color.white.opacity(0.04) : Color.white)
+                .cornerRadius(14)
+                hubContent
+            }
+            .padding(.top, 12)
         }
     }
 }

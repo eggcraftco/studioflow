@@ -6788,6 +6788,10 @@ struct ContentView: View {
     private var canAccessCustomers: Bool { workspaceAccessAllows("customers") }
     private var canAccessFiles: Bool { workspaceAccessAllows("clientFiles") }
     private var canAccessQuickReply: Bool { authVM.quickReplyMenuEnabled && workspaceAccessAllows("quickReply") }
+    private var isNivaDeskInsightsAdmin: Bool {
+        let email = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
+    }
     private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("messages") }
     private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
@@ -7517,6 +7521,15 @@ struct ContentView: View {
                 }
             }
 
+            if isNivaDeskInsightsAdmin {
+                Button {
+                    aktifSekme = "Insights"
+                    phoneShowsOrderDetail = false
+                } label: {
+                    Label(t("Insights", lang: seciliDil), systemImage: "chart.bar.xaxis")
+                }
+            }
+
             Divider()
 
             Button(role: .destructive) {
@@ -7800,6 +7813,9 @@ struct ContentView: View {
             }
             if canAccessSettings {
                 UstMenuButonu(title: t("Settings", lang: seciliDil), icon: "gearshape", isSelected: aktifSekme == "Settings") { aktifSekme = "Settings" }
+            }
+            if isNivaDeskInsightsAdmin {
+                UstMenuButonu(title: t("Insights", lang: seciliDil), icon: "chart.bar.xaxis", isSelected: aktifSekme == "Insights") { aktifSekme = "Insights" }
             }
         }
     }
@@ -8200,6 +8216,15 @@ struct ContentView: View {
                     AutoReplyView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
                 } else {
                     restrictedAccessView(title: t("Quick Reply hidden", lang: seciliDil), message: t("Your current workspace role does not include Quick Reply access.", lang: seciliDil))
+                }
+            } else if aktifSekme == "Insights" {
+                if isNivaDeskInsightsAdmin {
+                    AdminHubView(seciliDil: seciliDil)
+                        .padding(.horizontal, 18)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Insights hidden", lang: seciliDil), message: t("Insights are restricted to NivaDesk admins.", lang: seciliDil))
                 }
             } else {
                 if canAccessSettings {
