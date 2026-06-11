@@ -5,6 +5,10 @@
 
 import { useState } from "react";
 import { sendEmailVerification, signOut, type User } from "firebase/auth";
+
+// After clicking the verification link, land users back on the app instead of
+// a bare Firebase page.
+const VERIFY_CONTINUE = { url: "https://nivadesk.app/login" };
 import { auth } from "@/lib/firebase/client";
 
 const VERIFICATION_GRACE_DAYS = 3;
@@ -34,7 +38,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
   async function resend() {
     setBusy(true);
     try {
-      await sendEmailVerification(user);
+      await sendEmailVerification(user, VERIFY_CONTINUE);
       setStatus("Sent ✓");
     } catch {
       setStatus("Try again later");
@@ -95,7 +99,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
     setBusy(true);
     setStatus("");
     try {
-      await sendEmailVerification(user);
+      await sendEmailVerification(user, VERIFY_CONTINUE);
       setStatus("Verification email sent. Check your inbox (and spam folder).");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send the email.");
