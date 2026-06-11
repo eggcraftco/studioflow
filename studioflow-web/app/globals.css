@@ -18025,3 +18025,83 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
     font-size: 12.5px;
   }
 }
+
+/* Auth provider buttons (login + signup) */
+.auth-provider-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-provider-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.auth-provider-btn:active {
+  transform: scale(0.985);
+}
+
+.auth-provider-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.auth-provider-apple {
+  background: #111;
+  color: #fff;
+  border: 1px solid #111;
+}
+
+.auth-provider-google {
+  background: #fff;
+  color: #1f2326;
+  border: 1px solid rgba(31, 35, 38, 0.22);
+}
+
+/* Animated feature words above the login card */
+.auth-rotator {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 9px;
+  margin: 6px 0 18px;
+  font-weight: 850;
+  flex-wrap: wrap;
+  text-align: center;
+}
+
+.auth-rotator-prefix {
+  font-size: 21px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.auth-rotator-word {
+  font-size: 25px;
+  background: linear-gradient(100deg, #0a84ff, #8a5cf6 55%, #d65bd6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
+  transform: translateY(7px);
+  transition: opacity 0.26s ease, transform 0.26s ease;
+  min-width: 120px;
+}
+
+.auth-rotator-word.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.public-signup-form .auth-provider-stack {
+  margin-bottom: 6px;
+}

@@ -3,8 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase/client";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
+import { AuthProviderButtons } from "@/components/AuthProviders";
+import { AuthFeatureRotator } from "@/components/AuthFeatureRotator";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import type { StudioLanguage } from "@/lib/studioflow/language";
@@ -60,19 +62,6 @@ function LoginPageContent() {
     }
   }
 
-  async function handleGoogleLogin() {
-    setError(null);
-    setSubmitting(true);
-    try {
-      await signInWithPopup(auth, googleProvider);
-      router.replace("/orders");
-    } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : t("login.errorGoogleFailed"));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (loading || user) return <LoadingScreen />;
 
   return (
@@ -110,6 +99,18 @@ function LoginPageContent() {
         </div>
       ) : null}
 
+      <AuthFeatureRotator
+        prefix={t("auth.rotator.prefix")}
+        words={[
+          t("auth.rotator.w1"),
+          t("auth.rotator.w2"),
+          t("auth.rotator.w3"),
+          t("auth.rotator.w4"),
+          t("auth.rotator.w5"),
+          t("auth.rotator.w6")
+        ]}
+      />
+
       <section className="card login-card-frame">
         <div className="pill">{t("login.portalPill")}</div>
         <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "18px 0 8px" }}>
@@ -119,7 +120,29 @@ function LoginPageContent() {
           {t("login.body")}
         </p>
 
-        <form onSubmit={handleEmailLogin} className="grid" style={{ marginTop: 22 }}>
+        <AuthProviderButtons
+          appleLabel={t("auth.apple")}
+          googleLabel={t("auth.google")}
+          appleUnavailableMessage={t("auth.appleUnavailable")}
+          disabled={submitting}
+          onStart={() => {
+            setError(null);
+            setSubmitting(true);
+          }}
+          onSuccess={() => router.replace("/orders")}
+          onError={message => {
+            setSubmitting(false);
+            if (message) setError(message);
+          }}
+        />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 4px" }}>
+          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+          <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
+          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+        </div>
+
+        <form onSubmit={handleEmailLogin} className="grid" style={{ marginTop: 14 }}>
           <input
             className="input"
             type="email"
@@ -141,16 +164,6 @@ function LoginPageContent() {
             {t("login.signIn")}
           </button>
         </form>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
-          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
-          <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
-          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
-        </div>
-
-        <button className="button secondary" style={{ width: "100%" }} onClick={handleGoogleLogin} disabled={submitting}>
-          {t("login.google")}
-        </button>
 
         <p className="login-footnote">
           {t("login.footnotePrefix")} <Link href="/signup">{t("cta.startFree")}</Link> {t("login.footnoteOr")} <Link href="/pricing">{t("login.footnotePricing")}</Link>.
