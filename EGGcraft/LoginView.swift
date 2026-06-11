@@ -113,7 +113,6 @@ struct LoginFeatureRotator: View {
             .frame(width: caretSize, height: caretSize)
             .opacity(isDeleting || charCount < word.count ? 0.9 : (holdTicks % 16 < 8 ? 0.7 : 0.15))
             .animation(.easeInOut(duration: 0.3), value: wordIndex)
-            .padding(.leading, 3)
     }
 
     private func tickHaptic(intensity: CGFloat = 0.75) {
@@ -133,9 +132,8 @@ struct LoginFeatureRotator: View {
         Group {
             if typed.isEmpty {
                 caretView(for: word)
-                    .padding(.leading, 0)
             } else {
-                HStack(spacing: 2) {
+                HStack(spacing: 5) {
                     caretView(for: word).hidden()
                     Text(typed)
                         .font(.system(size: 27, weight: .heavy))
