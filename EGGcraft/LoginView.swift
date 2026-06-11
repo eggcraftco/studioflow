@@ -100,7 +100,7 @@ struct LoginFeatureRotator: View {
     }
 
     private var caretSize: CGFloat {
-        let sizes: [CGFloat] = [12, 15, 13, 16, 12.5, 14]
+        let sizes: [CGFloat] = [14, 17, 15, 18, 14.5, 16]
         return sizes[wordIndex % sizes.count]
     }
 
@@ -132,7 +132,7 @@ struct LoginFeatureRotator: View {
         HStack(spacing: 2) {
             caretView(for: word).hidden()
             Text(typed)
-                .font(.system(size: 21, weight: .heavy))
+                .font(.system(size: 27, weight: .heavy))
                 .foregroundStyle(
                     LinearGradient(
                         colors: [Color(red: 0.04, green: 0.52, blue: 1.0), Color(red: 0.54, green: 0.36, blue: 0.96), Color(red: 0.84, green: 0.36, blue: 0.84)],
@@ -142,7 +142,7 @@ struct LoginFeatureRotator: View {
                 )
             caretView(for: word)
         }
-        .frame(height: 28)
+        .frame(height: 36)
         .onReceive(timer) { _ in
             let current = words[wordIndex % words.count]
             if isDeleting {
@@ -250,8 +250,8 @@ struct LoginView: View {
                         Image("NivaDeskLogo")
                             .resizable()
                             .scaledToFit()
-                            .frame(maxWidth: 280, maxHeight: 78)
-                            .padding(.bottom, 8)
+                            .frame(maxWidth: 170, maxHeight: 48)
+                            .padding(.bottom, 4)
                             .accessibilityLabel("NivaDesk")
 
                         LoginFeatureRotator(seciliDil: seciliDil)
