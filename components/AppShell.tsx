@@ -15,7 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
-import { emailVerificationRequired, VerifyEmailScreen } from "@/components/VerifyEmailGate";
+import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { auth } from "@/lib/firebase/client";
 import {
@@ -542,8 +542,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (emailVerificationRequired(user)) {
     return <VerifyEmailScreen user={user!} />;
   }
+  const verifyBanner = !shellAlreadyMounted && emailVerificationPending(user) && user
+    ? <VerifyEmailBanner user={user} />
+    : null;
   if (shellAlreadyMounted) return <>{children}</>;
-  return <AppShellFrame>{children}</AppShellFrame>;
+  return (
+    <>
+      {verifyBanner}
+      <AppShellFrame>{children}</AppShellFrame>
+    </>
+  );
 }
 
 function AppShellFrame({ children }: { children: ReactNode }) {
