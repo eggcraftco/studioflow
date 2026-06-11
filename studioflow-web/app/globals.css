@@ -816,7 +816,9 @@ th {
   margin: 0 auto;
   display: grid;
   grid-template-columns: 270px minmax(0, 850px);
-  min-height: calc(100vh - 104px);
+  /* Fixed height so ONLY the inner content pane scrolls — a min-height here
+     let the page grow alongside the pane's own scrollbar (double bars). */
+  height: calc(100vh - 104px);
   border: 1px solid var(--border);
   border-radius: 16px;
   background: rgba(239, 242, 246, 0.92);
@@ -10513,6 +10515,15 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 
   .settings-workspace {
     grid-template-columns: 1fr;
+    /* Phones scroll the page itself — release the fixed height and inner
+       scrollers so there is exactly one scrollbar. */
+    height: auto;
+    min-height: calc(100vh - 104px);
+  }
+
+  .settings-sidebar,
+  .settings-content-pane {
+    overflow: visible;
   }
 
   .settings-sidebar {
