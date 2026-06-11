@@ -905,6 +905,12 @@ type AdminRevenueDetail = {
     storageAddonCount: number;
   };
   topPaying: { id: string; name: string; ownerEmail: string; plan: string; baseGbp: number; seatGbp: number; storageGbp: number; totalGbp: number }[];
+  addons: {
+    seatWorkspaces: { id: string; name: string; ownerEmail: string; seats: number; monthlyGbp: number }[];
+    storageWorkspaces: { id: string; name: string; ownerEmail: string; addonGB: number; monthlyGbp: number }[];
+    storageAddon100: number;
+    storageAddon200: number;
+  };
 };
 
 function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
@@ -973,7 +979,7 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
         {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}
         {adminKpiTile("Paid Workspaces", data.revenue.paidTotal.toLocaleString())}
         {adminKpiTile("Extra Seats", data.revenue.seatCount.toLocaleString(), `£${data.revenue.seatsMrr}/mo`)}
-        {adminKpiTile("Storage Add-ons", data.revenue.storageAddonCount.toLocaleString(), `£${data.revenue.storageMrr}/mo`)}
+        {adminKpiTile("Storage Add-ons", data.revenue.storageAddonCount.toLocaleString(), `${data.addons?.storageAddon100 ?? 0} × 100GB · ${data.addons?.storageAddon200 ?? 0} × 200GB · £${data.revenue.storageMrr}/mo`)}
       </div>
 
       <div className="site-stats-panels">
@@ -992,6 +998,49 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
             Revenue over time, billing sources (Stripe / Apple / Google), currencies, countries, transactions and refunds
             require live billing. These cards will activate here automatically once payments are enabled.
           </p>
+        </section>
+      </div>
+
+      <div className="site-stats-panels">
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Add-ons" title="Extra Seat Buyers" />
+          {(data.addons?.seatWorkspaces ?? []).length === 0 ? (
+            <p className="muted-copy">No workspace has purchased extra seats yet.</p>
+          ) : (
+            <div style={{ display: "grid" }}>
+              {data.addons.seatWorkspaces.map((workspace, index) => (
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: "#ff9f0a" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</div>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{workspace.seats} seat{workspace.seats === 1 ? "" : "s"}</span>
+                  <strong style={{ fontSize: 12.5, minWidth: 56, textAlign: "right" }}>£{workspace.monthlyGbp}/mo</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Add-ons" title="Storage Add-on Buyers" />
+          {(data.addons?.storageWorkspaces ?? []).length === 0 ? (
+            <p className="muted-copy">No workspace has purchased a storage add-on yet.</p>
+          ) : (
+            <div style={{ display: "grid" }}>
+              {data.addons.storageWorkspaces.map((workspace, index) => (
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: workspace.addonGB >= 200 ? "#8a5cf6" : "#0a84ff" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</div>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 800 }}>+{workspace.addonGB} GB</span>
+                  <strong style={{ fontSize: 12.5, minWidth: 56, textAlign: "right" }}>£{workspace.monthlyGbp}/mo</strong>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
 
