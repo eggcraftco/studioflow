@@ -22,6 +22,7 @@ struct StudioManagerApp: App {
 
     @StateObject var authVM: AuthViewModel
     @StateObject var firebaseManager: FirebaseManager
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     init() {
         #if os(macOS) && DEBUG
