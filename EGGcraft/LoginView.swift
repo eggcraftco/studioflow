@@ -254,7 +254,8 @@ struct LoginView: View {
                             .accessibilityLabel("NivaDesk")
 
                         LoginFeatureRotator(seciliDil: seciliDil)
-                            .padding(.vertical, 26)
+                            .padding(.top, 44)
+                            .padding(.bottom, 40)
 
                         Text(isLoginMode ? t("Sign in to your workspace", lang: seciliDil) : t("Create a new workspace", lang: seciliDil))
                             .font(.system(size: 14))
