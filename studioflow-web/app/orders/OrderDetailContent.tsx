@@ -1820,6 +1820,8 @@ export function OrderDetailContent({
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
   const canUseLiteWorkspaceCards = workspace.billingPlan !== "demo";
+  // Materials & Inventory is open on every plan, including Free Demo.
+  const canUseMaterialsCards = true;
   const canEditOrderFully = Boolean(canAccessOrders && canEditOrderFullyForRole(workspace.role));
   const canEditOrderStatus = Boolean(canAccessOrders && canEditOrderStatusForRole(workspace.role));
   const canEditWorkflowFields = canEditOrderStatus;
@@ -4533,7 +4535,7 @@ export function OrderDetailContent({
         return (
           <section key={cardId} className="card order-detail-card">
             {renderCardTitle(cardId)}
-            {canUseLiteWorkspaceCards ? (
+            {canUseMaterialsCards ? (
               <div className="app-card-panel app-materials-panel">
                 {materialChecks.map((item, index) => {
                   const fieldKey = `materials-default-${index}-${item.title}`;

@@ -1811,7 +1811,7 @@ const PLAN_ENTITLEMENTS = {
     workspaceLogoUploadEnabled: false,
     pdfExportEnabled: true,
     financialCardsEnabled: true,
-    materialsInventoryCardsEnabled: false,
+    materialsInventoryCardsEnabled: true,
     historyLogEnabled: false,
     cardCustomizationEnabled: true,
     scheduleAdvancedFiltersEnabled: false,
