@@ -1518,6 +1518,9 @@ struct SiparisDetayView: View {
 
             Spacer(minLength: 8)
 
+            if isPhoneLayout {
+                phoneCompactToggleButton
+            }
             cardLayoutLockButton
             orderDetailActionsMenu
         }
@@ -2555,8 +2558,6 @@ struct SiparisDetayView: View {
         ScrollViewReader { scrollProxy in
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(spacing: phoneOrderCompactView ? 8 : 14) {
-                phoneCompactToggleBar
-
                 if phoneOrderCompactView {
                     ForEach(visiblePhoneCards.filter { phoneCardHasContent($0) }) { kart in
                         phoneCompactCardRow(kart, scrollProxy: scrollProxy)
@@ -2610,26 +2611,24 @@ struct SiparisDetayView: View {
 
     // MARK: - Phone compact (one-line) card overview
 
-    private var phoneCompactToggleBar: some View {
-        HStack {
-            Spacer()
-            Button {
-                withAnimation(.snappy) { phoneOrderCompactView.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: phoneOrderCompactView ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
-                        .font(.system(size: 12, weight: .bold))
-                    Text(phoneOrderCompactView ? t("Full View", lang: seciliDil) : t("Compact View", lang: seciliDil))
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .foregroundColor(.blue)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color.blue.opacity(0.10))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
+    private var phoneCompactToggleButton: some View {
+        Button {
+            withAnimation(.snappy) { phoneOrderCompactView.toggle() }
+        } label: {
+            Image(systemName: phoneOrderCompactView ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(phoneOrderCompactView ? .blue : .secondary)
+                .frame(width: 34, height: 34)
+                .background((phoneOrderCompactView ? Color.blue : Color.primary).opacity(phoneOrderCompactView ? 0.12 : 0.055))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke((phoneOrderCompactView ? Color.blue : Color.primary).opacity(phoneOrderCompactView ? 0.25 : 0.08), lineWidth: 1)
+                )
         }
+        .buttonStyle(.plain)
+        .help(t(phoneOrderCompactView ? "Full View" : "Compact View", lang: seciliDil))
+        .accessibilityLabel(t(phoneOrderCompactView ? "Full View" : "Compact View", lang: seciliDil))
     }
 
     private func phoneCompactCardRow(_ kart: KartTipi, scrollProxy: ScrollViewProxy) -> some View {

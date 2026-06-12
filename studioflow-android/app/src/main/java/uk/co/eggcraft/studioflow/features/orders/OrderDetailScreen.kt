@@ -506,6 +506,8 @@ fun OrderDetailScreen(
                         phoneCardsUnlocked = next
                         phoneLockPrefs.edit().putBoolean(phoneLockKey, !next).apply()
                     },
+                    compactView = phoneCompactView,
+                    onCompactViewChange = { setPhoneCompactView(it) },
                     onOpenCardProfiles = if (canManageCardLayout && currentUserId.isNotBlank()) {
                         { phoneCardProfilesOpen = true }
                     } else {
@@ -523,22 +525,6 @@ fun OrderDetailScreen(
                     )
                 }
             }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = { setPhoneCompactView(!phoneCompactView) }) {
-                        Icon(
-                            imageVector = if (phoneCompactView) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (phoneCompactView) t("Full View") else t("Compact View"), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-            }
             if (phoneCompactView) {
                 visiblePhoneCards.filter { phoneCardHasContent(order, it) }.forEach { cardId ->
                     item(key = "compact_" + cardId.raw) {
@@ -549,10 +535,10 @@ fun OrderDetailScreen(
                                 setPhoneCompactView(false)
                                 val cardIndex = visiblePhoneCards.indexOf(cardId)
                                 if (cardIndex >= 0) {
-                                    val headerItems = 1 + 1 + if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) 1 else 0
+                                    val headerItems = 1 + if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) 1 else 0
                                     compactScrollScope.launch {
                                         kotlinx.coroutines.delay(250)
-                                        phoneListState.animateScrollToItem(headerItems + cardIndex - 1)
+                                        phoneListState.animateScrollToItem(headerItems + cardIndex)
                                     }
                                 }
                             }
@@ -754,6 +740,8 @@ private fun DetailTopBar(
     canManageCardLayout: Boolean,
     cardsUnlocked: Boolean = false,
     onCardsUnlockedChange: (Boolean) -> Unit = {},
+    compactView: Boolean = false,
+    onCompactViewChange: ((Boolean) -> Unit)? = null,
     onOpenCardProfiles: (() -> Unit)?
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -841,6 +829,25 @@ private fun DetailTopBar(
                         fontSize = 28.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    if (onCompactViewChange != null) {
+                        IconButton(
+                            onClick = { onCompactViewChange(!compactView) },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (compactView) StudioBlue.copy(alpha = 0.14f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (compactView) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                                contentDescription = if (compactView) "Full View" else "Compact View",
+                                tint = if (compactView) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     if (canManageCardLayout) {
                         IconButton(
                             onClick = { onCardsUnlockedChange(!cardsUnlocked) },
