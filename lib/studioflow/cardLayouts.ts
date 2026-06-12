@@ -36,7 +36,8 @@ export type OrderDetailCardLayout = {
 };
 
 const DEFAULT_VISIBILITY = ORDER_DETAIL_CARD_IDS.reduce((output, cardId) => {
-  output[cardId] = true;
+  // Production Status starts hidden for new users; they can enable it later.
+  output[cardId] = cardId !== "status";
   return output;
 }, {} as Record<OrderDetailCardId, boolean>);
 

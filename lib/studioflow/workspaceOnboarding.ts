@@ -293,7 +293,7 @@ function onboardingPayload(
     showCardCommunication: true,
     showCardNotes: true,
     showCardFinancial: true,
-    showCardStatus: true,
+    showCardStatus: false,
     showCardMaterials: preset.showMaterials,
     showCardShipping: preset.showShipping,
     showCardPriority: preset.showPriority,
