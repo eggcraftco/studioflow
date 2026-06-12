@@ -38,6 +38,30 @@ object StudioMessageRouteHolder {
         return v
     }
 
+    // Delivery push routing: open this order and land on its Shipping card.
+    private val _pendingOrderId = MutableStateFlow("")
+    val pendingOrderId: StateFlow<String> = _pendingOrderId.asStateFlow()
+    @Volatile private var pendingOrderCard: String = ""
+
+    fun setPendingOrderRoute(orderId: String, card: String = "shipping") {
+        val clean = orderId.trim()
+        if (clean.isEmpty()) return
+        pendingOrderCard = card
+        _pendingOrderId.value = clean
+    }
+
+    fun consumePendingOrderId(): String {
+        val v = _pendingOrderId.value
+        _pendingOrderId.value = ""
+        return v
+    }
+
+    fun consumePendingOrderCard(): String {
+        val v = pendingOrderCard
+        pendingOrderCard = ""
+        return v
+    }
+
     fun saveDeviceToken(companyId: String, token: String) {
         val cleanCompanyId = companyId.trim()
         val cleanToken = token.trim()

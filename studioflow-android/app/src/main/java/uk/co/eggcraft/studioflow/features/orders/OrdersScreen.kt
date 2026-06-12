@@ -178,6 +178,15 @@ fun OrdersScreen(
             if (visible) "Order list shown." else "Order list hidden."
         )
     }
+    LaunchedEffect(state.orders) {
+        // Delivery push route: open the order from the notification as soon as
+        // it is available in the loaded order list.
+        val pendingId = uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.pendingOrderId.value
+        if (pendingId.isNotBlank() && state.orders.any { it.id == pendingId }) {
+            uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.consumePendingOrderId()
+            selectedOrderId = pendingId
+        }
+    }
     val visibleOrders = remember(
         state.orders,
         state.teamMembers,

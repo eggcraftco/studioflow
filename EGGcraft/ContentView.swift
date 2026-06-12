@@ -8362,7 +8362,11 @@ struct ContentView: View {
             refreshCloudSyncIndicatorForOfflineState()
         }
         .background(klavyeKisayollari.frame(width: 0, height: 0).opacity(0))
+        .onReceive(NotificationCenter.default.publisher(for: .studioOrderRouteRequested)) { _ in
+            consumePendingOrderLaunchRoute()
+        }
         .onChange(of: firebaseManager.siparisler) { _, _ in
+            consumePendingOrderLaunchRoute()
             let mevcutOrderIds = Set(firebaseManager.siparisler.map { orderSelectionKey($0) })
             selectedOrderIds = selectedOrderIds.intersection(mevcutOrderIds)
             if let lastSelectedOrderId, !mevcutOrderIds.contains(lastSelectedOrderId) {
@@ -9874,6 +9878,16 @@ struct ContentView: View {
         }
 
         if route == "order" || !notification.orderId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let orderId = notification.orderId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !orderId.isEmpty {
+                let defaults = UserDefaults.standard
+                defaults.set(orderId, forKey: "pendingOpenOrderId")
+                defaults.set(Date().timeIntervalSince1970, forKey: "pendingOpenOrderRequestedAt")
+                if type.contains("delivery") || type.contains("tracking") {
+                    defaults.set("shipping", forKey: "pendingOpenOrderCard")
+                }
+                consumePendingOrderLaunchRoute()
+            }
             aktifSekme = "Orders"
         }
     }
@@ -9921,6 +9935,42 @@ struct ContentView: View {
         .background(bgMain)
     }
 
+
+    private func consumePendingOrderLaunchRoute() {
+        let defaults = UserDefaults.standard
+        let orderId = (defaults.string(forKey: "pendingOpenOrderId") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !orderId.isEmpty else { return }
+
+        func clearRoute() {
+            defaults.removeObject(forKey: "pendingOpenOrderId")
+            defaults.removeObject(forKey: "pendingOpenOrderRequestedAt")
+            defaults.removeObject(forKey: "pendingOpenOrderCard")
+        }
+
+        let requestedAt = defaults.double(forKey: "pendingOpenOrderRequestedAt")
+        if requestedAt > 0, Date().timeIntervalSince1970 - requestedAt > 1800 {
+            clearRoute()
+            return
+        }
+        guard canAccessOrders else {
+            clearRoute()
+            return
+        }
+        // Orders may not be loaded yet right after launch; this is retried from
+        // the siparisler onChange handler until the order appears.
+        guard let order = firebaseManager.siparisler.first(where: { ($0.id ?? "") == orderId }) else { return }
+
+        aktifSekme = "Orders"
+        seciliSiparis = order
+        let key = orderSelectionKey(order)
+        seciliSiparisGorunumKey = key
+        lastSelectedOrderId = key
+        phoneShowsOrderDetail = true
+        defaults.removeObject(forKey: "pendingOpenOrderId")
+        defaults.removeObject(forKey: "pendingOpenOrderRequestedAt")
+        // pendingOpenOrderCard is consumed by the order detail view, which
+        // scrolls to that card on phones.
+    }
 
     private func consumePendingSupportTicketLaunchRoute() {
         let defaults = UserDefaults.standard

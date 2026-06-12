@@ -2551,11 +2551,13 @@ struct SiparisDetayView: View {
     }
 
     private var phoneCalismaAlani: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(spacing: 14) {
                 ForEach(visiblePhoneCards) { kart in
                     kartGosterici(icin: kart, colIndex: 0)
                         .frame(maxWidth: .infinity)
+                        .id("phoneOrderCard_\(kart.rawValue)")
                 }
             }
             .padding(.horizontal, 12)
@@ -2565,6 +2567,7 @@ struct SiparisDetayView: View {
         .background(bgMainForPhone)
         .onAppear {
             normalizePhoneKartSirasi()
+            scrollToPendingNotificationCardIfNeeded(scrollProxy)
         }
         .onChange(of: kartYerlesimi) { _, _ in
             normalizePhoneKartSirasi()
@@ -2577,6 +2580,22 @@ struct SiparisDetayView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .phoneCardMoveRequested)) { notification in
             handlePhoneCardMoveRequest(notification)
+        }
+        }
+    }
+
+    // Delivery push tapped: bring the requested card (Shipping & Tracking) into
+    // view once the phone card list appears.
+    private func scrollToPendingNotificationCardIfNeeded(_ scrollProxy: ScrollViewProxy) {
+        let defaults = UserDefaults.standard
+        let raw = (defaults.string(forKey: "pendingOpenOrderCard") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let kart = KartTipi(rawValue: raw) else { return }
+        defaults.removeObject(forKey: "pendingOpenOrderCard")
+        guard visiblePhoneCards.contains(kart) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.55)) {
+                scrollProxy.scrollTo("phoneOrderCard_\(kart.rawValue)", anchor: .top)
+            }
         }
     }
 

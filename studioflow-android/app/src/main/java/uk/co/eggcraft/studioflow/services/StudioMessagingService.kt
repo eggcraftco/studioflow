@@ -37,14 +37,20 @@ class StudioMessagingService : FirebaseMessagingService() {
             ?: ""
 
         ensureChannel(this)
+        val orderId = data["orderId"].orEmpty()
+        val pushType = data["type"].orEmpty().lowercase()
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (threadId.isNotBlank()) putExtra("studio_thread_id", threadId)
             if (messageId.isNotBlank()) putExtra("studio_message_id", messageId)
+            if (orderId.isNotBlank() && (pushType == "delivery" || pushType == "tracking")) {
+                putExtra("studio_order_id", orderId)
+                putExtra("studio_order_card", "shipping")
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
-            threadId.hashCode(),
+            (threadId + orderId).hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

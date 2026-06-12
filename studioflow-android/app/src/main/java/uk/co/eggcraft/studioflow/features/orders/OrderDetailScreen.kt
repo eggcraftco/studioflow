@@ -459,7 +459,23 @@ fun OrderDetailScreen(
             mutableStateOf(!phoneLockPrefs.getBoolean(phoneLockKey, false))
         }
         val effectivePhoneCardsUnlocked = phoneCardsUnlocked && canManageCardLayout
+        val phoneListState = androidx.compose.foundation.lazy.rememberLazyListState()
+        // Delivery push tapped: bring the requested card (Shipping & Tracking)
+        // into view once this order's phone card list is on screen.
+        LaunchedEffect(order.id, visiblePhoneCards) {
+            val pendingCard = uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.consumePendingOrderCard()
+            if (pendingCard.isNotBlank()) {
+                val target = OrderDetailCardId.entries.firstOrNull { it.raw.equals(pendingCard, ignoreCase = true) }
+                val cardIndex = target?.let { visiblePhoneCards.indexOf(it) } ?: -1
+                if (cardIndex >= 0) {
+                    val headerItems = 1 + if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) 1 else 0
+                    kotlinx.coroutines.delay(400)
+                    phoneListState.animateScrollToItem(headerItems + cardIndex)
+                }
+            }
+        }
         LazyColumn(
+            state = phoneListState,
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)

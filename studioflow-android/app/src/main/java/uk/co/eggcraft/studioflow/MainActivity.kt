@@ -51,6 +51,13 @@ class MainActivity : ComponentActivity() {
         if (threadId.isNotBlank()) {
             StudioMessageRouteHolder.setPendingThreadId(threadId)
         }
+        val orderId = intent?.getStringExtra("studio_order_id").orEmpty()
+        if (orderId.isNotBlank()) {
+            StudioMessageRouteHolder.setPendingOrderRoute(
+                orderId,
+                intent?.getStringExtra("studio_order_card").orEmpty().ifBlank { "shipping" }
+            )
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

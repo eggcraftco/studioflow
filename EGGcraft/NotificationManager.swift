@@ -315,11 +315,30 @@ extension PushNotificationManager {
 
     func storeRoute(from userInfo: [AnyHashable: Any]) {
         let route = stringValue(userInfo["route"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = stringValue(userInfo["type"]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if route == "messageThread" {
             storeMessageThreadRoute(from: userInfo)
+        } else if type == "delivery" || type == "tracking" {
+            storeOrderDeliveryRoute(from: userInfo)
         } else {
             storeSupportTicketRoute(from: userInfo)
         }
+    }
+
+    /// Delivery/tracking push tapped: open that order and land on its
+    /// Shipping & Tracking card.
+    func storeOrderDeliveryRoute(from userInfo: [AnyHashable: Any]) {
+        let orderId = stringValue(userInfo["orderId"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !orderId.isEmpty else { return }
+
+        let defaults = UserDefaults.standard
+        defaults.set(orderId, forKey: "pendingOpenOrderId")
+        defaults.set("shipping", forKey: "pendingOpenOrderCard")
+        defaults.set(Date().timeIntervalSince1970, forKey: "pendingOpenOrderRequestedAt")
+        defaults.set("Orders", forKey: "studioRequestedStartTab")
+        defaults.synchronize()
+
+        NotificationCenter.default.post(name: .studioOrderRouteRequested, object: nil)
     }
 
     func storeMessageThreadRoute(from userInfo: [AnyHashable: Any]) {
@@ -366,6 +385,7 @@ extension PushNotificationManager {
 extension Notification.Name {
     static let studioSupportTicketRouteRequested = Notification.Name("studioSupportTicketRouteRequested")
     static let studioMessageThreadRouteRequested = Notification.Name("studioMessageThreadRouteRequested")
+    static let studioOrderRouteRequested = Notification.Name("studioOrderRouteRequested")
 }
 
 #if canImport(FirebaseMessaging)

@@ -343,6 +343,16 @@ fun StudioFlowMainScreen(
         }
     }
 
+    // Delivery push tapped: switch to the Orders section; OrdersScreen consumes
+    // the pending order id and opens that order's detail.
+    LaunchedEffect(Unit) {
+        uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.pendingOrderId.collect { id ->
+            if (id.isNotBlank() && StudioSection.Orders in availableSections) {
+                section = StudioSection.Orders
+            }
+        }
+    }
+
     LaunchedEffect(state.pendingActivityNavigation) {
         val pending = state.pendingActivityNavigation ?: return@LaunchedEffect
         when (pending) {
