@@ -727,6 +727,7 @@ export const PUBLIC_SITE_EN = {
   "contact.s3.body": "New studio onboarding should route through Free/Demo signup once workspace creation is connected.",
 
   "auth.newHere": "New to NivaDesk?",
+  "auth.continueWithEmail": "Continue with email",
   "auth.createAccount": "Create your free account",
   "signup.error.passwordStrength": "Password must be at least 8 characters and include a letter and a number.",
   "auth.apple": "Continue with Apple",
@@ -1424,6 +1425,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "contact.title": "NivaDesk Destek ve İletişim",
   "contact.body": "Uygulama içi destek talepleri, hesap yardımı, faturalama soruları, teknik sorunlar, gizlilik talepleri, güvenlik bildirimleri ve genel ürün soruları için NivaDesk ile iletişim yolları.",
   "auth.newHere": "NivaDesk'te yeni misin?",
+  "auth.continueWithEmail": "E-posta ile devam et",
   "auth.createAccount": "Ücretsiz hesabını oluştur",
   "signup.error.passwordStrength": "Şifre en az 8 karakter olmalı; bir harf ve bir rakam içermeli.",
   "auth.apple": "Apple ile devam et",

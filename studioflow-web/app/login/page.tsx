@@ -37,6 +37,7 @@ function LoginPageContent() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const { t } = usePublicSiteLanguage();
+  const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +101,7 @@ function LoginPageContent() {
       ) : null}
 
       <AuthFeatureRotator
+        style={{ paddingTop: 44, paddingBottom: 40 }}
         prefix={t("auth.rotator.prefix")}
         words={[
           t("auth.rotator.w1"),
@@ -141,34 +143,67 @@ function LoginPageContent() {
           }}
         />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 4px" }}>
-          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
-          <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
-          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
-        </div>
+        {!showEmailForm ? (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={() => setShowEmailForm(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                border: "none",
+                cursor: "pointer",
+                color: "var(--muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "9px 16px",
+                borderRadius: 999,
+                background: "color-mix(in srgb, var(--ink) 5%, transparent)"
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+              {t("auth.continueWithEmail")}
+            </button>
+          </div>
+        ) : null}
 
-        <form onSubmit={handleEmailLogin} className="grid" style={{ marginTop: 14 }}>
-          <input
-            className="input"
-            type="email"
-            placeholder={t("login.emailPlaceholder")}
-            value={email}
-            onChange={event => setEmail(event.target.value)}
-            required
-          />
-          <input
-            className="input"
-            type="password"
-            placeholder={t("login.passwordPlaceholder")}
-            value={password}
-            onChange={event => setPassword(event.target.value)}
-            required
-          />
-          {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
-          <button className="button" type="submit" disabled={submitting}>
-            {t("login.signIn")}
-          </button>
-        </form>
+        {showEmailForm ? (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 4px" }}>
+              <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+              <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
+              <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
+            </div>
+
+            <form onSubmit={handleEmailLogin} className="grid" style={{ marginTop: 14 }}>
+              <input
+                className="input"
+                type="email"
+                placeholder={t("login.emailPlaceholder")}
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+                required
+              />
+              <input
+                className="input"
+                type="password"
+                placeholder={t("login.passwordPlaceholder")}
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                required
+              />
+              {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+              <button className="button" type="submit" disabled={submitting}>
+                {t("login.signIn")}
+              </button>
+            </form>
+          </>
+        ) : null}
+        {!showEmailForm && error ? <p style={{ color: "var(--danger)", margin: "12px 0 0" }}>{error}</p> : null}
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px" }}>
           <div style={{ height: 1, background: "var(--border)", flex: 1 }} />

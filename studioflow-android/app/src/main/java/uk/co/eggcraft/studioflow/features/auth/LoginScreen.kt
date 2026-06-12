@@ -64,6 +64,7 @@ fun LoginScreen(
     var studioName by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
+    var showEmailForm by remember { mutableStateOf(false) }
     val passwordsMismatchText = t("Passwords do not match.")
 
     Box(
@@ -92,7 +93,9 @@ fun LoginScreen(
                     alignment = Alignment.CenterStart,
                     contentScale = ContentScale.Fit
                 )
+                Spacer(modifier = Modifier.height(30.dp))
                 LoginFeatureRotator()
+                Spacer(modifier = Modifier.height(26.dp))
                 Text(
                     text = if (isLoginMode) t("Sign in with the same account you use on iPhone, iPad, Mac or web.") else t("Create a new workspace"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -112,6 +115,30 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(t("Continue with Google"), fontWeight = FontWeight.Bold)
                 }
+                if (!showEmailForm) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        TextButton(onClick = { showEmailForm = true }) {
+                            Text(
+                                t("Continue with email"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    if (errorMessage.isNotBlank() || localError.isNotBlank()) {
+                        Text(
+                            text = if (localError.isNotBlank()) localError else errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (showEmailForm) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -202,10 +229,12 @@ fun LoginScreen(
                         Text(if (isLoginMode) t("Sign In") else t("Create Account"), fontWeight = FontWeight.Bold)
                     }
                 }
+                }
                 TextButton(
                     onClick = {
                         isLoginMode = !isLoginMode
                         localError = ""
+                        if (!isLoginMode) showEmailForm = true
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
