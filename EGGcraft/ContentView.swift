@@ -10168,9 +10168,20 @@ struct ContentView: View {
             guard firebaseManager.siparisler.isEmpty else { return }
         }
         if !macFirstProjectGuideActive {
-            macFirstProjectGuideActive = true
-            macFirstProjectGuideStep = 0
-            saveMacFirstProjectGuideState()
+            // Accounts created on a phone never get the info-card guide,
+            // even when they later sign in from a computer.
+            let uid = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !uid.isEmpty else { return }
+            Firestore.firestore().collection("users").document(uid).getDocument { snapshot, _ in
+                let platform = ((snapshot?.data()?["signupPlatform"] as? String) ?? "").lowercased()
+                guard platform != "mobile" else { return }
+                DispatchQueue.main.async {
+                    guard !macFirstProjectGuideActive, !macFirstProjectGuideCompleted else { return }
+                    macFirstProjectGuideActive = true
+                    macFirstProjectGuideStep = 0
+                    saveMacFirstProjectGuideState()
+                }
+            }
         }
         #endif
     }

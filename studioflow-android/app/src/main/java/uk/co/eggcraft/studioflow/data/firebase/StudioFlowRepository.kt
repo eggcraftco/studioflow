@@ -110,11 +110,28 @@ class StudioFlowRepository(
                 com.google.firebase.firestore.SetOptions.merge()
             ).await()
         }
+        recordSignupPlatformIfNewAccount()
     }
 
     suspend fun signInWithGoogleIdToken(idToken: String) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).await()
+        recordSignupPlatformIfNewAccount()
+    }
+
+    /// Marks freshly created accounts as mobile signups so the desktop-only
+    /// first-project info-card guide never opens for them, even on a computer.
+    private suspend fun recordSignupPlatformIfNewAccount() {
+        val user = auth.currentUser ?: return
+        val createdAt = user.metadata?.creationTimestamp ?: return
+        if (System.currentTimeMillis() - createdAt > 600_000L) return
+        runCatching {
+            val ref = db.collection("users").document(user.uid)
+            val existing = ref.get().await().getString("signupPlatform").orEmpty()
+            if (existing.isEmpty()) {
+                ref.set(mapOf("signupPlatform" to "mobile"), com.google.firebase.firestore.SetOptions.merge()).await()
+            }
+        }
     }
 
     fun signOut() {

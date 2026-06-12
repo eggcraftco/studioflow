@@ -976,6 +976,26 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+
+    /// Records which device class the account was created on (`desktop` vs
+    /// `mobile`) in users/{uid}. Written once, only for freshly created accounts;
+    /// the first-project info-card guide opens only for desktop signups.
+    func recordSignupPlatformIfNewAccount() {
+        guard let user = Auth.auth().currentUser else { return }
+        guard let created = user.metadata.creationDate, Date().timeIntervalSince(created) < 600 else { return }
+        #if os(macOS)
+        let platform = "desktop"
+        #else
+        let platform = "mobile"
+        #endif
+        let userRef = Firestore.firestore().collection("users").document(user.uid)
+        userRef.getDocument { snapshot, _ in
+            let existing = (snapshot?.data()?["signupPlatform"] as? String) ?? ""
+            guard existing.isEmpty else { return }
+            userRef.setData(["signupPlatform": platform], merge: true)
+        }
+    }
+
     func register(fullName: String = "", studioName: String = "", email: String, sifre: String, onSuccess: (() -> Void)? = nil) {
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanFullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1028,6 +1048,7 @@ class AuthViewModel: ObservableObject {
 
                 // Seed the new workspace with the chosen studio name and owner
                 // details so it never shows up as a bare "My Studio".
+                self?.recordSignupPlatformIfNewAccount()
                 Firestore.firestore().collection("companies").document(user.uid).setData([
                     "name": cleanStudioName,
                     "companyName": cleanStudioName,
@@ -1086,6 +1107,8 @@ class AuthViewModel: ObservableObject {
                     if let authError = authError {
                         self?.bypassNextLocalUnlockAfterInteractiveSignIn = false
                         self?.errorMessage = authError.localizedDescription
+                    } else {
+                        self?.recordSignupPlatformIfNewAccount()
                     }
                 }
             }
@@ -3281,6 +3304,8 @@ extension AuthViewModel {
                             if let authError {
                                 self.bypassNextLocalUnlockAfterInteractiveSignIn = false
                                 self.errorMessage = authError.localizedDescription
+                            } else {
+                                self.recordSignupPlatformIfNewAccount()
                             }
                             nvAppleSignInCoordinator = nil
                         }
