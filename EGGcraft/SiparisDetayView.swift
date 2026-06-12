@@ -4540,7 +4540,9 @@ struct SiparisDetayView: View {
             draggedKart: $draggedKart,
             uiTetikleyici: uiTetikleyici,
             kartRengi: getKartColor(kart: kart),
-            minimumHeightOverride: max(240, varsayilanKartYuksekligi(for: kart)),
+            minimumHeightOverride: kart == .historyLog
+                ? max(isPhoneLayout ? 340 : 280, varsayilanKartYuksekligi(for: kart))
+                : max(240, varsayilanKartYuksekligi(for: kart)),
             onHeightChangeEnd: kaydetKartYukseklikleri,
             onWidthChangeEnd: saveWidths,
             onHide: { setCardVisibleWithUndo(kart, false) },
