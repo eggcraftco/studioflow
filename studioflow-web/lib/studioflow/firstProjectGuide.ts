@@ -39,8 +39,18 @@ function parseGuideState(raw: string | null): FirstProjectGuideState | null {
   }
 }
 
+// The first-project info-card tour is desktop-only: it should never start or
+// resume on phones, regardless of where the account was created.
+export function isFirstProjectGuideDeviceEligible(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent || "";
+  if (/iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua)) return false;
+  return window.innerWidth >= 768;
+}
+
 export function getFirstProjectGuideState(): FirstProjectGuideState | null {
   if (typeof window === "undefined") return null;
+  if (!isFirstProjectGuideDeviceEligible()) return null;
 
   for (const key of FALLBACK_KEYS) {
     const parsed = parseGuideState(window.localStorage.getItem(key));

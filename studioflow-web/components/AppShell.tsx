@@ -58,6 +58,7 @@ import {
   getFirstProjectGuideState,
   setFirstProjectGuideState,
   type FirstProjectGuideState,
+  isFirstProjectGuideDeviceEligible,
 } from "@/lib/studioflow/firstProjectGuide";
 
 type NavIconName =
@@ -644,6 +645,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const addProjectButtonRef = useRef<HTMLButtonElement | null>(null);
   const [firstProjectGuide, setFirstProjectGuide] =
     useState<FirstProjectGuideState | null>(null);
+  const [guideDeviceEligible, setGuideDeviceEligible] = useState(false);
+  useEffect(() => {
+    setGuideDeviceEligible(isFirstProjectGuideDeviceEligible());
+  }, []);
   const [addProjectGuidePosition, setAddProjectGuidePosition] = useState<{
     top: number;
     left: number;
@@ -1117,6 +1122,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // yet and the guide not already completed. (Previously `firstProjectGuide === null`
   // made it show for any existing user without local guide state.)
   const showAddProjectGuide = Boolean(
+    guideDeviceEligible &&
     canCreateToolbarOrder &&
     pathname.startsWith("/orders") &&
     financeOrders.length === 0 &&
@@ -1174,7 +1180,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     // Only kick off the first-project guide on the user's very first project
     // (no existing orders) and when it isn't already completed.
     const isFirstEverProject = financeOrders.length === 0;
-    if (isFirstEverProject && !currentGuide.completed && currentGuide.step <= 1) {
+    if (isFirstEverProject && guideDeviceEligible && !currentGuide.completed && currentGuide.step <= 1) {
       const nextGuide: FirstProjectGuideState = {
         ...currentGuide,
         step: 2,

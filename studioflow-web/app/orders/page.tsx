@@ -47,6 +47,7 @@ import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderDetailContent } from "./OrderDetailContent";
 import {
   getFirstProjectGuideState,
+  isFirstProjectGuideDeviceEligible,
   setFirstProjectGuideState,
   subscribeFirstProjectGuideState,
   type FirstProjectGuideState
@@ -270,7 +271,7 @@ export default function OrdersPage() {
       // Otherwise creating any project would keep re-triggering the info cards.
       const existingGuide = getFirstProjectGuideState();
       const isFirstEverProject = ordersCountRef.current === 0;
-      if (isFirstEverProject && !existingGuide?.completed) {
+      if (isFirstEverProject && isFirstProjectGuideDeviceEligible() && !existingGuide?.completed) {
         setFirstProjectGuideState({ step: 2, orderId, completed: false });
       }
       const loadedOrders = await loadRecentOrders(workspace.id, workspace, uid);
