@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import AppKit
 #endif
 
-// 🌟 YENİ: TÜM UYGULAMA İÇİN ORTAK PARA BİRİMİ FORMATLAYICILARI 🌟
+// Shared currency formatters used across the app
 extension Double {
     func toCurrencyString() -> String {
         let formatter = NumberFormatter()
@@ -112,7 +112,7 @@ struct DashboardView: View {
     @State private var karsilastir3Yil: Bool = false
     @State private var hoveredDate: Date? = nil
     
-    // 🌟 YENİ: WIDGET KART GÖRÜNÜRLÜK ŞALTERLERİ 🌟
+    // Dashboard widget visibility toggles
     @State private var showWidgetMenu = false
     @State private var extraSpendingScope: DashboardSpendingScope = .thisMonth
     @State private var extraSpendingStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
@@ -124,7 +124,7 @@ struct DashboardView: View {
     @AppStorage("dashShowCost") private var dashShowCost = true
     @AppStorage("dashShowFee") private var dashShowFee = true
     @AppStorage("dashShowShipping") private var dashShowShipping = true
-    @AppStorage("dashShowTax") private var dashShowTax = true // Yeni Tax Kartı
+    @AppStorage("dashShowTax") private var dashShowTax = true
     @AppStorage("dashShowProfit") private var dashShowProfit = true
     @AppStorage("corporationTaxEnabled") private var corporationTaxEnabled = false
     @AppStorage("corporationTaxRate") private var corporationTaxRate = 19.0
@@ -1036,7 +1036,6 @@ struct DashboardView: View {
         }
     }
 
-    // 🌟 YENİ: VERGİ (TAX) KARTI EKLENDİ VE GÖRÜNÜRLÜKLER BAĞLANDI 🌟
     private var ozetKartlariAlani: some View {
         Group {
             if isPhoneLayout {

@@ -3651,7 +3651,6 @@ struct AyarlarView: View {
     }
 
 
-    // 🌟 PDF AYARLARI HİZALAMASI (MÜKEMMEL) 🌟
     private var pdfAyari: some View {
         SettingsCard(title: t("PDF Export Settings", lang: seciliDil), iconName: "doc.richtext") {
             VStack(alignment: .leading, spacing: 18) {
@@ -4119,7 +4118,6 @@ struct AyarlarView: View {
             }
             
             
-            // 🌟 WORKSPACE BLOCKS HİZALAMASI (MÜKEMMEL) 🌟
             SettingsCard(title: "Workspace Blocks", iconName: "square.grid.3x3.fill") {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 15) {
                     Toggle(isOn: $showCardPreview) { Text("Preview Image").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }

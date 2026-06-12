@@ -13,7 +13,7 @@ struct MusterilerView: View {
     
     @Binding var seciliSiparis: Siparis?
     @Binding var aktifSekme: String
-    @Binding var seciliMusteri: Musteri? // 🌟 STATE YERİNE BINDING OLDU!
+    @Binding var seciliMusteri: Musteri?
     
     @State private var aramaMetni: String = ""
     @State private var seciliSiralama: MusteriSiralamaTuru = .sonGorusme

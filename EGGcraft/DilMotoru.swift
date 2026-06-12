@@ -28,7 +28,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Team seats": ["Türkçe": "Ekip koltukları", "English": "Team seats"],
     "Team includes 5 seats. Add more for £5/month or £50/year each, up to 10 users.": ["Türkçe": "Team 5 koltuk içerir. Her biri £5/ay veya £50/yıl olan ek koltuklarla 10 kullanıcıya kadar.", "English": "Team includes 5 seats. Add more for £5/month or £50/year each, up to 10 users."],
     "Manage seats on the web": ["Türkçe": "Koltukları web'de yönet", "English": "Manage seats on the web"],
-    // --- MAC İLK PROJE REHBERİ ---
+    // --- MAC FIRST PROJECT GUIDE ---
     "Start with Add Project": ["Türkçe": "Add Project ile başlayın", "English": "Start with Add Project", "Deutsch": "Mit Add Project beginnen", "Français": "Commencez avec Add Project", "Italiano": "Inizia con Add Project", "Español (Spanish)": "Empieza con Add Project", "Português": "Comece com Add Project", "Русский (Russian)": "Начните с Add Project", "日本語 (Japanese)": "Add Project から始める", "中文 (Chinese)": "从 Add Project 开始", "العربية (Arabic)": "ابدأ بزر Add Project", "हिन्दी (Hindi)": "Add Project से शुरू करें"],
     "Click the green Add Project button to create your first project.": ["Türkçe": "İlk projenizi oluşturmak için yeşil Add Project butonuna tıklayın.", "English": "Click the green Add Project button to create your first project.", "Deutsch": "Klicken Sie auf den grünen Add Project Button, um Ihr erstes Projekt zu erstellen.", "Français": "Cliquez sur le bouton vert Add Project pour créer votre premier projet.", "Italiano": "Fai clic sul pulsante verde Add Project per creare il tuo primo progetto.", "Español (Spanish)": "Haz clic en el botón verde Add Project para crear tu primer proyecto.", "Português": "Clique no botão verde Add Project para criar o seu primeiro projeto.", "Русский (Russian)": "Нажмите зелёную кнопку Add Project, чтобы создать первый проект.", "日本語 (Japanese)": "緑色の Add Project ボタンをクリックして、最初のプロジェクトを作成します。", "中文 (Chinese)": "点击绿色的 Add Project 按钮创建第一个项目。", "العربية (Arabic)": "اضغط زر Add Project الأخضر لإنشاء مشروعك الأول.", "हिन्दी (Hindi)": "अपना पहला प्रोजेक्ट बनाने के लिए हरे Add Project बटन पर क्लिक करें।"],
     "Project card": ["Türkçe": "Proje kartı", "English": "Project card", "Deutsch": "Projektkarte", "Français": "Carte du projet", "Italiano": "Scheda progetto", "Español (Spanish)": "Tarjeta del proyecto", "Português": "Cartão do projeto", "Русский (Russian)": "Карточка проекта", "日本語 (Japanese)": "プロジェクトカード", "中文 (Chinese)": "项目卡片", "العربية (Arabic)": "بطاقة المشروع", "हिन्दी (Hindi)": "प्रोजेक्ट कार्ड"],
@@ -61,7 +61,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Billing / Plan": ["Türkçe": "Ödeme / Plan", "English": "Billing / Plan"],
     "Account / Login": ["Türkçe": "Hesap / Giriş", "English": "Account / Login"],
     "Workspace ticket sent to the workspace owner.": ["Türkçe": "Workspace ticket, workspace sahibine gönderildi.", "English": "Workspace ticket sent to the workspace owner."],
-    // --- TEMEL ARAYÜZ ---
+    // --- CORE INTERFACE ---
     "Schedule": ["Türkçe": "Planlama", "English": "Schedule", "Deutsch": "Planung", "Français": "Planning", "Italiano": "Pianificazione", "Español (Spanish)": "Planificación", "Português": "Planeamento", "Русский (Russian)": "Планирование", "日本語 (Japanese)": "スケジュール", "中文 (Chinese)": "计划", "العربية (Arabic)": "الجدول", "हिन्दी (Hindi)": "शेड्यूल"],
     "Board": ["Türkçe": "Pano", "English": "Board", "Deutsch": "Board", "Français": "Tableau", "Italiano": "Bacheca", "Español (Spanish)": "Tablero", "Português": "Quadro", "Русский (Russian)": "Доска", "日本語 (Japanese)": "ボード", "中文 (Chinese)": "看板", "العربية (Arabic)": "لوحة", "हिन्दी (Hindi)": "बोर्ड"],
     "Timeline": ["Türkçe": "Zaman Çizelgesi", "English": "Timeline", "Deutsch": "Zeitachse", "Français": "Chronologie", "Italiano": "Timeline", "Español (Spanish)": "Cronología", "Português": "Linha do tempo", "Русский (Russian)": "Шкала времени", "日本語 (Japanese)": "タイムライン", "中文 (Chinese)": "时间线", "العربية (Arabic)": "المخطط الزمني", "हिन्दी (Hindi)": "टाइमलाइन"],
@@ -136,7 +136,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Data Management": ["Türkçe": "Veri Yönetimi", "English": "Data Management", "Deutsch": "Datenverwaltung", "Français": "Gestion des Données", "Italiano": "Gestione Dati", "Español (Spanish)": "Gestión de Datos", "Português": "Gestão de Dados", "Русский (Russian)": "Управление Данными", "日本語 (Japanese)": "データ管理", "中文 (Chinese)": "数据管理", "العربية (Arabic)": "إدارة البيانات", "हिन्दी (Hindi)": "डेटा प्रबंधन"],
     "About": ["Türkçe": "Hakkında", "English": "About", "Deutsch": "Über", "Français": "À Propos", "Italiano": "Informazioni", "Español (Spanish)": "Acerca de", "Português": "Sobre", "Русский (Russian)": "О Приложении", "日本語 (Japanese)": "約", "中文 (Chinese)": "关于", "العربية (Arabic)": "حول", "हिन्दी (Hindi)": "के बारे में"],
     
-    // --- SİPARİŞ DETAYLARI VE ORTAK ---
+    // --- ORDER DETAILS & SHARED ---
     "Order Details": ["Türkçe": "Sipariş Detayları", "English": "Order Details", "Deutsch": "Bestelldetails", "Français": "Détails de la commande", "Italiano": "Dettagli Ordine", "Español (Spanish)": "Detalles del pedido", "Português": "Detalhes do Pedido", "Русский (Russian)": "Детали Заказа", "日本語 (Japanese)": "注文の詳細", "中文 (Chinese)": "订单详情", "العربية (Arabic)": "تفاصيل الطلب", "हिन्दी (Hindi)": "ऑर्डर विवरण"],
     "Export PDF": ["Türkçe": "PDF Çıktısı", "English": "Export PDF", "Deutsch": "PDF Exportieren", "Français": "Exporter PDF", "Italiano": "Esporta PDF", "Español (Spanish)": "Exportar PDF", "Português": "Exportar PDF", "Русский (Russian)": "Экспорт PDF", "日本語 (Japanese)": "PDF出力", "中文 (Chinese)": "导出 PDF", "العربية (Arabic)": "تصدير PDF", "हिन्दी (Hindi)": "पीडीएफ निर्यात करें"],
     "Cards Locked": ["Türkçe": "Kartlar Kilitli", "English": "Cards Locked", "Deutsch": "Karten gesperrt", "Français": "Cartes verrouillées", "Italiano": "Schede bloccate", "Español (Spanish)": "Tarjetas bloqueadas", "Português": "Cartões bloqueados", "Русский (Russian)": "Карточки заблокированы", "日本語 (Japanese)": "カードをロック中", "中文 (Chinese)": "卡片已锁定", "العربية (Arabic)": "البطاقات مقفلة", "हिन्दी (Hindi)": "कार्ड लॉक हैं"],
@@ -201,7 +201,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Delivery In": ["Türkçe": "Kalan Süre", "English": "Delivery In", "Deutsch": "Lieferung in", "Français": "Livraison dans", "Italiano": "Consegna in", "Español (Spanish)": "Entrega en", "Português": "Entrega em", "Русский (Russian)": "Доставка через", "日本語 (Japanese)": "納品まで", "中文 (Chinese)": "交付剩余", "العربية (Arabic)": "التسليم في", "हिन्दी (Hindi)": "डिलिवरी में"],
     "Customer Name": ["Türkçe": "Müşteri Adı", "English": "Customer Name", "Deutsch": "Kundenname", "Français": "Nom du client", "Italiano": "Nome Cliente", "Español (Spanish)": "Nombre del Cliente", "Português": "Nome do Cliente", "Русский (Russian)": "Имя Клиента", "日本語 (Japanese)": "顧客名", "中文 (Chinese)": "客户姓名", "العربية (Arabic)": "اسم العميل", "हिन्दी (Hindi)": "ग्राहक का नाम"],
     
-    // 🌟 YENİ: CUSTOM FIELDS İÇİN ETİKETLER 🌟
+    // --- CUSTOM FIELD LABELS ---
     "Customer Details Fields": ["Türkçe": "Müşteri & Tasarım Alt Başlıkları", "English": "Customer Details Fields", "Deutsch": "Kundendetails-Felder", "Français": "Champs de détails du client", "Italiano": "Campi dettagli cliente", "Español (Spanish)": "Campos de detalles del cliente", "Português": "Campos de detalhes do cliente", "Русский (Russian)": "Поля сведений о клиенте", "日本語 (Japanese)": "顧客詳細フィールド", "中文 (Chinese)": "客户详细信息字段", "العربية (Arabic)": "حقول تفاصيل العميل", "हिन्दी (Hindi)": "ग्राहक विवरण क्षेत्र"],
     "Production Toggles (Yes/No)": ["Türkçe": "Üretim Şalterleri (Evet/Hayır)", "English": "Production Toggles (Yes/No)", "Deutsch": "Produktionsschalter (Ja/Nein)", "Français": "Basculements de production (Oui/Non)", "Italiano": "Interruttori di produzione (Sì/No)", "Español (Spanish)": "Alternadores de producción (Sí/No)", "Português": "Alternâncias de produção (Sim/Não)", "Русский (Russian)": "Производственные переключатели (Да/Нет)", "日本語 (Japanese)": "本番トグル (はい/いいえ)", "中文 (Chinese)": "生产开关 (是/否)", "العربية (Arabic)": "مفاتيح الإنتاج (نعم/لا)", "हिन्दी (Hindi)": "उत्पादन टॉगल (हाँ/नहीं)"],
     "Add Field": ["Türkçe": "Başlık Ekle", "English": "Add Field", "Deutsch": "Feld hinzufügen", "Français": "Ajouter un champ", "Italiano": "Aggiungi campo", "Español (Spanish)": "Añadir campo", "Português": "Adicionar campo", "Русский (Russian)": "Добавить поле", "日本語 (Japanese)": "フィールドを追加", "中文 (Chinese)": "添加字段", "العربية (Arabic)": "إضافة حقل", "हिन्दी (Hindi)": "फ़ील्ड जोड़ें"],
@@ -294,7 +294,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Item 4": ["Türkçe": "Madde 4", "English": "Item 4"],
     "Notes / Supplier": ["Türkçe": "Notlar / Tedarikçi", "English": "Notes / Supplier", "Deutsch": "Notizen / Lieferant", "Français": "Notes / Fournisseur", "Italiano": "Note / Fornitore", "Español (Spanish)": "Notas / Proveedor", "Português": "Notas / Fornecedor", "Русский (Russian)": "Заметки / Поставщик", "日本語 (Japanese)": "メモ / サプライヤー", "中文 (Chinese)": "备注 / 供应商", "العربية (Arabic)": "ملاحظات / المورد", "हिन्दी (Hindi)": "नोट्स / आपूर्तिकर्ता"],
     
-    // --- ÖNCELİK VE RİSK ---
+    // --- PRIORITY & RISK ---
     "Priority / Risk": ["Türkçe": "Öncelik ve Risk", "English": "Priority / Risk", "Deutsch": "Priorität / Risiko", "Français": "Priorité / Risque", "Italiano": "Priorità / Rischio", "Español (Spanish)": "Prioridad / Riesgo", "Português": "Prioridade / Risco", "Русский (Russian)": "Приоритет / Риск", "日本語 (Japanese)": "優先度 / リスク", "中文 (Chinese)": "优先级 / 风险", "العربية (Arabic)": "الأولوية / المخاطر", "हिन्दी (Hindi)": "प्राथमिकता / जोखिम"],
     "Priority": ["Türkçe": "Öncelik", "English": "Priority"],
     "Low": ["Türkçe": "Düşük", "English": "Low"],
@@ -310,7 +310,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Waiting for payment": ["Türkçe": "Ödeme bekleniyor", "English": "Waiting for payment", "Deutsch": "Warten auf Zahlung", "Français": "En attente du paiement", "Italiano": "In attesa del pagamento", "Español (Spanish)": "Esperando pago", "Português": "Aguardando pagamento", "Русский (Russian)": "Ожидание оплаты", "日本語 (Japanese)": "支払い待ち", "中文 (Chinese)": "等待付款", "العربية (Arabic)": "بانتظار الدفع", "हिन्दी (Hindi)": "भुगतान की प्रतीक्षा"],
     "Waiting for material": ["Türkçe": "Materyal bekleniyor", "English": "Waiting for material", "Deutsch": "Warten auf Material", "Français": "En attente de matériel", "Italiano": "In attesa del materiale", "Español (Spanish)": "Esperando material", "Português": "Aguardando material", "Русский (Russian)": "Ожидание материалов", "日本語 (Japanese)": "材料待ち", "中文 (Chinese)": "等待材料", "العربية (Arabic)": "بانتظار المواد", "हिन्दी (Hindi)": "सामग्री की प्रतीक्षा"],
 
-    // --- ÜRETİM DURUMU LİSTESİ ---
+    // --- PRODUCTION STATUS LIST ---
     "Status Menu Options": ["Türkçe": "Durum Menüsü", "English": "Status Menu Options", "Deutsch": "Statusmenü-Optionen", "Français": "Options du menu d'état", "Italiano": "Opzioni menu di stato", "Español (Spanish)": "Opciones del menú de estado", "Português": "Opções do menu de status", "Русский (Russian)": "Параметры меню статуса", "日本語 (Japanese)": "ステータスメニュー", "中文 (Chinese)": "状态菜单选项", "العربية (Arabic)": "خيارات قائمة الحالة", "हिन्दी (Hindi)": "स्थिति मेनू विकल्प"],
     "New": ["Türkçe": "Yeni", "English": "New", "Deutsch": "Neu", "Français": "Nouveau", "Italiano": "Nuovo", "Español (Spanish)": "Nuevo", "Português": "Novo", "Русский (Russian)": "Новый", "日本語 (Japanese)": "新規", "中文 (Chinese)": "新建", "العربية (Arabic)": "جديد", "हिन्दी (Hindi)": "नया"],
     "Quoted": ["Türkçe": "Fiyat Verildi", "English": "Quoted", "Deutsch": "Angebot erstellt", "Français": "Devis envoyé", "Italiano": "Preventivo inviato", "Español (Spanish)": "Presupuestado", "Português": "Orçamento enviado", "Русский (Russian)": "Предложение отправлено", "日本語 (Japanese)": "見積済み", "中文 (Chinese)": "已报价", "العربية (Arabic)": "تم تقديم عرض سعر", "हिन्दी (Hindi)": "कोट किया गया"],
@@ -332,7 +332,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Refunded": ["Türkçe": "İade Edildi", "English": "Refunded", "Deutsch": "Erstattet", "Français": "Remboursé", "Italiano": "Rimborsato", "Español (Spanish)": "Reembolsado", "Português": "Reembolsado", "Русский (Russian)": "Возвращено", "日本語 (Japanese)": "返金済み", "中文 (Chinese)": "已退款", "العربية (Arabic)": "تم رد المبلغ", "हिन्दी (Hindi)": "रिफंड किया गया"],
     "On Hold": ["Türkçe": "Beklemeye Alındı", "English": "On Hold", "Deutsch": "Pausiert", "Français": "En attente", "Italiano": "In pausa", "Español (Spanish)": "En pausa", "Português": "Em espera", "Русский (Russian)": "На паузе", "日本語 (Japanese)": "保留中", "中文 (Chinese)": "已暂停", "العربية (Arabic)": "معلق", "हिन्दी (Hindi)": "होल्ड पर"],
 
-    // --- YAPAY ZEKA ŞABLON TERİMLERİ (YENİ EKLENDİ) ---
+    // --- AI TEMPLATE TERMS ---
     "Business Type": ["Türkçe": "İşletme Türü (Sektör)", "English": "Business Type", "Deutsch": "Unternehmenstyp", "Français": "Type d'entreprise", "Italiano": "Tipo di Azienda", "Español (Spanish)": "Tipo de Negocio", "Português": "Tipo de Negócio", "Русский (Russian)": "Тип Бизнеса", "日本語 (Japanese)": "業種", "中文 (Chinese)": "业务类型", "العربية (Arabic)": "نوع العمل", "हिन्दी (Hindi)": "व्यापार के प्रकार"],
     "Select Industry": ["Türkçe": "Sektörünüzü Seçin", "English": "Select Industry", "Deutsch": "Branche auswählen", "Français": "Sélectionner l'industrie", "Italiano": "Seleziona Settore", "Español (Spanish)": "Seleccionar Industria", "Português": "Selecione a Indústria", "Русский (Russian)": "Выберите Отрасль", "日本語 (Japanese)": "業界を選択", "中文 (Chinese)": "选择行业", "العربية (Arabic)": "حدد الصناعة", "हिन्दी (Hindi)": "उद्योग चुनें"],
     "Apply Template": ["Türkçe": "Şablonu Uygula", "English": "Apply Template"],
@@ -349,7 +349,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Agency / Creative Studio": ["Türkçe": "Ajans / Kreatif Stüdyo", "English": "Agency / Creative Studio"],
     "General Small Business": ["Türkçe": "Genel Küçük İşletme", "English": "General Small Business"],
     
-    // Şablon Alt Başlıkları
+    // Template subheadings
     "Watch Ref.": ["Türkçe": "Referans", "English": "Reference"],
     "Device Model": ["Türkçe": "Cihaz Modeli", "English": "Device Model"],
     "Serial Number": ["Türkçe": "Seri No", "English": "Serial Number"],
@@ -362,7 +362,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Shoot Type": ["Türkçe": "Çekim Türü", "English": "Shoot Type"],
     "Location": ["Türkçe": "Konum", "English": "Location"],
 
-    // Şablon Üretim Adımları
+    // Template production steps
     "Sketching": ["Türkçe": "Taslak Çizimi", "English": "Sketching"],
     "Painting": ["Türkçe": "Boyama", "English": "Painting"],
     "Varnishing": ["Türkçe": "Cilalama", "English": "Varnishing"],
@@ -388,7 +388,7 @@ struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title
     "Sourcing": ["Türkçe": "Tedarik", "English": "Sourcing"],
     "Crafting": ["Türkçe": "Üretim", "English": "Crafting"],
     
-    // Şablon Yes/No Şalterleri
+    // Template yes/no toggles
     "Client Approved Sketch?": ["Türkçe": "Müşteri Taslağı Onayladı mı?", "English": "Client Approved Sketch?"],
     "Varnish Dried?": ["Türkçe": "Cila Kurudu mu?", "English": "Varnish Dried?"],
     "Assets Received?": ["Türkçe": "Materyaller Alındı mı?", "English": "Assets Received?"],
@@ -505,7 +505,7 @@ private let globalDilSozlugu = _make_globalDilSozlugu()
 
 
 // MARK: - Order Detail / Schedule & Tracking Localisation
-// Bu sözlük daha önce SiparisDetayView.swift içindeydi. Merkezi DilMotoru içinde tutuyoruz.
+// This dictionary used to live in SiparisDetayView.swift; it is kept centrally in DilMotoru.
 @_optimize(none) private func _make_siparisDetayLocalTranslations() -> [String: [String: String]] { return [
     "Schedule & Alerts": ["Türkçe": "Plan ve Uyarılar", "English": "Schedule & Alerts", "Deutsch": "Plan & Hinweise", "Français": "Planning et alertes", "Italiano": "Pianificazione e avvisi", "Español (Spanish)": "Agenda y alertas", "Português": "Agenda e alertas", "Русский (Russian)": "Расписание и уведомления", "日本語 (Japanese)": "予定と通知", "中文 (Chinese)": "日程和提醒", "العربية (Arabic)": "الجدول والتنبيهات", "हिन्दी (Hindi)": "शेड्यूल और अलर्ट"],
     "Quick reminders": ["Türkçe": "Hızlı hatırlatıcılar", "English": "Quick reminders", "Deutsch": "Schnelle Erinnerungen", "Français": "Rappels rapides", "Italiano": "Promemoria rapidi", "Español (Spanish)": "Recordatorios rápidos", "Português": "Lembretes rápidos", "Русский (Russian)": "Быстрые напоминания", "日本語 (Japanese)": "クイックリマインダー", "中文 (Chinese)": "快速提醒", "العربية (Arabic)": "تذكيرات سريعة", "हिन्दी (Hindi)": "त्वरित रिमाइंडर"],
@@ -1250,7 +1250,7 @@ private let studioFlowFeatureTranslations_2 = _make_studioFlowFeatureTranslation
     "System": ["Türkçe": "Sistem", "English": "System", "Deutsch": "System", "Français": "Système", "Italiano": "Sistema", "Español (Spanish)": "Sistema", "Português": "Sistema", "Русский (Russian)": "Система", "日本語 (Japanese)": "システム", "中文 (Chinese)": "系统", "العربية (Arabic)": "النظام", "हिन्दी (Hindi)": "सिस्टम"],
     "Unread": ["Türkçe": "Okunmamış", "English": "Unread", "Deutsch": "Ungelesen", "Français": "Non lu", "Italiano": "Non letto", "Español (Spanish)": "No leído", "Português": "Não lido", "Русский (Russian)": "Непрочитанные", "日本語 (Japanese)": "未読", "中文 (Chinese)": "未读", "العربية (Arabic)": "غير مقروء", "हिन्दी (Hindi)": "अपठित"],
 
-    // ============================ CONTENT VIEW — SETTINGS + ROLE PROFILES + WORKSPACE (2. parça) ============================
+    // ============================ CONTENT VIEW — SETTINGS + ROLE PROFILES + WORKSPACE (part 2) ============================
     "More": ["Türkçe": "Daha", "English": "More", "Deutsch": "Mehr", "Français": "Plus", "Italiano": "Altro", "Español (Spanish)": "Más", "Português": "Mais", "Русский (Russian)": "Ещё", "日本語 (Japanese)": "もっと", "中文 (Chinese)": "更多", "العربية (Arabic)": "المزيد", "हिन्दी (Hindi)": "अधिक"],
     "Edit": ["Türkçe": "Düzenle", "English": "Edit", "Deutsch": "Bearbeiten", "Français": "Modifier", "Italiano": "Modifica", "Español (Spanish)": "Editar", "Português": "Editar", "Русский (Russian)": "Изменить", "日本語 (Japanese)": "編集", "中文 (Chinese)": "编辑", "العربية (Arabic)": "تعديل", "हिन्दी (Hindi)": "संपादित"],
     "Hide": ["Türkçe": "Gizle", "English": "Hide", "Deutsch": "Ausblenden", "Français": "Masquer", "Italiano": "Nascondi", "Español (Spanish)": "Ocultar", "Português": "Ocultar", "Русский (Russian)": "Скрыть", "日本語 (Japanese)": "非表示", "中文 (Chinese)": "隐藏", "العربية (Arabic)": "إخفاء", "हिन्दी (Hindi)": "छिपाएँ"],
@@ -1461,7 +1461,7 @@ private let studioFlowFeatureTranslations_3 = _make_studioFlowFeatureTranslation
     "Pink": ["Türkçe": "Pembe", "English": "Pink", "Deutsch": "Rosa", "Français": "Rose", "Italiano": "Rosa", "Español (Spanish)": "Rosa", "Português": "Rosa", "Русский (Russian)": "Розовый", "日本語 (Japanese)": "ピンク", "中文 (Chinese)": "粉色", "العربية (Arabic)": "وردي", "हिन्दी (Hindi)": "गुलाबी"],
     "Purple": ["Türkçe": "Mor", "English": "Purple", "Deutsch": "Lila", "Français": "Violet", "Italiano": "Viola", "Español (Spanish)": "Morado", "Português": "Roxo", "Русский (Russian)": "Фиолетовый", "日本語 (Japanese)": "紫", "中文 (Chinese)": "紫色", "العربية (Arabic)": "أرجواني", "हिन्दी (Hindi)": "बैंगनी"],
 
-    // ============================ AYARLAR VIEW — SETTINGS 1. parça ============================
+    // ============================ SETTINGS VIEW — part 1 ============================
     "Access restricted": ["Türkçe": "Erişim kısıtlı", "English": "Access restricted", "Deutsch": "Zugriff eingeschränkt", "Français": "Accès restreint", "Italiano": "Accesso limitato", "Español (Spanish)": "Acceso restringido", "Português": "Acesso restrito", "Русский (Russian)": "Доступ ограничен", "日本語 (Japanese)": "アクセス制限", "中文 (Chinese)": "访问受限", "العربية (Arabic)": "الوصول مقيد", "हिन्दी (Hindi)": "पहुँच प्रतिबंधित"],
     "Your current role does not include access to this settings section.": ["Türkçe": "Mevcut rolünüz bu ayarlar bölümüne erişim içermiyor.", "English": "Your current role does not include access to this settings section.", "Deutsch": "Deine Rolle hat keinen Zugriff auf diesen Bereich.", "Français": "Votre rôle n'inclut pas cet accès.", "Italiano": "Il tuo ruolo non include questo accesso.", "Español (Spanish)": "Tu rol no incluye este acceso.", "Português": "O teu cargo não inclui este acesso.", "Русский (Russian)": "Ваша роль не имеет доступа.", "日本語 (Japanese)": "あなたの役割にこのアクセスはありません。", "中文 (Chinese)": "您的角色无此设置访问权限。", "العربية (Arabic)": "دورك لا يشمل هذا الوصول.", "हिन्दी (Hindi)": "आपकी भूमिका इस सेटिंग्स तक पहुँच नहीं देती।"],
     "Only workspace owners or admins can change these settings.": ["Türkçe": "Bu ayarları yalnızca çalışma alanı sahipleri veya yöneticileri değiştirebilir.", "English": "Only workspace owners or admins can change these settings.", "Deutsch": "Nur Inhaber oder Admins können ändern.", "Français": "Seuls propriétaires ou admins peuvent modifier.", "Italiano": "Solo proprietari o admin possono modificare.", "Español (Spanish)": "Solo propietarios o admins pueden cambiar.", "Português": "Apenas proprietários ou admins podem alterar.", "Русский (Russian)": "Только владельцы или админы могут менять.", "日本語 (Japanese)": "オーナーまたは管理者のみ変更可。", "中文 (Chinese)": "仅工作区所有者或管理员可更改。", "العربية (Arabic)": "يستطيع المالكون أو المسؤولون فقط التغيير.", "हिन्दी (Hindi)": "केवल मालिक या एडमिन बदल सकते हैं।"],

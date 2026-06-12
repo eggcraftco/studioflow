@@ -16,7 +16,7 @@ struct Musteri: Identifiable, Codable, Equatable {
     var country: String?
     var notes: String
     var lastContactDate: Date
-    var profileImageUrl: String // 🌟 YENİ: Profil Fotoğrafı Linki
+    var profileImageUrl: String // Profile photo URL
     
     init(id: String? = nil, companyId: String = "test_studio_123", name: String = "", email: String = "", phone: String = "", instagram: String = "", address: String = "", streetAddress: String = "", city: String = "", postalCode: String = "", country: String = "", notes: String = "", lastContactDate: Date = Date(), profileImageUrl: String = "") {
         self.id = id

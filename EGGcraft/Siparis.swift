@@ -74,7 +74,7 @@ struct ClientFileItem: Identifiable, Codable, Equatable {
 struct Siparis: Identifiable, Codable {
     @DocumentID var id: String?
     
-    // 🌟 ŞİRKET GÜVENLİK MÜHRÜ 🌟
+    // Workspace ownership stamp
     var companyId: String = "test_studio_123"
     
     var paymentMethod: String = "Card"
@@ -102,13 +102,13 @@ struct Siparis: Identifiable, Codable {
     var deliveryCost: Double
     var taxType: String = "" // "Profit" veya "Revenue"
     var extraStatuses: [String: String]?
-    var taxRate: Double = 0.0    // Siparişe uygulanan vergi oranı (%)
+    var taxRate: Double = 0.0    // Tax rate applied to the order (%)
     var invBool1: Bool = false
         var invBool2: Bool = false
         var invBool3: Bool = false
         var invBool4: Bool = false
         var invNotes: String = ""
-        var taxAmount: Double = 0.0  // Kesilen vergi tutarı
+        var taxAmount: Double = 0.0  // Tax amount charged
     var priority: String = "Normal"
         var risk: String = "None"
         var riskReason: String = "-"
@@ -122,14 +122,14 @@ struct Siparis: Identifiable, Codable {
     var invoiceNumber: String = ""
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
-    // 🌟 OTOMATİK NET KAR HESAPLAYICI 🌟
+    // Computed net profit
     var netKar: Double {
         return (paidAmount + remainingAmount) - watchPurchasePrice - paymentFee - deliveryCost
     }
 }
 
-// 🌟 ÇÖZÜM: BOŞ BAŞLATICIYI EKLENTİ (EXTENSION) İÇİNE ALDIK 🌟
-// Bu sayede Swift'in o uzun varsayılan başlatıcısı silinmez ve Import sistemi çökmez!
+// The empty initializer lives in an extension so Swift keeps generating the long
+// memberwise initializer; the import system depends on it.
 extension Siparis {
     init() {
         self.id = nil

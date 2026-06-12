@@ -865,9 +865,9 @@ struct SiparisDetayView: View {
 
         workspaceCardsLocked = false
         arrangeMacFirstProjectGuideCustomerCardLayoutIfNeeded()
-        // Rehber kartı sadece görünürlük / konum yönlendirir.
-        // Kullanıcının daha önce elle ayarladığı kart yüksekliklerini burada değiştirmiyoruz;
-        // aksi halde alt tutamaçla yapılan yukarı-aşağı resize ayarları bozuluyordu.
+        // The guide card only drives visibility/position. Never touch card heights
+        // the user resized by hand here; doing so used to break manual bottom-handle
+        // resizing.
 
         guard !alreadyCustomerOnly else {
             yenileCalismaAlaniHitbox(delay: 0.01)
@@ -918,8 +918,8 @@ struct SiparisDetayView: View {
         while sutunGenislikleri.count < kartYerlesimi.count { sutunGenislikleri.append(350) }
         if sutunGenislikleri.indices.contains(0), sutunGenislikleri[0] < 350 { sutunGenislikleri[0] = 350 }
         if sutunGenislikleri.indices.contains(1), sutunGenislikleri[1] < 350 { sutunGenislikleri[1] = 350 }
-        // Financial Info kartının kayıtlı yüksekliğine dokunma.
-        // Rehber balonu overlay olarak konumlanır; kartın manuel resize değeri korunur.
+        // Leave the Financial Info card's saved height alone. The guide bubble is
+        // positioned as an overlay; the card's manual resize value is preserved.
         yenileCalismaAlaniHitbox(delay: 0.01)
         #endif
     }
@@ -1223,7 +1223,7 @@ struct SiparisDetayView: View {
     @AppStorage("sutunGenislikleriJSONV4") private var sutunGenislikleriJSON: String = ""
     @State private var sutunGenislikleri: [Double] = [350, 350, 350]
     
-    // 🌟 YENİ: BLOK (KART) RENK HAFIZASI 🌟
+    // Per-card colour memory
     @AppStorage("kartRenkleriJSONV1") private var kartRenkleriJSON: String = "{}"
     @State private var kartRenkleri: [String: String] = [:]
     
@@ -4024,7 +4024,7 @@ struct SiparisDetayView: View {
             return
         }
 
-        // Eski Profile 1/2/3 sisteminden yeni sınırsız profile sistemine yumuşak geçiş.
+        // Soft migration from the old Profile 1/2/3 system to unlimited profiles.
         var migrated: [WorkspaceProfileDTO] = []
         if !workspaceProfile1JSON.isEmpty {
             migrated.append(WorkspaceProfileDTO(name: "Profile 1", snapshotJSON: workspaceProfile1JSON))
@@ -4320,7 +4320,6 @@ struct SiparisDetayView: View {
             sharedKartYukseklikleri = kartYukseklikleri
         }
         
-        // 🌟 KART RENKLERİ YÜKLENİYOR 🌟
         if let data = kartRenkleriJSON.data(using: .utf8),
            let dict = try? JSONDecoder().decode([String: String].self, from: data) {
             kartRenkleri = dict
@@ -4492,7 +4491,6 @@ struct SiparisDetayView: View {
         }
     }
     
-    // 🌟 TÜM KARTLARA RENK ÖZELLİĞİ AKTARILIYOR 🌟
     @ViewBuilder
     private func kartGosterici(icin kart: KartTipi, colIndex: Int) -> some View {
         if !isCardAllowedByPlan(kart) {
@@ -11186,7 +11184,7 @@ struct BosKolonDropDelegate: DropDelegate {
               let sourceRow,
               layout.indices.contains(sourceColumn) else { return }
 
-        // Zaten aynı boşluğa bırakılıyorsa gereksiz hareket yaptırma.
+        // Skip pointless moves when dropping into the same slot.
         if sourceColumn == columnIndex { return }
 
         withAnimation(.interactiveSpring(response: 0.38, dampingFraction: 0.88, blendDuration: 0.12)) {
@@ -11226,7 +11224,6 @@ struct BosKolonDropDelegate: DropDelegate {
 }
 
 
-// 🌟 GÜNCELLENDİ: BLOKLARA (KARTLARA) RENK DEĞİŞTİRME ÖZELLİĞİ EKLENDİ 🌟
 struct DetayKarti<Content: View>: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -11243,7 +11240,7 @@ struct DetayKarti<Content: View>: View {
     @Binding var draggedKart: KartTipi?
     var uiTetikleyici: Bool
     
-    var kartRengi: String // 🎨 KARTIN AKTİF RENGİ
+    var kartRengi: String // Active card colour
     var minimumHeightOverride: Double? = nil
     var autoAdjustHeightOnContentChange: Bool = true
     var forceLayoutUnlocked: Bool = false
@@ -11255,7 +11252,7 @@ struct DetayKarti<Content: View>: View {
     var onHeightChangeEnd: () -> Void
     var onWidthChangeEnd: () -> Void
     var onHide: () -> Void
-    var onColorChange: (String) -> Void // 🎨 RENK DEĞİŞTİRME MOTORU
+    var onColorChange: (String) -> Void
     var onEditHeadings: (() -> Void)? = nil
     var onExport: (() -> Void)? = nil
     var onQuickAdd: (() -> Void)? = nil
@@ -11303,9 +11300,8 @@ struct DetayKarti<Content: View>: View {
         self.content = content()
     }
     
-    // 🌟 KARTIN DİNAMİK TEMA RENGİ 🌟
-    // Biraz daha canlı özel renkler kullanıyoruz. Özellikle Pink, sistem .pink yerine
-    // daha temiz/fuşya bir tona çekildiği için koyu kırmızı gibi görünmez.
+    // Dynamic card theme colour. Slightly more vivid custom tones are used; Pink in
+    // particular is pulled towards a cleaner fuchsia so it does not read as dark red.
     private func temaRengi(_ renkAdi: String) -> Color {
         switch renkAdi {
         case t("Red", lang: seciliDil): return Color(red: 1.00, green: 0.24, blue: 0.24)
@@ -11319,7 +11315,7 @@ struct DetayKarti<Content: View>: View {
         }
     }
     
-    // 🌟 KARTIN DİNAMİK ARKA PLAN RENGİ 🌟
+    // Dynamic card background colour
     private var bgColor: Color {
         if kartRengi == t("Default", lang: seciliDil) {
             return colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
@@ -11327,15 +11323,14 @@ struct DetayKarti<Content: View>: View {
         return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.18 : 0.14)
     }
     
-    // 🌟 KARTIN DİNAMİK ÇİZGİ (BORDER) RENGİ 🌟
+    // Dynamic card border colour
     private var borderColor: Color {
         if kartRengi == t("Default", lang: seciliDil) { return Color.clear }
         return temaRengi(kartRengi).opacity(colorScheme == .dark ? 0.62 : 0.50)
     }
 
-    // 🌟 RENKLİ BLOKLARDA OKUNABİLİRLİĞİ ARTIRAN İÇ YÜZEY 🌟
-    // Rengi kısmadan, içeriğin arkasına hafif nötr bir panel veriyoruz.
-    // Böylece blok rengi görünür kalıyor ama yazılar ve alanlar daha net ayrışıyor.
+    // Neutral inner surface that keeps coloured cards readable: a soft panel behind
+    // the content so the card colour stays visible while text and fields stand out.
     private var contentPanelFill: Color {
         if kartRengi == t("Default", lang: seciliDil) {
             return colorScheme == .dark ? Color.white.opacity(0.025) : Color.black.opacity(0.018)
@@ -11395,9 +11390,9 @@ struct DetayKarti<Content: View>: View {
     }
     private var etkiliYukseklik: Double { max(etkiliMinimumBoy, yukseklik ?? etkiliMinimumBoy) }
     private var shouldAutoAdjustHeightForContent: Bool {
-        // Mac tarafında da kartlar içerikten kısa kalmamalı.
-        // Eskiden macOS için false dönüyordu; bu da fixed height + clipped birleşince
-        // kart içeriğinin kesilmiş / kapanmış görünmesine sebep oluyordu.
+        // Cards must not end up shorter than their content on Mac either. This used
+        // to return false on macOS, and fixed height + clipping made card content
+        // look cut off.
         return autoAdjustHeightOnContentChange
     }
     private func hesaplananMinimumBoy(icerikBoyu: Double) -> Double { if kartTipi == .preview { return previewMinBoyu }; let hesap = icerikBoyu + ustBaslikAlani + altTutamacAlani + guvenlikPayi; return max(minKartBoyu, ceil(hesap)) }
@@ -11639,9 +11634,9 @@ struct DetayKarti<Content: View>: View {
         self.draggedKart = kartTipi
         PlatformCursor.closedHandSet()
 
-        // Kısa otomatik iptal süreleri kartı geniş çalışma alanında bırakmadan önce
-        // drag state'i temizleyebiliyordu. Drop delegate başarılı bırakmada temizliyor;
-        // burada sadece iptal edilen sürüklemeler için uzun güvenlik temizliği var.
+        // Short auto-cancel windows could clear the drag state before the card was
+        // dropped in a large workspace. The drop delegate cleans up successful drops;
+        // this is only a long safety cleanup for cancelled drags.
         DispatchQueue.main.asyncAfter(deadline: .now() + 30.0) {
             if CardDragCoordinator.shared.sessionID == sessionID,
                draggedKart == kartTipi {
@@ -11795,7 +11790,7 @@ struct DetayKarti<Content: View>: View {
                     desktopDragHandle
                 }
 
-                // Title area: menü için. Burada drag yok.
+                // Title area opens the menu; no dragging here.
                 HStack(spacing: 10) {
                     Image(systemName: iconName)
                         .foregroundColor(.gray)
@@ -11821,7 +11816,7 @@ struct DetayKarti<Content: View>: View {
                     .help(quickAddTooltip ?? "Add")
                 }
 
-                // iPad'de uzun basma yerine net bir menü hedefi olsun.
+                // Give iPad a clear menu target instead of long-press.
                 cardOptionsControl
             }
             .padding(.horizontal, 12)
@@ -11963,13 +11958,14 @@ struct DetayKarti<Content: View>: View {
                 var hedefYukseklik: Double? = nil
                 let minimumDegisti = abs(minimumBoy - yeniMinimum) > 0.5 || (oncekiMinimum.map { abs($0 - yeniMinimum) > 0.5 } ?? true)
 
-                // İçerik büyüdüğünde kart her zaman içeriği sığdıracak kadar uzar.
+                // When content grows, the card always grows to fit it.
                 if mevcutYukseklik < yeniMinimum - 0.5 {
                     hedefYukseklik = yeniMinimum
                 }
 
-                // İçerik küçüldüğünde, kart daha önce otomatik ölçüye yakınsa otomatik kısalır.
-                // Böylece başlık silindiğinde boş alan kalmaz, ama kullanıcı kartı bilerek büyüttüyse o ölçü korunur.
+                // When content shrinks, the card auto-shrinks only if it was near the
+                // automatic size — so deleting a heading leaves no dead space, while a
+                // deliberately enlarged card keeps its size.
                 if let oncekiMinimum, yeniMinimum < oncekiMinimum - 0.5 {
                     let kartOtomatikOlcudeydi = mevcutYukseklik <= oncekiMinimum + tolerans
                     if kartOtomatikOlcudeydi {
@@ -11991,7 +11987,7 @@ struct DetayKarti<Content: View>: View {
                         yukseklik = hedefYukseklik
                     }
 
-                    // İlk ölçümde gereksiz kayıt yapma; gerçek içerik değişimlerinde yeni yüksekliği sakla.
+                    // Skip the first measurement; only store new heights on real content changes.
                     if oncekiMinimum != nil {
                         onHeightChangeEnd()
                     }
@@ -12002,10 +11998,10 @@ struct DetayKarti<Content: View>: View {
         }
         .frame(height: etkiliYukseklik, alignment: .top)
         .background(WorkspacePanSurface())
-        .background(bgColor) // 🌟 KARTIN DİNAMİK ARKA PLANI 🌟
+        .background(bgColor)
         .background(cardHighlightOverlay)
         .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(borderColor, lineWidth: 1.5)) // 🌟 KARTIN DİNAMİK ÇİZGİSİ 🌟
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(borderColor, lineWidth: 1.5))
         .overlay {
             if guideHighlightActive {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)

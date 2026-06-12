@@ -57,7 +57,7 @@ struct AutoReplyView: View {
     @AppStorage("customProductsJSON") private var customProductsJSON: String = ""
     @AppStorage("customRulesJSON") private var customRulesJSON: String = ""
     
-    // Ayarlarda tanımlı olan modelleri okur
+    // Reads the AI models defined in Settings
     var decodedCustomProducts: [CustomProduct] {
         guard let data = customProductsJSON.data(using: .utf8), let products = try? JSONDecoder().decode([CustomProduct].self, from: data) else { return [] }
         return products
@@ -1084,7 +1084,6 @@ struct AutoReplyView: View {
     }
 }
 
-// 🌟 EKSİK OLAN CARD BİLEŞENİ BURAYA EKLENDİ 🌟
 struct Card<Content: View>: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass

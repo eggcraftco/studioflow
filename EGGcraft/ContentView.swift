@@ -3253,7 +3253,7 @@ struct StudioKeepNotesView: View {
             membersListeners.append(listener)
         }
 
-        // Bazı eski yapılarda üyeler company dokümanı içindeki map/array alanlarında tutulabilir.
+        // Some legacy workspaces keep members in map/array fields on the company document.
         let companyListener = db.collection("companies").document(companyId).addSnapshotListener { snapshot, _ in
             DispatchQueue.main.async {
                 guard let data = snapshot?.data() else { return }
@@ -3353,9 +3353,9 @@ struct StudioKeepNotesView: View {
 
 
     private func addWorkspaceMember(_ member: KeepWorkspaceMember, to note: StudioKeepNote) {
-        // Accept edilmeden sharedWith/collaboratorEmails yazmıyoruz.
-        // Aksi halde saveNote -> shared sync tetiklenir ve not karşı tarafta
-        // davet kabul edilmeden görünmeye başlar.
+        // Do not write sharedWith/collaboratorEmails before the invite is accepted.
+        // Otherwise saveNote -> shared sync fires and the note becomes visible to the
+        // other side before they accepted the invitation.
         markCollaboratorInvitePending(for: note, email: member.normalizedEmail)
         mirrorSharedNote(note, to: member)
     }
@@ -3371,9 +3371,9 @@ struct StudioKeepNotesView: View {
         let safeCount = max(1, columnCount)
         var columns = Array(repeating: [StudioProjectNoteGroup](), count: safeCount)
 
-        // Project Notes kartları aç/kapanırken sağa sola atlamasın diye
-        // kolon dağılımı görünür liste sırasına göre sabit tutulur.
-        // Aç/kapan sadece kartın kendi kolonunda yükseklik değiştirir.
+        // Keep the column distribution pinned to the visible list order so Project
+        // Notes cards do not jump between columns while expanding/collapsing; a
+        // toggle only changes height inside the card's own column.
         for (index, group) in groups.enumerated() {
             columns[index % safeCount].append(group)
         }
@@ -6613,7 +6613,6 @@ struct ContentView: View {
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
     
-    // 🌟 ONDALIK AYRACI BURAYA DA GELDİ 🌟
     @AppStorage("seciliOndalik") private var seciliOndalik: String = "."
     
         @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
@@ -10998,7 +10997,7 @@ struct SiparisKarti: View {
     @AppStorage("orderListStep2") private var orderListStep2Storage: String = "Painting"
     let siparis: Siparis; let isSelected: Bool; let isMultiSelected: Bool; let showMultiSelection: Bool; let showPreviewImage: Bool; let showDeliveryTime: Bool; let showDesignName: Bool; let showOrderValue: Bool; let showUpcomingSchedule: Bool; let showStatusBadges: Bool; let showCustomerShortcut: Bool; let assignedMemberLabel: String; let assignedMemberPhotoURL: String; let lblIsimsiz: String; let summaryStep1: String; let summaryStep2: String; let customStepsJSON: String; let sembol: String; let seciliDil: String
     
-    let seciliOndalik: String // 🌟 YENİ FORMAT GEÇİŞİ 🌟
+    let seciliOndalik: String
     
     var onCustomerNameTapped: () -> Void
     
