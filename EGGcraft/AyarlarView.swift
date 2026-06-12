@@ -339,7 +339,9 @@ struct AyarlarView: View {
         case "Message Settings":
             return !isWorkflowOnlySettingsRole && authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("settingsMessageSettings")
         case "Sign-in & Security":
-            return workspaceAccessAllows("settingsGeneral")
+            // Personal security + account deletion: always available to every
+            // signed-in user (store compliance), independent of workspace access.
+            return true
         case "Support":
             return workspaceAccessAllows("settingsSupport")
         case "Legal":

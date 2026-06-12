@@ -7514,15 +7514,15 @@ struct ContentView: View {
                 Label(phoneActivityMenuTitle, systemImage: "bell.fill")
             }
 
-            if canAccessSettings {
-                Button {
-                    settingsStartSection = "Account"
-                    aktifSekme = "Settings"
-                    phoneShowsOrderDetail = false
-                } label: {
-                    Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
-                }
+            Button {
+                settingsStartSection = "Account"
+                aktifSekme = "Settings"
+                phoneShowsOrderDetail = false
+            } label: {
+                Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
+            }
 
+            if canAccessSettings {
                 Button {
                     aktifSekme = "Settings"
                     phoneShowsOrderDetail = false
@@ -7833,13 +7833,11 @@ struct ContentView: View {
     @ViewBuilder
     private var topAccountAvatarIfAvailable: some View {
         Menu {
-            if canAccessSettings {
-                Button {
-                    settingsStartSection = "Account"
-                    aktifSekme = "Settings"
-                } label: {
-                    Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
-                }
+            Button {
+                settingsStartSection = "Account"
+                aktifSekme = "Settings"
+            } label: {
+                Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
             }
 
             Button(role: .destructive) {
@@ -9891,7 +9889,7 @@ struct ContentView: View {
         case "QuickReply": return canAccessQuickReply
         case "Messages": return canAccessMessages
         case "Notes": return canAccessNotes
-        case "Settings": return canAccessSettings
+        case "Settings": return true
         case "Insights": return isNivaDeskInsightsAdmin
         default: return false
         }
