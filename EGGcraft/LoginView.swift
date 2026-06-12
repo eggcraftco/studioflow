@@ -237,6 +237,8 @@ struct LoginView: View {
         lastAutofilledEmail = cleanEmail
     }
 
+    @State private var showEmailForm = false
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -244,20 +246,20 @@ struct LoginView: View {
                     .ignoresSafeArea()
 
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 25) {
+                    VStack(spacing: 16) {
                         Image("NivaDeskLogo")
                             .resizable()
                             .scaledToFit()
                             .frame(maxWidth: 170, maxHeight: 48)
-                            .padding(.bottom, 4)
                             .accessibilityLabel("NivaDesk")
 
                         LoginFeatureRotator(seciliDil: seciliDil)
-                            .padding(.bottom, 2)
+                            .padding(.vertical, 26)
 
                         Text(isLoginMode ? t("Sign in to your workspace", lang: seciliDil) : t("Create a new workspace", lang: seciliDil))
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
+                            .padding(.bottom, 2)
 
                         Button {
                             authVM.signInWithApple()
@@ -298,6 +300,27 @@ struct LoginView: View {
                         .buttonStyle(.plain)
                         .disabled(authVM.isLoading)
 
+                        if !showEmailForm {
+                            Button {
+                                withAnimation(.snappy) { showEmailForm = true }
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: "envelope")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text(t("Continue with email", lang: seciliDil))
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(Color.primary.opacity(0.05))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 6)
+                        }
+
+                        if showEmailForm {
                         HStack(spacing: 12) {
                             Rectangle()
                                 .fill(Color.primary.opacity(0.12))
@@ -310,7 +333,7 @@ struct LoginView: View {
                                 .frame(height: 1)
                         }
 
-                        VStack(spacing: 15) {
+                        VStack(spacing: 12) {
                             if !isLoginMode {
                                 TextField(t("Full Name", lang: seciliDil), text: $signupFullName)
                                     .textFieldStyle(.plain)
@@ -360,7 +383,7 @@ struct LoginView: View {
                                     submitCredentials()
                                 }
                         }
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 6)
 
                         if !authVM.errorMessage.isEmpty {
                             Text(authVM.errorMessage)
@@ -388,12 +411,14 @@ struct LoginView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!canSubmit)
+                        }
 
                         Button(action: {
                             withAnimation {
                                 isLoginMode.toggle()
                                 lastAutofilledEmail = ""
                                 authVM.errorMessage = ""
+                                if !isLoginMode { showEmailForm = true }
                             }
                         }) {
                             Text(isLoginMode ? t("Don't have an account? Create one", lang: seciliDil) : t("Already have an account? Sign In", lang: seciliDil))
