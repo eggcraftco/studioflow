@@ -9688,7 +9688,12 @@ struct ContentView: View {
                     return
                 }
 
-                guard let data = snapshot?.data() else { return }
+                guard let data = snapshot?.data() else {
+                    // New workspace with no settings doc yet: never keep branding
+                    // left in UserDefaults by a previously signed-in account.
+                    if !appLogoUrl.isEmpty { appLogoUrl = "" }
+                    return
+                }
 
                 let cloudOnboardingCompleted = data["businessOnboardingCompletedAt"] != nil
                 if businessOnboardingCompletedInCloud != cloudOnboardingCompleted {
@@ -9722,11 +9727,12 @@ struct ContentView: View {
                     }
                 }
 
-                if let cloudLogo = data["appLogoUrl"] as? String {
-                    let cleaned = cloudLogo.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if cleaned != appLogoUrl {
-                        appLogoUrl = cleaned
-                    }
+                // Workspace branding is owned by this workspace's cloud doc. If the
+                // field is missing (fresh account), clear any logo left over from a
+                // previous account on this device instead of keeping it.
+                let cloudLogo = ((data["appLogoUrl"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if cloudLogo != appLogoUrl {
+                    appLogoUrl = cloudLogo
                 }
 
                 applyString("businessType", { businessType = $0 }, businessType)
