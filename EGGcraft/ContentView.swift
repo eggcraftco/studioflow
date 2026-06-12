@@ -6707,6 +6707,7 @@ struct ContentView: View {
     @AppStorage("financialBaseCostLabel") private var financialBaseCostLabel: String = "Cost (Base)"
     @AppStorage("businessType") private var businessType: String = "Custom Art Studio"
     @AppStorage("businessDescriptionPrompt") private var businessDescriptionPrompt: String = ""
+    @State private var onboardingPromptUserEdited: Bool = false
     @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
     @AppStorage("businessOnboardingCompletedCompanyIdsJSON") private var businessOnboardingCompletedCompanyIdsJSON: String = "[]"
     @State private var businessOnboardingGateOpen: Bool = false
@@ -8979,7 +8980,13 @@ struct ContentView: View {
                                 .fixedSize(horizontal: false, vertical: true)
 
                             ZStack(alignment: .topLeading) {
-                                TextEditor(text: $businessDescriptionPrompt)
+                                TextEditor(text: Binding(
+                                    get: { businessDescriptionPrompt },
+                                    set: { newValue in
+                                        if newValue != businessDescriptionPrompt { onboardingPromptUserEdited = true }
+                                        businessDescriptionPrompt = newValue
+                                    }
+                                ))
                                     .font(.system(size: 13))
                                     .foregroundColor(.primary)
                                     .frame(minHeight: isPhoneLayout ? 160 : 130)
@@ -9061,7 +9068,10 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .onAppear { seedOnboardingPromptIfNeeded(for: businessType) }
+        .onAppear {
+            onboardingPromptUserEdited = false
+            seedOnboardingPromptIfNeeded(for: businessType)
+        }
     }
 
     private var onboardingBusinessTypeMenu: some View {
@@ -9157,12 +9167,16 @@ struct ContentView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return true }
         return (businessTypes + ["Watch Dial Painting Studio"]).contains { onboardingPromptSeed(for: $0) == trimmed }
+            || trimmed == "This business offers professional photography services for individuals, families, events, brands, and products.\nCustomers should provide their name, contact details, preferred date, location, type of shoot, style preferences, deadline, and any special requests.\nThe process includes enquiry, consultation, quote, deposit payment, shoot planning, editing, client review, final delivery and follow-up."
             || trimmed == "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
     }
 
     private func seedOnboardingPromptIfNeeded(for type: String) {
-        guard isOnboardingPromptSeed(businessDescriptionPrompt) else { return }
+        // The description follows the selected business type until the user
+        // edits it by hand on this screen (covers stale cloud/device text too).
+        guard !onboardingPromptUserEdited || isOnboardingPromptSeed(businessDescriptionPrompt) else { return }
         businessDescriptionPrompt = onboardingPromptSeed(for: type)
+        onboardingPromptUserEdited = false
     }
 
     private func applyBusinessOnboardingTemplate(smart: Bool) {

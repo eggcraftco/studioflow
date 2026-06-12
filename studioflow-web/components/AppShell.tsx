@@ -638,6 +638,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [onboardingPrompt, setOnboardingPrompt] = useState(
     workspaceOnboardingPromptSeed("Photography Studio"),
   );
+  const [onboardingPromptEdited, setOnboardingPromptEdited] = useState(false);
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingError, setOnboardingError] = useState("");
   const addProjectButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -1127,14 +1128,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     if (!showWorkspaceOnboarding) return;
     setOnboardingError("");
     setOnboardingBusinessType((current) => current || "Photography Studio");
-    setOnboardingPrompt(
-      (current) =>
-        current ||
-        workspaceOnboardingPromptSeed(
-          onboardingBusinessType || "Photography Studio",
-        ),
+    setOnboardingPrompt((current) =>
+      onboardingPromptEdited && current.trim()
+        ? current
+        : workspaceOnboardingPromptSeed(
+            onboardingBusinessType || "Photography Studio",
+          ),
     );
-  }, [showWorkspaceOnboarding, onboardingBusinessType]);
+  }, [showWorkspaceOnboarding, onboardingBusinessType, onboardingPromptEdited]);
 
   useEffect(() => {
     if (!showAddProjectGuide) {
@@ -1286,13 +1287,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           onBusinessTypeChange={(nextType) => {
             setOnboardingBusinessType(nextType);
             setOnboardingPrompt((current) =>
-              isWorkspaceOnboardingPromptSeed(current)
-                ? workspaceOnboardingPromptSeed(nextType)
-                : current,
+              onboardingPromptEdited && !isWorkspaceOnboardingPromptSeed(current)
+                ? current
+                : workspaceOnboardingPromptSeed(nextType),
             );
             setOnboardingError("");
           }}
           onPromptChange={(nextPrompt) => {
+            setOnboardingPromptEdited(true);
             setOnboardingPrompt(nextPrompt);
             setOnboardingError("");
           }}

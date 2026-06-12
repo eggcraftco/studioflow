@@ -696,8 +696,13 @@ private fun WorkspaceOnboardingScreen(
     var businessType by rememberSaveable {
         mutableStateOf(state.workspaceSettings.businessType.ifBlank { "Photography Studio" })
     }
+    var businessPromptEdited by rememberSaveable { mutableStateOf(false) }
     var businessPrompt by rememberSaveable {
-        mutableStateOf(state.workspaceSettings.businessDescriptionPrompt.ifBlank { onboardingPromptSeed("Photography Studio") })
+        mutableStateOf(
+            state.workspaceSettings.businessDescriptionPrompt
+                .takeIf { it.isNotBlank() && !isOnboardingPromptSeed(it) && it != onboardingDefaultModelPrompt }
+                ?: onboardingPromptSeed(state.workspaceSettings.businessType.ifBlank { "Photography Studio" })
+        )
     }
     var menuOpen by remember { mutableStateOf(false) }
     val businessTypes = listOf(
@@ -829,7 +834,10 @@ private fun WorkspaceOnboardingScreen(
                                         text = { Text(type) },
                                         onClick = {
                                             businessType = type
-                                            if (isOnboardingPromptSeed(businessPrompt)) businessPrompt = onboardingPromptSeed(type)
+                                            if (!businessPromptEdited || isOnboardingPromptSeed(businessPrompt)) {
+                                                businessPrompt = onboardingPromptSeed(type)
+                                                businessPromptEdited = false
+                                            }
                                             menuOpen = false
                                         }
                                     )
@@ -854,7 +862,7 @@ private fun WorkspaceOnboardingScreen(
 
                     OutlinedTextField(
                         value = businessPrompt,
-                        onValueChange = { businessPrompt = it },
+                        onValueChange = { businessPrompt = it; businessPromptEdited = true },
                         enabled = !saving,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -938,6 +946,8 @@ private val onboardingBusinessTypeNames = listOf(
     "Consultancy / Professional Service",
     "General Small Business"
 )
+
+private val onboardingDefaultModelPrompt = uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings().businessDescriptionPrompt
 
 private fun isOnboardingPromptSeed(prompt: String): Boolean {
     val trimmed = prompt.trim()

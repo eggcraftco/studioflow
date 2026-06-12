@@ -95,7 +95,7 @@ export function isWorkspaceOnboardingPromptSeed(prompt: string) {
   return (
     WORKSPACE_ONBOARDING_BUSINESS_TYPES.some(
       type => workspaceOnboardingPromptSeed(type) === trimmed,
-    ) || trimmed === "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
+    ) || trimmed === "This business offers professional photography services for individuals, families, events, brands, and products.\nCustomers should provide their name, contact details, preferred date, location, type of shoot, style preferences, deadline, and any special requests.\nThe process includes enquiry, consultation, quote, deposit payment, shoot planning, editing, client review, final delivery and follow-up." || trimmed === "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
   );
 }
 
