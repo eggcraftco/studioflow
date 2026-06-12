@@ -1245,6 +1245,7 @@ struct SiparisDetayView: View {
     // iPhone-only vertical order. This is intentionally separate from the Mac/iPad workspace layout.
     // Mac/iPad column positions continue to use kartYerlesimi/shared workspace sync.
     @AppStorage("phoneKartSirasiJSONV1") private var phoneKartSirasiJSON: String = ""
+    @AppStorage("phoneOrderCompactViewV1") private var phoneOrderCompactView: Bool = false
     @State private var phoneKartSirasi: [KartTipi] = []
     @State private var macOSHitboxHack: CGFloat = 0
     @State private var calismaAlaniIcerikBoyutu: CGSize = .zero
@@ -2553,11 +2554,19 @@ struct SiparisDetayView: View {
     private var phoneCalismaAlani: some View {
         ScrollViewReader { scrollProxy in
         ScrollView(.vertical, showsIndicators: true) {
-            LazyVStack(spacing: 14) {
-                ForEach(visiblePhoneCards) { kart in
-                    kartGosterici(icin: kart, colIndex: 0)
-                        .frame(maxWidth: .infinity)
-                        .id("phoneOrderCard_\(kart.rawValue)")
+            LazyVStack(spacing: phoneOrderCompactView ? 8 : 14) {
+                phoneCompactToggleBar
+
+                if phoneOrderCompactView {
+                    ForEach(visiblePhoneCards.filter { phoneCardHasContent($0) }) { kart in
+                        phoneCompactCardRow(kart, scrollProxy: scrollProxy)
+                    }
+                } else {
+                    ForEach(visiblePhoneCards) { kart in
+                        kartGosterici(icin: kart, colIndex: 0)
+                            .frame(maxWidth: .infinity)
+                            .id("phoneOrderCard_\(kart.rawValue)")
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -2596,6 +2605,149 @@ struct SiparisDetayView: View {
             withAnimation(.easeInOut(duration: 0.55)) {
                 scrollProxy.scrollTo("phoneOrderCard_\(kart.rawValue)", anchor: .top)
             }
+        }
+    }
+
+    // MARK: - Phone compact (one-line) card overview
+
+    private var phoneCompactToggleBar: some View {
+        HStack {
+            Spacer()
+            Button {
+                withAnimation(.snappy) { phoneOrderCompactView.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: phoneOrderCompactView ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(phoneOrderCompactView ? t("Full View", lang: seciliDil) : t("Compact View", lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(.blue)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color.blue.opacity(0.10))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func phoneCompactCardRow(_ kart: KartTipi, scrollProxy: ScrollViewProxy) -> some View {
+        Button {
+            withAnimation(.snappy) { phoneOrderCompactView = false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    scrollProxy.scrollTo("phoneOrderCard_\(kart.rawValue)", anchor: .top)
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: cardHeaderIcon(for: kart))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .frame(width: 22)
+                Text(workspaceBlockTitle(for: kart))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                Text(phoneCompactSummaryText(for: kart))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
+            .background(bgHeaderForPhoneRow)
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var bgHeaderForPhoneRow: Color {
+        colorScheme == .dark ? Color(white: 0.13) : Color.white
+    }
+
+    /// "Used" cards only: hides cards with no real content in compact mode.
+    private func phoneCardHasContent(_ kart: KartTipi) -> Bool {
+        switch kart {
+        case .summary: return true
+        case .preview: return !siparis.designLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .customer: return !siparis.customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .delivery: return siparis.deliveryTime > 0
+        case .communication: return ![siparis.emailAddress, siparis.instagramUsername, siparis.whatsappNumber].allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        case .notes: return !siparis.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .financial: return siparis.paidAmount != 0 || siparis.remainingAmount != 0
+        case .status: return !siparis.status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .shipping: return siparis.isDispatched || siparis.isDelivered || !siparis.trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .schedule: return !scheduleItems.isEmpty
+        case .historyLog: return !(siparis.historyLog ?? []).isEmpty
+        case .clientFiles: return !(siparis.clientFiles ?? []).isEmpty
+        case .todo: return !(siparis.todoItems ?? []).isEmpty
+        case .workTime: return !(siparis.workSessions ?? []).isEmpty
+        case .customerNotes: return !(seciliMusteri?.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .materials: return siparis.invBool1 || siparis.invBool2 || siparis.invBool3 || siparis.invBool4 || !siparis.invNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .priority: return siparis.priority != "Normal" || siparis.risk != "None"
+        }
+    }
+
+    private func phoneCompactSummaryText(for kart: KartTipi) -> String {
+        switch kart {
+        case .summary:
+            let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return design.isEmpty ? t(siparis.status, lang: seciliDil) : "\(design) • \(t(siparis.status, lang: seciliDil))"
+        case .preview:
+            let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return design.isEmpty ? t("Preview", lang: seciliDil) : design
+        case .customer:
+            return siparis.customerName
+        case .delivery:
+            return "\(siparis.deliveryTime) " + t("days", lang: seciliDil)
+        case .communication:
+            return [siparis.whatsappNumber, siparis.instagramUsername, siparis.emailAddress]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: " • ")
+        case .notes:
+            return siparis.notes.split(separator: "\n").first.map(String.init) ?? ""
+        case .financial:
+            let paid = privacyCurrency(siparis.paidAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)
+            let remaining = privacyCurrency(siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)
+            return t("Paid", lang: seciliDil) + " \(paid) • " + t("Remaining", lang: seciliDil) + " \(remaining)"
+        case .status:
+            return t(siparis.status, lang: seciliDil)
+        case .shipping:
+            if siparis.isDelivered { return t("Delivered", lang: seciliDil) }
+            let tracking = siparis.trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tracking.isEmpty { return "\(siparis.courier) \(tracking)" }
+            return siparis.isDispatched ? t("Dispatched", lang: seciliDil) : t("Not dispatched", lang: seciliDil)
+        case .schedule:
+            return "\(activeScheduleItems.count) " + t("active", lang: seciliDil)
+        case .historyLog:
+            return "\((siparis.historyLog ?? []).count)"
+        case .clientFiles:
+            return "\((siparis.clientFiles ?? []).count) " + t("files", lang: seciliDil)
+        case .todo:
+            let items = siparis.todoItems ?? []
+            return "\(items.filter { $0.isDone }.count)/\(items.count)"
+        case .workTime:
+            let total = (siparis.workSessions ?? []).reduce(0) { $0 + $1.durationSeconds }
+            let hours = total / 3600
+            let minutes = (total % 3600) / 60
+            return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+        case .customerNotes:
+            return (seciliMusteri?.notes ?? "").split(separator: "\n").first.map(String.init) ?? ""
+        case .materials:
+            let checks = [siparis.invBool1, siparis.invBool2, siparis.invBool3, siparis.invBool4]
+            return "\(checks.filter { $0 }.count)/4 " + t("ready", lang: seciliDil)
+        case .priority:
+            return t(siparis.priority, lang: seciliDil) + (siparis.risk == "None" ? "" : " • " + t(siparis.risk, lang: seciliDil))
         }
     }
 

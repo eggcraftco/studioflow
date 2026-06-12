@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
@@ -459,7 +460,15 @@ fun OrderDetailScreen(
             mutableStateOf(!phoneLockPrefs.getBoolean(phoneLockKey, false))
         }
         val effectivePhoneCardsUnlocked = phoneCardsUnlocked && canManageCardLayout
+        var phoneCompactView by remember {
+            mutableStateOf(phoneLockPrefs.getBoolean("phoneOrderCompactViewV1", false))
+        }
+        fun setPhoneCompactView(value: Boolean) {
+            phoneCompactView = value
+            phoneLockPrefs.edit().putBoolean("phoneOrderCompactViewV1", value).apply()
+        }
         val phoneListState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val compactScrollScope = androidx.compose.runtime.rememberCoroutineScope()
         // Delivery push tapped: bring the requested card (Shipping & Tracking)
         // into view once this order's phone card list is on screen.
         LaunchedEffect(order.id, visiblePhoneCards) {
@@ -514,6 +523,43 @@ fun OrderDetailScreen(
                     )
                 }
             }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { setPhoneCompactView(!phoneCompactView) }) {
+                        Icon(
+                            imageVector = if (phoneCompactView) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (phoneCompactView) t("Full View") else t("Compact View"), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+            if (phoneCompactView) {
+                visiblePhoneCards.filter { phoneCardHasContent(order, it) }.forEach { cardId ->
+                    item(key = "compact_" + cardId.raw) {
+                        PhoneCompactCardRow(
+                            cardId = cardId,
+                            order = order,
+                            onOpen = {
+                                setPhoneCompactView(false)
+                                val cardIndex = visiblePhoneCards.indexOf(cardId)
+                                if (cardIndex >= 0) {
+                                    val headerItems = 1 + 1 + if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) 1 else 0
+                                    compactScrollScope.launch {
+                                        kotlinx.coroutines.delay(250)
+                                        phoneListState.animateScrollToItem(headerItems + cardIndex - 1)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            } else {
             visiblePhoneCards.forEach { cardId ->
                 item(key = cardId.raw) {
                     OrderLayoutCardFrame(
@@ -572,6 +618,7 @@ fun OrderDetailScreen(
                     }
                 }
             }
+            }
             item {
                 Spacer(modifier = Modifier.height(18.dp))
             }
@@ -605,6 +652,94 @@ fun OrderDetailScreen(
             )
         }
     }
+    }
+}
+
+// "Used" cards only: compact mode hides cards with no real content.
+private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): Boolean = when (cardId) {
+    OrderDetailCardId.Summary -> true
+    OrderDetailCardId.Preview -> order.designLink.isNotBlank() || order.designName.isNotBlank()
+    OrderDetailCardId.Customer -> order.customerName.isNotBlank()
+    OrderDetailCardId.Materials -> order.invBool1 || order.invBool2 || order.invBool3 || order.invBool4 || order.invNotes.isNotBlank()
+    OrderDetailCardId.Priority -> order.priority != "Normal" || order.risk != "None"
+    OrderDetailCardId.Delivery -> order.deliveryTime > 0
+    OrderDetailCardId.Notes -> order.notes.isNotBlank()
+    OrderDetailCardId.ClientFiles -> order.clientFiles.isNotEmpty()
+    OrderDetailCardId.Todo -> order.todoItems.isNotEmpty()
+    OrderDetailCardId.WorkTime -> order.workSessions.isNotEmpty()
+    OrderDetailCardId.Financial -> order.paidAmount != 0.0 || order.remainingAmount != 0.0
+    OrderDetailCardId.Status -> order.status.isNotBlank()
+    OrderDetailCardId.Shipping -> order.isDispatched || order.isDelivered || order.trackingNumber.isNotBlank()
+    OrderDetailCardId.Schedule -> order.scheduleReminders.isNotEmpty()
+    OrderDetailCardId.HistoryLog -> order.historyLog.isNotEmpty()
+}
+
+@Composable
+private fun phoneCompactSummary(order: StudioOrder, cardId: OrderDetailCardId, t: (String) -> String): String = when (cardId) {
+    OrderDetailCardId.Summary -> listOf(order.designName, t(order.status)).filter { it.isNotBlank() }.joinToString(" • ")
+    OrderDetailCardId.Preview -> order.designName.ifBlank { t("Preview") }
+    OrderDetailCardId.Customer -> order.customerName
+    OrderDetailCardId.Materials -> "${listOf(order.invBool1, order.invBool2, order.invBool3, order.invBool4).count { it }}/4"
+    OrderDetailCardId.Priority -> listOf(t(order.priority), if (order.risk == "None") "" else t(order.risk)).filter { it.isNotBlank() }.joinToString(" • ")
+    OrderDetailCardId.Delivery -> "${order.deliveryTime} " + t("days")
+    OrderDetailCardId.Notes -> order.notes.lineSequence().firstOrNull().orEmpty()
+    OrderDetailCardId.ClientFiles -> "${order.clientFiles.size}"
+    OrderDetailCardId.Todo -> "${order.todoItems.count { it.isDone }}/${order.todoItems.size}"
+    OrderDetailCardId.WorkTime -> {
+        val total = order.workSessions.sumOf { it.durationSeconds }
+        val hours = total / 3600
+        val minutes = (total % 3600) / 60
+        if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+    }
+    OrderDetailCardId.Financial -> t("Paid") + " ${money(order.paidAmount)} • " + t("Remaining") + " ${money(order.remainingAmount)}"
+    OrderDetailCardId.Status -> t(order.status)
+    OrderDetailCardId.Shipping -> when {
+        order.isDelivered -> t("Delivered")
+        order.trackingNumber.isNotBlank() -> "${order.courier} ${order.trackingNumber}".trim()
+        order.isDispatched -> t("Dispatched")
+        else -> t("Not dispatched")
+    }
+    OrderDetailCardId.Schedule -> "${order.scheduleReminders.size}"
+    OrderDetailCardId.HistoryLog -> "${order.historyLog.size}"
+}
+
+@Composable
+private fun PhoneCompactCardRow(
+    cardId: OrderDetailCardId,
+    order: StudioOrder,
+    onOpen: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Text(
+                t(cardId.title),
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(0.46f)
+            )
+            Text(
+                phoneCompactSummary(order, cardId, t),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.weight(0.54f)
+            )
+        }
     }
 }
 

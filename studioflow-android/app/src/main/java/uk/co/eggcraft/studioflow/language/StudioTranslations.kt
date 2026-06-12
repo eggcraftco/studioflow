@@ -58,6 +58,8 @@ internal fun normalizeLang(raw: String?): String {
 private val TRANSLATIONS: Map<String, Map<String, String>> by lazy { TR_1 + TR_2 + TR_3 + TR_4 }
 
 private val TR_1: Map<String, Map<String, String>> by lazy { mapOf(
+    "Compact View" to mapOf("Türkçe" to "Özet Görünüm", "Deutsch" to "Kompaktansicht", "Français" to "Vue compacte", "Italiano" to "Vista compatta", "Español (Spanish)" to "Vista compacta", "Português" to "Vista compacta", "Русский (Russian)" to "Компактный вид", "日本語 (Japanese)" to "コンパクト表示", "中文 (Chinese)" to "紧凑视图", "العربية (Arabic)" to "عرض مضغوط", "हिन्दी (Hindi)" to "संक्षिप्त दृश्य"),
+    "Full View" to mapOf("Türkçe" to "Tam Görünüm", "Deutsch" to "Vollansicht", "Français" to "Vue complète", "Italiano" to "Vista completa", "Español (Spanish)" to "Vista completa", "Português" to "Vista completa", "Русский (Russian)" to "Полный вид", "日本語 (Japanese)" to "フル表示", "中文 (Chinese)" to "完整视图", "العربية (Arabic)" to "عرض كامل", "हिन्दी (Hindi)" to "पूर्ण दृश्य"),
     // ============================ STORAGE ADD-ONS ============================
     "Storage add-ons" to mapOf("Türkçe" to "Depolama eklentileri"),
     "Current add-on" to mapOf("Türkçe" to "Mevcut eklenti"),
