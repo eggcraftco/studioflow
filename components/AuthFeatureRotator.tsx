@@ -23,7 +23,7 @@ function vibrate(ms: number) {
   }
 }
 
-export function AuthFeatureRotator({ words }: { prefix?: string; words: string[] }) {
+export function AuthFeatureRotator({ words, style }: { prefix?: string; words: string[]; style?: React.CSSProperties }) {
   // All animation counters live in refs (mutated by a single interval); one
   // state tick per frame triggers the re-render.
   const wordIndexRef = useRef(0);
@@ -105,7 +105,8 @@ export function AuthFeatureRotator({ words }: { prefix?: string; words: string[]
         justifyContent: "center",
         gap: 5,
         margin: "6px 0 18px",
-        minHeight: 38
+        minHeight: 38,
+        ...style
       }}
     >
       {typed.length === 0 ? (
