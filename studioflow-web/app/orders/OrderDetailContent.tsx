@@ -1819,7 +1819,8 @@ export function OrderDetailContent({
   const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
-  const canUseLiteWorkspaceCards = workspace.billingPlan !== "demo";
+  // History/Log and Materials cards are open on every plan, including Free Demo.
+  const canUseLiteWorkspaceCards = true;
   // Materials & Inventory is open on every plan, including Free Demo.
   const canUseMaterialsCards = true;
   const canEditOrderFully = Boolean(canAccessOrders && canEditOrderFullyForRole(workspace.role));

@@ -1812,7 +1812,7 @@ const PLAN_ENTITLEMENTS = {
     pdfExportEnabled: true,
     financialCardsEnabled: true,
     materialsInventoryCardsEnabled: true,
-    historyLogEnabled: false,
+    historyLogEnabled: true,
     cardCustomizationEnabled: true,
     scheduleAdvancedFiltersEnabled: false,
     scheduleLongRangeEnabled: false,
