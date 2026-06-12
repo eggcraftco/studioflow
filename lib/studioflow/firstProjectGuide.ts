@@ -39,10 +39,23 @@ function parseGuideState(raw: string | null): FirstProjectGuideState | null {
   }
 }
 
-// The first-project info-card tour is desktop-only: it should never start or
-// resume on phones, regardless of where the account was created.
+const SIGNUP_PLATFORM_KEY = "studioflowSignupPlatformV1";
+
+// Cached per device after AppShell reads users/{uid}.signupPlatform from
+// Firestore. Accounts created on a phone never see the guide, even on desktop.
+export function rememberSignupPlatformForGuide(platform: string) {
+  if (typeof window === "undefined") return;
+  const cleaned = platform.trim().toLowerCase();
+  if (cleaned) window.localStorage.setItem(SIGNUP_PLATFORM_KEY, cleaned);
+  else window.localStorage.removeItem(SIGNUP_PLATFORM_KEY);
+}
+
+// The first-project info-card tour is desktop-only and only for accounts that
+// were created on a computer: it never starts or resumes on phones, and never
+// shows for mobile signups regardless of the current device.
 export function isFirstProjectGuideDeviceEligible(): boolean {
   if (typeof window === "undefined") return false;
+  if (window.localStorage.getItem(SIGNUP_PLATFORM_KEY) === "mobile") return false;
   const ua = window.navigator.userAgent || "";
   if (/iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua)) return false;
   return window.innerWidth >= 768;

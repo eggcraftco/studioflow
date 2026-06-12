@@ -46,6 +46,14 @@ async function ensurePersonalWorkspace(currentUser: User) {
       updatedAt: serverTimestamp()
     };
     if (!cleanText(userData.activeCompanyId)) userPayload.activeCompanyId = uid;
+    // First bootstrap of a brand-new account: remember which device class it
+    // was created on. The first-project guide opens only for desktop signups.
+    if (!userSnapshot.exists() && !cleanText(userData.signupPlatform)) {
+      const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+      const isPhone = /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua) ||
+        (typeof window !== "undefined" && window.innerWidth < 768);
+      userPayload.signupPlatform = isPhone ? "mobile" : "desktop";
+    }
     await setDoc(userRef, userPayload, { merge: true });
   }
 

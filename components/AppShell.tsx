@@ -17,7 +17,8 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
-import { auth } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
+import { doc, getDoc } from "firebase/firestore";
 import {
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
@@ -59,6 +60,7 @@ import {
   setFirstProjectGuideState,
   type FirstProjectGuideState,
   isFirstProjectGuideDeviceEligible,
+  rememberSignupPlatformForGuide,
 } from "@/lib/studioflow/firstProjectGuide";
 
 type NavIconName =
@@ -647,8 +649,29 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     useState<FirstProjectGuideState | null>(null);
   const [guideDeviceEligible, setGuideDeviceEligible] = useState(false);
   useEffect(() => {
-    setGuideDeviceEligible(isFirstProjectGuideDeviceEligible());
-  }, []);
+    if (!user) {
+      setGuideDeviceEligible(false);
+      return;
+    }
+    if (!isFirstProjectGuideDeviceEligible()) {
+      setGuideDeviceEligible(false);
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, "users", user.uid))
+      .then((snap) => {
+        if (cancelled) return;
+        const platform = String(snap.data()?.signupPlatform ?? "").toLowerCase();
+        rememberSignupPlatformForGuide(platform);
+        setGuideDeviceEligible(platform !== "mobile");
+      })
+      .catch(() => {
+        if (!cancelled) setGuideDeviceEligible(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
   const [addProjectGuidePosition, setAddProjectGuidePosition] = useState<{
     top: number;
     left: number;
