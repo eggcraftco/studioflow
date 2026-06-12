@@ -1358,6 +1358,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 >
                   <img
                     src={toolbarLogoSrc}
+                    className={showWorkspaceToolbarLogo ? undefined : "appshell-brand-logo"}
                     alt=""
                     aria-hidden="true"
                     onError={() => {

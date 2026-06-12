@@ -18121,3 +18121,13 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
   0%, 100% { opacity: 0.7; }
   50% { opacity: 0.15; }
 }
+
+/* Dark theme: light premium logo lockup so the brand stays visible. */
+html[data-studio-theme="dark"] .public-brand-logo,
+body[data-studio-theme="dark"] .public-brand-logo,
+html[data-studio-theme="dark"] .public-footer-logo,
+body[data-studio-theme="dark"] .public-footer-logo,
+html[data-studio-theme="dark"] .appshell-brand-logo,
+body[data-studio-theme="dark"] .appshell-brand-logo {
+  content: url("/brand/nivadesk-logo-dark.png");
+}
