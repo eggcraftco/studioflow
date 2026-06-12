@@ -428,7 +428,7 @@ data class StudioWorkspaceSettings(
     val showCardTodo: Boolean = true,
     val showCardWorkTime: Boolean = true,
     val showCardFinancial: Boolean = true,
-    val showCardStatus: Boolean = true,
+    val showCardStatus: Boolean = false,
     val showCardShipping: Boolean = true,
     val showCardSchedule: Boolean = true,
     val showCardHistoryLog: Boolean = true,

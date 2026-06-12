@@ -6739,7 +6739,7 @@ struct ContentView: View {
     @AppStorage("showCardCommunication") private var showCardCommunication = true
     @AppStorage("showCardNotes") private var showCardNotes = true
     @AppStorage("showCardFinancial") private var showCardFinancial = true
-    @AppStorage("showCardStatus") private var showCardStatus = true
+    @AppStorage("showCardStatus") private var showCardStatus = false
     @AppStorage("showCardShipping") private var showCardShipping = true
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true
@@ -9194,7 +9194,7 @@ struct ContentView: View {
         showCardCommunication = true
         showCardNotes = true
         showCardFinancial = true
-        showCardStatus = true
+        showCardStatus = false
         showCardMaterials = preset.showMaterials
         showCardShipping = preset.showShipping
         showCardPriority = preset.showPriority
