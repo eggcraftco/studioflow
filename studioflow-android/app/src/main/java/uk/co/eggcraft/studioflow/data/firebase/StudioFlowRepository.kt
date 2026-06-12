@@ -292,7 +292,9 @@ class StudioFlowRepository(
         if (userDoc.getString("activeCompanyId").isNullOrBlank()) {
             userPayload["activeCompanyId"] = uid
         }
-        userRef.set(userPayload, SetOptions.merge()).await()
+        // Fire-and-forget: Firestore queues this write while offline; awaiting it
+        // would block app startup forever without a connection.
+        userRef.set(userPayload, SetOptions.merge())
 
         val companyDoc = companyRef.get().await()
         val ownerMember = mapOf(
@@ -319,7 +321,7 @@ class StudioFlowRepository(
             if (stringValue(data["ownerPhotoURL"], "").isBlank()) payload["ownerPhotoURL"] = photoUrl
             val members = data["members"] as? Map<*, *>
             if (members?.get(uid) == null) payload["members"] = mapOf(uid to ownerMember)
-            companyRef.set(payload, SetOptions.merge()).await()
+            companyRef.set(payload, SetOptions.merge())
             return
         }
 
@@ -345,7 +347,7 @@ class StudioFlowRepository(
                 "billingTeamMemberLimit" to StudioBillingPlan.Demo.teamMemberLimit
             ),
             SetOptions.merge()
-        ).await()
+        )
     }
 
     fun workspaceSettingsFlow(

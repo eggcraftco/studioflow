@@ -1033,6 +1033,15 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update {
                         it.copy(loading = false, errorMessage = error.message ?: "Could not load workspace.")
                     }
+                    // Offline or flaky network at launch: retry quietly so the app
+                    // recovers by itself instead of sitting on a blank screen.
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(8000)
+                        val currentUser = mutableState.value.user
+                        if (currentUser != null && mutableState.value.workspace == null) {
+                            loadWorkspace(currentUser)
+                        }
+                    }
                 }
         }
     }
