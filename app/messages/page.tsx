@@ -116,7 +116,7 @@ export default function MessagesPage() {
   }, []);
 
   useEffect(() => {
-    // Thread değişince phone'da otomatik conversation göster
+    // When the active thread changes, auto-open the conversation on phones
     setPhoneShowingConversation(false);
   }, [selectedThreadId]);
   const lastTypingSentRef = useRef(0);
