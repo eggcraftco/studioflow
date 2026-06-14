@@ -521,7 +521,7 @@ function renderSettingsSection({
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
-      return <AboutSection workspace={workspace} />;
+      return <AboutSection workspace={workspace} language={language} />;
   }
 }
 
@@ -589,7 +589,7 @@ function GeneralSettingsSection({
     return (
       <div className="settings-card-stack">
         <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
-        <AboutSection workspace={workspace} />
+        <AboutSection workspace={workspace} language={language} />
       </div>
     );
   }
@@ -4552,32 +4552,33 @@ function formatSupportDate(value: number) {
 }
 
 
-function AboutSection({ workspace }: { workspace: WorkspaceContext }) {
+function AboutSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="notes" eyebrow="About" title="NivaDesk" />
+        <CardTitle icon="notes" eyebrow={t("About")} title="NivaDesk" />
         <div className="about-app-panel">
           <span className="about-app-mark" aria-hidden="true">⬢</span>
           <div>
             <strong>NivaDesk</strong>
-            <p>Version 1.0.0</p>
-            <p>An EGGcraft brand for studio workspace management.</p>
+            <p>{t("Version")} 1.0.0</p>
+            <p>{t("An EGGcraft brand for studio workspace management.")}</p>
           </div>
         </div>
         <div className="settings-divider" />
-        <p className="muted-copy"><strong>© 2026 All rights reserved.</strong></p>
-        <p className="muted-copy">This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.</p>
+        <p className="muted-copy"><strong>{t("© 2026 All rights reserved.")}</strong></p>
+        <p className="muted-copy">{t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.")}</p>
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="storage" eyebrow="Workspace" title="Current workspace" />
+        <CardTitle icon="storage" eyebrow={t("Workspace")} title={t("Current workspace")} />
         <div className="settings-mini-grid">
-          <InfoTile label="Workspace" value={workspace.name} />
-          <InfoTile label="Company ID" value={workspace.id} />
-          <InfoTile label="Web portal" value="Next.js + Firebase" />
+          <InfoTile label={t("Workspace")} value={workspace.name} />
+          <InfoTile label={t("Company ID")} value={workspace.id} />
+          <InfoTile label={t("Web portal")} value="Next.js + Firebase" />
         </div>
-        <p className="muted-copy">NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.</p>
+        <p className="muted-copy">{t("NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.")}</p>
       </section>
     </div>
   );
