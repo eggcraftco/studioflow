@@ -1203,7 +1203,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             disabled={!canEdit || saving}
             onChange={event => selectBusinessType(event.target.value)}
           >
-            {BUSINESS_TYPES.map(type => <option value={type} key={type}>{type}</option>)}
+            {BUSINESS_TYPES.map(type => <option value={type} key={type}>{studioT(type, language)}</option>)}
           </select>
         </label>
         <label className="quick-reply-settings-label">

@@ -476,7 +476,7 @@ function WorkspaceOnboardingScreen({
             >
               {WORKSPACE_ONBOARDING_BUSINESS_TYPES.map((type) => (
                 <option key={type} value={type}>
-                  {type}
+                  {t(type)}
                 </option>
               ))}
             </select>
