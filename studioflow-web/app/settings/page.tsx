@@ -511,7 +511,7 @@ function renderSettingsSection({
     case "safety-uploads":
       return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
-      return <DataManagementSection workspace={workspace} counts={counts} userEmail={userEmail} onImported={onDataImported} />;
+      return <DataManagementSection workspace={workspace} counts={counts} userEmail={userEmail} onImported={onDataImported} language={language} />;
     case "account":
       return <AccountSection workspace={workspace} settings={settings} userEmail={userEmail} onSaved={onWorkspaceSettingsChange} />;
     case "plan-access":
@@ -3217,13 +3217,16 @@ function DataManagementSection({
   workspace,
   counts,
   userEmail,
-  onImported
+  onImported,
+  language = "English"
 }: {
   workspace: WorkspaceContext;
   counts: DashboardCounts | null;
   userEmail: string;
   onImported: () => Promise<void>;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [exporting, setExporting] = useState<"backup" | "webBackup" | "orders" | "customers" | "">("");
   const [importing, setImporting] = useState(false);
@@ -3237,7 +3240,7 @@ function DataManagementSection({
 
   async function runExport(kind: "backup" | "webBackup" | "orders" | "customers") {
     if (!exportAllowed) {
-      setError("Export is not available for this workspace.");
+      setError(t("Export is not available for this workspace."));
       return;
     }
 
@@ -3263,7 +3266,7 @@ function DataManagementSection({
         setStatus("Customers CSV downloaded.");
       }
     } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : "Export could not be prepared.");
+      setError(exportError instanceof Error ? exportError.message : t("Export could not be prepared."));
     } finally {
       setExporting("");
     }
@@ -3281,7 +3284,7 @@ function DataManagementSection({
       await onImported();
       setStatus(result.message || "Import finished.");
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "Import could not be completed.");
+      setError(importError instanceof Error ? importError.message : t("Import could not be completed."));
     } finally {
       setImporting(false);
       if (importInputRef.current) importInputRef.current.value = "";
@@ -3298,7 +3301,7 @@ function DataManagementSection({
       await onImported();
       setStatus(result.message || "Workspace orders and customers deleted.");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Workspace data could not be deleted.");
+      setError(deleteError instanceof Error ? deleteError.message : t("Workspace data could not be deleted."));
     } finally {
       setDeleting(false);
     }
@@ -3307,26 +3310,26 @@ function DataManagementSection({
   return (
     <div className="settings-card-stack">
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="export" eyebrow="Data Management" title="Export and backup" />
-        <p className="muted-copy">Create a backup before importing or deleting data.</p>
+        <CardTitle icon="export" eyebrow={t("Data Management")} title={t("Export and backup")} />
+        <p className="muted-copy">{t("Create a backup before importing or deleting data.")}</p>
         <div className="settings-mini-grid">
-          <InfoTile label="Orders" value={`${counts?.orderCount ?? 0}`} />
-          <InfoTile label="Customers" value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile label="Export" value={exportAllowed ? "Available" : "Locked"} />
+          <InfoTile label={t("Orders")} value={`${counts?.orderCount ?? 0}`} />
+          <InfoTile label={t("Customers")} value={`${counts?.customerCount ?? 0}`} />
+          <InfoTile label={t("Export")} value={exportAllowed ? t("Available") : t("Locked")} />
         </div>
 
         <div className="data-management-actions">
           <button className="button" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("backup")}>
-            {exporting === "backup" ? "Exporting..." : "Export Backup"}
+            {exporting === "backup" ? t("Exporting...") : t("Export Backup")}
           </button>
           <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("webBackup")}>
-            {exporting === "webBackup" ? "Exporting..." : "Web JSON Backup"}
+            {exporting === "webBackup" ? t("Exporting...") : t("Web JSON Backup")}
           </button>
           <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("orders")}>
-            {exporting === "orders" ? "Exporting..." : "Export CSV"}
+            {exporting === "orders" ? t("Exporting...") : t("Export CSV")}
           </button>
           <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("customers")}>
-            {exporting === "customers" ? "Exporting..." : "Customers CSV"}
+            {exporting === "customers" ? t("Exporting...") : t("Customers CSV")}
           </button>
           <input
             ref={importInputRef}
@@ -3336,29 +3339,29 @@ function DataManagementSection({
             onChange={event => void handleImportFile(event.target.files?.[0])}
           />
           <button className="button" type="button" disabled={!canImport || importing} onClick={() => importInputRef.current?.click()}>
-            {importing ? "Importing..." : "Import Backup"}
+            {importing ? t("Importing...") : t("Import Backup")}
           </button>
         </div>
 
-        <p className="muted-copy">Export Backup uses the same JSON structure as the Swift app. Web JSON Backup keeps the raw web archive. Import accepts both formats and adds the selected NivaDesk backup into the current workspace without clearing existing data.</p>
-        {!canImport ? <p className="muted-copy">Your current workspace role cannot import backup files.</p> : null}
-        {status ? <p className="success-copy">{status}</p> : null}
+        <p className="muted-copy">{t("Export Backup uses the same JSON structure as the Swift app. Web JSON Backup keeps the raw web archive. Import accepts both formats and adds the selected NivaDesk backup into the current workspace without clearing existing data.")}</p>
+        {!canImport ? <p className="muted-copy">{t("Your current workspace role cannot import backup files.")}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="lock" eyebrow="Protected Actions" title="Import and delete" />
+        <CardTitle icon="lock" eyebrow={t("Protected Actions")} title={t("Import and delete")} />
         <div className="settings-rule-list">
-          <InfoTile label="Import Backup" value="Available" />
-          <InfoTile label="Delete Data" value={canDelete ? "Owner/Admin only" : "Locked"} />
+          <InfoTile label={t("Import Backup")} value={t("Available")} />
+          <InfoTile label={t("Delete Data")} value={canDelete ? t("Owner/Admin only") : t("Locked")} />
         </div>
-        <p className="muted-copy">Web import is append-only and app-compatible. It imports app backups, web JSON backups, orders, customers and supported settings, but does not import Client Files storage objects. Delete Data mirrors the app: it removes orders and customers only, not workspace settings, members, logos or Storage files.</p>
+        <p className="muted-copy">{t("Web import is append-only and app-compatible. It imports app backups, web JSON backups, orders, customers and supported settings, but does not import Client Files storage objects. Delete Data mirrors the app: it removes orders and customers only, not workspace settings, members, logos or Storage files.")}</p>
         <div className="data-management-actions">
-          <Link className="button secondary" href="/export">Open full Export page</Link>
+          <Link className="button secondary" href="/export">{t("Open full Export page")}</Link>
         </div>
         <div className="settings-danger-box">
-          <strong>Delete orders and customers</strong>
-          <p>Export a backup first. Then type <code>DELETE DATA</code> to unlock the delete action.</p>
+          <strong>{t("Delete orders and customers")}</strong>
+          <p>{t("Export a backup first.")} {t("Then type")} <code>DELETE DATA</code> {t("to unlock the delete action.")}</p>
           <input
             className="input"
             value={deleteConfirmation}
@@ -3376,9 +3379,9 @@ function DataManagementSection({
             disabled={!canDelete || deleting || deleteConfirmation.trim() !== "DELETE DATA"}
             onClick={handleDeleteData}
           >
-            {deleting ? "Deleting..." : "Delete Data"}
+            {deleting ? t("Deleting...") : t("Delete Data")}
           </button>
-          {!canDelete ? <p className="muted-copy">Only workspace Owner or Admin can delete workspace data.</p> : null}
+          {!canDelete ? <p className="muted-copy">{t("Only workspace Owner or Admin can delete workspace data.")}</p> : null}
         </div>
       </section>
     </div>
