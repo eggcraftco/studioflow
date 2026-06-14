@@ -132,67 +132,277 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "इस कार्ड को छिपाने, ब्लॉक हेडिंग संपादित करने, उपलब्ध होने पर एक्सपोर्ट करने और कार्ड का रंग बदलने के लिए तीन-डॉट बटन पर क्लिक करें।"
   },
   "Choose whether this is an internal workspace request or a NivaDesk app support ticket.": {
-    "Türkçe": "Bunun şirket içi bir istek mi yoksa NivaDesk uygulama destek talebi mi olduğunu seçin."
+    "Türkçe": "Bunun şirket içi bir istek mi yoksa NivaDesk uygulama destek talebi mi olduğunu seçin.",
+    "Deutsch": "Wählen Sie, ob dies eine interne Workspace-Anfrage oder ein NivaDesk-App-Supportticket ist.",
+    "Français": "Choisissez s'il s'agit d'une demande interne à l'espace ou d'un ticket de support de l'app NivaDesk.",
+    "Italiano": "Scegli se si tratta di una richiesta interna allo spazio o di un ticket di supporto dell'app NivaDesk.",
+    "Español (Spanish)": "Elige si es una solicitud interna del espacio o un ticket de soporte de la app NivaDesk.",
+    "Português": "Escolha se é um pedido interno do espaço ou um ticket de suporte da app NivaDesk.",
+    "Русский (Russian)": "Выберите, это внутренний запрос пространства или тикет поддержки приложения NivaDesk.",
+    "日本語 (Japanese)": "これがワークスペース内部のリクエストか、NivaDesk アプリのサポートチケットかを選択します。",
+    "中文 (Chinese)": "选择这是工作区内部请求还是 NivaDesk 应用支持工单。",
+    "العربية (Arabic)": "اختر ما إذا كان هذا طلبًا داخليًا لمساحة العمل أم تذكرة دعم لتطبيق NivaDesk.",
+    "हिन्दी (Hindi)": "चुनें कि यह आंतरिक वर्कस्पेस अनुरोध है या NivaDesk ऐप सपोर्ट टिकट।"
   },
   "Where should this ticket go?": {
-    "Türkçe": "Bu ticket nereye gitsin?"
+    "Türkçe": "Bu ticket nereye gitsin?",
+    "Deutsch": "Wohin soll dieses Ticket gehen?",
+    "Français": "Où ce ticket doit-il aller ?",
+    "Italiano": "Dove deve andare questo ticket?",
+    "Español (Spanish)": "¿A dónde debe ir este ticket?",
+    "Português": "Para onde deve ir este ticket?",
+    "Русский (Russian)": "Куда должен пойти этот тикет?",
+    "日本語 (Japanese)": "このチケットの送り先は？",
+    "中文 (Chinese)": "此工单应发往何处？",
+    "العربية (Arabic)": "إلى أين يجب أن تذهب هذه التذكرة؟",
+    "हिन्दी (Hindi)": "यह टिकट कहाँ जाना चाहिए?"
   },
   "Contact NivaDesk Support": {
-    "Türkçe": "NivaDesk Support ile iletişime geç"
+    "Türkçe": "NivaDesk Support ile iletişime geç",
+    "Deutsch": "NivaDesk-Support kontaktieren",
+    "Français": "Contacter le support NivaDesk",
+    "Italiano": "Contatta il supporto NivaDesk",
+    "Español (Spanish)": "Contactar con soporte de NivaDesk",
+    "Português": "Contactar o suporte NivaDesk",
+    "Русский (Russian)": "Связаться с поддержкой NivaDesk",
+    "日本語 (Japanese)": "NivaDesk サポートに連絡",
+    "中文 (Chinese)": "联系 NivaDesk 支持",
+    "العربية (Arabic)": "تواصل مع دعم NivaDesk",
+    "हिन्दी (Hindi)": "NivaDesk सपोर्ट से संपर्क करें"
   },
   "Use this for app bugs, sync issues, billing, account problems or feature requests.": {
-    "Türkçe": "Uygulama hataları, senkron sorunları, ödeme/plan, hesap problemleri veya özellik istekleri için bunu kullanın."
+    "Türkçe": "Uygulama hataları, senkron sorunları, ödeme/plan, hesap problemleri veya özellik istekleri için bunu kullanın.",
+    "Deutsch": "Verwenden Sie dies für App-Fehler, Sync-Probleme, Abrechnung, Kontoprobleme oder Funktionswünsche.",
+    "Français": "Utilisez ceci pour les bugs de l'app, les problèmes de synchro, la facturation, les problèmes de compte ou les demandes de fonctionnalités.",
+    "Italiano": "Usa questo per bug dell'app, problemi di sincronizzazione, fatturazione, problemi di account o richieste di funzionalità.",
+    "Español (Spanish)": "Usa esto para errores de la app, problemas de sincronización, facturación, problemas de cuenta o solicitudes de funciones.",
+    "Português": "Use isto para erros da app, problemas de sincronização, faturação, problemas de conta ou pedidos de funcionalidades.",
+    "Русский (Russian)": "Используйте это для ошибок приложения, проблем синхронизации, оплаты, проблем с аккаунтом или запросов функций.",
+    "日本語 (Japanese)": "アプリの不具合、同期の問題、請求、アカウントの問題、機能リクエストにはこれを使用します。",
+    "中文 (Chinese)": "用于应用错误、同步问题、账单、账户问题或功能请求。",
+    "العربية (Arabic)": "استخدم هذا لأخطاء التطبيق ومشكلات المزامنة والفوترة ومشكلات الحساب أو طلبات الميزات.",
+    "हिन्दी (Hindi)": "ऐप बग, सिंक समस्याएँ, बिलिंग, खाता समस्याएँ या फ़ीचर अनुरोध के लिए इसका उपयोग करें।"
   },
   "Contact Workspace Owner": {
-    "Türkçe": "Workspace sahibine gönder"
+    "Türkçe": "Workspace sahibine gönder",
+    "Deutsch": "Workspace-Inhaber kontaktieren",
+    "Français": "Contacter le propriétaire de l'espace",
+    "Italiano": "Contatta il proprietario dello spazio",
+    "Español (Spanish)": "Contactar con el propietario del espacio",
+    "Português": "Contactar o proprietário do espaço",
+    "Русский (Russian)": "Связаться с владельцем пространства",
+    "日本語 (Japanese)": "ワークスペース所有者に連絡",
+    "中文 (Chinese)": "联系工作区所有者",
+    "العربية (Arabic)": "تواصل مع مالك مساحة العمل",
+    "हिन्दी (Hindi)": "वर्कस्पेस स्वामी से संपर्क करें"
   },
   "Use this for project questions, task requests, missing customer details or internal workflow issues.": {
-    "Türkçe": "Proje soruları, görev istekleri, eksik müşteri bilgileri veya şirket içi iş akışı sorunları için bunu kullanın."
+    "Türkçe": "Proje soruları, görev istekleri, eksik müşteri bilgileri veya şirket içi iş akışı sorunları için bunu kullanın.",
+    "Deutsch": "Verwenden Sie dies für Projektfragen, Aufgabenanfragen, fehlende Kundendaten oder interne Workflow-Probleme.",
+    "Français": "Utilisez ceci pour les questions de projet, les demandes de tâches, les informations client manquantes ou les problèmes de flux internes.",
+    "Italiano": "Usa questo per domande sui progetti, richieste di attività, dati cliente mancanti o problemi di flusso interno.",
+    "Español (Spanish)": "Usa esto para preguntas de proyectos, solicitudes de tareas, datos de cliente faltantes o problemas de flujo interno.",
+    "Português": "Use isto para perguntas de projeto, pedidos de tarefas, dados de cliente em falta ou problemas de fluxo interno.",
+    "Русский (Russian)": "Используйте это для вопросов по проектам, запросов задач, недостающих данных клиента или проблем внутреннего рабочего процесса.",
+    "日本語 (Japanese)": "プロジェクトの質問、タスク依頼、不足している顧客情報、社内ワークフローの問題にはこれを使用します。",
+    "中文 (Chinese)": "用于项目问题、任务请求、缺失的客户信息或内部工作流问题。",
+    "العربية (Arabic)": "استخدم هذا لأسئلة المشاريع وطلبات المهام وبيانات العميل الناقصة أو مشكلات سير العمل الداخلي.",
+    "हिन्दी (Hindi)": "परियोजना प्रश्न, कार्य अनुरोध, अनुपलब्ध ग्राहक विवरण या आंतरिक वर्कफ़्लो समस्याओं के लिए इसका उपयोग करें।"
   },
   "New Workspace Ticket": {
-    "Türkçe": "Yeni Workspace Ticket"
+    "Türkçe": "Yeni Workspace Ticket",
+    "Deutsch": "Neues Workspace-Ticket",
+    "Français": "Nouveau ticket d'espace",
+    "Italiano": "Nuovo ticket dello spazio",
+    "Español (Spanish)": "Nuevo ticket del espacio",
+    "Português": "Novo ticket do espaço",
+    "Русский (Russian)": "Новый тикет пространства",
+    "日本語 (Japanese)": "新しいワークスペースチケット",
+    "中文 (Chinese)": "新建工作区工单",
+    "العربية (Arabic)": "تذكرة مساحة عمل جديدة",
+    "हिन्दी (Hindi)": "नया वर्कस्पेस टिकट"
   },
   "New NivaDesk Support Ticket": {
-    "Türkçe": "Yeni NivaDesk Support Ticket"
+    "Türkçe": "Yeni NivaDesk Support Ticket",
+    "Deutsch": "Neues NivaDesk-Supportticket",
+    "Français": "Nouveau ticket de support NivaDesk",
+    "Italiano": "Nuovo ticket di supporto NivaDesk",
+    "Español (Spanish)": "Nuevo ticket de soporte NivaDesk",
+    "Português": "Novo ticket de suporte NivaDesk",
+    "Русский (Russian)": "Новый тикет поддержки NivaDesk",
+    "日本語 (Japanese)": "新しい NivaDesk サポートチケット",
+    "中文 (Chinese)": "新建 NivaDesk 支持工单",
+    "العربية (Arabic)": "تذكرة دعم NivaDesk جديدة",
+    "हिन्दी (Hindi)": "नया NivaDesk सपोर्ट टिकट"
   },
   "Send a request to your workspace owner or admins.": {
-    "Türkçe": "Workspace sahibinize veya adminlere istek gönderin."
+    "Türkçe": "Workspace sahibinize veya adminlere istek gönderin.",
+    "Deutsch": "Senden Sie eine Anfrage an Ihren Workspace-Inhaber oder die Admins.",
+    "Français": "Envoyez une demande au propriétaire de votre espace ou aux administrateurs.",
+    "Italiano": "Invia una richiesta al proprietario dello spazio o agli amministratori.",
+    "Español (Spanish)": "Envía una solicitud al propietario de tu espacio o a los administradores.",
+    "Português": "Envie um pedido ao proprietário do seu espaço ou aos administradores.",
+    "Русский (Russian)": "Отправьте запрос владельцу пространства или администраторам.",
+    "日本語 (Japanese)": "ワークスペース所有者または管理者にリクエストを送信します。",
+    "中文 (Chinese)": "向工作区所有者或管理员发送请求。",
+    "العربية (Arabic)": "أرسل طلبًا إلى مالك مساحة عملك أو المشرفين.",
+    "हिन्दी (Hindi)": "अपने वर्कस्पेस स्वामी या एडमिन को अनुरोध भेजें।"
   },
   "My Workspace Tickets": {
-    "Türkçe": "Workspace Ticketlarım"
+    "Türkçe": "Workspace Ticketlarım",
+    "Deutsch": "Meine Workspace-Tickets",
+    "Français": "Mes tickets d'espace",
+    "Italiano": "I miei ticket dello spazio",
+    "Español (Spanish)": "Mis tickets del espacio",
+    "Português": "Os meus tickets do espaço",
+    "Русский (Russian)": "Мои тикеты пространства",
+    "日本語 (Japanese)": "自分のワークスペースチケット",
+    "中文 (Chinese)": "我的工作区工单",
+    "العربية (Arabic)": "تذاكر مساحة عملي",
+    "हिन्दी (Hindi)": "मेरे वर्कस्पेस टिकट"
   },
   "My NivaDesk Support Tickets": {
-    "Türkçe": "NivaDesk Support Ticketlarım"
+    "Türkçe": "NivaDesk Support Ticketlarım",
+    "Deutsch": "Meine NivaDesk-Supporttickets",
+    "Français": "Mes tickets de support NivaDesk",
+    "Italiano": "I miei ticket di supporto NivaDesk",
+    "Español (Spanish)": "Mis tickets de soporte NivaDesk",
+    "Português": "Os meus tickets de suporte NivaDesk",
+    "Русский (Russian)": "Мои тикеты поддержки NivaDesk",
+    "日本語 (Japanese)": "自分の NivaDesk サポートチケット",
+    "中文 (Chinese)": "我的 NivaDesk 支持工单",
+    "العربية (Arabic)": "تذاكر دعم NivaDesk الخاصة بي",
+    "हिन्दी (Hindi)": "मेरे NivaDesk सपोर्ट टिकट"
   },
   "Project / Order question": {
-    "Türkçe": "Proje / Sipariş sorusu"
+    "Türkçe": "Proje / Sipariş sorusu",
+    "Deutsch": "Projekt-/Auftragsfrage",
+    "Français": "Question projet / commande",
+    "Italiano": "Domanda progetto / ordine",
+    "Español (Spanish)": "Pregunta de proyecto / pedido",
+    "Português": "Pergunta de projeto / encomenda",
+    "Русский (Russian)": "Вопрос по проекту / заказу",
+    "日本語 (Japanese)": "プロジェクト/注文の質問",
+    "中文 (Chinese)": "项目/订单问题",
+    "العربية (Arabic)": "سؤال عن مشروع / طلب",
+    "हिन्दी (Hindi)": "परियोजना / ऑर्डर प्रश्न"
   },
   "Task / Assignment": {
-    "Türkçe": "Görev / Atama"
+    "Türkçe": "Görev / Atama",
+    "Deutsch": "Aufgabe / Zuweisung",
+    "Français": "Tâche / Attribution",
+    "Italiano": "Attività / Assegnazione",
+    "Español (Spanish)": "Tarea / Asignación",
+    "Português": "Tarefa / Atribuição",
+    "Русский (Russian)": "Задача / Назначение",
+    "日本語 (Japanese)": "タスク/割り当て",
+    "中文 (Chinese)": "任务/分配",
+    "العربية (Arabic)": "مهمة / تعيين",
+    "हिन्दी (Hindi)": "कार्य / असाइनमेंट"
   },
   "Approval request": {
-    "Türkçe": "Onay isteği"
+    "Türkçe": "Onay isteği",
+    "Deutsch": "Genehmigungsanfrage",
+    "Français": "Demande d'approbation",
+    "Italiano": "Richiesta di approvazione",
+    "Español (Spanish)": "Solicitud de aprobación",
+    "Português": "Pedido de aprovação",
+    "Русский (Russian)": "Запрос на одобрение",
+    "日本語 (Japanese)": "承認リクエスト",
+    "中文 (Chinese)": "审批请求",
+    "العربية (Arabic)": "طلب موافقة",
+    "हिन्दी (Hindi)": "अनुमोदन अनुरोध"
   },
   "Customer information": {
-    "Türkçe": "Müşteri bilgisi"
+    "Türkçe": "Müşteri bilgisi",
+    "Deutsch": "Kundeninformationen",
+    "Français": "Informations client",
+    "Italiano": "Informazioni cliente",
+    "Español (Spanish)": "Información del cliente",
+    "Português": "Informações do cliente",
+    "Русский (Russian)": "Информация о клиенте",
+    "日本語 (Japanese)": "顧客情報",
+    "中文 (Chinese)": "客户信息",
+    "العربية (Arabic)": "معلومات العميل",
+    "हिन्दी (Hindi)": "ग्राहक जानकारी"
   },
   "Internal workflow": {
-    "Türkçe": "Şirket içi iş akışı"
+    "Türkçe": "Şirket içi iş akışı",
+    "Deutsch": "Interner Workflow",
+    "Français": "Flux de travail interne",
+    "Italiano": "Flusso di lavoro interno",
+    "Español (Spanish)": "Flujo de trabajo interno",
+    "Português": "Fluxo de trabalho interno",
+    "Русский (Russian)": "Внутренний рабочий процесс",
+    "日本語 (Japanese)": "社内ワークフロー",
+    "中文 (Chinese)": "内部工作流",
+    "العربية (Arabic)": "سير العمل الداخلي",
+    "हिन्दी (Hindi)": "आंतरिक वर्कफ़्लो"
   },
   "Bug / Something is not working": {
-    "Türkçe": "Hata / Bir şey çalışmıyor"
+    "Türkçe": "Hata / Bir şey çalışmıyor",
+    "Deutsch": "Fehler / Etwas funktioniert nicht",
+    "Français": "Bug / Quelque chose ne fonctionne pas",
+    "Italiano": "Bug / Qualcosa non funziona",
+    "Español (Spanish)": "Error / Algo no funciona",
+    "Português": "Erro / Algo não funciona",
+    "Русский (Russian)": "Ошибка / Что-то не работает",
+    "日本語 (Japanese)": "不具合 / 何かが動作しない",
+    "中文 (Chinese)": "错误 / 某项功能无法使用",
+    "العربية (Arabic)": "خطأ / شيء لا يعمل",
+    "हिन्दी (Hindi)": "बग / कुछ काम नहीं कर रहा"
   },
   "Question / How do I use this?": {
-    "Türkçe": "Soru / Bunu nasıl kullanırım?"
+    "Türkçe": "Soru / Bunu nasıl kullanırım?",
+    "Deutsch": "Frage / Wie benutze ich das?",
+    "Français": "Question / Comment utiliser ceci ?",
+    "Italiano": "Domanda / Come si usa?",
+    "Español (Spanish)": "Pregunta / ¿Cómo uso esto?",
+    "Português": "Pergunta / Como uso isto?",
+    "Русский (Russian)": "Вопрос / Как этим пользоваться?",
+    "日本語 (Japanese)": "質問 / これはどう使う？",
+    "中文 (Chinese)": "问题 / 如何使用？",
+    "العربية (Arabic)": "سؤال / كيف أستخدم هذا؟",
+    "हिन्दी (Hindi)": "प्रश्न / इसका उपयोग कैसे करूँ?"
   },
   "Billing / Plan": {
-    "Türkçe": "Ödeme / Plan"
+    "Türkçe": "Ödeme / Plan",
+    "Deutsch": "Abrechnung / Plan",
+    "Français": "Facturation / Forfait",
+    "Italiano": "Fatturazione / Piano",
+    "Español (Spanish)": "Facturación / Plan",
+    "Português": "Faturação / Plano",
+    "Русский (Russian)": "Оплата / Тариф",
+    "日本語 (Japanese)": "請求 / プラン",
+    "中文 (Chinese)": "账单 / 套餐",
+    "العربية (Arabic)": "الفوترة / الخطة",
+    "हिन्दी (Hindi)": "बिलिंग / प्लान"
   },
   "Account / Login": {
-    "Türkçe": "Hesap / Giriş"
+    "Türkçe": "Hesap / Giriş",
+    "Deutsch": "Konto / Anmeldung",
+    "Français": "Compte / Connexion",
+    "Italiano": "Account / Accesso",
+    "Español (Spanish)": "Cuenta / Inicio de sesión",
+    "Português": "Conta / Início de sessão",
+    "Русский (Russian)": "Аккаунт / Вход",
+    "日本語 (Japanese)": "アカウント / ログイン",
+    "中文 (Chinese)": "账户 / 登录",
+    "العربية (Arabic)": "الحساب / تسجيل الدخول",
+    "हिन्दी (Hindi)": "खाता / लॉगिन"
   },
   "Workspace ticket sent to the workspace owner.": {
-    "Türkçe": "Workspace ticket, workspace sahibine gönderildi."
+    "Türkçe": "Workspace ticket, workspace sahibine gönderildi.",
+    "Deutsch": "Workspace-Ticket an den Workspace-Inhaber gesendet.",
+    "Français": "Ticket d'espace envoyé au propriétaire de l'espace.",
+    "Italiano": "Ticket dello spazio inviato al proprietario dello spazio.",
+    "Español (Spanish)": "Ticket del espacio enviado al propietario del espacio.",
+    "Português": "Ticket do espaço enviado ao proprietário do espaço.",
+    "Русский (Russian)": "Тикет пространства отправлен владельцу пространства.",
+    "日本語 (Japanese)": "ワークスペースチケットを所有者に送信しました。",
+    "中文 (Chinese)": "工作区工单已发送给工作区所有者。",
+    "العربية (Arabic)": "تم إرسال تذكرة مساحة العمل إلى مالك المساحة.",
+    "हिन्दी (Hindi)": "वर्कस्पेस टिकट वर्कस्पेस स्वामी को भेजा गया।"
   },
   "Schedule": {
     "Türkçe": "Planlama",
@@ -1196,82 +1406,342 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "कार्ड अनलॉक करें"
   },
   "Your card profile": {
-    "Türkçe": "Kendi kart profiliniz"
+    "Türkçe": "Kendi kart profiliniz",
+    "Deutsch": "Ihr Kartenprofil",
+    "Français": "Votre profil de cartes",
+    "Italiano": "Il tuo profilo schede",
+    "Español (Spanish)": "Tu perfil de tarjetas",
+    "Português": "O seu perfil de cartões",
+    "Русский (Russian)": "Ваш профиль карточек",
+    "日本語 (Japanese)": "あなたのカードプロファイル",
+    "中文 (Chinese)": "您的卡片配置",
+    "العربية (Arabic)": "ملف بطاقاتك",
+    "हिन्दी (Hindi)": "आपकी कार्ड प्रोफ़ाइल"
   },
   "My card profiles": {
-    "Türkçe": "Kart profillerim"
+    "Türkçe": "Kart profillerim",
+    "Deutsch": "Meine Kartenprofile",
+    "Français": "Mes profils de cartes",
+    "Italiano": "I miei profili schede",
+    "Español (Spanish)": "Mis perfiles de tarjetas",
+    "Português": "Os meus perfis de cartões",
+    "Русский (Russian)": "Мои профили карточек",
+    "日本語 (Japanese)": "自分のカードプロファイル",
+    "中文 (Chinese)": "我的卡片配置",
+    "العربية (Arabic)": "ملفات بطاقاتي",
+    "हिन्दी (Hindi)": "मेरी कार्ड प्रोफ़ाइलें"
   },
   "Save different card layouts for your own user. Card content stays shared for the whole workspace; only positions, sizes, visibility and colors change.": {
-    "Türkçe": "Kendi kullanıcınız için farklı kart yerleşimleri kaydedin. Kart içerikleri tüm workspace için ortak kalır; sadece konum, boyut, görünürlük ve renkler değişir."
+    "Türkçe": "Kendi kullanıcınız için farklı kart yerleşimleri kaydedin. Kart içerikleri tüm workspace için ortak kalır; sadece konum, boyut, görünürlük ve renkler değişir.",
+    "Deutsch": "Speichern Sie verschiedene Kartenlayouts für Ihren eigenen Benutzer. Karteninhalte bleiben für den gesamten Workspace geteilt; nur Positionen, Größen, Sichtbarkeit und Farben ändern sich.",
+    "Français": "Enregistrez différentes dispositions de cartes pour votre propre utilisateur. Le contenu des cartes reste partagé pour tout l'espace ; seules les positions, tailles, visibilité et couleurs changent.",
+    "Italiano": "Salva diversi layout di schede per il tuo utente. Il contenuto delle schede resta condiviso per tutto lo spazio; cambiano solo posizioni, dimensioni, visibilità e colori.",
+    "Español (Spanish)": "Guarda diferentes diseños de tarjetas para tu propio usuario. El contenido de las tarjetas se mantiene compartido para todo el espacio; solo cambian posiciones, tamaños, visibilidad y colores.",
+    "Português": "Guarde diferentes esquemas de cartões para o seu utilizador. O conteúdo dos cartões permanece partilhado por todo o espaço; só mudam posições, tamanhos, visibilidade e cores.",
+    "Русский (Russian)": "Сохраняйте разные раскладки карточек для своего пользователя. Содержимое карточек остаётся общим для всего пространства; меняются только позиции, размеры, видимость и цвета.",
+    "日本語 (Japanese)": "自分のユーザー用に異なるカードレイアウトを保存します。カードの内容はワークスペース全体で共有され、変わるのは位置・サイズ・表示・色のみです。",
+    "中文 (Chinese)": "为您自己的用户保存不同的卡片布局。卡片内容在整个工作区共享；仅位置、大小、可见性和颜色会改变。",
+    "العربية (Arabic)": "احفظ تخطيطات بطاقات مختلفة لمستخدمك. يبقى محتوى البطاقات مشتركًا لكامل مساحة العمل؛ تتغير المواضع والأحجام والظهور والألوان فقط.",
+    "हिन्दी (Hindi)": "अपने उपयोगकर्ता के लिए अलग कार्ड लेआउट सहेजें। कार्ड सामग्री पूरे वर्कस्पेस के लिए साझा रहती है; केवल स्थिति, आकार, दृश्यता और रंग बदलते हैं।"
   },
   "Create first profile": {
-    "Türkçe": "İlk profili oluştur"
+    "Türkçe": "İlk profili oluştur",
+    "Deutsch": "Erstes Profil erstellen",
+    "Français": "Créer le premier profil",
+    "Italiano": "Crea il primo profilo",
+    "Español (Spanish)": "Crear primer perfil",
+    "Português": "Criar primeiro perfil",
+    "Русский (Russian)": "Создать первый профиль",
+    "日本語 (Japanese)": "最初のプロファイルを作成",
+    "中文 (Chinese)": "创建第一个配置",
+    "العربية (Arabic)": "إنشاء أول ملف",
+    "हिन्दी (Hindi)": "पहली प्रोफ़ाइल बनाएं"
   },
   "Card profile added": {
-    "Türkçe": "Kart profili eklendi"
+    "Türkçe": "Kart profili eklendi",
+    "Deutsch": "Kartenprofil hinzugefügt",
+    "Français": "Profil de cartes ajouté",
+    "Italiano": "Profilo schede aggiunto",
+    "Español (Spanish)": "Perfil de tarjetas añadido",
+    "Português": "Perfil de cartões adicionado",
+    "Русский (Russian)": "Профиль карточек добавлен",
+    "日本語 (Japanese)": "カードプロファイルを追加しました",
+    "中文 (Chinese)": "已添加卡片配置",
+    "العربية (Arabic)": "تمت إضافة ملف البطاقات",
+    "हिन्दी (Hindi)": "कार्ड प्रोफ़ाइल जोड़ी गई"
   },
   "Card profile deleted": {
-    "Türkçe": "Kart profili silindi"
+    "Türkçe": "Kart profili silindi",
+    "Deutsch": "Kartenprofil gelöscht",
+    "Français": "Profil de cartes supprimé",
+    "Italiano": "Profilo schede eliminato",
+    "Español (Spanish)": "Perfil de tarjetas eliminado",
+    "Português": "Perfil de cartões eliminado",
+    "Русский (Russian)": "Профиль карточек удалён",
+    "日本語 (Japanese)": "カードプロファイルを削除しました",
+    "中文 (Chinese)": "已删除卡片配置",
+    "العربية (Arabic)": "تم حذف ملف البطاقات",
+    "हिन्दी (Hindi)": "कार्ड प्रोफ़ाइल हटाई गई"
   },
   "Card positions, widths, heights, visibility and colors are saved only for your user. Order content stays shared for the whole workspace.": {
-    "Türkçe": "Kart konumları, genişlikleri, yükseklikleri, görünürlüğü ve renkleri sadece sizin kullanıcı profilinize kaydedilir. Order içerikleri tüm workspace için ortak kalır."
+    "Türkçe": "Kart konumları, genişlikleri, yükseklikleri, görünürlüğü ve renkleri sadece sizin kullanıcı profilinize kaydedilir. Order içerikleri tüm workspace için ortak kalır.",
+    "Deutsch": "Kartenpositionen, Breiten, Höhen, Sichtbarkeit und Farben werden nur für Ihren Benutzer gespeichert. Auftragsinhalte bleiben für den gesamten Workspace geteilt.",
+    "Français": "Les positions, largeurs, hauteurs, visibilité et couleurs des cartes sont enregistrées uniquement pour votre utilisateur. Le contenu des commandes reste partagé pour tout l'espace.",
+    "Italiano": "Posizioni, larghezze, altezze, visibilità e colori delle schede vengono salvati solo per il tuo utente. Il contenuto degli ordini resta condiviso per tutto lo spazio.",
+    "Español (Spanish)": "Las posiciones, anchos, altos, visibilidad y colores de las tarjetas se guardan solo para tu usuario. El contenido de los pedidos se mantiene compartido para todo el espacio.",
+    "Português": "As posições, larguras, alturas, visibilidade e cores dos cartões são guardadas apenas para o seu utilizador. O conteúdo das encomendas permanece partilhado por todo o espaço.",
+    "Русский (Russian)": "Позиции, ширины, высоты, видимость и цвета карточек сохраняются только для вашего пользователя. Содержимое заказов остаётся общим для всего пространства.",
+    "日本語 (Japanese)": "カードの位置・幅・高さ・表示・色は自分のユーザーにのみ保存されます。注文の内容はワークスペース全体で共有されます。",
+    "中文 (Chinese)": "卡片的位置、宽度、高度、可见性和颜色仅为您的用户保存。订单内容在整个工作区共享。",
+    "العربية (Arabic)": "تُحفظ مواضع البطاقات وعرضها وارتفاعها وظهورها وألوانها لمستخدمك فقط. يبقى محتوى الطلبات مشتركًا لكامل مساحة العمل.",
+    "हिन्दी (Hindi)": "कार्ड की स्थिति, चौड़ाई, ऊँचाई, दृश्यता और रंग केवल आपके उपयोगकर्ता के लिए सहेजे जाते हैं। ऑर्डर सामग्री पूरे वर्कस्पेस के लिए साझा रहती है।"
   },
   "Save my profile": {
-    "Türkçe": "Profilimi kaydet"
+    "Türkçe": "Profilimi kaydet",
+    "Deutsch": "Mein Profil speichern",
+    "Français": "Enregistrer mon profil",
+    "Italiano": "Salva il mio profilo",
+    "Español (Spanish)": "Guardar mi perfil",
+    "Português": "Guardar o meu perfil",
+    "Русский (Russian)": "Сохранить мой профиль",
+    "日本語 (Japanese)": "自分のプロファイルを保存",
+    "中文 (Chinese)": "保存我的配置",
+    "العربية (Arabic)": "حفظ ملفي",
+    "हिन्दी (Hindi)": "मेरी प्रोफ़ाइल सहेजें"
   },
   "Load my profile": {
-    "Türkçe": "Profilimi yükle"
+    "Türkçe": "Profilimi yükle",
+    "Deutsch": "Mein Profil laden",
+    "Français": "Charger mon profil",
+    "Italiano": "Carica il mio profilo",
+    "Español (Spanish)": "Cargar mi perfil",
+    "Português": "Carregar o meu perfil",
+    "Русский (Russian)": "Загрузить мой профиль",
+    "日本語 (Japanese)": "自分のプロファイルを読み込む",
+    "中文 (Chinese)": "加载我的配置",
+    "العربية (Arabic)": "تحميل ملفي",
+    "हिन्दी (Hindi)": "मेरी प्रोफ़ाइल लोड करें"
   },
   "Team card profiles": {
-    "Türkçe": "Ekip kart profilleri"
+    "Türkçe": "Ekip kart profilleri",
+    "Deutsch": "Team-Kartenprofile",
+    "Français": "Profils de cartes de l'équipe",
+    "Italiano": "Profili schede del team",
+    "Español (Spanish)": "Perfiles de tarjetas del equipo",
+    "Português": "Perfis de cartões da equipa",
+    "Русский (Russian)": "Профили карточек команды",
+    "日本語 (Japanese)": "チームのカードプロファイル",
+    "中文 (Chinese)": "团队卡片配置",
+    "العربية (Arabic)": "ملفات بطاقات الفريق",
+    "हिन्दी (Hindi)": "टीम कार्ड प्रोफ़ाइलें"
   },
   "You can load another team member’s layout to view it, but saving only updates your own profile.": {
-    "Türkçe": "Başka bir ekip üyesinin yerleşimini görmek için yükleyebilirsiniz, fakat kaydetmek yalnızca kendi profilinizi günceller."
+    "Türkçe": "Başka bir ekip üyesinin yerleşimini görmek için yükleyebilirsiniz, fakat kaydetmek yalnızca kendi profilinizi günceller.",
+    "Deutsch": "Sie können das Layout eines anderen Teammitglieds laden, um es anzusehen, aber das Speichern aktualisiert nur Ihr eigenes Profil.",
+    "Français": "Vous pouvez charger la disposition d'un autre membre pour la consulter, mais l'enregistrement ne met à jour que votre propre profil.",
+    "Italiano": "Puoi caricare il layout di un altro membro per visualizzarlo, ma il salvataggio aggiorna solo il tuo profilo.",
+    "Español (Spanish)": "Puedes cargar el diseño de otro miembro para verlo, pero al guardar solo se actualiza tu propio perfil.",
+    "Português": "Pode carregar o esquema de outro membro para o ver, mas guardar atualiza apenas o seu perfil.",
+    "Русский (Russian)": "Вы можете загрузить раскладку другого участника для просмотра, но сохранение обновляет только ваш профиль.",
+    "日本語 (Japanese)": "他のメンバーのレイアウトを読み込んで表示できますが、保存は自分のプロファイルのみを更新します。",
+    "中文 (Chinese)": "您可以加载其他成员的布局以查看，但保存只会更新您自己的配置。",
+    "العربية (Arabic)": "يمكنك تحميل تخطيط عضو آخر لعرضه، لكن الحفظ يحدّث ملفك فقط.",
+    "हिन्दी (Hindi)": "आप किसी अन्य सदस्य का लेआउट देखने के लिए लोड कर सकते हैं, लेकिन सहेजने पर केवल आपकी अपनी प्रोफ़ाइल अपडेट होती है।"
   },
   "Load another team member’s current layout only to view or copy it. Saving still updates your own card profiles.": {
-    "Türkçe": "Başka bir ekip üyesinin mevcut yerleşimini sadece görüntülemek veya kopyalamak için yükleyebilirsiniz. Kaydetmek yine sadece kendi kart profillerinizi günceller."
+    "Türkçe": "Başka bir ekip üyesinin mevcut yerleşimini sadece görüntülemek veya kopyalamak için yükleyebilirsiniz. Kaydetmek yine sadece kendi kart profillerinizi günceller.",
+    "Deutsch": "Laden Sie das aktuelle Layout eines anderen Teammitglieds nur zum Ansehen oder Kopieren. Das Speichern aktualisiert weiterhin nur Ihre eigenen Kartenprofile.",
+    "Français": "Chargez la disposition actuelle d'un autre membre uniquement pour la consulter ou la copier. L'enregistrement met toujours à jour vos propres profils de cartes.",
+    "Italiano": "Carica il layout attuale di un altro membro solo per visualizzarlo o copiarlo. Il salvataggio aggiorna comunque solo i tuoi profili schede.",
+    "Español (Spanish)": "Carga el diseño actual de otro miembro solo para verlo o copiarlo. Al guardar se actualizan solo tus propios perfiles de tarjetas.",
+    "Português": "Carregue o esquema atual de outro membro apenas para o ver ou copiar. Guardar atualiza apenas os seus próprios perfis de cartões.",
+    "Русский (Russian)": "Загрузите текущую раскладку другого участника только для просмотра или копирования. Сохранение по-прежнему обновляет только ваши профили карточек.",
+    "日本語 (Japanese)": "他のメンバーの現在のレイアウトは、表示またはコピーのためだけに読み込みます。保存しても更新されるのは自分のカードプロファイルのみです。",
+    "中文 (Chinese)": "仅加载其他成员的当前布局以查看或复制。保存仍只更新您自己的卡片配置。",
+    "العربية (Arabic)": "حمّل التخطيط الحالي لعضو آخر للعرض أو النسخ فقط. الحفظ يحدّث ملفات بطاقاتك فقط.",
+    "हिन्दी (Hindi)": "किसी अन्य सदस्य का वर्तमान लेआउट केवल देखने या कॉपी करने के लिए लोड करें। सहेजने पर भी केवल आपकी अपनी कार्ड प्रोफ़ाइलें अपडेट होती हैं।"
   },
   "No team profiles yet": {
-    "Türkçe": "Henüz ekip profili yok"
+    "Türkçe": "Henüz ekip profili yok",
+    "Deutsch": "Noch keine Team-Profile",
+    "Français": "Aucun profil d'équipe pour le moment",
+    "Italiano": "Nessun profilo del team ancora",
+    "Español (Spanish)": "Aún no hay perfiles de equipo",
+    "Português": "Ainda sem perfis de equipa",
+    "Русский (Russian)": "Профилей команды пока нет",
+    "日本語 (Japanese)": "チームプロファイルはまだありません",
+    "中文 (Chinese)": "暂无团队配置",
+    "العربية (Arabic)": "لا توجد ملفات فريق بعد",
+    "हिन्दी (Hindi)": "अभी तक कोई टीम प्रोफ़ाइल नहीं"
   },
   "Mine": {
-    "Türkçe": "Benim"
+    "Türkçe": "Benim",
+    "Deutsch": "Meins",
+    "Français": "Le mien",
+    "Italiano": "Il mio",
+    "Español (Spanish)": "El mío",
+    "Português": "O meu",
+    "Русский (Russian)": "Мой",
+    "日本語 (Japanese)": "自分",
+    "中文 (Chinese)": "我的",
+    "العربية (Arabic)": "ملكي",
+    "हिन्दी (Hindi)": "मेरा"
   },
   "Your card profile was saved": {
-    "Türkçe": "Kart profiliniz kaydedildi"
+    "Türkçe": "Kart profiliniz kaydedildi",
+    "Deutsch": "Ihr Kartenprofil wurde gespeichert",
+    "Français": "Votre profil de cartes a été enregistré",
+    "Italiano": "Il tuo profilo schede è stato salvato",
+    "Español (Spanish)": "Tu perfil de tarjetas se guardó",
+    "Português": "O seu perfil de cartões foi guardado",
+    "Русский (Russian)": "Ваш профиль карточек сохранён",
+    "日本語 (Japanese)": "カードプロファイルを保存しました",
+    "中文 (Chinese)": "已保存您的卡片配置",
+    "العربية (Arabic)": "تم حفظ ملف بطاقاتك",
+    "हिन्दी (Hindi)": "आपकी कार्ड प्रोफ़ाइल सहेजी गई"
   },
   "Using your card profile": {
-    "Türkçe": "Kendi kart profiliniz kullanılıyor"
+    "Türkçe": "Kendi kart profiliniz kullanılıyor",
+    "Deutsch": "Ihr Kartenprofil wird verwendet",
+    "Français": "Utilisation de votre profil de cartes",
+    "Italiano": "Uso del tuo profilo schede",
+    "Español (Spanish)": "Usando tu perfil de tarjetas",
+    "Português": "A usar o seu perfil de cartões",
+    "Русский (Russian)": "Используется ваш профиль карточек",
+    "日本語 (Japanese)": "あなたのカードプロファイルを使用中",
+    "中文 (Chinese)": "正在使用您的卡片配置",
+    "العربية (Arabic)": "يتم استخدام ملف بطاقاتك",
+    "हिन्दी (Hindi)": "आपकी कार्ड प्रोफ़ाइल उपयोग में है"
   },
   "Viewing team card profile": {
-    "Türkçe": "Ekip kart profili görüntüleniyor"
+    "Türkçe": "Ekip kart profili görüntüleniyor",
+    "Deutsch": "Team-Kartenprofil wird angezeigt",
+    "Français": "Affichage du profil de cartes de l'équipe",
+    "Italiano": "Visualizzazione del profilo schede del team",
+    "Español (Spanish)": "Viendo el perfil de tarjetas del equipo",
+    "Português": "A ver o perfil de cartões da equipa",
+    "Русский (Russian)": "Просмотр профиля карточек команды",
+    "日本語 (Japanese)": "チームのカードプロファイルを表示中",
+    "中文 (Chinese)": "正在查看团队卡片配置",
+    "العربية (Arabic)": "عرض ملف بطاقات الفريق",
+    "हिन्दी (Hindi)": "टीम कार्ड प्रोफ़ाइल देखी जा रही है"
   },
   "Load a team member’s layout to follow it live. When they save their card profile, your layout updates too. If you edit your own layout, sync stops.": {
-    "Türkçe": "Bir ekip üyesinin yerleşimini canlı takip etmek için yükleyin. O kişi kart profilini kaydettiğinde sizin yerleşiminiz de güncellenir. Kendi yerleşiminizi düzenlerseniz senkron durur."
+    "Türkçe": "Bir ekip üyesinin yerleşimini canlı takip etmek için yükleyin. O kişi kart profilini kaydettiğinde sizin yerleşiminiz de güncellenir. Kendi yerleşiminizi düzenlerseniz senkron durur.",
+    "Deutsch": "Laden Sie das Layout eines Teammitglieds, um es live zu verfolgen. Wenn es sein Kartenprofil speichert, wird auch Ihr Layout aktualisiert. Wenn Sie Ihr eigenes Layout bearbeiten, stoppt die Synchronisierung.",
+    "Français": "Chargez la disposition d'un membre pour la suivre en direct. Lorsqu'il enregistre son profil de cartes, votre disposition se met aussi à jour. Si vous modifiez la vôtre, la synchro s'arrête.",
+    "Italiano": "Carica il layout di un membro per seguirlo in tempo reale. Quando salva il suo profilo schede, anche il tuo layout si aggiorna. Se modifichi il tuo layout, la sincronizzazione si interrompe.",
+    "Español (Spanish)": "Carga el diseño de un miembro para seguirlo en directo. Cuando guarda su perfil de tarjetas, tu diseño también se actualiza. Si editas el tuyo, la sincronización se detiene.",
+    "Português": "Carregue o esquema de um membro para o seguir ao vivo. Quando ele guarda o seu perfil de cartões, o seu esquema também é atualizado. Se editar o seu próprio esquema, a sincronização para.",
+    "Русский (Russian)": "Загрузите раскладку участника, чтобы следить за ней вживую. Когда он сохраняет свой профиль карточек, ваша раскладка тоже обновляется. Если вы измените свою раскладку, синхронизация остановится.",
+    "日本語 (Japanese)": "メンバーのレイアウトを読み込んでライブで追従します。相手がカードプロファイルを保存すると、あなたのレイアウトも更新されます。自分のレイアウトを編集すると同期は停止します。",
+    "中文 (Chinese)": "加载某成员的布局以实时跟随。当其保存卡片配置时，您的布局也会更新。如果您编辑自己的布局，同步将停止。",
+    "العربية (Arabic)": "حمّل تخطيط أحد الأعضاء لمتابعته مباشرة. عندما يحفظ ملف بطاقاته، يتحدّث تخطيطك أيضًا. إذا عدّلت تخطيطك، تتوقف المزامنة.",
+    "हिन्दी (Hindi)": "किसी सदस्य का लेआउट लाइव फ़ॉलो करने के लिए लोड करें। जब वे अपनी कार्ड प्रोफ़ाइल सहेजते हैं, तो आपका लेआउट भी अपडेट होता है। यदि आप अपना लेआउट संपादित करते हैं, तो सिंक रुक जाता है।"
   },
   "Sync": {
-    "Türkçe": "Senkronla"
+    "Türkçe": "Senkronla",
+    "Deutsch": "Synchronisieren",
+    "Français": "Synchroniser",
+    "Italiano": "Sincronizza",
+    "Español (Spanish)": "Sincronizar",
+    "Português": "Sincronizar",
+    "Русский (Russian)": "Синхронизировать",
+    "日本語 (Japanese)": "同期",
+    "中文 (Chinese)": "同步",
+    "العربية (Arabic)": "مزامنة",
+    "हिन्दी (Hindi)": "सिंक"
   },
   "Synced": {
-    "Türkçe": "Senkron"
+    "Türkçe": "Senkron",
+    "Deutsch": "Synchronisiert",
+    "Français": "Synchronisé",
+    "Italiano": "Sincronizzato",
+    "Español (Spanish)": "Sincronizado",
+    "Português": "Sincronizado",
+    "Русский (Russian)": "Синхронизировано",
+    "日本語 (Japanese)": "同期済み",
+    "中文 (Chinese)": "已同步",
+    "العربية (Arabic)": "تمت المزامنة",
+    "हिन्दी (Hindi)": "सिंक हो गया"
   },
   "Live sync": {
-    "Türkçe": "Canlı senkron"
+    "Türkçe": "Canlı senkron",
+    "Deutsch": "Live-Synchronisierung",
+    "Français": "Synchro en direct",
+    "Italiano": "Sincronizzazione live",
+    "Español (Spanish)": "Sincronización en directo",
+    "Português": "Sincronização ao vivo",
+    "Русский (Russian)": "Живая синхронизация",
+    "日本語 (Japanese)": "ライブ同期",
+    "中文 (Chinese)": "实时同步",
+    "العربية (Arabic)": "مزامنة مباشرة",
+    "हिन्दी (Hindi)": "लाइव सिंक"
   },
   "Stop sync": {
-    "Türkçe": "Senkronu durdur"
+    "Türkçe": "Senkronu durdur",
+    "Deutsch": "Synchronisierung stoppen",
+    "Français": "Arrêter la synchro",
+    "Italiano": "Interrompi sincronizzazione",
+    "Español (Spanish)": "Detener sincronización",
+    "Português": "Parar sincronização",
+    "Русский (Russian)": "Остановить синхронизацию",
+    "日本語 (Japanese)": "同期を停止",
+    "中文 (Chinese)": "停止同步",
+    "العربية (Arabic)": "إيقاف المزامنة",
+    "हिन्दी (Hindi)": "सिंक रोकें"
   },
   "Synced with team card profile": {
-    "Türkçe": "Ekip kart profiliyle senkron"
+    "Türkçe": "Ekip kart profiliyle senkron",
+    "Deutsch": "Mit Team-Kartenprofil synchronisiert",
+    "Français": "Synchronisé avec le profil de cartes de l'équipe",
+    "Italiano": "Sincronizzato con il profilo schede del team",
+    "Español (Spanish)": "Sincronizado con el perfil de tarjetas del equipo",
+    "Português": "Sincronizado com o perfil de cartões da equipa",
+    "Русский (Russian)": "Синхронизировано с профилем карточек команды",
+    "日本語 (Japanese)": "チームのカードプロファイルと同期しました",
+    "中文 (Chinese)": "已与团队卡片配置同步",
+    "العربية (Arabic)": "تمت المزامنة مع ملف بطاقات الفريق",
+    "हिन्दी (Hindi)": "टीम कार्ड प्रोफ़ाइल के साथ सिंक किया गया"
   },
   "Team card sync stopped": {
-    "Türkçe": "Ekip kart senkronu durduruldu"
+    "Türkçe": "Ekip kart senkronu durduruldu",
+    "Deutsch": "Team-Kartensynchronisierung gestoppt",
+    "Français": "Synchro des cartes d'équipe arrêtée",
+    "Italiano": "Sincronizzazione schede team interrotta",
+    "Español (Spanish)": "Sincronización de tarjetas del equipo detenida",
+    "Português": "Sincronização de cartões da equipa parada",
+    "Русский (Russian)": "Синхронизация карточек команды остановлена",
+    "日本語 (Japanese)": "チームカードの同期を停止しました",
+    "中文 (Chinese)": "已停止团队卡片同步",
+    "العربية (Arabic)": "تم إيقاف مزامنة بطاقات الفريق",
+    "हिन्दी (Hindi)": "टीम कार्ड सिंक रोक दिया गया"
   },
   "Team profile is no longer available": {
-    "Türkçe": "Ekip profili artık kullanılamıyor"
+    "Türkçe": "Ekip profili artık kullanılamıyor",
+    "Deutsch": "Team-Profil ist nicht mehr verfügbar",
+    "Français": "Le profil d'équipe n'est plus disponible",
+    "Italiano": "Il profilo del team non è più disponibile",
+    "Español (Spanish)": "El perfil del equipo ya no está disponible",
+    "Português": "O perfil da equipa já não está disponível",
+    "Русский (Russian)": "Профиль команды больше недоступен",
+    "日本語 (Japanese)": "チームプロファイルは利用できなくなりました",
+    "中文 (Chinese)": "团队配置不再可用",
+    "العربية (Arabic)": "ملف الفريق لم يعد متاحًا",
+    "हिन्दी (Hindi)": "टीम प्रोफ़ाइल अब उपलब्ध नहीं है"
   },
   "This layout follows a team member live. Any manual change will stop sync and save to your own profile.": {
-    "Türkçe": "Bu yerleşim bir ekip üyesini canlı takip eder. Manuel bir değişiklik yaparsanız senkron durur ve kendi profilinize kaydedilir."
+    "Türkçe": "Bu yerleşim bir ekip üyesini canlı takip eder. Manuel bir değişiklik yaparsanız senkron durur ve kendi profilinize kaydedilir.",
+    "Deutsch": "Dieses Layout folgt einem Teammitglied live. Jede manuelle Änderung stoppt die Synchronisierung und speichert in Ihrem eigenen Profil.",
+    "Français": "Cette disposition suit un membre en direct. Toute modification manuelle arrêtera la synchro et l'enregistrera dans votre propre profil.",
+    "Italiano": "Questo layout segue un membro in tempo reale. Qualsiasi modifica manuale interromperà la sincronizzazione e salverà nel tuo profilo.",
+    "Español (Spanish)": "Este diseño sigue a un miembro en directo. Cualquier cambio manual detendrá la sincronización y se guardará en tu propio perfil.",
+    "Português": "Este esquema segue um membro ao vivo. Qualquer alteração manual irá parar a sincronização e guardar no seu próprio perfil.",
+    "Русский (Russian)": "Эта раскладка вживую следует за участником. Любое ручное изменение остановит синхронизацию и сохранит в ваш профиль.",
+    "日本語 (Japanese)": "このレイアウトはメンバーをライブで追従します。手動で変更すると同期が停止し、自分のプロファイルに保存されます。",
+    "中文 (Chinese)": "此布局实时跟随某成员。任何手动更改都会停止同步并保存到您自己的配置。",
+    "العربية (Arabic)": "يتبع هذا التخطيط عضوًا مباشرة. أي تغيير يدوي سيوقف المزامنة ويحفظ في ملفك الخاص.",
+    "हिन्दी (Hindi)": "यह लेआउट किसी सदस्य को लाइव फ़ॉलो करता है। कोई भी मैन्युअल बदलाव सिंक रोक देगा और आपकी अपनी प्रोफ़ाइल में सहेज देगा।"
   },
   "Layout locked": {
     "Türkçe": "Yerleşim kilitli",
@@ -2106,13 +2576,43 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "PayPal"
   },
   "General": {
-    "Türkçe": "Genel"
+    "Türkçe": "Genel",
+    "Deutsch": "Allgemein",
+    "Français": "Général",
+    "Italiano": "Generale",
+    "Español (Spanish)": "General",
+    "Português": "Geral",
+    "Русский (Russian)": "Общие",
+    "日本語 (Japanese)": "一般",
+    "中文 (Chinese)": "常规",
+    "العربية (Arabic)": "عام",
+    "हिन्दी (Hindi)": "सामान्य"
   },
   "Currency Symbol": {
-    "Türkçe": "Para Birimi Sembolü"
+    "Türkçe": "Para Birimi Sembolü",
+    "Deutsch": "Währungssymbol",
+    "Français": "Symbole monétaire",
+    "Italiano": "Simbolo valuta",
+    "Español (Spanish)": "Símbolo de moneda",
+    "Português": "Símbolo da moeda",
+    "Русский (Russian)": "Символ валюты",
+    "日本語 (Japanese)": "通貨記号",
+    "中文 (Chinese)": "货币符号",
+    "العربية (Arabic)": "رمز العملة",
+    "हिन्दी (Hindi)": "मुद्रा प्रतीक"
   },
   "Avg. Platform Fee (%)": {
-    "Türkçe": "Ortalama Platform Ücreti (%)"
+    "Türkçe": "Ortalama Platform Ücreti (%)",
+    "Deutsch": "Durchschn. Plattformgebühr (%)",
+    "Français": "Frais moyens de plateforme (%)",
+    "Italiano": "Commissione media piattaforma (%)",
+    "Español (Spanish)": "Comisión media de plataforma (%)",
+    "Português": "Taxa média da plataforma (%)",
+    "Русский (Russian)": "Средняя комиссия платформы (%)",
+    "日本語 (Japanese)": "平均プラットフォーム手数料 (%)",
+    "中文 (Chinese)": "平均平台费 (%)",
+    "العربية (Arabic)": "متوسط رسوم المنصة (%)",
+    "हिन्दी (Hindi)": "औसत प्लेटफ़ॉर्म शुल्क (%)"
   },
   "Tax / VAT Settings": {
     "Türkçe": "KDV (VAT) Ayarları",
@@ -2128,58 +2628,238 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "वैट सेटिंग्स"
   },
   "Default Tax Rate (%)": {
-    "Türkçe": "Varsayılan KDV Oranı (%)"
+    "Türkçe": "Varsayılan KDV Oranı (%)",
+    "Deutsch": "Standard-Steuersatz (%)",
+    "Français": "Taux de taxe par défaut (%)",
+    "Italiano": "Aliquota fiscale predefinita (%)",
+    "Español (Spanish)": "Tasa de impuesto predeterminada (%)",
+    "Português": "Taxa de imposto padrão (%)",
+    "Русский (Russian)": "Ставка налога по умолчанию (%)",
+    "日本語 (Japanese)": "デフォルト税率 (%)",
+    "中文 (Chinese)": "默认税率 (%)",
+    "العربية (Arabic)": "معدل الضريبة الافتراضي (%)",
+    "हिन्दी (Hindi)": "डिफ़ॉल्ट कर दर (%)"
   },
   "Calculate Tax On": {
-    "Türkçe": "Varsayılan Hesaplama Modeli"
+    "Türkçe": "Varsayılan Hesaplama Modeli",
+    "Deutsch": "Steuer berechnen auf",
+    "Français": "Calculer la taxe sur",
+    "Italiano": "Calcola imposta su",
+    "Español (Spanish)": "Calcular impuesto sobre",
+    "Português": "Calcular imposto sobre",
+    "Русский (Russian)": "Рассчитывать налог на",
+    "日本語 (Japanese)": "税の計算対象",
+    "中文 (Chinese)": "计税基准",
+    "العربية (Arabic)": "احتساب الضريبة على",
+    "हिन्दी (Hindi)": "कर की गणना इस पर"
   },
   "Tax Amount": {
-    "Türkçe": "KDV Tutarı"
+    "Türkçe": "KDV Tutarı",
+    "Deutsch": "Steuerbetrag",
+    "Français": "Montant de la taxe",
+    "Italiano": "Importo imposta",
+    "Español (Spanish)": "Importe del impuesto",
+    "Português": "Valor do imposto",
+    "Русский (Russian)": "Сумма налога",
+    "日本語 (Japanese)": "税額",
+    "中文 (Chinese)": "税额",
+    "العربية (Arabic)": "مبلغ الضريبة",
+    "हिन्दी (Hindi)": "कर राशि"
   },
   "Final Profit": {
-    "Türkçe": "Nihai Kar"
+    "Türkçe": "Nihai Kar",
+    "Deutsch": "Endgewinn",
+    "Français": "Profit final",
+    "Italiano": "Profitto finale",
+    "Español (Spanish)": "Beneficio final",
+    "Português": "Lucro final",
+    "Русский (Russian)": "Итоговая прибыль",
+    "日本語 (Japanese)": "最終利益",
+    "中文 (Chinese)": "最终利润",
+    "العربية (Arabic)": "الربح النهائي",
+    "हिन्दी (Hindi)": "अंतिम लाभ"
   },
   "Tax Rate (%)": {
-    "Türkçe": "KDV Oranı (%)"
+    "Türkçe": "KDV Oranı (%)",
+    "Deutsch": "Steuersatz (%)",
+    "Français": "Taux de taxe (%)",
+    "Italiano": "Aliquota fiscale (%)",
+    "Español (Spanish)": "Tasa de impuesto (%)",
+    "Português": "Taxa de imposto (%)",
+    "Русский (Russian)": "Ставка налога (%)",
+    "日本語 (Japanese)": "税率 (%)",
+    "中文 (Chinese)": "税率 (%)",
+    "العربية (Arabic)": "معدل الضريبة (%)",
+    "हिन्दी (Hindi)": "कर दर (%)"
   },
   "Recalculate Taxes for Past Orders": {
-    "Türkçe": "Geçmiş Siparişlerin KDV'sini Güncelle"
+    "Türkçe": "Geçmiş Siparişlerin KDV'sini Güncelle",
+    "Deutsch": "Steuern für vergangene Aufträge neu berechnen",
+    "Français": "Recalculer les taxes des commandes passées",
+    "Italiano": "Ricalcola le imposte per gli ordini passati",
+    "Español (Spanish)": "Recalcular impuestos de pedidos anteriores",
+    "Português": "Recalcular impostos de encomendas anteriores",
+    "Русский (Russian)": "Пересчитать налоги для прошлых заказов",
+    "日本語 (Japanese)": "過去の注文の税を再計算",
+    "中文 (Chinese)": "重新计算历史订单的税额",
+    "العربية (Arabic)": "إعادة احتساب الضرائب للطلبات السابقة",
+    "हिन्दी (Hindi)": "पिछले ऑर्डर के कर पुनः गणना करें"
   },
   "Tax recalculation completed!": {
-    "Türkçe": "KDV hesaplaması başarıyla tamamlandı!"
+    "Türkçe": "KDV hesaplaması başarıyla tamamlandı!",
+    "Deutsch": "Steuerneuberechnung abgeschlossen!",
+    "Français": "Recalcul des taxes terminé !",
+    "Italiano": "Ricalcolo delle imposte completato!",
+    "Español (Spanish)": "¡Recálculo de impuestos completado!",
+    "Português": "Recálculo de impostos concluído!",
+    "Русский (Russian)": "Пересчёт налогов завершён!",
+    "日本語 (Japanese)": "税の再計算が完了しました！",
+    "中文 (Chinese)": "税额重新计算完成！",
+    "العربية (Arabic)": "اكتملت إعادة احتساب الضرائب!",
+    "हिन्दी (Hindi)": "कर पुनः गणना पूर्ण हुई!"
   },
   "Tax Rule": {
-    "Türkçe": "KDV Kuralı"
+    "Türkçe": "KDV Kuralı",
+    "Deutsch": "Steuerregel",
+    "Français": "Règle de taxe",
+    "Italiano": "Regola fiscale",
+    "Español (Spanish)": "Regla de impuesto",
+    "Português": "Regra de imposto",
+    "Русский (Russian)": "Налоговое правило",
+    "日本語 (Japanese)": "税ルール",
+    "中文 (Chinese)": "税务规则",
+    "العربية (Arabic)": "قاعدة الضريبة",
+    "हिन्दी (Hindi)": "कर नियम"
   },
   "Use Tax Transition Date": {
-    "Türkçe": "KDV Kayıt Tarihini Kullan"
+    "Türkçe": "KDV Kayıt Tarihini Kullan",
+    "Deutsch": "Steuerübergangsdatum verwenden",
+    "Français": "Utiliser la date de transition fiscale",
+    "Italiano": "Usa data di transizione fiscale",
+    "Español (Spanish)": "Usar fecha de transición fiscal",
+    "Português": "Usar data de transição fiscal",
+    "Русский (Russian)": "Использовать дату перехода налога",
+    "日本語 (Japanese)": "税の移行日を使用",
+    "中文 (Chinese)": "使用税务过渡日期",
+    "العربية (Arabic)": "استخدام تاريخ الانتقال الضريبي",
+    "हिन्दी (Hindi)": "कर संक्रमण तिथि का उपयोग करें"
   },
   "VAT Registration Date": {
-    "Türkçe": "KDV'ye Geçiş Tarihi"
+    "Türkçe": "KDV'ye Geçiş Tarihi",
+    "Deutsch": "USt-Registrierungsdatum",
+    "Français": "Date d'enregistrement à la TVA",
+    "Italiano": "Data di registrazione IVA",
+    "Español (Spanish)": "Fecha de registro de IVA",
+    "Português": "Data de registo de IVA",
+    "Русский (Russian)": "Дата регистрации НДС",
+    "日本語 (Japanese)": "VAT 登録日",
+    "中文 (Chinese)": "增值税登记日期",
+    "العربية (Arabic)": "تاريخ تسجيل ضريبة القيمة المضافة",
+    "हिन्दी (Hindi)": "वैट पंजीकरण तिथि"
   },
   "Custom Tax Rule Names": {
-    "Türkçe": "Kural İsimlerini Özelleştir"
+    "Türkçe": "Kural İsimlerini Özelleştir",
+    "Deutsch": "Eigene Namen für Steuerregeln",
+    "Français": "Noms personnalisés des règles de taxe",
+    "Italiano": "Nomi personalizzati delle regole fiscali",
+    "Español (Spanish)": "Nombres personalizados de reglas de impuesto",
+    "Português": "Nomes personalizados das regras de imposto",
+    "Русский (Russian)": "Свои названия налоговых правил",
+    "日本語 (Japanese)": "税ルール名のカスタマイズ",
+    "中文 (Chinese)": "自定义税务规则名称",
+    "العربية (Arabic)": "أسماء مخصصة لقواعد الضريبة",
+    "हिन्दी (Hindi)": "कस्टम कर नियम नाम"
   },
   "Rule 1 (Revenue)": {
-    "Türkçe": "Kural 1 (Ciro Üzerinden)"
+    "Türkçe": "Kural 1 (Ciro Üzerinden)",
+    "Deutsch": "Regel 1 (Umsatz)",
+    "Français": "Règle 1 (Chiffre d'affaires)",
+    "Italiano": "Regola 1 (Ricavi)",
+    "Español (Spanish)": "Regla 1 (Ingresos)",
+    "Português": "Regra 1 (Receita)",
+    "Русский (Russian)": "Правило 1 (Выручка)",
+    "日本語 (Japanese)": "ルール 1（売上）",
+    "中文 (Chinese)": "规则 1（营收）",
+    "العربية (Arabic)": "القاعدة 1 (الإيرادات)",
+    "हिन्दी (Hindi)": "नियम 1 (राजस्व)"
   },
   "Rule 2 (Profit)": {
-    "Türkçe": "Kural 2 (Kar Üzerinden)"
+    "Türkçe": "Kural 2 (Kar Üzerinden)",
+    "Deutsch": "Regel 2 (Gewinn)",
+    "Français": "Règle 2 (Profit)",
+    "Italiano": "Regola 2 (Profitto)",
+    "Español (Spanish)": "Regla 2 (Beneficio)",
+    "Português": "Regra 2 (Lucro)",
+    "Русский (Russian)": "Правило 2 (Прибыль)",
+    "日本語 (Japanese)": "ルール 2（利益）",
+    "中文 (Chinese)": "规则 2（利润）",
+    "العربية (Arabic)": "القاعدة 2 (الربح)",
+    "हिन्दी (Hindi)": "नियम 2 (लाभ)"
   },
   "Revenue": {
-    "Türkçe": "Standart KDV (Sıfır)"
+    "Türkçe": "Standart KDV (Sıfır)",
+    "Deutsch": "Umsatz",
+    "Français": "Chiffre d'affaires",
+    "Italiano": "Ricavi",
+    "Español (Spanish)": "Ingresos",
+    "Português": "Receita",
+    "Русский (Russian)": "Выручка",
+    "日本語 (Japanese)": "売上",
+    "中文 (Chinese)": "营收",
+    "العربية (Arabic)": "الإيرادات",
+    "हिन्दी (Hindi)": "राजस्व"
   },
   "Profit": {
-    "Türkçe": "Margin Scheme (2.El)"
+    "Türkçe": "Margin Scheme (2.El)",
+    "Deutsch": "Gewinn",
+    "Français": "Profit",
+    "Italiano": "Profitto",
+    "Español (Spanish)": "Beneficio",
+    "Português": "Lucro",
+    "Русский (Russian)": "Прибыль",
+    "日本語 (Japanese)": "利益",
+    "中文 (Chinese)": "利润",
+    "العربية (Arabic)": "الربح",
+    "हिन्दी (Hindi)": "लाभ"
   },
   "Decimal Separator": {
-    "Türkçe": "Ondalık Ayracı"
+    "Türkçe": "Ondalık Ayracı",
+    "Deutsch": "Dezimaltrennzeichen",
+    "Français": "Séparateur décimal",
+    "Italiano": "Separatore decimale",
+    "Español (Spanish)": "Separador decimal",
+    "Português": "Separador decimal",
+    "Русский (Russian)": "Десятичный разделитель",
+    "日本語 (Japanese)": "小数点記号",
+    "中文 (Chinese)": "小数分隔符",
+    "العربية (Arabic)": "الفاصل العشري",
+    "हिन्दी (Hindi)": "दशमलव विभाजक"
   },
   "Dot (.)": {
-    "Türkçe": "Nokta (.)"
+    "Türkçe": "Nokta (.)",
+    "Deutsch": "Punkt (.)",
+    "Français": "Point (.)",
+    "Italiano": "Punto (.)",
+    "Español (Spanish)": "Punto (.)",
+    "Português": "Ponto (.)",
+    "Русский (Russian)": "Точка (.)",
+    "日本語 (Japanese)": "ドット (.)",
+    "中文 (Chinese)": "点 (.)",
+    "العربية (Arabic)": "نقطة (.)",
+    "हिन्दी (Hindi)": "बिंदु (.)"
   },
   "Comma (,)": {
-    "Türkçe": "Virgül (,)"
+    "Türkçe": "Virgül (,)",
+    "Deutsch": "Komma (,)",
+    "Français": "Virgule (,)",
+    "Italiano": "Virgola (,)",
+    "Español (Spanish)": "Coma (,)",
+    "Português": "Vírgula (,)",
+    "Русский (Russian)": "Запятая (,)",
+    "日本語 (Japanese)": "カンマ (,)",
+    "中文 (Chinese)": "逗号 (,)",
+    "العربية (Arabic)": "فاصلة (,)",
+    "हिन्दी (Hindi)": "अल्पविराम (,)"
   },
   "Materials & Inventory": {
     "Türkçe": "Materyal ve Envanter",
@@ -2195,19 +2875,69 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "सामग्री और सूची"
   },
   "Inventory Labels": {
-    "Türkçe": "Envanter Etiketlerini Özelleştir"
+    "Türkçe": "Envanter Etiketlerini Özelleştir",
+    "Deutsch": "Inventaretiketten",
+    "Français": "Étiquettes d'inventaire",
+    "Italiano": "Etichette inventario",
+    "Español (Spanish)": "Etiquetas de inventario",
+    "Português": "Etiquetas de inventário",
+    "Русский (Russian)": "Метки инвентаря",
+    "日本語 (Japanese)": "在庫ラベル",
+    "中文 (Chinese)": "库存标签",
+    "العربية (Arabic)": "تسميات المخزون",
+    "हिन्दी (Hindi)": "इन्वेंट्री लेबल"
   },
   "Item 1": {
-    "Türkçe": "Madde 1"
+    "Türkçe": "Madde 1",
+    "Deutsch": "Position 1",
+    "Français": "Article 1",
+    "Italiano": "Voce 1",
+    "Español (Spanish)": "Artículo 1",
+    "Português": "Item 1",
+    "Русский (Russian)": "Позиция 1",
+    "日本語 (Japanese)": "項目 1",
+    "中文 (Chinese)": "项目 1",
+    "العربية (Arabic)": "العنصر 1",
+    "हिन्दी (Hindi)": "आइटम 1"
   },
   "Item 2": {
-    "Türkçe": "Madde 2"
+    "Türkçe": "Madde 2",
+    "Deutsch": "Position 2",
+    "Français": "Article 2",
+    "Italiano": "Voce 2",
+    "Español (Spanish)": "Artículo 2",
+    "Português": "Item 2",
+    "Русский (Russian)": "Позиция 2",
+    "日本語 (Japanese)": "項目 2",
+    "中文 (Chinese)": "项目 2",
+    "العربية (Arabic)": "العنصر 2",
+    "हिन्दी (Hindi)": "आइटम 2"
   },
   "Item 3": {
-    "Türkçe": "Madde 3"
+    "Türkçe": "Madde 3",
+    "Deutsch": "Position 3",
+    "Français": "Article 3",
+    "Italiano": "Voce 3",
+    "Español (Spanish)": "Artículo 3",
+    "Português": "Item 3",
+    "Русский (Russian)": "Позиция 3",
+    "日本語 (Japanese)": "項目 3",
+    "中文 (Chinese)": "项目 3",
+    "العربية (Arabic)": "العنصر 3",
+    "हिन्दी (Hindi)": "आइटम 3"
   },
   "Item 4": {
-    "Türkçe": "Madde 4"
+    "Türkçe": "Madde 4",
+    "Deutsch": "Position 4",
+    "Français": "Article 4",
+    "Italiano": "Voce 4",
+    "Español (Spanish)": "Artículo 4",
+    "Português": "Item 4",
+    "Русский (Russian)": "Позиция 4",
+    "日本語 (Japanese)": "項目 4",
+    "中文 (Chinese)": "项目 4",
+    "العربية (Arabic)": "العنصر 4",
+    "हिन्दी (Hindi)": "आइटम 4"
   },
   "Notes / Supplier": {
     "Türkçe": "Notlar / Tedarikçi",
@@ -2236,31 +2966,121 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "प्राथमिकता / जोखिम"
   },
   "Priority": {
-    "Türkçe": "Öncelik"
+    "Türkçe": "Öncelik",
+    "Deutsch": "Priorität",
+    "Français": "Priorité",
+    "Italiano": "Priorità",
+    "Español (Spanish)": "Prioridad",
+    "Português": "Prioridade",
+    "Русский (Russian)": "Приоритет",
+    "日本語 (Japanese)": "優先度",
+    "中文 (Chinese)": "优先级",
+    "العربية (Arabic)": "الأولوية",
+    "हिन्दी (Hindi)": "प्राथमिकता"
   },
   "Low": {
-    "Türkçe": "Düşük"
+    "Türkçe": "Düşük",
+    "Deutsch": "Niedrig",
+    "Français": "Faible",
+    "Italiano": "Bassa",
+    "Español (Spanish)": "Baja",
+    "Português": "Baixa",
+    "Русский (Russian)": "Низкий",
+    "日本語 (Japanese)": "低",
+    "中文 (Chinese)": "低",
+    "العربية (Arabic)": "منخفضة",
+    "हिन्दी (Hindi)": "कम"
   },
   "High": {
-    "Türkçe": "Yüksek"
+    "Türkçe": "Yüksek",
+    "Deutsch": "Hoch",
+    "Français": "Élevée",
+    "Italiano": "Alta",
+    "Español (Spanish)": "Alta",
+    "Português": "Alta",
+    "Русский (Russian)": "Высокий",
+    "日本語 (Japanese)": "高",
+    "中文 (Chinese)": "高",
+    "العربية (Arabic)": "عالية",
+    "हिन्दी (Hindi)": "उच्च"
   },
   "Risk": {
-    "Türkçe": "Risk Durumu"
+    "Türkçe": "Risk Durumu",
+    "Deutsch": "Risiko",
+    "Français": "Risque",
+    "Italiano": "Rischio",
+    "Español (Spanish)": "Riesgo",
+    "Português": "Risco",
+    "Русский (Russian)": "Риск",
+    "日本語 (Japanese)": "リスク",
+    "中文 (Chinese)": "风险",
+    "العربية (Arabic)": "المخاطر",
+    "हिन्दी (Hindi)": "जोखिम"
   },
   "None": {
-    "Türkçe": "Yok"
+    "Türkçe": "Yok",
+    "Deutsch": "Keine",
+    "Français": "Aucun",
+    "Italiano": "Nessuno",
+    "Español (Spanish)": "Ninguno",
+    "Português": "Nenhum",
+    "Русский (Russian)": "Нет",
+    "日本語 (Japanese)": "なし",
+    "中文 (Chinese)": "无",
+    "العربية (Arabic)": "لا شيء",
+    "हिन्दी (Hindi)": "कोई नहीं"
   },
   "Waiting": {
-    "Türkçe": "Bekliyor"
+    "Türkçe": "Bekliyor",
+    "Deutsch": "Wartet",
+    "Français": "En attente",
+    "Italiano": "In attesa",
+    "Español (Spanish)": "Esperando",
+    "Português": "À espera",
+    "Русский (Russian)": "Ожидание",
+    "日本語 (Japanese)": "待機中",
+    "中文 (Chinese)": "等待中",
+    "العربية (Arabic)": "قيد الانتظار",
+    "हिन्दी (Hindi)": "प्रतीक्षारत"
   },
   "Blocked": {
-    "Türkçe": "Engellendi"
+    "Türkçe": "Engellendi",
+    "Deutsch": "Blockiert",
+    "Français": "Bloqué",
+    "Italiano": "Bloccato",
+    "Español (Spanish)": "Bloqueado",
+    "Português": "Bloqueado",
+    "Русский (Russian)": "Заблокировано",
+    "日本語 (Japanese)": "ブロック",
+    "中文 (Chinese)": "已阻止",
+    "العربية (Arabic)": "محظور",
+    "हिन्दी (Hindi)": "अवरुद्ध"
   },
   "Overdue": {
-    "Türkçe": "Gecikmiş"
+    "Türkçe": "Gecikmiş",
+    "Deutsch": "Überfällig",
+    "Français": "En retard",
+    "Italiano": "In ritardo",
+    "Español (Spanish)": "Atrasado",
+    "Português": "Em atraso",
+    "Русский (Russian)": "Просрочено",
+    "日本語 (Japanese)": "期限切れ",
+    "中文 (Chinese)": "逾期",
+    "العربية (Arabic)": "متأخر",
+    "हिन्दी (Hindi)": "अतिदेय"
   },
   "Reason": {
-    "Türkçe": "Sebep"
+    "Türkçe": "Sebep",
+    "Deutsch": "Grund",
+    "Français": "Raison",
+    "Italiano": "Motivo",
+    "Español (Spanish)": "Motivo",
+    "Português": "Motivo",
+    "Русский (Russian)": "Причина",
+    "日本語 (Japanese)": "理由",
+    "中文 (Chinese)": "原因",
+    "العربية (Arabic)": "السبب",
+    "हिन्दी (Hindi)": "कारण"
   },
   "-": {
     "Türkçe": "-"
@@ -2591,13 +3411,43 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "उद्योग चुनें"
   },
   "Apply Template": {
-    "Türkçe": "Şablonu Uygula"
+    "Türkçe": "Şablonu Uygula",
+    "Deutsch": "Vorlage anwenden",
+    "Français": "Appliquer le modèle",
+    "Italiano": "Applica modello",
+    "Español (Spanish)": "Aplicar plantilla",
+    "Português": "Aplicar modelo",
+    "Русский (Russian)": "Применить шаблон",
+    "日本語 (Japanese)": "テンプレートを適用",
+    "中文 (Chinese)": "应用模板",
+    "العربية (Arabic)": "تطبيق القالب",
+    "हिन्दी (Hindi)": "टेम्पलेट लागू करें"
   },
   "Warning: This will overwrite your current workflow steps and inventory labels. Are you sure?": {
-    "Türkçe": "Uyarı: Bu işlem mevcut iş akışı adımlarınızı ve etiketlerinizi sıfırlayacaktır. Emin misiniz?"
+    "Türkçe": "Uyarı: Bu işlem mevcut iş akışı adımlarınızı ve etiketlerinizi sıfırlayacaktır. Emin misiniz?",
+    "Deutsch": "Warnung: Dadurch werden Ihre aktuellen Workflow-Schritte und Inventaretiketten überschrieben. Sind Sie sicher?",
+    "Français": "Avertissement : ceci écrasera vos étapes de flux et étiquettes d'inventaire actuelles. Êtes-vous sûr ?",
+    "Italiano": "Attenzione: questo sovrascriverà i passaggi del flusso e le etichette di inventario attuali. Sei sicuro?",
+    "Español (Spanish)": "Advertencia: esto sobrescribirá tus pasos de flujo y etiquetas de inventario actuales. ¿Seguro?",
+    "Português": "Aviso: isto irá substituir os seus passos de fluxo e etiquetas de inventário atuais. Tem a certeza?",
+    "Русский (Russian)": "Внимание: это перезапишет ваши текущие шаги рабочего процесса и метки инвентаря. Вы уверены?",
+    "日本語 (Japanese)": "警告: 現在のワークフローステップと在庫ラベルが上書きされます。よろしいですか？",
+    "中文 (Chinese)": "警告：这将覆盖您当前的工作流步骤和库存标签。确定吗？",
+    "العربية (Arabic)": "تحذير: سيؤدي هذا إلى استبدال خطوات سير عملك وتسميات المخزون الحالية. هل أنت متأكد؟",
+    "हिन्दी (Hindi)": "चेतावनी: यह आपके वर्तमान वर्कफ़्लो चरणों और इन्वेंट्री लेबल को अधिलेखित कर देगा। क्या आप निश्चित हैं?"
   },
   "Template applied successfully!": {
-    "Türkçe": "Şablon başarıyla uygulandı!"
+    "Türkçe": "Şablon başarıyla uygulandı!",
+    "Deutsch": "Vorlage erfolgreich angewendet!",
+    "Français": "Modèle appliqué avec succès !",
+    "Italiano": "Modello applicato con successo!",
+    "Español (Spanish)": "¡Plantilla aplicada correctamente!",
+    "Português": "Modelo aplicado com sucesso!",
+    "Русский (Russian)": "Шаблон успешно применён!",
+    "日本語 (Japanese)": "テンプレートを適用しました！",
+    "中文 (Chinese)": "模板应用成功！",
+    "العربية (Arabic)": "تم تطبيق القالب بنجاح!",
+    "हिन्दी (Hindi)": "टेम्पलेट सफलतापूर्वक लागू हुआ!"
   },
   "Custom Art Studio": {
     "Türkçe": "Özel Sanat Stüdyosu", "Deutsch": "Individuelles Kunststudio", "Français": "Atelier d'art personnalisé", "Italiano": "Studio d'arte personalizzata", "Español (Spanish)": "Estudio de arte personalizado", "Português": "Estúdio de arte personalizada", "Русский (Russian)": "Студия авторского искусства", "日本語 (Japanese)": "カスタムアートスタジオ", "中文 (Chinese)": "定制艺术工作室", "العربية (Arabic)": "استوديو فن مخصص", "हिन्दी (Hindi)": "कस्टम आर्ट स्टूडियो"
@@ -3707,142 +4557,602 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "Türkçe": "Kaydedilen değerler, Mac, iPad, iPhone ve web tarafından kullanılan aynı uygulamayla uyumlu companySettings blok başlığı alanlarına yazılır.", "Deutsch": "Gespeicherte Werte werden in dieselben app-kompatiblen companySettings-Blocküberschriften-Felder geschrieben, die von Mac, iPad, iPhone und Web verwendet werden.", "Français": "Les valeurs enregistrées sont écrites dans les mêmes champs d'en-têtes de blocs companySettings compatibles utilisés par Mac, iPad, iPhone et le web.", "Italiano": "I valori salvati vengono scritti negli stessi campi intestazione blocco companySettings compatibili usati da Mac, iPad, iPhone e web.", "Español (Spanish)": "Los valores guardados se escriben en los mismos campos de encabezado de bloque companySettings compatibles usados por Mac, iPad, iPhone y web.", "Português": "Os valores guardados são gravados nos mesmos campos de cabeçalho de bloco companySettings compatíveis usados por Mac, iPad, iPhone e web.", "Русский (Russian)": "Сохранённые значения записываются в те же совместимые поля заголовков блоков companySettings, что используются на Mac, iPad, iPhone и в вебе.", "日本語 (Japanese)": "保存された値は、Mac・iPad・iPhone・Web が使用するのと同じアプリ互換の companySettings ブロック見出しフィールドに書き込まれます。", "中文 (Chinese)": "保存的值会写入 Mac、iPad、iPhone 和网页所使用的同一套与应用兼容的 companySettings 区块标题字段。", "العربية (Arabic)": "تُكتب القيم المحفوظة في نفس حقول عناوين كتل companySettings المتوافقة مع التطبيق المستخدمة في Mac وiPad وiPhone والويب.", "हिन्दी (Hindi)": "सहेजे गए मान उन्हीं ऐप-संगत companySettings ब्लॉक हेडिंग फ़ील्ड में लिखे जाते हैं जिन्हें Mac, iPad, iPhone और वेब उपयोग करते हैं।"
   },
   "Watch Ref.": {
-    "Türkçe": "Referans"
+    "Türkçe": "Referans",
+    "Deutsch": "Uhren-Ref.",
+    "Français": "Réf. montre",
+    "Italiano": "Rif. orologio",
+    "Español (Spanish)": "Ref. de reloj",
+    "Português": "Ref. relógio",
+    "Русский (Russian)": "Артикул часов",
+    "日本語 (Japanese)": "時計参照",
+    "中文 (Chinese)": "手表编号",
+    "العربية (Arabic)": "مرجع الساعة",
+    "हिन्दी (Hindi)": "घड़ी संदर्भ"
   },
   "Device Model": {
-    "Türkçe": "Cihaz Modeli"
+    "Türkçe": "Cihaz Modeli",
+    "Deutsch": "Gerätemodell",
+    "Français": "Modèle d'appareil",
+    "Italiano": "Modello dispositivo",
+    "Español (Spanish)": "Modelo de dispositivo",
+    "Português": "Modelo do dispositivo",
+    "Русский (Russian)": "Модель устройства",
+    "日本語 (Japanese)": "デバイスモデル",
+    "中文 (Chinese)": "设备型号",
+    "العربية (Arabic)": "طراز الجهاز",
+    "हिन्दी (Hindi)": "डिवाइस मॉडल"
   },
   "Serial Number": {
-    "Türkçe": "Seri No"
+    "Türkçe": "Seri No",
+    "Deutsch": "Seriennummer",
+    "Français": "Numéro de série",
+    "Italiano": "Numero di serie",
+    "Español (Spanish)": "Número de serie",
+    "Português": "Número de série",
+    "Русский (Russian)": "Серийный номер",
+    "日本語 (Japanese)": "シリアル番号",
+    "中文 (Chinese)": "序列号",
+    "العربية (Arabic)": "الرقم التسلسلي",
+    "हिन्दी (Hindi)": "सीरियल नंबर"
   },
   "Garment Type": {
-    "Türkçe": "Giysi Türü"
+    "Türkçe": "Giysi Türü",
+    "Deutsch": "Kleidungstyp",
+    "Français": "Type de vêtement",
+    "Italiano": "Tipo di capo",
+    "Español (Spanish)": "Tipo de prenda",
+    "Português": "Tipo de peça",
+    "Русский (Russian)": "Тип одежды",
+    "日本語 (Japanese)": "衣類の種類",
+    "中文 (Chinese)": "服装类型",
+    "العربية (Arabic)": "نوع الملابس",
+    "हिन्दी (Hindi)": "परिधान प्रकार"
   },
   "Fabric": {
-    "Türkçe": "Kumaş"
+    "Türkçe": "Kumaş",
+    "Deutsch": "Stoff",
+    "Français": "Tissu",
+    "Italiano": "Tessuto",
+    "Español (Spanish)": "Tela",
+    "Português": "Tecido",
+    "Русский (Russian)": "Ткань",
+    "日本語 (Japanese)": "生地",
+    "中文 (Chinese)": "面料",
+    "العربية (Arabic)": "القماش",
+    "हिन्दी (Hindi)": "कपड़ा"
   },
   "Metal Type": {
-    "Türkçe": "Metal Türü"
+    "Türkçe": "Metal Türü",
+    "Deutsch": "Metalltyp",
+    "Français": "Type de métal",
+    "Italiano": "Tipo di metallo",
+    "Español (Spanish)": "Tipo de metal",
+    "Português": "Tipo de metal",
+    "Русский (Russian)": "Тип металла",
+    "日本語 (Japanese)": "金属の種類",
+    "中文 (Chinese)": "金属类型",
+    "العربية (Arabic)": "نوع المعدن",
+    "हिन्दी (Hindi)": "धातु प्रकार"
   },
   "Ring Size": {
-    "Türkçe": "Yüzük Ölçüsü"
+    "Türkçe": "Yüzük Ölçüsü",
+    "Deutsch": "Ringgröße",
+    "Français": "Taille de bague",
+    "Italiano": "Misura anello",
+    "Español (Spanish)": "Talla de anillo",
+    "Português": "Tamanho do anel",
+    "Русский (Russian)": "Размер кольца",
+    "日本語 (Japanese)": "リングサイズ",
+    "中文 (Chinese)": "戒指尺寸",
+    "العربية (Arabic)": "مقاس الخاتم",
+    "हिन्दी (Hindi)": "अंगूठी का आकार"
   },
   "Project Type": {
-    "Türkçe": "Proje Tipi"
+    "Türkçe": "Proje Tipi",
+    "Deutsch": "Projekttyp",
+    "Français": "Type de projet",
+    "Italiano": "Tipo di progetto",
+    "Español (Spanish)": "Tipo de proyecto",
+    "Português": "Tipo de projeto",
+    "Русский (Russian)": "Тип проекта",
+    "日本語 (Japanese)": "プロジェクトの種類",
+    "中文 (Chinese)": "项目类型",
+    "العربية (Arabic)": "نوع المشروع",
+    "हिन्दी (Hindi)": "परियोजना प्रकार"
   },
   "Brand Name": {
-    "Türkçe": "Marka Adı"
+    "Türkçe": "Marka Adı",
+    "Deutsch": "Markenname",
+    "Français": "Nom de la marque",
+    "Italiano": "Nome del marchio",
+    "Español (Spanish)": "Nombre de marca",
+    "Português": "Nome da marca",
+    "Русский (Russian)": "Название бренда",
+    "日本語 (Japanese)": "ブランド名",
+    "中文 (Chinese)": "品牌名称",
+    "العربية (Arabic)": "اسم العلامة التجارية",
+    "हिन्दी (Hindi)": "ब्रांड नाम"
   },
   "Shoot Type": {
-    "Türkçe": "Çekim Türü"
+    "Türkçe": "Çekim Türü",
+    "Deutsch": "Aufnahmetyp",
+    "Français": "Type de prise de vue",
+    "Italiano": "Tipo di servizio",
+    "Español (Spanish)": "Tipo de sesión",
+    "Português": "Tipo de sessão",
+    "Русский (Russian)": "Тип съёмки",
+    "日本語 (Japanese)": "撮影の種類",
+    "中文 (Chinese)": "拍摄类型",
+    "العربية (Arabic)": "نوع التصوير",
+    "हिन्दी (Hindi)": "शूट प्रकार"
   },
   "Location": {
-    "Türkçe": "Konum"
+    "Türkçe": "Konum",
+    "Deutsch": "Standort",
+    "Français": "Lieu",
+    "Italiano": "Posizione",
+    "Español (Spanish)": "Ubicación",
+    "Português": "Localização",
+    "Русский (Russian)": "Местоположение",
+    "日本語 (Japanese)": "場所",
+    "中文 (Chinese)": "地点",
+    "العربية (Arabic)": "الموقع",
+    "हिन्दी (Hindi)": "स्थान"
   },
   "Sketching": {
-    "Türkçe": "Taslak Çizimi"
+    "Türkçe": "Taslak Çizimi",
+    "Deutsch": "Skizzieren",
+    "Français": "Esquisse",
+    "Italiano": "Schizzo",
+    "Español (Spanish)": "Bocetado",
+    "Português": "Esboço",
+    "Русский (Russian)": "Эскиз",
+    "日本語 (Japanese)": "スケッチ",
+    "中文 (Chinese)": "草图绘制",
+    "العربية (Arabic)": "رسم تخطيطي",
+    "हिन्दी (Hindi)": "स्केचिंग"
   },
   "Painting": {
-    "Türkçe": "Boyama"
+    "Türkçe": "Boyama",
+    "Deutsch": "Malen",
+    "Français": "Peinture",
+    "Italiano": "Pittura",
+    "Español (Spanish)": "Pintura",
+    "Português": "Pintura",
+    "Русский (Russian)": "Покраска",
+    "日本語 (Japanese)": "塗装",
+    "中文 (Chinese)": "上色",
+    "العربية (Arabic)": "رسم",
+    "हिन्दी (Hindi)": "पेंटिंग"
   },
   "Varnishing": {
-    "Türkçe": "Cilalama"
+    "Türkçe": "Cilalama",
+    "Deutsch": "Lackieren",
+    "Français": "Vernissage",
+    "Italiano": "Verniciatura",
+    "Español (Spanish)": "Barnizado",
+    "Português": "Envernizamento",
+    "Русский (Russian)": "Лакировка",
+    "日本語 (Japanese)": "ニス塗り",
+    "中文 (Chinese)": "上漆",
+    "العربية (Arabic)": "تلميع",
+    "हिन्दी (Hindi)": "वार्निशिंग"
   },
   "Briefing": {
-    "Türkçe": "Müşteri Özeti"
+    "Türkçe": "Müşteri Özeti",
+    "Deutsch": "Briefing",
+    "Français": "Briefing",
+    "Italiano": "Briefing",
+    "Español (Spanish)": "Briefing",
+    "Português": "Briefing",
+    "Русский (Russian)": "Бриф",
+    "日本語 (Japanese)": "ブリーフィング",
+    "中文 (Chinese)": "简报",
+    "العربية (Arabic)": "ملخص",
+    "हिन्दी (Hindi)": "ब्रीफिंग"
   },
   "Concept": {
-    "Türkçe": "Konsept"
+    "Türkçe": "Konsept",
+    "Deutsch": "Konzept",
+    "Français": "Concept",
+    "Italiano": "Concept",
+    "Español (Spanish)": "Concepto",
+    "Português": "Conceito",
+    "Русский (Russian)": "Концепт",
+    "日本語 (Japanese)": "コンセプト",
+    "中文 (Chinese)": "概念",
+    "العربية (Arabic)": "تصور",
+    "हिन्दी (Hindi)": "कॉन्सेप्ट"
   },
   "Drafting": {
-    "Türkçe": "Taslak"
+    "Türkçe": "Taslak",
+    "Deutsch": "Entwurf",
+    "Français": "Brouillon",
+    "Italiano": "Bozza",
+    "Español (Spanish)": "Borrador",
+    "Português": "Rascunho",
+    "Русский (Russian)": "Черновик",
+    "日本語 (Japanese)": "下書き",
+    "中文 (Chinese)": "草拟",
+    "العربية (Arabic)": "مسودة",
+    "हिन्दी (Hindi)": "ड्राफ्टिंग"
   },
   "Finalizing": {
-    "Türkçe": "Sonlandırma"
+    "Türkçe": "Sonlandırma",
+    "Deutsch": "Fertigstellung",
+    "Français": "Finalisation",
+    "Italiano": "Finalizzazione",
+    "Español (Spanish)": "Finalización",
+    "Português": "Finalização",
+    "Русский (Russian)": "Завершение",
+    "日本語 (Japanese)": "仕上げ",
+    "中文 (Chinese)": "定稿",
+    "العربية (Arabic)": "الإنهاء",
+    "हिन्दी (Hindi)": "अंतिम रूप"
   },
   "Diagnostics": {
-    "Türkçe": "Arıza Tespiti"
+    "Türkçe": "Arıza Tespiti",
+    "Deutsch": "Diagnose",
+    "Français": "Diagnostic",
+    "Italiano": "Diagnostica",
+    "Español (Spanish)": "Diagnóstico",
+    "Português": "Diagnóstico",
+    "Русский (Russian)": "Диагностика",
+    "日本語 (Japanese)": "診断",
+    "中文 (Chinese)": "故障诊断",
+    "العربية (Arabic)": "تشخيص",
+    "हिन्दी (Hindi)": "निदान"
   },
   "Repairing": {
-    "Türkçe": "Tamir"
+    "Türkçe": "Tamir",
+    "Deutsch": "Reparatur",
+    "Français": "Réparation",
+    "Italiano": "Riparazione",
+    "Español (Spanish)": "Reparación",
+    "Português": "Reparação",
+    "Русский (Russian)": "Ремонт",
+    "日本語 (Japanese)": "修理",
+    "中文 (Chinese)": "维修",
+    "العربية (Arabic)": "إصلاح",
+    "हिन्दी (Hindi)": "मरम्मत"
   },
   "Testing": {
-    "Türkçe": "Test Ediliyor"
+    "Türkçe": "Test Ediliyor",
+    "Deutsch": "Testen",
+    "Français": "Test",
+    "Italiano": "Test",
+    "Español (Spanish)": "Pruebas",
+    "Português": "Teste",
+    "Русский (Russian)": "Тестирование",
+    "日本語 (Japanese)": "テスト",
+    "中文 (Chinese)": "测试",
+    "العربية (Arabic)": "اختبار",
+    "हिन्दी (Hindi)": "परीक्षण"
   },
   "Pinning": {
-    "Türkçe": "İğneleme"
+    "Türkçe": "İğneleme",
+    "Deutsch": "Anstecken",
+    "Français": "Épinglage",
+    "Italiano": "Spillatura",
+    "Español (Spanish)": "Alfilerado",
+    "Português": "Alfinetagem",
+    "Русский (Russian)": "Закалывание",
+    "日本語 (Japanese)": "ピン留め",
+    "中文 (Chinese)": "别针固定",
+    "العربية (Arabic)": "تثبيت بالدبابيس",
+    "हिन्दी (Hindi)": "पिनिंग"
   },
   "Cutting": {
-    "Türkçe": "Kesim"
+    "Türkçe": "Kesim",
+    "Deutsch": "Zuschnitt",
+    "Français": "Découpe",
+    "Italiano": "Taglio",
+    "Español (Spanish)": "Corte",
+    "Português": "Corte",
+    "Русский (Russian)": "Раскрой",
+    "日本語 (Japanese)": "裁断",
+    "中文 (Chinese)": "裁剪",
+    "العربية (Arabic)": "قص",
+    "हिन्दी (Hindi)": "कटाई"
   },
   "Sewing": {
-    "Türkçe": "Dikim"
+    "Türkçe": "Dikim",
+    "Deutsch": "Nähen",
+    "Français": "Couture",
+    "Italiano": "Cucito",
+    "Español (Spanish)": "Costura",
+    "Português": "Costura",
+    "Русский (Russian)": "Шитьё",
+    "日本語 (Japanese)": "縫製",
+    "中文 (Chinese)": "缝制",
+    "العربية (Arabic)": "خياطة",
+    "हिन्दी (Hindi)": "सिलाई"
   },
   "Fitting": {
-    "Türkçe": "Prova"
+    "Türkçe": "Prova",
+    "Deutsch": "Anprobe",
+    "Français": "Essayage",
+    "Italiano": "Prova",
+    "Español (Spanish)": "Prueba",
+    "Português": "Prova",
+    "Русский (Russian)": "Примерка",
+    "日本語 (Japanese)": "フィッティング",
+    "中文 (Chinese)": "试穿",
+    "العربية (Arabic)": "قياس",
+    "हिन्दी (Hindi)": "फिटिंग"
   },
   "Designing": {
-    "Türkçe": "Tasarım"
+    "Türkçe": "Tasarım",
+    "Deutsch": "Entwerfen",
+    "Français": "Conception",
+    "Italiano": "Progettazione",
+    "Español (Spanish)": "Diseño",
+    "Português": "Design",
+    "Русский (Russian)": "Дизайн",
+    "日本語 (Japanese)": "デザイン",
+    "中文 (Chinese)": "设计",
+    "العربية (Arabic)": "تصميم",
+    "हिन्दी (Hindi)": "डिज़ाइनिंग"
   },
   "Casting": {
-    "Türkçe": "Döküm"
+    "Türkçe": "Döküm",
+    "Deutsch": "Gießen",
+    "Français": "Coulée",
+    "Italiano": "Fusione",
+    "Español (Spanish)": "Fundición",
+    "Português": "Fundição",
+    "Русский (Russian)": "Литьё",
+    "日本語 (Japanese)": "鋳造",
+    "中文 (Chinese)": "铸造",
+    "العربية (Arabic)": "صب",
+    "हिन्दी (Hindi)": "कास्टिंग"
   },
   "Polishing": {
-    "Türkçe": "Cilalama / Parlatma"
+    "Türkçe": "Cilalama / Parlatma",
+    "Deutsch": "Polieren",
+    "Français": "Polissage",
+    "Italiano": "Lucidatura",
+    "Español (Spanish)": "Pulido",
+    "Português": "Polimento",
+    "Русский (Russian)": "Полировка",
+    "日本語 (Japanese)": "研磨",
+    "中文 (Chinese)": "抛光",
+    "العربية (Arabic)": "تلميع",
+    "हिन्दी (Hindi)": "पॉलिशिंग"
   },
   "Stone Setting": {
-    "Türkçe": "Taş Mıhlama"
+    "Türkçe": "Taş Mıhlama",
+    "Deutsch": "Steinfassung",
+    "Français": "Sertissage",
+    "Italiano": "Incastonatura",
+    "Español (Spanish)": "Engaste",
+    "Português": "Cravação",
+    "Русский (Russian)": "Закрепка камня",
+    "日本語 (Japanese)": "石留め",
+    "中文 (Chinese)": "镶石",
+    "العربية (Arabic)": "تركيب الأحجار",
+    "हिन्दी (Hindi)": "स्टोन सेटिंग"
   },
   "Pre-shoot": {
-    "Türkçe": "Çekim Öncesi"
+    "Türkçe": "Çekim Öncesi",
+    "Deutsch": "Vor dem Shooting",
+    "Français": "Préparation du shooting",
+    "Italiano": "Pre-shooting",
+    "Español (Spanish)": "Preproducción",
+    "Português": "Pré-sessão",
+    "Русский (Russian)": "Подготовка к съёмке",
+    "日本語 (Japanese)": "撮影前",
+    "中文 (Chinese)": "拍摄前",
+    "العربية (Arabic)": "ما قبل التصوير",
+    "हिन्दी (Hindi)": "प्री-शूट"
   },
   "Shooting": {
-    "Türkçe": "Çekim"
+    "Türkçe": "Çekim",
+    "Deutsch": "Shooting",
+    "Français": "Prise de vue",
+    "Italiano": "Servizio fotografico",
+    "Español (Spanish)": "Sesión",
+    "Português": "Sessão",
+    "Русский (Russian)": "Съёмка",
+    "日本語 (Japanese)": "撮影",
+    "中文 (Chinese)": "拍摄",
+    "العربية (Arabic)": "تصوير",
+    "हिन्दी (Hindi)": "शूटिंग"
   },
   "Editing": {
-    "Türkçe": "Düzenleme"
+    "Türkçe": "Düzenleme",
+    "Deutsch": "Bearbeitung",
+    "Français": "Montage",
+    "Italiano": "Editing",
+    "Español (Spanish)": "Edición",
+    "Português": "Edição",
+    "Русский (Russian)": "Монтаж",
+    "日本語 (Japanese)": "編集",
+    "中文 (Chinese)": "剪辑",
+    "العربية (Arabic)": "تحرير",
+    "हिन्दी (Hindi)": "एडिटिंग"
   },
   "Retouching": {
-    "Türkçe": "Rötuş"
+    "Türkçe": "Rötuş",
+    "Deutsch": "Retusche",
+    "Français": "Retouche",
+    "Italiano": "Ritocco",
+    "Español (Spanish)": "Retoque",
+    "Português": "Retoque",
+    "Русский (Russian)": "Ретушь",
+    "日本語 (Japanese)": "レタッチ",
+    "中文 (Chinese)": "修图",
+    "العربية (Arabic)": "تنقيح",
+    "हिन्दी (Hindi)": "रीटचिंग"
   },
   "Sourcing": {
-    "Türkçe": "Tedarik"
+    "Türkçe": "Tedarik",
+    "Deutsch": "Beschaffung",
+    "Français": "Approvisionnement",
+    "Italiano": "Approvvigionamento",
+    "Español (Spanish)": "Aprovisionamiento",
+    "Português": "Aquisição",
+    "Русский (Russian)": "Закупка",
+    "日本語 (Japanese)": "調達",
+    "中文 (Chinese)": "采购",
+    "العربية (Arabic)": "التوريد",
+    "हिन्दी (Hindi)": "सोर्सिंग"
   },
   "Crafting": {
-    "Türkçe": "Üretim"
+    "Türkçe": "Üretim",
+    "Deutsch": "Fertigung",
+    "Français": "Fabrication",
+    "Italiano": "Realizzazione",
+    "Español (Spanish)": "Elaboración",
+    "Português": "Confeção",
+    "Русский (Russian)": "Изготовление",
+    "日本語 (Japanese)": "製作",
+    "中文 (Chinese)": "制作",
+    "العربية (Arabic)": "تصنيع",
+    "हिन्दी (Hindi)": "निर्माण"
   },
   "Client Approved Sketch?": {
-    "Türkçe": "Müşteri Taslağı Onayladı mı?"
+    "Türkçe": "Müşteri Taslağı Onayladı mı?",
+    "Deutsch": "Skizze vom Kunden genehmigt?",
+    "Français": "Croquis approuvé par le client ?",
+    "Italiano": "Schizzo approvato dal cliente?",
+    "Español (Spanish)": "¿Boceto aprobado por el cliente?",
+    "Português": "Esboço aprovado pelo cliente?",
+    "Русский (Russian)": "Эскиз одобрен клиентом?",
+    "日本語 (Japanese)": "顧客がスケッチを承認？",
+    "中文 (Chinese)": "客户已批准草图？",
+    "العربية (Arabic)": "هل وافق العميل على الرسم؟",
+    "हिन्दी (Hindi)": "ग्राहक ने स्केच स्वीकृत किया?"
   },
   "Varnish Dried?": {
-    "Türkçe": "Cila Kurudu mu?"
+    "Türkçe": "Cila Kurudu mu?",
+    "Deutsch": "Lack getrocknet?",
+    "Français": "Vernis sec ?",
+    "Italiano": "Vernice asciutta?",
+    "Español (Spanish)": "¿Barniz seco?",
+    "Português": "Verniz seco?",
+    "Русский (Russian)": "Лак высох?",
+    "日本語 (Japanese)": "ニスは乾いた？",
+    "中文 (Chinese)": "漆已干？",
+    "العربية (Arabic)": "هل جف الطلاء؟",
+    "हिन्दी (Hindi)": "वार्निश सूखा?"
   },
   "Assets Received?": {
-    "Türkçe": "Materyaller Alındı mı?"
+    "Türkçe": "Materyaller Alındı mı?",
+    "Deutsch": "Materialien erhalten?",
+    "Français": "Éléments reçus ?",
+    "Italiano": "Materiali ricevuti?",
+    "Español (Spanish)": "¿Recursos recibidos?",
+    "Português": "Recursos recebidos?",
+    "Русский (Russian)": "Материалы получены?",
+    "日本語 (Japanese)": "素材は受領済み？",
+    "中文 (Chinese)": "素材已收到？",
+    "العربية (Arabic)": "هل تم استلام الملفات؟",
+    "हिन्दी (Hindi)": "सामग्री प्राप्त हुई?"
   },
   "Deposit Cleared?": {
-    "Türkçe": "Kapora Hesaba Geçti mi?"
+    "Türkçe": "Kapora Hesaba Geçti mi?",
+    "Deutsch": "Anzahlung eingegangen?",
+    "Français": "Acompte encaissé ?",
+    "Italiano": "Acconto incassato?",
+    "Español (Spanish)": "¿Depósito confirmado?",
+    "Português": "Sinal recebido?",
+    "Русский (Russian)": "Задаток поступил?",
+    "日本語 (Japanese)": "手付金は入金済み？",
+    "中文 (Chinese)": "定金已到账？",
+    "العربية (Arabic)": "هل تم تحصيل العربون؟",
+    "हिन्दी (Hindi)": "जमा राशि प्राप्त हुई?"
   },
   "Warranty Valid?": {
-    "Türkçe": "Garanti Geçerli mi?"
+    "Türkçe": "Garanti Geçerli mi?",
+    "Deutsch": "Garantie gültig?",
+    "Français": "Garantie valide ?",
+    "Italiano": "Garanzia valida?",
+    "Español (Spanish)": "¿Garantía válida?",
+    "Português": "Garantia válida?",
+    "Русский (Russian)": "Гарантия действительна?",
+    "日本語 (Japanese)": "保証は有効？",
+    "中文 (Chinese)": "保修有效？",
+    "العربية (Arabic)": "هل الضمان ساري؟",
+    "हिन्दी (Hindi)": "वारंटी मान्य?"
   },
   "Customer Approved Cost?": {
-    "Türkçe": "Müşteri Maliyeti Onayladı mı?"
+    "Türkçe": "Müşteri Maliyeti Onayladı mı?",
+    "Deutsch": "Kosten vom Kunden genehmigt?",
+    "Français": "Coût approuvé par le client ?",
+    "Italiano": "Costo approvato dal cliente?",
+    "Español (Spanish)": "¿Coste aprobado por el cliente?",
+    "Português": "Custo aprovado pelo cliente?",
+    "Русский (Russian)": "Стоимость одобрена клиентом?",
+    "日本語 (Japanese)": "顧客が費用を承認？",
+    "中文 (Chinese)": "客户已批准费用？",
+    "العربية (Arabic)": "هل وافق العميل على التكلفة؟",
+    "हिन्दी (Hindi)": "ग्राहक ने लागत स्वीकृत की?"
   },
   "Measurements Taken?": {
-    "Türkçe": "Ölçüler Alındı mı?"
+    "Türkçe": "Ölçüler Alındı mı?",
+    "Deutsch": "Maße genommen?",
+    "Français": "Mesures prises ?",
+    "Italiano": "Misure prese?",
+    "Español (Spanish)": "¿Medidas tomadas?",
+    "Português": "Medidas tiradas?",
+    "Русский (Russian)": "Замеры сняты?",
+    "日本語 (Japanese)": "採寸は完了？",
+    "中文 (Chinese)": "已量尺寸？",
+    "العربية (Arabic)": "هل تم أخذ القياسات؟",
+    "हिन्दी (Hindi)": "माप लिए गए?"
   },
   "Ironed?": {
-    "Türkçe": "Ütülendi mi?"
+    "Türkçe": "Ütülendi mi?",
+    "Deutsch": "Gebügelt?",
+    "Français": "Repassé ?",
+    "Italiano": "Stirato?",
+    "Español (Spanish)": "¿Planchado?",
+    "Português": "Passado a ferro?",
+    "Русский (Russian)": "Поглажено?",
+    "日本語 (Japanese)": "アイロンは済んだ？",
+    "中文 (Chinese)": "已熨烫？",
+    "العربية (Arabic)": "هل تم الكي؟",
+    "हिन्दी (Hindi)": "इस्त्री किया?"
   },
   "3D Render Approved?": {
-    "Türkçe": "3D Çizim Onaylandı mı?"
+    "Türkçe": "3D Çizim Onaylandı mı?",
+    "Deutsch": "3D-Render genehmigt?",
+    "Français": "Rendu 3D approuvé ?",
+    "Italiano": "Rendering 3D approvato?",
+    "Español (Spanish)": "¿Render 3D aprobado?",
+    "Português": "Render 3D aprovado?",
+    "Русский (Russian)": "3D-рендер одобрен?",
+    "日本語 (Japanese)": "3D レンダーは承認済み？",
+    "中文 (Chinese)": "3D 渲染已批准？",
+    "العربية (Arabic)": "هل تمت الموافقة على النموذج ثلاثي الأبعاد؟",
+    "हिन्दी (Hindi)": "3D रेंडर स्वीकृत?"
   },
   "Hallmarked?": {
-    "Türkçe": "Damgalandı mı?"
+    "Türkçe": "Damgalandı mı?",
+    "Deutsch": "Punziert?",
+    "Français": "Poinçonné ?",
+    "Italiano": "Punzonato?",
+    "Español (Spanish)": "¿Contrastado?",
+    "Português": "Com contraste?",
+    "Русский (Russian)": "Клеймо поставлено?",
+    "日本語 (Japanese)": "刻印済み？",
+    "中文 (Chinese)": "已盖印记？",
+    "العربية (Arabic)": "هل تم الدمغ؟",
+    "हिन्दी (Hindi)": "हॉलमार्क किया?"
   },
   "Contract Signed?": {
-    "Türkçe": "Sözleşme İmzalandı mı?"
+    "Türkçe": "Sözleşme İmzalandı mı?",
+    "Deutsch": "Vertrag unterschrieben?",
+    "Français": "Contrat signé ?",
+    "Italiano": "Contratto firmato?",
+    "Español (Spanish)": "¿Contrato firmado?",
+    "Português": "Contrato assinado?",
+    "Русский (Russian)": "Договор подписан?",
+    "日本語 (Japanese)": "契約は署名済み？",
+    "中文 (Chinese)": "合同已签署？",
+    "العربية (Arabic)": "هل تم توقيع العقد؟",
+    "हिन्दी (Hindi)": "अनुबंध पर हस्ताक्षर हुए?"
   },
   "Notes": {
     "Türkçe": "Notlar",
@@ -4690,7 +6000,17 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "अनुलग्नक"
   },
   "Files": {
-    "Türkçe": "Dosyalardan Seç"
+    "Türkçe": "Dosyalardan Seç",
+    "Deutsch": "Dateien",
+    "Français": "Fichiers",
+    "Italiano": "File",
+    "Español (Spanish)": "Archivos",
+    "Português": "Ficheiros",
+    "Русский (Russian)": "Файлы",
+    "日本語 (Japanese)": "ファイル",
+    "中文 (Chinese)": "文件",
+    "العربية (Arabic)": "الملفات",
+    "हिन्दी (Hindi)": "फ़ाइलें"
   },
   "Media": {
     "Türkçe": "Medya",
@@ -5148,7 +6468,17 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "त्वरित रिमाइंडर संपादित करें"
   },
   "Choose the shortcut titles shown in Schedule & Alerts. Date, priority and note are set in the card.": {
-    "Türkçe": "Plan ve Uyarılar kartında görünen kısayol başlıklarını seçin. Tarih, öncelik ve not kartın içinde ayarlanır."
+    "Türkçe": "Plan ve Uyarılar kartında görünen kısayol başlıklarını seçin. Tarih, öncelik ve not kartın içinde ayarlanır.",
+    "Deutsch": "Wählen Sie die Kurzbefehl-Titel, die in Termine & Hinweise angezeigt werden. Datum, Priorität und Notiz werden in der Karte festgelegt.",
+    "Français": "Choisissez les titres de raccourcis affichés dans Planning et alertes. La date, la priorité et la note sont définies dans la carte.",
+    "Italiano": "Scegli i titoli delle scorciatoie mostrati in Pianificazione e avvisi. Data, priorità e nota si impostano nella scheda.",
+    "Español (Spanish)": "Elige los títulos de atajo que se muestran en Agenda y alertas. La fecha, la prioridad y la nota se establecen en la tarjeta.",
+    "Português": "Escolha os títulos de atalho mostrados em Agenda e alertas. Data, prioridade e nota são definidas no cartão.",
+    "Русский (Russian)": "Выберите названия ярлыков, отображаемые в «Расписание и уведомления». Дата, приоритет и заметка задаются в карточке.",
+    "日本語 (Japanese)": "予定とアラートに表示されるショートカットのタイトルを選択します。日付・優先度・メモはカード内で設定します。",
+    "中文 (Chinese)": "选择在“日程与提醒”中显示的快捷标题。日期、优先级和备注在卡片中设置。",
+    "العربية (Arabic)": "اختر عناوين الاختصارات المعروضة في الجدول والتنبيهات. يتم تعيين التاريخ والأولوية والملاحظة في البطاقة.",
+    "हिन्दी (Hindi)": "शेड्यूल और अलर्ट में दिखाए गए शॉर्टकट शीर्षक चुनें। तिथि, प्राथमिकता और नोट कार्ड में सेट होते हैं।"
   },
   "Quick reminder settings": {
     "Türkçe": "Hızlı hatırlatıcı ayarları",
@@ -5320,25 +6650,95 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "सेटिंग्स के व्यवसाय प्रकार और विवरण का उपयोग करता है।"
   },
   "Ask for approval": {
-    "Türkçe": "Onay iste"
+    "Türkçe": "Onay iste",
+    "Deutsch": "Genehmigung anfragen",
+    "Français": "Demander une approbation",
+    "Italiano": "Chiedi approvazione",
+    "Español (Spanish)": "Pedir aprobación",
+    "Português": "Pedir aprovação",
+    "Русский (Russian)": "Запросить одобрение",
+    "日本語 (Japanese)": "承認を依頼",
+    "中文 (Chinese)": "请求批准",
+    "العربية (Arabic)": "طلب الموافقة",
+    "हिन्दी (Hindi)": "अनुमोदन माँगें"
   },
   "Confirm appointment": {
-    "Türkçe": "Randevuyu onayla"
+    "Türkçe": "Randevuyu onayla",
+    "Deutsch": "Termin bestätigen",
+    "Français": "Confirmer le rendez-vous",
+    "Italiano": "Conferma appuntamento",
+    "Español (Spanish)": "Confirmar cita",
+    "Português": "Confirmar marcação",
+    "Русский (Russian)": "Подтвердить встречу",
+    "日本語 (Japanese)": "予約を確認",
+    "中文 (Chinese)": "确认预约",
+    "العربية (Arabic)": "تأكيد الموعد",
+    "हिन्दी (Hindi)": "अपॉइंटमेंट की पुष्टि करें"
   },
   "Check materials": {
-    "Türkçe": "Malzemeleri kontrol et"
+    "Türkçe": "Malzemeleri kontrol et",
+    "Deutsch": "Materialien prüfen",
+    "Français": "Vérifier les matériaux",
+    "Italiano": "Controlla i materiali",
+    "Español (Spanish)": "Comprobar materiales",
+    "Português": "Verificar materiais",
+    "Русский (Russian)": "Проверить материалы",
+    "日本語 (Japanese)": "材料を確認",
+    "中文 (Chinese)": "检查材料",
+    "العربية (Arabic)": "فحص المواد",
+    "हिन्दी (Hindi)": "सामग्री जाँचें"
   },
   "Prepare shipment": {
-    "Türkçe": "Kargoyu hazırla"
+    "Türkçe": "Kargoyu hazırla",
+    "Deutsch": "Versand vorbereiten",
+    "Français": "Préparer l'expédition",
+    "Italiano": "Prepara la spedizione",
+    "Español (Spanish)": "Preparar envío",
+    "Português": "Preparar envio",
+    "Русский (Russian)": "Подготовить отправку",
+    "日本語 (Japanese)": "発送を準備",
+    "中文 (Chinese)": "准备发货",
+    "العربية (Arabic)": "تجهيز الشحنة",
+    "हिन्दी (Hindi)": "शिपमेंट तैयार करें"
   },
   "Quality check": {
-    "Türkçe": "Kalite kontrol"
+    "Türkçe": "Kalite kontrol",
+    "Deutsch": "Qualitätsprüfung",
+    "Français": "Contrôle qualité",
+    "Italiano": "Controllo qualità",
+    "Español (Spanish)": "Control de calidad",
+    "Português": "Controlo de qualidade",
+    "Русский (Russian)": "Контроль качества",
+    "日本語 (Japanese)": "品質チェック",
+    "中文 (Chinese)": "质量检查",
+    "العربية (Arabic)": "فحص الجودة",
+    "हिन्दी (Hindi)": "गुणवत्ता जाँच"
   },
   "Send invoice": {
-    "Türkçe": "Fatura gönder"
+    "Türkçe": "Fatura gönder",
+    "Deutsch": "Rechnung senden",
+    "Français": "Envoyer la facture",
+    "Italiano": "Invia fattura",
+    "Español (Spanish)": "Enviar factura",
+    "Português": "Enviar fatura",
+    "Русский (Russian)": "Отправить счёт",
+    "日本語 (Japanese)": "請求書を送信",
+    "中文 (Chinese)": "发送发票",
+    "العربية (Arabic)": "إرسال الفاتورة",
+    "हिन्दी (Hindi)": "चालान भेजें"
   },
   "Send client update": {
-    "Türkçe": "Müşteriye güncelleme gönder"
+    "Türkçe": "Müşteriye güncelleme gönder",
+    "Deutsch": "Kunden-Update senden",
+    "Français": "Envoyer une mise à jour au client",
+    "Italiano": "Invia aggiornamento al cliente",
+    "Español (Spanish)": "Enviar actualización al cliente",
+    "Português": "Enviar atualização ao cliente",
+    "Русский (Russian)": "Отправить обновление клиенту",
+    "日本語 (Japanese)": "顧客に進捗を送信",
+    "中文 (Chinese)": "向客户发送更新",
+    "العربية (Arabic)": "إرسال تحديث للعميل",
+    "हिन्दी (Hindi)": "ग्राहक को अपडेट भेजें"
   },
   "Follow up": {
     "Türkçe": "Takip et",
@@ -5432,16 +6832,56 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "ग्राहक से फॉलो अप"
   },
   "Send design update": {
-    "Türkçe": "Tasarım güncellemesi gönder"
+    "Türkçe": "Tasarım güncellemesi gönder",
+    "Deutsch": "Design-Update senden",
+    "Français": "Envoyer une mise à jour du design",
+    "Italiano": "Invia aggiornamento del design",
+    "Español (Spanish)": "Enviar actualización del diseño",
+    "Português": "Enviar atualização do design",
+    "Русский (Russian)": "Отправить обновление дизайна",
+    "日本語 (Japanese)": "デザインの進捗を送信",
+    "中文 (Chinese)": "发送设计更新",
+    "العربية (Arabic)": "إرسال تحديث التصميم",
+    "हिन्दी (Hindi)": "डिज़ाइन अपडेट भेजें"
   },
   "Check remaining payment": {
-    "Türkçe": "Kalan ödemeyi kontrol et"
+    "Türkçe": "Kalan ödemeyi kontrol et",
+    "Deutsch": "Restzahlung prüfen",
+    "Français": "Vérifier le paiement restant",
+    "Italiano": "Controlla il pagamento residuo",
+    "Español (Spanish)": "Comprobar pago restante",
+    "Português": "Verificar pagamento restante",
+    "Русский (Russian)": "Проверить остаток оплаты",
+    "日本語 (Japanese)": "残金を確認",
+    "中文 (Chinese)": "检查剩余付款",
+    "العربية (Arabic)": "التحقق من المبلغ المتبقي",
+    "हिन्दी (Hindi)": "शेष भुगतान जाँचें"
   },
   "Check dial arrival": {
-    "Türkçe": "Kadranın gelip gelmediğini kontrol et"
+    "Türkçe": "Kadranın gelip gelmediğini kontrol et",
+    "Deutsch": "Eingang des Zifferblatts prüfen",
+    "Français": "Vérifier l'arrivée du cadran",
+    "Italiano": "Controlla l'arrivo del quadrante",
+    "Español (Spanish)": "Comprobar llegada de la esfera",
+    "Português": "Verificar chegada do mostrador",
+    "Русский (Russian)": "Проверить поступление циферблата",
+    "日本語 (Japanese)": "文字盤の到着を確認",
+    "中文 (Chinese)": "检查表盘到货",
+    "العربية (Arabic)": "التحقق من وصول مينا الساعة",
+    "हिन्दी (Hindi)": "डायल आगमन जाँचें"
   },
   "Check delivery status": {
-    "Türkçe": "Teslimat durumunu kontrol et"
+    "Türkçe": "Teslimat durumunu kontrol et",
+    "Deutsch": "Lieferstatus prüfen",
+    "Français": "Vérifier le statut de livraison",
+    "Italiano": "Controlla lo stato di consegna",
+    "Español (Spanish)": "Comprobar estado de entrega",
+    "Português": "Verificar estado de entrega",
+    "Русский (Russian)": "Проверить статус доставки",
+    "日本語 (Japanese)": "配送状況を確認",
+    "中文 (Chinese)": "检查配送状态",
+    "العربية (Arabic)": "التحقق من حالة التسليم",
+    "हिन्दी (Hindi)": "डिलीवरी स्थिति जाँचें"
   },
   "Reminder title": {
     "Türkçe": "Hatırlatıcı başlığı",
@@ -5483,7 +6923,17 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "सूचित करें"
   },
   "Optional note...": {
-    "Türkçe": "İsteğe bağlı not..."
+    "Türkçe": "İsteğe bağlı not...",
+    "Deutsch": "Optionale Notiz...",
+    "Français": "Note facultative...",
+    "Italiano": "Nota facoltativa...",
+    "Español (Spanish)": "Nota opcional...",
+    "Português": "Nota opcional...",
+    "Русский (Russian)": "Необязательная заметка...",
+    "日本語 (Japanese)": "任意のメモ...",
+    "中文 (Chinese)": "可选备注...",
+    "العربية (Arabic)": "ملاحظة اختيارية...",
+    "हिन्दी (Hindi)": "वैकल्पिक नोट..."
   },
   "Add Reminder": {
     "Türkçe": "Hatırlatıcı Ekle",
@@ -5512,163 +6962,693 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "आगामी"
   },
   "No active reminders yet.": {
-    "Türkçe": "Henüz aktif hatırlatıcı yok."
+    "Türkçe": "Henüz aktif hatırlatıcı yok.",
+    "Deutsch": "Noch keine aktiven Erinnerungen.",
+    "Français": "Aucun rappel actif pour le moment.",
+    "Italiano": "Nessun promemoria attivo ancora.",
+    "Español (Spanish)": "Aún no hay recordatorios activos.",
+    "Português": "Ainda sem lembretes ativos.",
+    "Русский (Russian)": "Активных напоминаний пока нет.",
+    "日本語 (Japanese)": "アクティブなリマインダーはまだありません。",
+    "中文 (Chinese)": "暂无活动提醒。",
+    "العربية (Arabic)": "لا توجد تذكيرات نشطة بعد.",
+    "हिन्दी (Hindi)": "अभी तक कोई सक्रिय रिमाइंडर नहीं।"
   },
   "Recently completed": {
-    "Türkçe": "Son tamamlananlar"
+    "Türkçe": "Son tamamlananlar",
+    "Deutsch": "Kürzlich abgeschlossen",
+    "Français": "Récemment terminés",
+    "Italiano": "Completati di recente",
+    "Español (Spanish)": "Completados recientemente",
+    "Português": "Concluídos recentemente",
+    "Русский (Russian)": "Недавно завершённые",
+    "日本語 (Japanese)": "最近完了したもの",
+    "中文 (Chinese)": "最近完成",
+    "العربية (Arabic)": "المكتملة مؤخرًا",
+    "हिन्दी (Hindi)": "हाल ही में पूर्ण"
   },
   "Mark Done": {
-    "Türkçe": "Tamamlandı İşaretle"
+    "Türkçe": "Tamamlandı İşaretle",
+    "Deutsch": "Als erledigt markieren",
+    "Français": "Marquer comme fait",
+    "Italiano": "Segna come fatto",
+    "Español (Spanish)": "Marcar como hecho",
+    "Português": "Marcar como concluído",
+    "Русский (Russian)": "Отметить выполненным",
+    "日本語 (Japanese)": "完了にする",
+    "中文 (Chinese)": "标记完成",
+    "العربية (Arabic)": "وضع علامة منجز",
+    "हिन्दी (Hindi)": "पूर्ण चिह्नित करें"
   },
   "Snooze 1 hour": {
-    "Türkçe": "1 saat ertele"
+    "Türkçe": "1 saat ertele",
+    "Deutsch": "1 Stunde später",
+    "Français": "Reporter d'1 heure",
+    "Italiano": "Posponi di 1 ora",
+    "Español (Spanish)": "Posponer 1 hora",
+    "Português": "Adiar 1 hora",
+    "Русский (Russian)": "Отложить на 1 час",
+    "日本語 (Japanese)": "1時間スヌーズ",
+    "中文 (Chinese)": "延后 1 小时",
+    "العربية (Arabic)": "تأجيل ساعة",
+    "हिन्दी (Hindi)": "1 घंटे टालें"
   },
   "Snooze 1 day": {
-    "Türkçe": "1 gün ertele"
+    "Türkçe": "1 gün ertele",
+    "Deutsch": "1 Tag später",
+    "Français": "Reporter d'1 jour",
+    "Italiano": "Posponi di 1 giorno",
+    "Español (Spanish)": "Posponer 1 día",
+    "Português": "Adiar 1 dia",
+    "Русский (Russian)": "Отложить на 1 день",
+    "日本語 (Japanese)": "1日スヌーズ",
+    "中文 (Chinese)": "延后 1 天",
+    "العربية (Arabic)": "تأجيل يوم",
+    "हिन्दी (Hindi)": "1 दिन टालें"
   },
   "Schedule updated.": {
-    "Türkçe": "Plan güncellendi."
+    "Türkçe": "Plan güncellendi.",
+    "Deutsch": "Zeitplan aktualisiert.",
+    "Français": "Planning mis à jour.",
+    "Italiano": "Pianificazione aggiornata.",
+    "Español (Spanish)": "Agenda actualizada.",
+    "Português": "Agenda atualizada.",
+    "Русский (Russian)": "Расписание обновлено.",
+    "日本語 (Japanese)": "予定を更新しました。",
+    "中文 (Chinese)": "日程已更新。",
+    "العربية (Arabic)": "تم تحديث الجدول.",
+    "हिन्दी (Hindi)": "शेड्यूल अपडेट हुआ।"
   },
   "Please add a reminder title.": {
-    "Türkçe": "Lütfen bir hatırlatıcı başlığı ekleyin."
+    "Türkçe": "Lütfen bir hatırlatıcı başlığı ekleyin.",
+    "Deutsch": "Bitte fügen Sie einen Erinnerungstitel hinzu.",
+    "Français": "Veuillez ajouter un titre de rappel.",
+    "Italiano": "Aggiungi un titolo al promemoria.",
+    "Español (Spanish)": "Añade un título de recordatorio.",
+    "Português": "Adicione um título de lembrete.",
+    "Русский (Russian)": "Добавьте заголовок напоминания.",
+    "日本語 (Japanese)": "リマインダーのタイトルを追加してください。",
+    "中文 (Chinese)": "请添加提醒标题。",
+    "العربية (Arabic)": "يرجى إضافة عنوان للتذكير.",
+    "हिन्दी (Hindi)": "कृपया रिमाइंडर शीर्षक जोड़ें।"
   },
   "Reminder saved and notification scheduled.": {
-    "Türkçe": "Hatırlatıcı kaydedildi ve bildirim planlandı."
+    "Türkçe": "Hatırlatıcı kaydedildi ve bildirim planlandı.",
+    "Deutsch": "Erinnerung gespeichert und Benachrichtigung geplant.",
+    "Français": "Rappel enregistré et notification programmée.",
+    "Italiano": "Promemoria salvato e notifica pianificata.",
+    "Español (Spanish)": "Recordatorio guardado y notificación programada.",
+    "Português": "Lembrete guardado e notificação agendada.",
+    "Русский (Russian)": "Напоминание сохранено и уведомление запланировано.",
+    "日本語 (Japanese)": "リマインダーを保存し、通知を予約しました。",
+    "中文 (Chinese)": "提醒已保存，通知已安排。",
+    "العربية (Arabic)": "تم حفظ التذكير وجدولة الإشعار.",
+    "हिन्दी (Hindi)": "रिमाइंडर सहेजा गया और सूचना शेड्यूल हुई।"
   },
   "Reminder saved.": {
-    "Türkçe": "Hatırlatıcı kaydedildi."
+    "Türkçe": "Hatırlatıcı kaydedildi.",
+    "Deutsch": "Erinnerung gespeichert.",
+    "Français": "Rappel enregistré.",
+    "Italiano": "Promemoria salvato.",
+    "Español (Spanish)": "Recordatorio guardado.",
+    "Português": "Lembrete guardado.",
+    "Русский (Russian)": "Напоминание сохранено.",
+    "日本語 (Japanese)": "リマインダーを保存しました。",
+    "中文 (Chinese)": "提醒已保存。",
+    "العربية (Arabic)": "تم حفظ التذكير.",
+    "हिन्दी (Hindi)": "रिमाइंडर सहेजा गया।"
   },
   "Reminder completed.": {
-    "Türkçe": "Hatırlatıcı tamamlandı."
+    "Türkçe": "Hatırlatıcı tamamlandı.",
+    "Deutsch": "Erinnerung abgeschlossen.",
+    "Français": "Rappel terminé.",
+    "Italiano": "Promemoria completato.",
+    "Español (Spanish)": "Recordatorio completado.",
+    "Português": "Lembrete concluído.",
+    "Русский (Russian)": "Напоминание выполнено.",
+    "日本語 (Japanese)": "リマインダーを完了しました。",
+    "中文 (Chinese)": "提醒已完成。",
+    "العربية (Arabic)": "اكتمل التذكير.",
+    "हिन्दी (Hindi)": "रिमाइंडर पूर्ण हुआ।"
   },
   "Reminder snoozed.": {
-    "Türkçe": "Hatırlatıcı ertelendi."
+    "Türkçe": "Hatırlatıcı ertelendi.",
+    "Deutsch": "Erinnerung verschoben.",
+    "Français": "Rappel reporté.",
+    "Italiano": "Promemoria posticipato.",
+    "Español (Spanish)": "Recordatorio pospuesto.",
+    "Português": "Lembrete adiado.",
+    "Русский (Russian)": "Напоминание отложено.",
+    "日本語 (Japanese)": "リマインダーをスヌーズしました。",
+    "中文 (Chinese)": "提醒已延后。",
+    "العربية (Arabic)": "تم تأجيل التذكير.",
+    "हिन्दी (Hindi)": "रिमाइंडर टाला गया।"
   },
   "Reminder deleted.": {
-    "Türkçe": "Hatırlatıcı silindi."
+    "Türkçe": "Hatırlatıcı silindi.",
+    "Deutsch": "Erinnerung gelöscht.",
+    "Français": "Rappel supprimé.",
+    "Italiano": "Promemoria eliminato.",
+    "Español (Spanish)": "Recordatorio eliminado.",
+    "Português": "Lembrete eliminado.",
+    "Русский (Russian)": "Напоминание удалено.",
+    "日本語 (Japanese)": "リマインダーを削除しました。",
+    "中文 (Chinese)": "提醒已删除。",
+    "العربية (Arabic)": "تم حذف التذكير.",
+    "हिन्दी (Hindi)": "रिमाइंडर हटाया गया।"
   },
   "Reminder saved, but notification permission was not granted.": {
-    "Türkçe": "Hatırlatıcı kaydedildi fakat bildirim izni verilmedi."
+    "Türkçe": "Hatırlatıcı kaydedildi fakat bildirim izni verilmedi.",
+    "Deutsch": "Erinnerung gespeichert, aber die Benachrichtigungsberechtigung wurde nicht erteilt.",
+    "Français": "Rappel enregistré, mais l'autorisation de notification n'a pas été accordée.",
+    "Italiano": "Promemoria salvato, ma l'autorizzazione alle notifiche non è stata concessa.",
+    "Español (Spanish)": "Recordatorio guardado, pero no se concedió el permiso de notificaciones.",
+    "Português": "Lembrete guardado, mas a permissão de notificações não foi concedida.",
+    "Русский (Russian)": "Напоминание сохранено, но разрешение на уведомления не предоставлено.",
+    "日本語 (Japanese)": "リマインダーを保存しましたが、通知の許可が得られませんでした。",
+    "中文 (Chinese)": "提醒已保存，但未授予通知权限。",
+    "العربية (Arabic)": "تم حفظ التذكير، لكن لم يُمنح إذن الإشعارات.",
+    "हिन्दी (Hindi)": "रिमाइंडर सहेजा गया, लेकिन सूचना अनुमति नहीं मिली।"
   },
   "NivaDesk reminder": {
-    "Türkçe": "NivaDesk hatırlatıcı"
+    "Türkçe": "NivaDesk hatırlatıcı",
+    "Deutsch": "NivaDesk-Erinnerung",
+    "Français": "Rappel NivaDesk",
+    "Italiano": "Promemoria NivaDesk",
+    "Español (Spanish)": "Recordatorio de NivaDesk",
+    "Português": "Lembrete NivaDesk",
+    "Русский (Russian)": "Напоминание NivaDesk",
+    "日本語 (Japanese)": "NivaDesk リマインダー",
+    "中文 (Chinese)": "NivaDesk 提醒",
+    "العربية (Arabic)": "تذكير NivaDesk",
+    "हिन्दी (Hindi)": "NivaDesk रिमाइंडर"
   },
   "Due now": {
-    "Türkçe": "Şimdi zamanı"
+    "Türkçe": "Şimdi zamanı",
+    "Deutsch": "Jetzt fällig",
+    "Français": "À faire maintenant",
+    "Italiano": "In scadenza ora",
+    "Español (Spanish)": "Vence ahora",
+    "Português": "Vence agora",
+    "Русский (Russian)": "Срок наступил",
+    "日本語 (Japanese)": "今が期限",
+    "中文 (Chinese)": "现在到期",
+    "العربية (Arabic)": "مستحق الآن",
+    "हिन्दी (Hindi)": "अभी देय"
   },
   "Due soon": {
-    "Türkçe": "Yakında"
+    "Türkçe": "Yakında",
+    "Deutsch": "Bald fällig",
+    "Français": "Bientôt dû",
+    "Italiano": "In scadenza a breve",
+    "Español (Spanish)": "Vence pronto",
+    "Português": "Vence em breve",
+    "Русский (Russian)": "Скоро срок",
+    "日本語 (Japanese)": "まもなく期限",
+    "中文 (Chinese)": "即将到期",
+    "العربية (Arabic)": "مستحق قريبًا",
+    "हिन्दी (Hindi)": "जल्द देय"
   },
   "In": {
-    "Türkçe": "Kalan"
+    "Türkçe": "Kalan",
+    "Deutsch": "In",
+    "Français": "Dans",
+    "Italiano": "Tra",
+    "Español (Spanish)": "En",
+    "Português": "Em",
+    "Русский (Russian)": "Через",
+    "日本語 (Japanese)": "あと",
+    "中文 (Chinese)": "还有",
+    "العربية (Arabic)": "خلال",
+    "हिन्दी (Hindi)": "में"
   },
   "Tracking Support": {
-    "Türkçe": "Takip Desteği"
+    "Türkçe": "Takip Desteği",
+    "Deutsch": "Sendungsverfolgung",
+    "Français": "Suivi des colis",
+    "Italiano": "Supporto tracciamento",
+    "Español (Spanish)": "Soporte de seguimiento",
+    "Português": "Suporte de rastreio",
+    "Русский (Russian)": "Поддержка отслеживания",
+    "日本語 (Japanese)": "追跡サポート",
+    "中文 (Chinese)": "跟踪支持",
+    "العربية (Arabic)": "دعم التتبع",
+    "हिन्दी (Hindi)": "ट्रैकिंग समर्थन"
   },
   "carrier_required": {
-    "Türkçe": "Kurye gerekli"
+    "Türkçe": "Kurye gerekli",
+    "Deutsch": "Zusteller erforderlich",
+    "Français": "Transporteur requis",
+    "Italiano": "Corriere richiesto",
+    "Español (Spanish)": "Transportista requerido",
+    "Português": "Transportadora necessária",
+    "Русский (Russian)": "Требуется перевозчик",
+    "日本語 (Japanese)": "配送業者が必要",
+    "中文 (Chinese)": "需要承运商",
+    "العربية (Arabic)": "شركة الشحن مطلوبة",
+    "हिन्दी (Hindi)": "कैरियर आवश्यक"
   },
   "limited": {
-    "Türkçe": "Sınırlı destek"
+    "Türkçe": "Sınırlı destek",
+    "Deutsch": "Eingeschränkte Unterstützung",
+    "Français": "Support limité",
+    "Italiano": "Supporto limitato",
+    "Español (Spanish)": "Soporte limitado",
+    "Português": "Suporte limitado",
+    "Русский (Russian)": "Ограниченная поддержка",
+    "日本語 (Japanese)": "限定的なサポート",
+    "中文 (Chinese)": "有限支持",
+    "العربية (Arabic)": "دعم محدود",
+    "हिन्दी (Hindi)": "सीमित समर्थन"
   },
   "unsupported": {
-    "Türkçe": "Desteklenmiyor"
+    "Türkçe": "Desteklenmiyor",
+    "Deutsch": "Nicht unterstützt",
+    "Français": "Non pris en charge",
+    "Italiano": "Non supportato",
+    "Español (Spanish)": "No compatible",
+    "Português": "Não suportado",
+    "Русский (Russian)": "Не поддерживается",
+    "日本語 (Japanese)": "非対応",
+    "中文 (Chinese)": "不支持",
+    "العربية (Arabic)": "غير مدعوم",
+    "हिन्दी (Hindi)": "असमर्थित"
   },
   "waiting": {
-    "Türkçe": "Bekleniyor"
+    "Türkçe": "Bekleniyor",
+    "Deutsch": "Wartet",
+    "Français": "En attente",
+    "Italiano": "In attesa",
+    "Español (Spanish)": "Esperando",
+    "Português": "À espera",
+    "Русский (Russian)": "Ожидание",
+    "日本語 (Japanese)": "待機中",
+    "中文 (Chinese)": "等待中",
+    "العربية (Arabic)": "قيد الانتظار",
+    "हिन्दी (Hindi)": "प्रतीक्षारत"
   },
   "active": {
-    "Türkçe": "Aktif"
+    "Türkçe": "Aktif",
+    "Deutsch": "Aktiv",
+    "Français": "Actif",
+    "Italiano": "Attivo",
+    "Español (Spanish)": "Activo",
+    "Português": "Ativo",
+    "Русский (Russian)": "Активно",
+    "日本語 (Japanese)": "アクティブ",
+    "中文 (Chinese)": "活动",
+    "العربية (Arabic)": "نشط",
+    "हिन्दी (Hindi)": "सक्रिय"
   },
   "error": {
-    "Türkçe": "Hata"
+    "Türkçe": "Hata",
+    "Deutsch": "Fehler",
+    "Français": "Erreur",
+    "Italiano": "Errore",
+    "Español (Spanish)": "Error",
+    "Português": "Erro",
+    "Русский (Russian)": "Ошибка",
+    "日本語 (Japanese)": "エラー",
+    "中文 (Chinese)": "错误",
+    "العربية (Arabic)": "خطأ",
+    "हिन्दी (Hindi)": "त्रुटि"
   },
   "checking_support": {
-    "Türkçe": "Bu takip numarası için 17TRACK desteği kontrol ediliyor."
+    "Türkçe": "Bu takip numarası için 17TRACK desteği kontrol ediliyor.",
+    "Deutsch": "17TRACK-Unterstützung für diese Sendungsnummer wird geprüft.",
+    "Français": "Vérification de la prise en charge 17TRACK pour ce numéro de suivi.",
+    "Italiano": "Verifica del supporto 17TRACK per questo numero di tracciamento.",
+    "Español (Spanish)": "Comprobando el soporte de 17TRACK para este número de seguimiento.",
+    "Português": "A verificar o suporte do 17TRACK para este número de rastreio.",
+    "Русский (Russian)": "Проверка поддержки 17TRACK для этого трек-номера.",
+    "日本語 (Japanese)": "この追跡番号の 17TRACK サポートを確認中です。",
+    "中文 (Chinese)": "正在检查此跟踪号的 17TRACK 支持。",
+    "العربية (Arabic)": "جارٍ التحقق من دعم 17TRACK لرقم التتبع هذا.",
+    "हिन्दी (Hindi)": "इस ट्रैकिंग नंबर के लिए 17TRACK समर्थन जाँचा जा रहा है।"
   },
   "carrier_required_message": {
-    "Türkçe": "17TRACK kuryeyi otomatik algılayamadı. Lütfen DHL, FedEx, Royal Mail veya UPS gibi doğru kuryeyi manuel seçip tekrar yenileyin."
+    "Türkçe": "17TRACK kuryeyi otomatik algılayamadı. Lütfen DHL, FedEx, Royal Mail veya UPS gibi doğru kuryeyi manuel seçip tekrar yenileyin.",
+    "Deutsch": "17TRACK konnte den Zusteller nicht automatisch erkennen. Bitte wählen Sie den Zusteller manuell, z. B. Royal Mail, DHL, FedEx oder UPS, und tippen Sie erneut auf Live-Status aktualisieren.",
+    "Français": "17TRACK n'a pas pu détecter automatiquement le transporteur. Choisissez-le manuellement, par exemple Royal Mail, DHL, FedEx ou UPS, puis appuyez à nouveau sur Actualiser le statut.",
+    "Italiano": "17TRACK non è riuscito a rilevare automaticamente il corriere. Scegli il corriere manualmente, ad es. Royal Mail, DHL, FedEx o UPS, poi premi di nuovo Aggiorna stato.",
+    "Español (Spanish)": "17TRACK no pudo detectar el transportista automáticamente. Elige el transportista manualmente, por ejemplo Royal Mail, DHL, FedEx o UPS, y vuelve a pulsar Actualizar estado.",
+    "Português": "O 17TRACK não conseguiu detetar a transportadora automaticamente. Escolha-a manualmente, por exemplo Royal Mail, DHL, FedEx ou UPS, e toque novamente em Atualizar estado.",
+    "Русский (Russian)": "17TRACK не смог автоматически определить перевозчика. Выберите перевозчика вручную, например Royal Mail, DHL, FedEx или UPS, затем снова нажмите «Обновить статус».",
+    "日本語 (Japanese)": "17TRACK は配送業者を自動検出できませんでした。Royal Mail、DHL、FedEx、UPS など配送業者を手動で選択し、もう一度ライブ状況を更新してください。",
+    "中文 (Chinese)": "17TRACK 无法自动识别承运商。请手动选择承运商，例如 Royal Mail、DHL、FedEx 或 UPS，然后再次点击刷新实时状态。",
+    "العربية (Arabic)": "تعذّر على 17TRACK اكتشاف شركة الشحن تلقائيًا. اختر الشركة يدويًا، مثل Royal Mail أو DHL أو FedEx أو UPS، ثم اضغط تحديث الحالة مرة أخرى.",
+    "हिन्दी (Hindi)": "17TRACK कैरियर का स्वतः पता नहीं लगा सका। कृपया कैरियर मैन्युअल रूप से चुनें, जैसे Royal Mail, DHL, FedEx या UPS, फिर लाइव स्थिति रिफ़्रेश दोबारा दबाएं।"
   },
   "registered_waiting": {
-    "Türkçe": "Kayıt yapıldı, 17TRACK güncellemesi bekleniyor."
+    "Türkçe": "Kayıt yapıldı, 17TRACK güncellemesi bekleniyor.",
+    "Deutsch": "Registriert – Warten auf 17TRACK-Update",
+    "Français": "Enregistré – en attente de mise à jour 17TRACK",
+    "Italiano": "Registrato – in attesa di aggiornamento 17TRACK",
+    "Español (Spanish)": "Registrado: esperando actualización de 17TRACK",
+    "Português": "Registado – a aguardar atualização do 17TRACK",
+    "Русский (Russian)": "Зарегистрировано — ожидание обновления 17TRACK",
+    "日本語 (Japanese)": "登録済み — 17TRACK の更新待ち",
+    "中文 (Chinese)": "已登记 — 等待 17TRACK 更新",
+    "العربية (Arabic)": "مسجّل - بانتظار تحديث 17TRACK",
+    "हिन्दी (Hindi)": "पंजीकृत - 17TRACK अपडेट की प्रतीक्षा"
   },
   "royal_mail_limited": {
-    "Türkçe": "Royal Mail için 17TRACK API desteği şu an sınırlı görünüyor. Sistem daha sonra otomatik tekrar deneyecek; gerekirse Royal Mail sitesinden de kontrol edin."
+    "Türkçe": "Royal Mail için 17TRACK API desteği şu an sınırlı görünüyor. Sistem daha sonra otomatik tekrar deneyecek; gerekirse Royal Mail sitesinden de kontrol edin.",
+    "Deutsch": "Die Royal-Mail-Sendungsverfolgung über 17TRACK ist derzeit eingeschränkt. Das System versucht es automatisch erneut; Sie können auch die Royal-Mail-Website prüfen.",
+    "Français": "Le suivi Royal Mail via 17TRACK est actuellement limité. Le système réessaiera automatiquement ; vous pouvez aussi consulter le site Royal Mail.",
+    "Italiano": "Il tracciamento Royal Mail tramite 17TRACK è attualmente limitato. Il sistema riproverà automaticamente; puoi anche controllare il sito Royal Mail.",
+    "Español (Spanish)": "El seguimiento de Royal Mail a través de 17TRACK es limitado actualmente. El sistema reintentará automáticamente; también puedes consultar el sitio de Royal Mail.",
+    "Português": "O rastreio da Royal Mail através do 17TRACK está atualmente limitado. O sistema tentará novamente automaticamente; também pode consultar o site da Royal Mail.",
+    "Русский (Russian)": "Отслеживание Royal Mail через 17TRACK сейчас ограничено. Система повторит попытку автоматически; вы также можете проверить сайт Royal Mail.",
+    "日本語 (Japanese)": "17TRACK 経由の Royal Mail 追跡は現在限定的です。システムが自動的に再試行します。Royal Mail のサイトでも確認できます。",
+    "中文 (Chinese)": "目前通过 17TRACK 的 Royal Mail 跟踪支持有限。系统会自动重试；您也可以查看 Royal Mail 网站。",
+    "العربية (Arabic)": "دعم تتبع Royal Mail عبر 17TRACK محدود حاليًا. سيعيد النظام المحاولة تلقائيًا؛ ويمكنك أيضًا التحقق من موقع Royal Mail.",
+    "हिन्दी (Hindi)": "17TRACK के माध्यम से Royal Mail ट्रैकिंग समर्थन फ़िलहाल सीमित है। सिस्टम स्वतः पुनः प्रयास करेगा; आप Royal Mail वेबसाइट भी देख सकते हैं।"
   },
   "fedex_limited": {
-    "Türkçe": "FedEx bazı takip numaralarında ek gönderim bilgisi isteyebilir. Sistem otomatik tekrar deneyecek; sonuç gelmezse FedEx sitesiyle kontrol edin."
+    "Türkçe": "FedEx bazı takip numaralarında ek gönderim bilgisi isteyebilir. Sistem otomatik tekrar deneyecek; sonuç gelmezse FedEx sitesiyle kontrol edin.",
+    "Deutsch": "FedEx benötigt für einige Sendungsnummern möglicherweise zusätzliche Versanddetails. Das System versucht es automatisch erneut; falls kein Ergebnis erscheint, prüfen Sie direkt bei FedEx.",
+    "Français": "FedEx peut exiger des détails d'expédition supplémentaires pour certains numéros. Le système réessaiera automatiquement ; en l'absence de résultat, vérifiez directement chez FedEx.",
+    "Italiano": "FedEx potrebbe richiedere dettagli di spedizione aggiuntivi per alcuni numeri. Il sistema riproverà automaticamente; se non appare alcun risultato, controlla direttamente su FedEx.",
+    "Español (Spanish)": "FedEx puede requerir detalles de envío adicionales para algunos números. El sistema reintentará automáticamente; si no aparece resultado, consulta directamente con FedEx.",
+    "Português": "A FedEx pode exigir detalhes de envio adicionais para alguns números. O sistema tentará novamente automaticamente; se não aparecer resultado, consulte a FedEx diretamente.",
+    "Русский (Russian)": "FedEx может запросить дополнительные данные об отправлении для некоторых номеров. Система повторит попытку автоматически; если результата нет, проверьте на сайте FedEx.",
+    "日本語 (Japanese)": "FedEx は一部の追跡番号で追加の配送情報を求める場合があります。システムが自動的に再試行します。結果が出ない場合は FedEx で直接確認してください。",
+    "中文 (Chinese)": "对于某些跟踪号，FedEx 可能需要额外的配送信息。系统会自动重试；若无结果，请直接查询 FedEx。",
+    "العربية (Arabic)": "قد تطلب FedEx تفاصيل شحن إضافية لبعض أرقام التتبع. سيعيد النظام المحاولة تلقائيًا؛ وإذا لم تظهر نتيجة، تحقق من FedEx مباشرة.",
+    "हिन्दी (Hindi)": "FedEx कुछ ट्रैकिंग नंबरों के लिए अतिरिक्त शिपमेंट विवरण माँग सकता है। सिस्टम स्वतः पुनः प्रयास करेगा; परिणाम न आने पर सीधे FedEx जाँचें।"
   },
   "tracking_updated": {
-    "Türkçe": "Takip durumu güncellendi."
+    "Türkçe": "Takip durumu güncellendi.",
+    "Deutsch": "Sendungsstatus aktualisiert.",
+    "Français": "Statut de suivi mis à jour.",
+    "Italiano": "Stato di tracciamento aggiornato.",
+    "Español (Spanish)": "Estado de seguimiento actualizado.",
+    "Português": "Estado de rastreio atualizado.",
+    "Русский (Russian)": "Статус отслеживания обновлён.",
+    "日本語 (Japanese)": "追跡状況を更新しました。",
+    "中文 (Chinese)": "跟踪状态已更新。",
+    "العربية (Arabic)": "تم تحديث حالة التتبع.",
+    "हिन्दी (Hindi)": "ट्रैकिंग स्थिति अपडेट की गई।"
   },
   "tracking_request_sent": {
-    "Türkçe": "Takip isteği gönderildi."
+    "Türkçe": "Takip isteği gönderildi.",
+    "Deutsch": "Tracking-Anfrage gesendet.",
+    "Français": "Demande de suivi envoyée.",
+    "Italiano": "Richiesta di tracciamento inviata.",
+    "Español (Spanish)": "Solicitud de seguimiento enviada.",
+    "Português": "Pedido de rastreio enviado.",
+    "Русский (Russian)": "Запрос на отслеживание отправлен.",
+    "日本語 (Japanese)": "追跡リクエストを送信しました。",
+    "中文 (Chinese)": "已发送跟踪请求。",
+    "العربية (Arabic)": "تم إرسال طلب التتبع.",
+    "हिन्दी (Hindi)": "ट्रैकिंग अनुरोध भेजा गया।"
   },
   "checking_tracking": {
-    "Türkçe": "Takip durumu kontrol ediliyor..."
+    "Türkçe": "Takip durumu kontrol ediliyor...",
+    "Deutsch": "Sendungsstatus wird geprüft...",
+    "Français": "Vérification du statut de suivi...",
+    "Italiano": "Verifica dello stato di tracciamento...",
+    "Español (Spanish)": "Comprobando el estado de seguimiento...",
+    "Português": "A verificar o estado de rastreio...",
+    "Русский (Russian)": "Проверка статуса отслеживания...",
+    "日本語 (Japanese)": "追跡状況を確認中...",
+    "中文 (Chinese)": "正在检查跟踪状态...",
+    "العربية (Arabic)": "جارٍ التحقق من حالة التتبع...",
+    "हिन्दी (Hindi)": "ट्रैकिंग स्थिति जाँची जा रही है..."
   },
   "save_order_first": {
-    "Türkçe": "Canlı takibi başlatmadan önce siparişi kaydedin."
+    "Türkçe": "Canlı takibi başlatmadan önce siparişi kaydedin.",
+    "Deutsch": "Bitte speichern Sie den Auftrag, bevor Sie die Live-Verfolgung starten.",
+    "Français": "Veuillez enregistrer la commande avant de démarrer le suivi en direct.",
+    "Italiano": "Salva l'ordine prima di avviare il tracciamento live.",
+    "Español (Spanish)": "Guarda el pedido antes de iniciar el seguimiento en directo.",
+    "Português": "Guarde a encomenda antes de iniciar o rastreio ao vivo.",
+    "Русский (Russian)": "Сохраните заказ перед запуском отслеживания в реальном времени.",
+    "日本語 (Japanese)": "ライブ追跡を開始する前に注文を保存してください。",
+    "中文 (Chinese)": "开始实时跟踪前请先保存订单。",
+    "العربية (Arabic)": "يرجى حفظ الطلب قبل بدء التتبع المباشر.",
+    "हिन्दी (Hindi)": "लाइव ट्रैकिंग शुरू करने से पहले ऑर्डर सहेजें।"
   },
   "firebase_functions_missing": {
-    "Türkçe": "FirebaseFunctions paketi Xcode projesine henüz eklenmemiş."
+    "Türkçe": "FirebaseFunctions paketi Xcode projesine henüz eklenmemiş.",
+    "Deutsch": "Das FirebaseFunctions-Paket wurde dem Xcode-Projekt noch nicht hinzugefügt.",
+    "Français": "Le package FirebaseFunctions n'a pas encore été ajouté au projet Xcode.",
+    "Italiano": "Il pacchetto FirebaseFunctions non è ancora stato aggiunto al progetto Xcode.",
+    "Español (Spanish)": "El paquete FirebaseFunctions aún no se ha añadido al proyecto de Xcode.",
+    "Português": "O pacote FirebaseFunctions ainda não foi adicionado ao projeto Xcode.",
+    "Русский (Russian)": "Пакет FirebaseFunctions ещё не добавлен в проект Xcode.",
+    "日本語 (Japanese)": "FirebaseFunctions パッケージはまだ Xcode プロジェクトに追加されていません。",
+    "中文 (Chinese)": "FirebaseFunctions 包尚未添加到 Xcode 项目。",
+    "العربية (Arabic)": "لم تتم إضافة حزمة FirebaseFunctions إلى مشروع Xcode بعد.",
+    "हिन्दी (Hindi)": "FirebaseFunctions पैकेज अभी तक Xcode प्रोजेक्ट में नहीं जोड़ा गया है।"
   },
   "Move Block": {
-    "Türkçe": "Bloğu Taşı"
+    "Türkçe": "Bloğu Taşı",
+    "Deutsch": "Block verschieben",
+    "Français": "Déplacer le bloc",
+    "Italiano": "Sposta blocco",
+    "Español (Spanish)": "Mover bloque",
+    "Português": "Mover bloco",
+    "Русский (Russian)": "Переместить блок",
+    "日本語 (Japanese)": "ブロックを移動",
+    "中文 (Chinese)": "移动区块",
+    "العربية (Arabic)": "نقل الكتلة",
+    "हिन्दी (Hindi)": "ब्लॉक खिसकाएं"
   },
   "Add Channel": {
-    "Türkçe": "Kanal Ekle"
+    "Türkçe": "Kanal Ekle",
+    "Deutsch": "Kanal hinzufügen",
+    "Français": "Ajouter un canal",
+    "Italiano": "Aggiungi canale",
+    "Español (Spanish)": "Añadir canal",
+    "Português": "Adicionar canal",
+    "Русский (Russian)": "Добавить канал",
+    "日本語 (Japanese)": "チャンネルを追加",
+    "中文 (Chinese)": "添加渠道",
+    "العربية (Arabic)": "إضافة قناة",
+    "हिन्दी (Hindi)": "चैनल जोड़ें"
   },
   "No channel buttons yet. Add one below if you want another platform.": {
-    "Türkçe": "Henüz kanal butonu yok. Başka bir platform istiyorsanız aşağıdan ekleyin."
+    "Türkçe": "Henüz kanal butonu yok. Başka bir platform istiyorsanız aşağıdan ekleyin.",
+    "Deutsch": "Noch keine Kanal-Buttons. Fügen Sie unten einen hinzu, wenn Sie eine weitere Plattform möchten.",
+    "Français": "Aucun bouton de canal pour le moment. Ajoutez-en un ci-dessous si vous voulez une autre plateforme.",
+    "Italiano": "Nessun pulsante canale ancora. Aggiungine uno qui sotto se vuoi un'altra piattaforma.",
+    "Español (Spanish)": "Aún no hay botones de canal. Añade uno abajo si quieres otra plataforma.",
+    "Português": "Ainda sem botões de canal. Adicione um abaixo se quiser outra plataforma.",
+    "Русский (Russian)": "Кнопок каналов пока нет. Добавьте ниже, если нужна другая платформа.",
+    "日本語 (Japanese)": "チャンネルボタンはまだありません。別のプラットフォームが必要なら下から追加してください。",
+    "中文 (Chinese)": "暂无渠道按钮。如需其他平台，请在下方添加。",
+    "العربية (Arabic)": "لا توجد أزرار قنوات بعد. أضف واحدًا أدناه إذا أردت منصة أخرى.",
+    "हिन्दी (Hindi)": "अभी तक कोई चैनल बटन नहीं। यदि आप अन्य प्लेटफ़ॉर्म चाहते हैं तो नीचे जोड़ें।"
   },
   "Channel button names can be added, removed, or renamed. Telephone and Email stay as their own fields and can be shown or hidden above.": {
-    "Türkçe": "Kanal butonları eklenebilir, silinebilir veya yeniden adlandırılabilir. Telefon ve Email kendi alanları olarak kalır; yukarıdan gösterilip gizlenebilir."
+    "Türkçe": "Kanal butonları eklenebilir, silinebilir veya yeniden adlandırılabilir. Telefon ve Email kendi alanları olarak kalır; yukarıdan gösterilip gizlenebilir.",
+    "Deutsch": "Kanal-Buttonnamen können hinzugefügt, entfernt oder umbenannt werden. Telefon und E-Mail bleiben eigene Felder und können oben ein- oder ausgeblendet werden.",
+    "Français": "Les noms des boutons de canal peuvent être ajoutés, supprimés ou renommés. Téléphone et E-mail restent des champs distincts et peuvent être affichés ou masqués ci-dessus.",
+    "Italiano": "I nomi dei pulsanti canale possono essere aggiunti, rimossi o rinominati. Telefono ed Email restano campi propri e possono essere mostrati o nascosti sopra.",
+    "Español (Spanish)": "Los nombres de los botones de canal se pueden añadir, eliminar o renombrar. Teléfono y Email se mantienen como campos propios y se pueden mostrar u ocultar arriba.",
+    "Português": "Os nomes dos botões de canal podem ser adicionados, removidos ou renomeados. Telefone e Email permanecem como campos próprios e podem ser mostrados ou ocultados acima.",
+    "Русский (Russian)": "Названия кнопок каналов можно добавлять, удалять или переименовывать. Телефон и Email остаются отдельными полями и могут быть показаны или скрыты выше.",
+    "日本語 (Japanese)": "チャンネルボタン名は追加・削除・名前変更ができます。電話とメールは独自のフィールドとして残り、上で表示/非表示にできます。",
+    "中文 (Chinese)": "渠道按钮名称可以添加、删除或重命名。电话和邮箱保留为各自的字段，可在上方显示或隐藏。",
+    "العربية (Arabic)": "يمكن إضافة أسماء أزرار القنوات أو إزالتها أو إعادة تسميتها. يبقى الهاتف والبريد الإلكتروني كحقول خاصة ويمكن إظهارها أو إخفاؤها أعلاه.",
+    "हिन्दी (Hindi)": "चैनल बटन नाम जोड़े, हटाए या नाम बदले जा सकते हैं। टेलीफ़ोन और ईमेल अपने फ़ील्ड के रूप में रहते हैं और ऊपर दिखाए या छिपाए जा सकते हैं।"
   },
   "Edit Notes Headings": {
-    "Türkçe": "Not Başlıklarını Düzenle"
+    "Türkçe": "Not Başlıklarını Düzenle",
+    "Deutsch": "Notizüberschriften bearbeiten",
+    "Français": "Modifier les titres des notes",
+    "Italiano": "Modifica intestazioni note",
+    "Español (Spanish)": "Editar encabezados de notas",
+    "Português": "Editar títulos das notas",
+    "Русский (Russian)": "Изменить заголовки заметок",
+    "日本語 (Japanese)": "メモの見出しを編集",
+    "中文 (Chinese)": "编辑备注标题",
+    "العربية (Arabic)": "تعديل عناوين الملاحظات",
+    "हिन्दी (Hindi)": "नोट शीर्षक संपादित करें"
   },
   "Special Note Headings": {
-    "Türkçe": "Özel Not Başlıkları"
+    "Türkçe": "Özel Not Başlıkları",
+    "Deutsch": "Überschriften für besondere Notizen",
+    "Français": "Titres des notes spéciales",
+    "Italiano": "Intestazioni note speciali",
+    "Español (Spanish)": "Encabezados de notas especiales",
+    "Português": "Títulos de notas especiais",
+    "Русский (Russian)": "Заголовки особых заметок",
+    "日本語 (Japanese)": "特記事項の見出し",
+    "中文 (Chinese)": "特别备注标题",
+    "العربية (Arabic)": "عناوين الملاحظات الخاصة",
+    "हिन्दी (Hindi)": "विशेष नोट शीर्षक"
   },
   "Customer Notes stays linked to the customer profile. Add, remove or rename the Special Notes sections shown below it.": {
-    "Türkçe": "Müşteri notu müşteri profiline bağlı kalır. Altında görünen Özel Not bölümlerini ekleyebilir, silebilir veya yeniden adlandırabilirsiniz."
+    "Türkçe": "Müşteri notu müşteri profiline bağlı kalır. Altında görünen Özel Not bölümlerini ekleyebilir, silebilir veya yeniden adlandırabilirsiniz.",
+    "Deutsch": "Kundennotizen bleiben mit dem Kundenprofil verknüpft. Fügen Sie die unten angezeigten Abschnitte für besondere Notizen hinzu, entfernen oder benennen Sie sie um.",
+    "Français": "Les notes client restent liées au profil client. Ajoutez, supprimez ou renommez les sections Notes spéciales affichées en dessous.",
+    "Italiano": "Le note cliente restano collegate al profilo del cliente. Aggiungi, rimuovi o rinomina le sezioni Note speciali mostrate sotto.",
+    "Español (Spanish)": "Las notas del cliente permanecen vinculadas al perfil del cliente. Añade, elimina o renombra las secciones de Notas especiales que aparecen debajo.",
+    "Português": "As notas do cliente permanecem ligadas ao perfil do cliente. Adicione, remova ou renomeie as secções de Notas especiais mostradas abaixo.",
+    "Русский (Russian)": "Заметки клиента остаются привязанными к профилю клиента. Добавляйте, удаляйте или переименовывайте разделы особых заметок ниже.",
+    "日本語 (Japanese)": "顧客メモは顧客プロファイルにリンクされたままです。その下に表示される特記事項のセクションを追加・削除・名前変更できます。",
+    "中文 (Chinese)": "客户备注与客户资料保持关联。可添加、删除或重命名其下方显示的特别备注部分。",
+    "العربية (Arabic)": "تبقى ملاحظات العميل مرتبطة بملف العميل. أضف أو احذف أو أعد تسمية أقسام الملاحظات الخاصة المعروضة أدناه.",
+    "हिन्दी (Hindi)": "ग्राहक नोट्स ग्राहक प्रोफ़ाइल से जुड़े रहते हैं। इसके नीचे दिखाए गए विशेष नोट अनुभाग जोड़ें, हटाएं या नाम बदलें।"
   },
   "No headings yet. Use Add Heading below.": {
-    "Türkçe": "Henüz başlık yok. Aşağıdan Başlık Ekle'yi kullanın."
+    "Türkçe": "Henüz başlık yok. Aşağıdan Başlık Ekle'yi kullanın.",
+    "Deutsch": "Noch keine Überschriften. Verwenden Sie unten Überschrift hinzufügen.",
+    "Français": "Aucun titre pour le moment. Utilisez Ajouter un titre ci-dessous.",
+    "Italiano": "Nessuna intestazione ancora. Usa Aggiungi intestazione qui sotto.",
+    "Español (Spanish)": "Aún no hay encabezados. Usa Añadir encabezado abajo.",
+    "Português": "Ainda sem títulos. Use Adicionar título abaixo.",
+    "Русский (Russian)": "Заголовков пока нет. Используйте «Добавить заголовок» ниже.",
+    "日本語 (Japanese)": "見出しはまだありません。下の「見出しを追加」を使用してください。",
+    "中文 (Chinese)": "暂无标题。请使用下方的“添加标题”。",
+    "العربية (Arabic)": "لا توجد عناوين بعد. استخدم إضافة عنوان أدناه.",
+    "हिन्दी (Hindi)": "अभी तक कोई शीर्षक नहीं। नीचे शीर्षक जोड़ें का उपयोग करें।"
   },
   "Customer profile not found to show notes.": {
-    "Türkçe": "Notları göstermek için müşteri profili bulunamadı."
+    "Türkçe": "Notları göstermek için müşteri profili bulunamadı.",
+    "Deutsch": "Kundenprofil zum Anzeigen der Notizen nicht gefunden.",
+    "Français": "Profil client introuvable pour afficher les notes.",
+    "Italiano": "Profilo cliente non trovato per mostrare le note.",
+    "Español (Spanish)": "No se encontró el perfil del cliente para mostrar las notas.",
+    "Português": "Perfil do cliente não encontrado para mostrar as notas.",
+    "Русский (Russian)": "Профиль клиента для показа заметок не найден.",
+    "日本語 (Japanese)": "メモを表示する顧客プロファイルが見つかりません。",
+    "中文 (Chinese)": "未找到用于显示备注的客户资料。",
+    "العربية (Arabic)": "لم يتم العثور على ملف العميل لعرض الملاحظات.",
+    "हिन्दी (Hindi)": "नोट दिखाने के लिए ग्राहक प्रोफ़ाइल नहीं मिली।"
   },
   "Special Notes 1": {
-    "Türkçe": "Özel Not 1"
+    "Türkçe": "Özel Not 1",
+    "Deutsch": "Besondere Notizen 1",
+    "Français": "Notes spéciales 1",
+    "Italiano": "Note speciali 1",
+    "Español (Spanish)": "Notas especiales 1",
+    "Português": "Notas especiais 1",
+    "Русский (Russian)": "Особые заметки 1",
+    "日本語 (Japanese)": "特記事項 1",
+    "中文 (Chinese)": "特别备注 1",
+    "العربية (Arabic)": "ملاحظات خاصة 1",
+    "हिन्दी (Hindi)": "विशेष नोट 1"
   },
   "Special Notes 2": {
-    "Türkçe": "Özel Not 2"
+    "Türkçe": "Özel Not 2",
+    "Deutsch": "Besondere Notizen 2",
+    "Français": "Notes spéciales 2",
+    "Italiano": "Note speciali 2",
+    "Español (Spanish)": "Notas especiales 2",
+    "Português": "Notas especiais 2",
+    "Русский (Russian)": "Особые заметки 2",
+    "日本語 (Japanese)": "特記事項 2",
+    "中文 (Chinese)": "特别备注 2",
+    "العربية (Arabic)": "ملاحظات خاصة 2",
+    "हिन्दी (Hindi)": "विशेष नोट 2"
   },
   "Support Managers": {
-    "Türkçe": "Support Yöneticileri"
+    "Türkçe": "Support Yöneticileri",
+    "Deutsch": "Support-Manager",
+    "Français": "Responsables du support",
+    "Italiano": "Responsabili del supporto",
+    "Español (Spanish)": "Gestores de soporte",
+    "Português": "Gestores de suporte",
+    "Русский (Russian)": "Менеджеры поддержки",
+    "日本語 (Japanese)": "サポート管理者",
+    "中文 (Chinese)": "支持经理",
+    "العربية (Arabic)": "مديرو الدعم",
+    "हिन्दी (Hindi)": "सपोर्ट मैनेजर"
   },
   "Support managers can review, reply to and update workspace support tickets without getting full workspace admin access.": {
-    "Türkçe": "Support yöneticileri tam workspace admin yetkisi almadan workspace support ticketlarını görebilir, cevaplayabilir ve durumlarını güncelleyebilir."
+    "Türkçe": "Support yöneticileri tam workspace admin yetkisi almadan workspace support ticketlarını görebilir, cevaplayabilir ve durumlarını güncelleyebilir.",
+    "Deutsch": "Support-Manager können Workspace-Supporttickets prüfen, beantworten und aktualisieren, ohne vollen Workspace-Admin-Zugriff zu erhalten.",
+    "Français": "Les responsables du support peuvent examiner, répondre et mettre à jour les tickets de support de l'espace sans obtenir un accès admin complet.",
+    "Italiano": "I responsabili del supporto possono esaminare, rispondere e aggiornare i ticket di supporto dello spazio senza ottenere l'accesso admin completo.",
+    "Español (Spanish)": "Los gestores de soporte pueden revisar, responder y actualizar los tickets de soporte del espacio sin obtener acceso de administrador completo.",
+    "Português": "Os gestores de suporte podem rever, responder e atualizar os tickets de suporte do espaço sem obter acesso total de administrador.",
+    "Русский (Russian)": "Менеджеры поддержки могут просматривать, отвечать и обновлять тикеты поддержки пространства без полного доступа администратора.",
+    "日本語 (Japanese)": "サポート管理者は、ワークスペースの完全な管理者権限を得ることなく、サポートチケットの確認・返信・更新ができます。",
+    "中文 (Chinese)": "支持经理可以查看、回复和更新工作区支持工单，而无需获得完整的工作区管理员权限。",
+    "العربية (Arabic)": "يمكن لمديري الدعم مراجعة تذاكر دعم مساحة العمل والرد عليها وتحديثها دون الحصول على صلاحية مشرف كاملة.",
+    "हिन्दी (Hindi)": "सपोर्ट मैनेजर पूर्ण वर्कस्पेस एडमिन एक्सेस प्राप्त किए बिना वर्कस्पेस सपोर्ट टिकट की समीक्षा, उत्तर और अपडेट कर सकते हैं।"
   },
   "Owner and admins can delegate ticket management to trusted team members.": {
-    "Türkçe": "Owner ve adminler ticket yönetimini güvendikleri ekip üyelerine atayabilir."
+    "Türkçe": "Owner ve adminler ticket yönetimini güvendikleri ekip üyelerine atayabilir.",
+    "Deutsch": "Inhaber und Admins können die Ticketverwaltung an vertrauenswürdige Teammitglieder delegieren.",
+    "Français": "Le propriétaire et les admins peuvent déléguer la gestion des tickets à des membres de confiance.",
+    "Italiano": "Il proprietario e gli amministratori possono delegare la gestione dei ticket a membri fidati del team.",
+    "Español (Spanish)": "El propietario y los administradores pueden delegar la gestión de tickets a miembros de confianza.",
+    "Português": "O proprietário e os administradores podem delegar a gestão de tickets a membros de confiança.",
+    "Русский (Russian)": "Владелец и администраторы могут делегировать управление тикетами доверенным участникам команды.",
+    "日本語 (Japanese)": "所有者と管理者は、チケット管理を信頼できるチームメンバーに委任できます。",
+    "中文 (Chinese)": "所有者和管理员可将工单管理委派给受信任的团队成员。",
+    "العربية (Arabic)": "يمكن للمالك والمشرفين تفويض إدارة التذاكر لأعضاء الفريق الموثوقين.",
+    "हिन्दी (Hindi)": "स्वामी और एडमिन टिकट प्रबंधन को विश्वसनीय टीम सदस्यों को सौंप सकते हैं।"
   },
   "This setting is saved in the cloud, so the assigned support managers have the same access on Mac, iPhone, iPad, web and Android.": {
-    "Türkçe": "Bu ayar cloud'da saklanır, böylece atanan support yöneticileri Mac, iPhone, iPad, web ve Android'de aynı erişimi görür."
+    "Türkçe": "Bu ayar cloud'da saklanır, böylece atanan support yöneticileri Mac, iPhone, iPad, web ve Android'de aynı erişimi görür.",
+    "Deutsch": "Diese Einstellung wird in der Cloud gespeichert, sodass die zugewiesenen Support-Manager auf Mac, iPhone, iPad, Web und Android denselben Zugriff haben.",
+    "Français": "Ce réglage est enregistré dans le cloud, ainsi les responsables du support assignés ont le même accès sur Mac, iPhone, iPad, web et Android.",
+    "Italiano": "Questa impostazione viene salvata nel cloud, così i responsabili del supporto assegnati hanno lo stesso accesso su Mac, iPhone, iPad, web e Android.",
+    "Español (Spanish)": "Este ajuste se guarda en la nube, por lo que los gestores de soporte asignados tienen el mismo acceso en Mac, iPhone, iPad, web y Android.",
+    "Português": "Esta definição é guardada na nuvem, por isso os gestores de suporte atribuídos têm o mesmo acesso no Mac, iPhone, iPad, web e Android.",
+    "Русский (Russian)": "Эта настройка сохраняется в облаке, поэтому назначенные менеджеры поддержки имеют одинаковый доступ на Mac, iPhone, iPad, в вебе и на Android.",
+    "日本語 (Japanese)": "この設定はクラウドに保存されるため、割り当てられたサポート管理者は Mac、iPhone、iPad、ウェブ、Android で同じアクセス権を持ちます。",
+    "中文 (Chinese)": "此设置保存在云端，因此指定的支持经理在 Mac、iPhone、iPad、网页和 Android 上拥有相同的访问权限。",
+    "العربية (Arabic)": "يُحفظ هذا الإعداد في السحابة، لذا يحصل مديرو الدعم المعيّنون على نفس الصلاحية على Mac وiPhone وiPad والويب وAndroid.",
+    "हिन्दी (Hindi)": "यह सेटिंग क्लाउड में सहेजी जाती है, इसलिए असाइन किए गए सपोर्ट मैनेजरों को Mac, iPhone, iPad, वेब और Android पर समान एक्सेस मिलता है।"
   },
   "Loading support managers...": {
-    "Türkçe": "Support yöneticileri yükleniyor..."
+    "Türkçe": "Support yöneticileri yükleniyor...",
+    "Deutsch": "Support-Manager werden geladen...",
+    "Français": "Chargement des responsables du support...",
+    "Italiano": "Caricamento responsabili del supporto...",
+    "Español (Spanish)": "Cargando gestores de soporte...",
+    "Português": "A carregar gestores de suporte...",
+    "Русский (Russian)": "Загрузка менеджеров поддержки...",
+    "日本語 (Japanese)": "サポート管理者を読み込み中...",
+    "中文 (Chinese)": "正在加载支持经理...",
+    "العربية (Arabic)": "جارٍ تحميل مديري الدعم...",
+    "हिन्दी (Hindi)": "सपोर्ट मैनेजर लोड हो रहे हैं..."
   },
   "No team members found yet. Add members from Team Access first.": {
-    "Türkçe": "Henüz ekip üyesi bulunamadı. Önce Team Access üzerinden üye ekleyin."
+    "Türkçe": "Henüz ekip üyesi bulunamadı. Önce Team Access üzerinden üye ekleyin.",
+    "Deutsch": "Noch keine Teammitglieder gefunden. Fügen Sie zuerst Mitglieder über Team-Zugriff hinzu.",
+    "Français": "Aucun membre d'équipe trouvé. Ajoutez d'abord des membres depuis Accès équipe.",
+    "Italiano": "Nessun membro del team trovato. Aggiungi prima i membri da Accesso team.",
+    "Español (Spanish)": "Aún no se encontraron miembros del equipo. Añade miembros desde Acceso de equipo primero.",
+    "Português": "Ainda não foram encontrados membros da equipa. Adicione membros a partir de Acesso da equipa primeiro.",
+    "Русский (Russian)": "Участники команды пока не найдены. Сначала добавьте участников через «Доступ команды».",
+    "日本語 (Japanese)": "チームメンバーが見つかりません。まず「チームアクセス」からメンバーを追加してください。",
+    "中文 (Chinese)": "尚未找到团队成员。请先从“团队访问”添加成员。",
+    "العربية (Arabic)": "لم يتم العثور على أعضاء فريق بعد. أضف الأعضاء من وصول الفريق أولاً.",
+    "हिन्दी (Hindi)": "अभी तक कोई टीम सदस्य नहीं मिला। पहले टीम एक्सेस से सदस्य जोड़ें।"
   },
   "Support Manager": {
-    "Türkçe": "Support Yöneticisi"
+    "Türkçe": "Support Yöneticisi",
+    "Deutsch": "Support-Manager",
+    "Français": "Responsable du support",
+    "Italiano": "Responsabile del supporto",
+    "Español (Spanish)": "Gestor de soporte",
+    "Português": "Gestor de suporte",
+    "Русский (Russian)": "Менеджер поддержки",
+    "日本語 (Japanese)": "サポート管理者",
+    "中文 (Chinese)": "支持经理",
+    "العربية (Arabic)": "مدير الدعم",
+    "हिन्दी (Hindi)": "सपोर्ट मैनेजर"
   },
   "Only workspace owner or admins can change support manager assignments.": {
-    "Türkçe": "Support yöneticisi atamalarını sadece workspace owner veya adminler değiştirebilir."
+    "Türkçe": "Support yöneticisi atamalarını sadece workspace owner veya adminler değiştirebilir.",
+    "Deutsch": "Nur der Workspace-Inhaber oder Admins können Support-Manager-Zuweisungen ändern.",
+    "Français": "Seuls le propriétaire de l'espace ou les admins peuvent modifier les affectations des responsables du support.",
+    "Italiano": "Solo il proprietario dello spazio o gli amministratori possono modificare le assegnazioni dei responsabili del supporto.",
+    "Español (Spanish)": "Solo el propietario del espacio o los administradores pueden cambiar las asignaciones de gestores de soporte.",
+    "Português": "Apenas o proprietário do espaço ou os administradores podem alterar as atribuições de gestores de suporte.",
+    "Русский (Russian)": "Только владелец пространства или администраторы могут изменять назначения менеджеров поддержки.",
+    "日本語 (Japanese)": "ワークスペース所有者または管理者のみがサポート管理者の割り当てを変更できます。",
+    "中文 (Chinese)": "只有工作区所有者或管理员可以更改支持经理的分配。",
+    "العربية (Arabic)": "يمكن لمالك مساحة العمل أو المشرفين فقط تغيير تعيينات مديري الدعم.",
+    "हिन्दी (Hindi)": "केवल वर्कस्पेस स्वामी या एडमिन सपोर्ट मैनेजर असाइनमेंट बदल सकते हैं।"
   },
   "Month Net": {
     "Türkçe": "Ay Net",
@@ -9584,121 +11564,511 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "हर upload में company, user, file type, file size, upload date, source और उपलब्ध related order रिकॉर्ड होता है."
   },
   "Client Files": {
-    "Türkçe": "Müşteri Dosyaları"
+    "Türkçe": "Müşteri Dosyaları",
+    "Deutsch": "Client-Dateien",
+    "Français": "Fichiers client",
+    "Italiano": "File cliente",
+    "Español (Spanish)": "Archivos de cliente",
+    "Português": "Ficheiros de cliente",
+    "Русский (Russian)": "Файлы клиента",
+    "日本語 (Japanese)": "クライアントファイル",
+    "中文 (Chinese)": "客户文件",
+    "العربية (Arabic)": "ملفات العميل",
+    "हिन्दी (Hindi)": "क्लाइंट फ़ाइलें"
   },
   "PDF and image files for this order.": {
-    "Türkçe": "Bu siparişe ait PDF ve görsel dosyalar."
+    "Türkçe": "Bu siparişe ait PDF ve görsel dosyalar.",
+    "Deutsch": "PDF- und Bilddateien für diesen Auftrag.",
+    "Français": "Fichiers PDF et image pour cette commande.",
+    "Italiano": "File PDF e immagine per questo ordine.",
+    "Español (Spanish)": "Archivos PDF e imagen para este pedido.",
+    "Português": "Ficheiros PDF e de imagem para esta encomenda.",
+    "Русский (Russian)": "PDF- и графические файлы для этого заказа.",
+    "日本語 (Japanese)": "この注文の PDF と画像ファイル。",
+    "中文 (Chinese)": "此订单的 PDF 和图片文件。",
+    "العربية (Arabic)": "ملفات PDF وصور لهذا الطلب.",
+    "हिन्दी (Hindi)": "इस ऑर्डर के लिए PDF और छवि फ़ाइलें।"
   },
   "Visible to workspace members who can open this order.": {
-    "Türkçe": "Bu siparişi açabilen workspace üyeleri tarafından görülebilir."
+    "Türkçe": "Bu siparişi açabilen workspace üyeleri tarafından görülebilir.",
+    "Deutsch": "Sichtbar für Workspace-Mitglieder, die diesen Auftrag öffnen können.",
+    "Français": "Visible par les membres de l'espace pouvant ouvrir cette commande.",
+    "Italiano": "Visibile ai membri dello spazio che possono aprire questo ordine.",
+    "Español (Spanish)": "Visible para los miembros del espacio que pueden abrir este pedido.",
+    "Português": "Visível para os membros do espaço que podem abrir esta encomenda.",
+    "Русский (Russian)": "Видно участникам пространства, которые могут открыть этот заказ.",
+    "日本語 (Japanese)": "この注文を開けるワークスペースメンバーに表示されます。",
+    "中文 (Chinese)": "对可以打开此订单的工作区成员可见。",
+    "العربية (Arabic)": "مرئي لأعضاء مساحة العمل الذين يمكنهم فتح هذا الطلب.",
+    "हिन्दी (Hindi)": "इस ऑर्डर को खोल सकने वाले वर्कस्पेस सदस्यों को दृश्यमान।"
   },
   "Upload File": {
-    "Türkçe": "Dosya Yükle"
+    "Türkçe": "Dosya Yükle",
+    "Deutsch": "Datei hochladen",
+    "Français": "Téléverser un fichier",
+    "Italiano": "Carica file",
+    "Español (Spanish)": "Subir archivo",
+    "Português": "Carregar ficheiro",
+    "Русский (Russian)": "Загрузить файл",
+    "日本語 (Japanese)": "ファイルをアップロード",
+    "中文 (Chinese)": "上传文件",
+    "العربية (Arabic)": "رفع ملف",
+    "हिन्दी (Hindi)": "फ़ाइल अपलोड करें"
   },
   "Photo Library": {
-    "Türkçe": "Galeriden Seç"
+    "Türkçe": "Galeriden Seç",
+    "Deutsch": "Fotomediathek",
+    "Français": "Photothèque",
+    "Italiano": "Libreria foto",
+    "Español (Spanish)": "Fototeca",
+    "Português": "Biblioteca de fotos",
+    "Русский (Russian)": "Медиатека",
+    "日本語 (Japanese)": "フォトライブラリ",
+    "中文 (Chinese)": "照片图库",
+    "العربية (Arabic)": "مكتبة الصور",
+    "हिन्दी (Hindi)": "फ़ोटो लाइब्रेरी"
   },
   "Camera": {
-    "Türkçe": "Kamera"
+    "Türkçe": "Kamera",
+    "Deutsch": "Kamera",
+    "Français": "Appareil photo",
+    "Italiano": "Fotocamera",
+    "Español (Spanish)": "Cámara",
+    "Português": "Câmara",
+    "Русский (Russian)": "Камера",
+    "日本語 (Japanese)": "カメラ",
+    "中文 (Chinese)": "相机",
+    "العربية (Arabic)": "الكاميرا",
+    "हिन्दी (Hindi)": "कैमरा"
   },
   "Choose where to add the client file from.": {
-    "Türkçe": "Müşteri dosyasını nereden eklemek istediğinizi seçin."
+    "Türkçe": "Müşteri dosyasını nereden eklemek istediğinizi seçin.",
+    "Deutsch": "Wählen Sie, woher die Client-Datei hinzugefügt werden soll.",
+    "Français": "Choisissez d'où ajouter le fichier client.",
+    "Italiano": "Scegli da dove aggiungere il file cliente.",
+    "Español (Spanish)": "Elige desde dónde añadir el archivo del cliente.",
+    "Português": "Escolha de onde adicionar o ficheiro de cliente.",
+    "Русский (Russian)": "Выберите, откуда добавить файл клиента.",
+    "日本語 (Japanese)": "クライアントファイルの追加元を選択します。",
+    "中文 (Chinese)": "选择从何处添加客户文件。",
+    "العربية (Arabic)": "اختر من أين تضيف ملف العميل.",
+    "हिन्दी (Hindi)": "चुनें कि क्लाइंट फ़ाइल कहाँ से जोड़नी है।"
   },
   "Preparing photo...": {
-    "Türkçe": "Fotoğraf hazırlanıyor..."
+    "Türkçe": "Fotoğraf hazırlanıyor...",
+    "Deutsch": "Foto wird vorbereitet...",
+    "Français": "Préparation de la photo...",
+    "Italiano": "Preparazione foto...",
+    "Español (Spanish)": "Preparando la foto...",
+    "Português": "A preparar a foto...",
+    "Русский (Russian)": "Подготовка фото...",
+    "日本語 (Japanese)": "写真を準備中...",
+    "中文 (Chinese)": "正在准备照片...",
+    "العربية (Arabic)": "جارٍ تحضير الصورة...",
+    "हिन्दी (Hindi)": "फ़ोटो तैयार हो रही है..."
   },
   "Could not read selected photo.": {
-    "Türkçe": "Seçilen fotoğraf okunamadı."
+    "Türkçe": "Seçilen fotoğraf okunamadı.",
+    "Deutsch": "Ausgewähltes Foto konnte nicht gelesen werden.",
+    "Français": "Impossible de lire la photo sélectionnée.",
+    "Italiano": "Impossibile leggere la foto selezionata.",
+    "Español (Spanish)": "No se pudo leer la foto seleccionada.",
+    "Português": "Não foi possível ler a foto selecionada.",
+    "Русский (Russian)": "Не удалось прочитать выбранное фото.",
+    "日本語 (Japanese)": "選択した写真を読み取れませんでした。",
+    "中文 (Chinese)": "无法读取所选照片。",
+    "العربية (Arabic)": "تعذرت قراءة الصورة المحددة.",
+    "हिन्दी (Hindi)": "चयनित फ़ोटो पढ़ी नहीं जा सकी।"
   },
   "Could not read camera photo.": {
-    "Türkçe": "Kamera fotoğrafı okunamadı."
+    "Türkçe": "Kamera fotoğrafı okunamadı.",
+    "Deutsch": "Kamerafoto konnte nicht gelesen werden.",
+    "Français": "Impossible de lire la photo de l'appareil.",
+    "Italiano": "Impossibile leggere la foto della fotocamera.",
+    "Español (Spanish)": "No se pudo leer la foto de la cámara.",
+    "Português": "Não foi possível ler a foto da câmara.",
+    "Русский (Russian)": "Не удалось прочитать фото с камеры.",
+    "日本語 (Japanese)": "カメラの写真を読み取れませんでした。",
+    "中文 (Chinese)": "无法读取相机照片。",
+    "العربية (Arabic)": "تعذرت قراءة صورة الكاميرا.",
+    "हिन्दी (Hindi)": "कैमरा फ़ोटो पढ़ी नहीं जा सकी।"
   },
   "No client files yet.": {
-    "Türkçe": "Henüz müşteri dosyası yok."
+    "Türkçe": "Henüz müşteri dosyası yok.",
+    "Deutsch": "Noch keine Client-Dateien.",
+    "Français": "Aucun fichier client pour le moment.",
+    "Italiano": "Nessun file cliente ancora.",
+    "Español (Spanish)": "Aún no hay archivos de cliente.",
+    "Português": "Ainda sem ficheiros de cliente.",
+    "Русский (Russian)": "Файлов клиента пока нет.",
+    "日本語 (Japanese)": "クライアントファイルはまだありません。",
+    "中文 (Chinese)": "暂无客户文件。",
+    "العربية (Arabic)": "لا توجد ملفات عميل بعد.",
+    "हिन्दी (Hindi)": "अभी तक कोई क्लाइंट फ़ाइल नहीं।"
   },
   "Upload PDFs or images that belong to this client order.": {
-    "Türkçe": "Bu müşteri siparişine ait PDF veya görselleri yükleyin."
+    "Türkçe": "Bu müşteri siparişine ait PDF veya görselleri yükleyin.",
+    "Deutsch": "Laden Sie PDFs oder Bilder hoch, die zu diesem Kundenauftrag gehören.",
+    "Français": "Téléversez les PDF ou images appartenant à cette commande client.",
+    "Italiano": "Carica PDF o immagini che appartengono a questo ordine cliente.",
+    "Español (Spanish)": "Sube PDF o imágenes que pertenezcan a este pedido de cliente.",
+    "Português": "Carregue PDFs ou imagens que pertençam a esta encomenda de cliente.",
+    "Русский (Russian)": "Загрузите PDF или изображения, относящиеся к этому заказу клиента.",
+    "日本語 (Japanese)": "この顧客注文に属する PDF または画像をアップロードします。",
+    "中文 (Chinese)": "上传属于此客户订单的 PDF 或图片。",
+    "العربية (Arabic)": "ارفع ملفات PDF أو صورًا تخص طلب العميل هذا.",
+    "हिन्दी (Hindi)": "इस क्लाइंट ऑर्डर से संबंधित PDF या छवियाँ अपलोड करें।"
   },
   "Allowed: PDF, JPG, PNG, HEIC, HEIF and WEBP. The size limit follows Settings > Safety & Uploads.": {
-    "Türkçe": "İzin verilenler: PDF, JPG, PNG, HEIC, HEIF ve WEBP. Boyut limiti Settings > Safety & Uploads ayarını takip eder."
+    "Türkçe": "İzin verilenler: PDF, JPG, PNG, HEIC, HEIF ve WEBP. Boyut limiti Settings > Safety & Uploads ayarını takip eder.",
+    "Deutsch": "Erlaubt: PDF, JPG, PNG, HEIC, HEIF und WEBP. Das Größenlimit folgt Einstellungen > Sicherheit & Uploads.",
+    "Français": "Autorisé : PDF, JPG, PNG, HEIC, HEIF et WEBP. La limite de taille suit Réglages > Sécurité et téléversements.",
+    "Italiano": "Consentiti: PDF, JPG, PNG, HEIC, HEIF e WEBP. Il limite di dimensione segue Impostazioni > Sicurezza e caricamenti.",
+    "Español (Spanish)": "Permitido: PDF, JPG, PNG, HEIC, HEIF y WEBP. El límite de tamaño sigue Ajustes > Seguridad y subidas.",
+    "Português": "Permitido: PDF, JPG, PNG, HEIC, HEIF e WEBP. O limite de tamanho segue Definições > Segurança e carregamentos.",
+    "Русский (Russian)": "Разрешено: PDF, JPG, PNG, HEIC, HEIF и WEBP. Ограничение размера задаётся в «Настройки > Безопасность и загрузки».",
+    "日本語 (Japanese)": "許可: PDF、JPG、PNG、HEIC、HEIF、WEBP。サイズ制限は設定 > 安全性とアップロードに従います。",
+    "中文 (Chinese)": "允许：PDF、JPG、PNG、HEIC、HEIF 和 WEBP。大小限制遵循设置 > 安全与上传。",
+    "العربية (Arabic)": "المسموح: PDF وJPG وPNG وHEIC وHEIF وWEBP. يتبع حد الحجم الإعدادات > الأمان والرفع.",
+    "हिन्दी (Hindi)": "अनुमत: PDF, JPG, PNG, HEIC, HEIF और WEBP। आकार सीमा सेटिंग्स > सुरक्षा और अपलोड का अनुसरण करती है।"
   },
   "Choose a PDF or image file for this order.": {
-    "Türkçe": "Bu sipariş için PDF veya görsel dosya seçin."
+    "Türkçe": "Bu sipariş için PDF veya görsel dosya seçin.",
+    "Deutsch": "Wählen Sie eine PDF- oder Bilddatei für diesen Auftrag.",
+    "Français": "Choisissez un fichier PDF ou image pour cette commande.",
+    "Italiano": "Scegli un file PDF o immagine per questo ordine.",
+    "Español (Spanish)": "Elige un archivo PDF o de imagen para este pedido.",
+    "Português": "Escolha um ficheiro PDF ou de imagem para esta encomenda.",
+    "Русский (Russian)": "Выберите PDF или изображение для этого заказа.",
+    "日本語 (Japanese)": "この注文の PDF または画像ファイルを選択します。",
+    "中文 (Chinese)": "为此订单选择 PDF 或图片文件。",
+    "العربية (Arabic)": "اختر ملف PDF أو صورة لهذا الطلب.",
+    "हिन्दी (Hindi)": "इस ऑर्डर के लिए PDF या छवि फ़ाइल चुनें।"
   },
   "File uploaded": {
-    "Türkçe": "Dosya yüklendi"
+    "Türkçe": "Dosya yüklendi",
+    "Deutsch": "Datei hochgeladen",
+    "Français": "Fichier téléversé",
+    "Italiano": "File caricato",
+    "Español (Spanish)": "Archivo subido",
+    "Português": "Ficheiro carregado",
+    "Русский (Russian)": "Файл загружен",
+    "日本語 (Japanese)": "ファイルをアップロードしました",
+    "中文 (Chinese)": "文件已上传",
+    "العربية (Arabic)": "تم رفع الملف",
+    "हिन्दी (Hindi)": "फ़ाइल अपलोड की गई"
   },
   "Waiting to upload": {
-    "Türkçe": "Yükleme bekliyor"
+    "Türkçe": "Yükleme bekliyor",
+    "Deutsch": "Wartet auf Upload",
+    "Français": "En attente de téléversement",
+    "Italiano": "In attesa di caricamento",
+    "Español (Spanish)": "Esperando para subir",
+    "Português": "A aguardar carregamento",
+    "Русский (Russian)": "Ожидание загрузки",
+    "日本語 (Japanese)": "アップロード待ち",
+    "中文 (Chinese)": "等待上传",
+    "العربية (Arabic)": "بانتظار الرفع",
+    "हिन्दी (Hindi)": "अपलोड की प्रतीक्षा"
   },
   "Offline. File saved locally and will upload when online.": {
-    "Türkçe": "Offline. Dosya bu cihaza kaydedildi ve bağlantı gelince otomatik yüklenecek."
+    "Türkçe": "Offline. Dosya bu cihaza kaydedildi ve bağlantı gelince otomatik yüklenecek.",
+    "Deutsch": "Offline. Datei lokal gespeichert und wird hochgeladen, sobald online.",
+    "Français": "Hors ligne. Fichier enregistré localement, téléversé une fois en ligne.",
+    "Italiano": "Offline. File salvato localmente, verrà caricato quando online.",
+    "Español (Spanish)": "Sin conexión. Archivo guardado localmente; se subirá al estar en línea.",
+    "Português": "Offline. Ficheiro guardado localmente e será carregado quando online.",
+    "Русский (Russian)": "Офлайн. Файл сохранён локально и загрузится при подключении.",
+    "日本語 (Japanese)": "オフライン。ファイルはローカルに保存され、オンライン時にアップロードされます。",
+    "中文 (Chinese)": "离线。文件已保存在本地，联网后将上传。",
+    "العربية (Arabic)": "غير متصل. تم حفظ الملف محليًا وسيُرفع عند الاتصال.",
+    "हिन्दी (Hindi)": "ऑफ़लाइन। फ़ाइल स्थानीय रूप से सहेजी गई और ऑनलाइन होने पर अपलोड होगी।"
   },
   "This file is saved on this device and will upload automatically when online.": {
-    "Türkçe": "Bu dosya bu cihazda saklanıyor ve online olunca otomatik yüklenecek."
+    "Türkçe": "Bu dosya bu cihazda saklanıyor ve online olunca otomatik yüklenecek.",
+    "Deutsch": "Diese Datei wird auf diesem Gerät gespeichert und automatisch hochgeladen, sobald online.",
+    "Français": "Ce fichier est enregistré sur cet appareil et sera téléversé automatiquement une fois en ligne.",
+    "Italiano": "Questo file è salvato su questo dispositivo e verrà caricato automaticamente quando online.",
+    "Español (Spanish)": "Este archivo se guarda en este dispositivo y se subirá automáticamente al estar en línea.",
+    "Português": "Este ficheiro é guardado neste dispositivo e será carregado automaticamente quando online.",
+    "Русский (Russian)": "Этот файл сохранён на устройстве и загрузится автоматически при подключении.",
+    "日本語 (Japanese)": "このファイルはこのデバイスに保存され、オンライン時に自動アップロードされます。",
+    "中文 (Chinese)": "此文件保存在此设备上，联网后将自动上传。",
+    "العربية (Arabic)": "يُحفظ هذا الملف على هذا الجهاز ويُرفع تلقائيًا عند الاتصال.",
+    "हिन्दी (Hindi)": "यह फ़ाइल इस डिवाइस पर सहेजी गई है और ऑनलाइन होने पर स्वतः अपलोड होगी।"
   },
   "Pending upload removed": {
-    "Türkçe": "Bekleyen yükleme kaldırıldı"
+    "Türkçe": "Bekleyen yükleme kaldırıldı",
+    "Deutsch": "Ausstehender Upload entfernt",
+    "Français": "Téléversement en attente supprimé",
+    "Italiano": "Caricamento in sospeso rimosso",
+    "Español (Spanish)": "Subida pendiente eliminada",
+    "Português": "Carregamento pendente removido",
+    "Русский (Russian)": "Ожидающая загрузка удалена",
+    "日本語 (Japanese)": "保留中のアップロードを削除しました",
+    "中文 (Chinese)": "已移除待上传项",
+    "العربية (Arabic)": "تمت إزالة الرفع المعلق",
+    "हिन्दी (Hindi)": "लंबित अपलोड हटाया गया"
   },
   "Pending client file removed": {
-    "Türkçe": "Bekleyen müşteri dosyası kaldırıldı"
+    "Türkçe": "Bekleyen müşteri dosyası kaldırıldı",
+    "Deutsch": "Ausstehende Client-Datei entfernt",
+    "Français": "Fichier client en attente supprimé",
+    "Italiano": "File cliente in sospeso rimosso",
+    "Español (Spanish)": "Archivo de cliente pendiente eliminado",
+    "Português": "Ficheiro de cliente pendente removido",
+    "Русский (Russian)": "Ожидающий файл клиента удалён",
+    "日本語 (Japanese)": "保留中のクライアントファイルを削除しました",
+    "中文 (Chinese)": "已移除待处理的客户文件",
+    "العربية (Arabic)": "تمت إزالة ملف العميل المعلق",
+    "हिन्दी (Hindi)": "लंबित क्लाइंट फ़ाइल हटाई गई"
   },
   "Open local file": {
-    "Türkçe": "Yerel dosyayı aç"
+    "Türkçe": "Yerel dosyayı aç",
+    "Deutsch": "Lokale Datei öffnen",
+    "Français": "Ouvrir le fichier local",
+    "Italiano": "Apri file locale",
+    "Español (Spanish)": "Abrir archivo local",
+    "Português": "Abrir ficheiro local",
+    "Русский (Russian)": "Открыть локальный файл",
+    "日本語 (Japanese)": "ローカルファイルを開く",
+    "中文 (Chinese)": "打开本地文件",
+    "العربية (Arabic)": "فتح الملف المحلي",
+    "हिन्दी (Hindi)": "स्थानीय फ़ाइल खोलें"
   },
   "File deleted": {
-    "Türkçe": "Dosya silindi"
+    "Türkçe": "Dosya silindi",
+    "Deutsch": "Datei gelöscht",
+    "Français": "Fichier supprimé",
+    "Italiano": "File eliminato",
+    "Español (Spanish)": "Archivo eliminado",
+    "Português": "Ficheiro eliminado",
+    "Русский (Russian)": "Файл удалён",
+    "日本語 (Japanese)": "ファイルを削除しました",
+    "中文 (Chinese)": "文件已删除",
+    "العربية (Arabic)": "تم حذف الملف",
+    "हिन्दी (Hindi)": "फ़ाइल हटाई गई"
   },
   "Client file uploaded": {
-    "Türkçe": "Müşteri dosyası yüklendi"
+    "Türkçe": "Müşteri dosyası yüklendi",
+    "Deutsch": "Client-Datei hochgeladen",
+    "Français": "Fichier client téléversé",
+    "Italiano": "File cliente caricato",
+    "Español (Spanish)": "Archivo de cliente subido",
+    "Português": "Ficheiro de cliente carregado",
+    "Русский (Russian)": "Файл клиента загружен",
+    "日本語 (Japanese)": "クライアントファイルをアップロードしました",
+    "中文 (Chinese)": "客户文件已上传",
+    "العربية (Arabic)": "تم رفع ملف العميل",
+    "हिन्दी (Hindi)": "क्लाइंट फ़ाइल अपलोड की गई"
   },
   "Client file deleted": {
-    "Türkçe": "Müşteri dosyası silindi"
+    "Türkçe": "Müşteri dosyası silindi",
+    "Deutsch": "Client-Datei gelöscht",
+    "Français": "Fichier client supprimé",
+    "Italiano": "File cliente eliminato",
+    "Español (Spanish)": "Archivo de cliente eliminado",
+    "Português": "Ficheiro de cliente eliminado",
+    "Русский (Russian)": "Файл клиента удалён",
+    "日本語 (Japanese)": "クライアントファイルを削除しました",
+    "中文 (Chinese)": "客户文件已删除",
+    "العربية (Arabic)": "تم حذف ملف العميل",
+    "हिन्दी (Hindi)": "क्लाइंट फ़ाइल हटाई गई"
   },
   "Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.": {
-    "Türkçe": "Order preview, logo ve avatar alanları görsel dosya kabul eder. Client Files yalnızca görsel ve PDF belgeleri kabul eder."
+    "Türkçe": "Order preview, logo ve avatar alanları görsel dosya kabul eder. Client Files yalnızca görsel ve PDF belgeleri kabul eder.",
+    "Deutsch": "Auftragsvorschauen, Logos und Avatare akzeptieren Bilddateien. Client-Dateien akzeptieren nur Bilder und PDF-Dokumente.",
+    "Français": "Les aperçus de commande, logos et avatars acceptent des fichiers image. Les fichiers client acceptent uniquement les images et documents PDF.",
+    "Italiano": "Le anteprime degli ordini, i loghi e gli avatar accettano file immagine. I file cliente accettano solo immagini e documenti PDF.",
+    "Español (Spanish)": "Las vistas previas de pedidos, logos y avatares aceptan archivos de imagen. Los Archivos de cliente aceptan solo imágenes y documentos PDF.",
+    "Português": "As pré-visualizações de encomendas, logótipos e avatares aceitam ficheiros de imagem. Os Ficheiros de cliente aceitam apenas imagens e documentos PDF.",
+    "Русский (Russian)": "Превью заказов, логотипы и аватары принимают файлы изображений. Файлы клиента принимают только изображения и PDF-документы.",
+    "日本語 (Japanese)": "注文プレビュー、ロゴ、アバターは画像ファイルを受け付けます。クライアントファイルは画像と PDF 文書のみを受け付けます。",
+    "中文 (Chinese)": "订单预览、徽标和头像接受图片文件。客户文件仅接受图片和 PDF 文档。",
+    "العربية (Arabic)": "تقبل معاينات الطلب والشعارات والصور الرمزية ملفات الصور. تقبل ملفات العميل الصور ومستندات PDF فقط.",
+    "हिन्दी (Hindi)": "ऑर्डर प्रीव्यू, लोगो और अवतार छवि फ़ाइलें स्वीकार करते हैं। क्लाइंट फ़ाइलें केवल छवियाँ और PDF दस्तावेज़ स्वीकार करती हैं।"
   },
   "Maximum upload size": {
-    "Türkçe": "Maksimum yükleme boyutu"
+    "Türkçe": "Maksimum yükleme boyutu",
+    "Deutsch": "Maximale Upload-Größe",
+    "Français": "Taille de téléversement maximale",
+    "Italiano": "Dimensione massima di caricamento",
+    "Español (Spanish)": "Tamaño máximo de subida",
+    "Português": "Tamanho máximo de carregamento",
+    "Русский (Russian)": "Максимальный размер загрузки",
+    "日本語 (Japanese)": "最大アップロードサイズ",
+    "中文 (Chinese)": "最大上传大小",
+    "العربية (Arabic)": "الحد الأقصى لحجم الرفع",
+    "हिन्दी (Hindi)": "अधिकतम अपलोड आकार"
   },
   "These settings help protect your workspace when users upload images and client PDFs.": {
-    "Türkçe": "Bu ayarlar, kullanıcılar görsel ve müşteri PDF dosyası yüklerken workspace’i korumaya yardımcı olur."
+    "Türkçe": "Bu ayarlar, kullanıcılar görsel ve müşteri PDF dosyası yüklerken workspace’i korumaya yardımcı olur.",
+    "Deutsch": "Diese Einstellungen schützen Ihren Workspace, wenn Benutzer Bilder und Kunden-PDFs hochladen.",
+    "Français": "Ces réglages aident à protéger votre espace lorsque les utilisateurs téléversent des images et des PDF clients.",
+    "Italiano": "Queste impostazioni aiutano a proteggere lo spazio quando gli utenti caricano immagini e PDF cliente.",
+    "Español (Spanish)": "Estos ajustes ayudan a proteger tu espacio cuando los usuarios suben imágenes y PDF de cliente.",
+    "Português": "Estas definições ajudam a proteger o seu espaço quando os utilizadores carregam imagens e PDFs de cliente.",
+    "Русский (Russian)": "Эти настройки помогают защитить пространство, когда пользователи загружают изображения и PDF клиентов.",
+    "日本語 (Japanese)": "これらの設定は、ユーザーが画像や顧客 PDF をアップロードする際にワークスペースを保護します。",
+    "中文 (Chinese)": "当用户上传图片和客户 PDF 时，这些设置有助于保护您的工作区。",
+    "العربية (Arabic)": "تساعد هذه الإعدادات في حماية مساحة عملك عندما يرفع المستخدمون الصور وملفات PDF للعملاء.",
+    "हिन्दी (Hindi)": "ये सेटिंग्स तब आपके वर्कस्पेस की रक्षा में मदद करती हैं जब उपयोगकर्ता छवियाँ और क्लाइंट PDF अपलोड करते हैं।"
   },
   "Users must only upload legal, safe and work-related files that belong in this workspace.": {
-    "Türkçe": "Kullanıcılar yalnızca bu workspace’e ait, yasal, güvenli ve işle ilgili dosyalar yüklemelidir."
+    "Türkçe": "Kullanıcılar yalnızca bu workspace’e ait, yasal, güvenli ve işle ilgili dosyalar yüklemelidir.",
+    "Deutsch": "Benutzer dürfen nur legale, sichere und arbeitsbezogene Dateien hochladen, die in diesen Workspace gehören.",
+    "Français": "Les utilisateurs ne doivent téléverser que des fichiers légaux, sûrs et liés au travail appartenant à cet espace.",
+    "Italiano": "Gli utenti devono caricare solo file legali, sicuri e legati al lavoro che appartengono a questo spazio.",
+    "Español (Spanish)": "Los usuarios solo deben subir archivos legales, seguros y relacionados con el trabajo que pertenezcan a este espacio.",
+    "Português": "Os utilizadores só devem carregar ficheiros legais, seguros e relacionados com o trabalho que pertençam a este espaço.",
+    "Русский (Russian)": "Пользователи должны загружать только законные, безопасные и рабочие файлы, относящиеся к этому пространству.",
+    "日本語 (Japanese)": "ユーザーは、このワークスペースに属する合法で安全な業務関連ファイルのみをアップロードする必要があります。",
+    "中文 (Chinese)": "用户只能上传属于此工作区的合法、安全且与工作相关的文件。",
+    "العربية (Arabic)": "يجب على المستخدمين رفع الملفات القانونية والآمنة والمتعلقة بالعمل فقط التي تخص مساحة العمل هذه.",
+    "हिन्दी (Hindi)": "उपयोगकर्ताओं को केवल इस वर्कस्पेस से संबंधित वैध, सुरक्षित और कार्य-संबंधी फ़ाइलें अपलोड करनी चाहिए।"
   },
   "If a file belongs to a client or third party, the user should have permission to use it for the order.": {
-    "Türkçe": "Dosya bir müşteriye veya üçüncü tarafa aitse, kullanıcının bu dosyayı sipariş için kullanma izni olmalıdır."
+    "Türkçe": "Dosya bir müşteriye veya üçüncü tarafa aitse, kullanıcının bu dosyayı sipariş için kullanma izni olmalıdır.",
+    "Deutsch": "Wenn eine Datei einem Kunden oder Dritten gehört, sollte der Benutzer die Erlaubnis haben, sie für den Auftrag zu verwenden.",
+    "Français": "Si un fichier appartient à un client ou à un tiers, l'utilisateur doit avoir l'autorisation de l'utiliser pour la commande.",
+    "Italiano": "Se un file appartiene a un cliente o a terzi, l'utente deve avere il permesso di usarlo per l'ordine.",
+    "Español (Spanish)": "Si un archivo pertenece a un cliente o a un tercero, el usuario debe tener permiso para usarlo en el pedido.",
+    "Português": "Se um ficheiro pertence a um cliente ou terceiro, o utilizador deve ter permissão para o usar na encomenda.",
+    "Русский (Russian)": "Если файл принадлежит клиенту или третьей стороне, у пользователя должно быть разрешение использовать его для заказа.",
+    "日本語 (Japanese)": "ファイルが顧客や第三者に属する場合、ユーザーはそれを注文に使用する許可を持っている必要があります。",
+    "中文 (Chinese)": "如果文件属于客户或第三方，用户应有权将其用于该订单。",
+    "العربية (Arabic)": "إذا كان الملف يخص عميلاً أو طرفًا ثالثًا، فيجب أن يكون لدى المستخدم إذن باستخدامه للطلب.",
+    "हिन्दी (Hindi)": "यदि कोई फ़ाइल किसी क्लाइंट या तीसरे पक्ष की है, तो उपयोगकर्ता के पास उसे ऑर्डर के लिए उपयोग करने की अनुमति होनी चाहिए।"
   },
   "Shared file is ready. Open the correct order and tap Add here.": {
-    "Türkçe": "Paylaşılan dosya hazır. Doğru siparişi açıp Buraya ekle’ye basın."
+    "Türkçe": "Paylaşılan dosya hazır. Doğru siparişi açıp Buraya ekle’ye basın.",
+    "Deutsch": "Geteilte Datei ist bereit. Öffnen Sie den richtigen Auftrag und tippen Sie hier auf Hinzufügen.",
+    "Français": "Le fichier partagé est prêt. Ouvrez la bonne commande et appuyez sur Ajouter ici.",
+    "Italiano": "Il file condiviso è pronto. Apri l'ordine corretto e tocca Aggiungi qui.",
+    "Español (Spanish)": "El archivo compartido está listo. Abre el pedido correcto y toca Añadir aquí.",
+    "Português": "O ficheiro partilhado está pronto. Abra a encomenda correta e toque em Adicionar aqui.",
+    "Русский (Russian)": "Общий файл готов. Откройте нужный заказ и нажмите «Добавить здесь».",
+    "日本語 (Japanese)": "共有ファイルの準備ができました。正しい注文を開き、ここで「追加」をタップします。",
+    "中文 (Chinese)": "共享文件已就绪。打开正确的订单并点击在此添加。",
+    "العربية (Arabic)": "الملف المشترك جاهز. افتح الطلب الصحيح واضغط إضافة هنا.",
+    "हिन्दी (Hindi)": "साझा फ़ाइल तैयार है। सही ऑर्डर खोलें और यहाँ जोड़ें टैप करें।"
   },
   "Please accept the Upload Policy before importing shared files.": {
-    "Türkçe": "Paylaşılan dosyaları içeri aktarmadan önce Upload Policy onayını kabul edin."
+    "Türkçe": "Paylaşılan dosyaları içeri aktarmadan önce Upload Policy onayını kabul edin.",
+    "Deutsch": "Bitte akzeptieren Sie die Upload-Richtlinie, bevor Sie geteilte Dateien importieren.",
+    "Français": "Veuillez accepter la politique de téléversement avant d'importer des fichiers partagés.",
+    "Italiano": "Accetta i criteri di caricamento prima di importare i file condivisi.",
+    "Español (Spanish)": "Acepta la política de subida antes de importar archivos compartidos.",
+    "Português": "Aceite a política de carregamento antes de importar ficheiros partilhados.",
+    "Русский (Russian)": "Примите политику загрузки перед импортом общих файлов.",
+    "日本語 (Japanese)": "共有ファイルをインポートする前にアップロードポリシーに同意してください。",
+    "中文 (Chinese)": "导入共享文件前请接受上传策略。",
+    "العربية (Arabic)": "يرجى قبول سياسة الرفع قبل استيراد الملفات المشتركة.",
+    "हिन्दी (Hindi)": "साझा फ़ाइलें आयात करने से पहले कृपया अपलोड नीति स्वीकार करें।"
   },
   "Importing shared files...": {
-    "Türkçe": "Paylaşılan dosyalar içeri aktarılıyor..."
+    "Türkçe": "Paylaşılan dosyalar içeri aktarılıyor...",
+    "Deutsch": "Geteilte Dateien werden importiert...",
+    "Français": "Importation des fichiers partagés...",
+    "Italiano": "Importazione dei file condivisi...",
+    "Español (Spanish)": "Importando archivos compartidos...",
+    "Português": "A importar ficheiros partilhados...",
+    "Русский (Russian)": "Импорт общих файлов...",
+    "日本語 (Japanese)": "共有ファイルをインポート中...",
+    "中文 (Chinese)": "正在导入共享文件...",
+    "العربية (Arabic)": "جارٍ استيراد الملفات المشتركة...",
+    "हिन्दी (Hindi)": "साझा फ़ाइलें आयात हो रही हैं..."
   },
   "%d shared file(s) added to this order.": {
-    "Türkçe": "%d paylaşılan dosya bu siparişe eklendi."
+    "Türkçe": "%d paylaşılan dosya bu siparişe eklendi.",
+    "Deutsch": "%d geteilte Datei(en) zu diesem Auftrag hinzugefügt.",
+    "Français": "%d fichier(s) partagé(s) ajouté(s) à cette commande.",
+    "Italiano": "%d file condiviso/i aggiunto/i a questo ordine.",
+    "Español (Spanish)": "%d archivo(s) compartido(s) añadido(s) a este pedido.",
+    "Português": "%d ficheiro(s) partilhado(s) adicionado(s) a esta encomenda.",
+    "Русский (Russian)": "%d общих файл(ов) добавлено к этому заказу.",
+    "日本語 (Japanese)": "%d 件の共有ファイルをこの注文に追加しました。",
+    "中文 (Chinese)": "已将 %d 个共享文件添加到此订单。",
+    "العربية (Arabic)": "تمت إضافة %d ملف مشترك إلى هذا الطلب.",
+    "हिन्दी (Hindi)": "इस ऑर्डर में %d साझा फ़ाइल(ें) जोड़ी गईं।"
   },
   "No shared files were imported.": {
-    "Türkçe": "Hiçbir paylaşılan dosya içeri aktarılmadı."
+    "Türkçe": "Hiçbir paylaşılan dosya içeri aktarılmadı.",
+    "Deutsch": "Es wurden keine geteilten Dateien importiert.",
+    "Français": "Aucun fichier partagé n'a été importé.",
+    "Italiano": "Nessun file condiviso è stato importato.",
+    "Español (Spanish)": "No se importó ningún archivo compartido.",
+    "Português": "Nenhum ficheiro partilhado foi importado.",
+    "Русский (Russian)": "Общие файлы не были импортированы.",
+    "日本語 (Japanese)": "共有ファイルはインポートされませんでした。",
+    "中文 (Chinese)": "未导入任何共享文件。",
+    "العربية (Arabic)": "لم يتم استيراد أي ملفات مشتركة.",
+    "हिन्दी (Hindi)": "कोई साझा फ़ाइल आयात नहीं हुई।"
   },
   "Shared files cleared.": {
-    "Türkçe": "Paylaşılan dosyalar temizlendi."
+    "Türkçe": "Paylaşılan dosyalar temizlendi.",
+    "Deutsch": "Geteilte Dateien gelöscht.",
+    "Français": "Fichiers partagés effacés.",
+    "Italiano": "File condivisi cancellati.",
+    "Español (Spanish)": "Archivos compartidos borrados.",
+    "Português": "Ficheiros partilhados limpos.",
+    "Русский (Russian)": "Общие файлы очищены.",
+    "日本語 (Japanese)": "共有ファイルをクリアしました。",
+    "中文 (Chinese)": "已清除共享文件。",
+    "العربية (Arabic)": "تم مسح الملفات المشتركة.",
+    "हिन्दी (Hindi)": "साझा फ़ाइलें साफ़ की गईं।"
   },
   "%d shared file(s) waiting": {
-    "Türkçe": "%d paylaşılan dosya bekliyor"
+    "Türkçe": "%d paylaşılan dosya bekliyor",
+    "Deutsch": "%d geteilte Datei(en) warten",
+    "Français": "%d fichier(s) partagé(s) en attente",
+    "Italiano": "%d file condiviso/i in attesa",
+    "Español (Spanish)": "%d archivo(s) compartido(s) en espera",
+    "Português": "%d ficheiro(s) partilhado(s) em espera",
+    "Русский (Russian)": "%d общих файл(ов) ожидает",
+    "日本語 (Japanese)": "%d 件の共有ファイルが待機中",
+    "中文 (Chinese)": "%d 个共享文件等待中",
+    "العربية (Arabic)": "%d ملف مشترك بالانتظار",
+    "हिन्दी (Hindi)": "%d साझा फ़ाइल(ें) प्रतीक्षारत"
   },
   "Add these shared files to this order, or clear them.": {
-    "Türkçe": "Bu paylaşılan dosyaları bu siparişe ekleyin veya temizleyin."
+    "Türkçe": "Bu paylaşılan dosyaları bu siparişe ekleyin veya temizleyin.",
+    "Deutsch": "Fügen Sie diese geteilten Dateien zu diesem Auftrag hinzu oder löschen Sie sie.",
+    "Français": "Ajoutez ces fichiers partagés à cette commande, ou effacez-les.",
+    "Italiano": "Aggiungi questi file condivisi a questo ordine, oppure cancellali.",
+    "Español (Spanish)": "Añade estos archivos compartidos a este pedido, o bórralos.",
+    "Português": "Adicione estes ficheiros partilhados a esta encomenda, ou limpe-os.",
+    "Русский (Russian)": "Добавьте эти общие файлы к этому заказу или очистите их.",
+    "日本語 (Japanese)": "これらの共有ファイルをこの注文に追加するか、クリアします。",
+    "中文 (Chinese)": "将这些共享文件添加到此订单，或清除它们。",
+    "العربية (Arabic)": "أضف هذه الملفات المشتركة إلى هذا الطلب أو امسحها.",
+    "हिन्दी (Hindi)": "इन साझा फ़ाइलों को इस ऑर्डर में जोड़ें, या साफ़ करें।"
   },
   "Add here": {
-    "Türkçe": "Buraya ekle"
+    "Türkçe": "Buraya ekle",
+    "Deutsch": "Hier hinzufügen",
+    "Français": "Ajouter ici",
+    "Italiano": "Aggiungi qui",
+    "Español (Spanish)": "Añadir aquí",
+    "Português": "Adicionar aqui",
+    "Русский (Russian)": "Добавить здесь",
+    "日本語 (Japanese)": "ここに追加",
+    "中文 (Chinese)": "在此添加",
+    "العربية (Arabic)": "أضف هنا",
+    "हिन्दी (Hindi)": "यहाँ जोड़ें"
   },
   "Clear": {
-    "Türkçe": "Temizle"
+    "Türkçe": "Temizle",
+    "Deutsch": "Löschen",
+    "Français": "Effacer",
+    "Italiano": "Cancella",
+    "Español (Spanish)": "Borrar",
+    "Português": "Limpar",
+    "Русский (Russian)": "Очистить",
+    "日本語 (Japanese)": "クリア",
+    "中文 (Chinese)": "清除",
+    "العربية (Arabic)": "مسح",
+    "हिन्दी (Hindi)": "साफ़ करें"
   },
   "Edit customer fields, visible contact fields and the channel button names.": {
     "Türkçe": "Müşteri alanlarını, görünür iletişim alanlarını ve kanal butonu adlarını düzenleyin.",
@@ -9740,91 +12110,381 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "Channel button names can be added, removed, or renamed. Telephone, Email and Address stay as their own fields and can be shown or hidden above."
   },
   "To Do": {
-    "Türkçe": "Yapılacaklar"
+    "Türkçe": "Yapılacaklar",
+    "Deutsch": "Aufgaben",
+    "Français": "À faire",
+    "Italiano": "Da fare",
+    "Español (Spanish)": "Por hacer",
+    "Português": "A fazer",
+    "Русский (Russian)": "Сделать",
+    "日本語 (Japanese)": "ToDo",
+    "中文 (Chinese)": "待办",
+    "العربية (Arabic)": "المهام",
+    "हिन्दी (Hindi)": "करने योग्य"
   },
   "Choose which blocks are visible and manage the layout for this order.": {
-    "Türkçe": "Bu order için hangi kartların görüneceğini seçin ve yerleşimi yönetin."
+    "Türkçe": "Bu order için hangi kartların görüneceğini seçin ve yerleşimi yönetin.",
+    "Deutsch": "Wählen Sie, welche Blöcke sichtbar sind, und verwalten Sie das Layout für diesen Auftrag.",
+    "Français": "Choisissez quels blocs sont visibles et gérez la disposition de cette commande.",
+    "Italiano": "Scegli quali blocchi sono visibili e gestisci il layout per questo ordine.",
+    "Español (Spanish)": "Elige qué bloques son visibles y gestiona el diseño de este pedido.",
+    "Português": "Escolha que blocos estão visíveis e faça a gestão do layout para esta encomenda.",
+    "Русский (Russian)": "Выберите, какие блоки видны, и управляйте раскладкой этого заказа.",
+    "日本語 (Japanese)": "表示するブロックを選択し、この注文のレイアウトを管理します。",
+    "中文 (Chinese)": "选择哪些区块可见并管理此订单的布局。",
+    "العربية (Arabic)": "اختر الكتل المرئية وأدر تخطيط هذا الطلب.",
+    "हिन्दी (Hindi)": "चुनें कि कौन-से ब्लॉक दृश्यमान हैं और इस ऑर्डर के लेआउट को प्रबंधित करें।"
   },
   "Show or hide the cards you want to see in the order detail workspace.": {
-    "Türkçe": "Order detail çalışma alanında görmek istediğiniz kartları gösterin veya gizleyin."
+    "Türkçe": "Order detail çalışma alanında görmek istediğiniz kartları gösterin veya gizleyin.",
+    "Deutsch": "Blenden Sie die Karten ein oder aus, die Sie im Auftragsdetail-Workspace sehen möchten.",
+    "Français": "Affichez ou masquez les cartes que vous souhaitez voir dans l'espace de détail de commande.",
+    "Italiano": "Mostra o nascondi le schede che vuoi vedere nello spazio di dettaglio dell'ordine.",
+    "Español (Spanish)": "Muestra u oculta las tarjetas que quieres ver en el espacio de detalle del pedido.",
+    "Português": "Mostre ou oculte os cartões que quer ver no espaço de detalhe da encomenda.",
+    "Русский (Russian)": "Показывайте или скрывайте карточки, которые хотите видеть в рабочей области деталей заказа.",
+    "日本語 (Japanese)": "注文詳細ワークスペースで表示したいカードを表示/非表示にします。",
+    "中文 (Chinese)": "在订单详情工作区中显示或隐藏您想看到的卡片。",
+    "العربية (Arabic)": "أظهر أو أخفِ البطاقات التي تريد رؤيتها في مساحة تفاصيل الطلب.",
+    "हिन्दी (Hindi)": "ऑर्डर विवरण वर्कस्पेस में जिन कार्डों को देखना चाहते हैं, उन्हें दिखाएं या छिपाएं।"
   },
   "Task added": {
-    "Türkçe": "Görev eklendi"
+    "Türkçe": "Görev eklendi",
+    "Deutsch": "Aufgabe hinzugefügt",
+    "Français": "Tâche ajoutée",
+    "Italiano": "Attività aggiunta",
+    "Español (Spanish)": "Tarea añadida",
+    "Português": "Tarefa adicionada",
+    "Русский (Russian)": "Задача добавлена",
+    "日本語 (Japanese)": "タスクを追加しました",
+    "中文 (Chinese)": "已添加任务",
+    "العربية (Arabic)": "تمت إضافة المهمة",
+    "हिन्दी (Hindi)": "कार्य जोड़ा गया"
   },
   "Task completed": {
-    "Türkçe": "Görev tamamlandı"
+    "Türkçe": "Görev tamamlandı",
+    "Deutsch": "Aufgabe abgeschlossen",
+    "Français": "Tâche terminée",
+    "Italiano": "Attività completata",
+    "Español (Spanish)": "Tarea completada",
+    "Português": "Tarefa concluída",
+    "Русский (Russian)": "Задача выполнена",
+    "日本語 (Japanese)": "タスクを完了しました",
+    "中文 (Chinese)": "任务已完成",
+    "العربية (Arabic)": "اكتملت المهمة",
+    "हिन्दी (Hindi)": "कार्य पूर्ण हुआ"
   },
   "Task reopened": {
-    "Türkçe": "Görev yeniden açıldı"
+    "Türkçe": "Görev yeniden açıldı",
+    "Deutsch": "Aufgabe wieder geöffnet",
+    "Français": "Tâche rouverte",
+    "Italiano": "Attività riaperta",
+    "Español (Spanish)": "Tarea reabierta",
+    "Português": "Tarefa reaberta",
+    "Русский (Russian)": "Задача снова открыта",
+    "日本語 (Japanese)": "タスクを再開しました",
+    "中文 (Chinese)": "任务已重新打开",
+    "العربية (Arabic)": "تمت إعادة فتح المهمة",
+    "हिन्दी (Hindi)": "कार्य फिर से खोला गया"
   },
   "Task deleted": {
-    "Türkçe": "Görev silindi"
+    "Türkçe": "Görev silindi",
+    "Deutsch": "Aufgabe gelöscht",
+    "Français": "Tâche supprimée",
+    "Italiano": "Attività eliminata",
+    "Español (Spanish)": "Tarea eliminada",
+    "Português": "Tarefa eliminada",
+    "Русский (Russian)": "Задача удалена",
+    "日本語 (Japanese)": "タスクを削除しました",
+    "中文 (Chinese)": "任务已删除",
+    "العربية (Arabic)": "تم حذف المهمة",
+    "हिन्दी (Hindi)": "कार्य हटाया गया"
   },
   "Task assigned": {
-    "Türkçe": "Görev atandı"
+    "Türkçe": "Görev atandı",
+    "Deutsch": "Aufgabe zugewiesen",
+    "Français": "Tâche attribuée",
+    "Italiano": "Attività assegnata",
+    "Español (Spanish)": "Tarea asignada",
+    "Português": "Tarefa atribuída",
+    "Русский (Russian)": "Задача назначена",
+    "日本語 (Japanese)": "タスクを割り当てました",
+    "中文 (Chinese)": "已分配任务",
+    "العربية (Arabic)": "تم تعيين المهمة",
+    "हिन्दी (Hindi)": "कार्य असाइन किया गया"
   },
   "Task due date updated": {
-    "Türkçe": "Görev tarihi güncellendi"
+    "Türkçe": "Görev tarihi güncellendi",
+    "Deutsch": "Aufgaben-Fälligkeitsdatum aktualisiert",
+    "Français": "Date d'échéance de la tâche mise à jour",
+    "Italiano": "Data di scadenza dell'attività aggiornata",
+    "Español (Spanish)": "Fecha de vencimiento de la tarea actualizada",
+    "Português": "Data limite da tarefa atualizada",
+    "Русский (Russian)": "Срок задачи обновлён",
+    "日本語 (Japanese)": "タスクの期限を更新しました",
+    "中文 (Chinese)": "任务截止日期已更新",
+    "العربية (Arabic)": "تم تحديث تاريخ استحقاق المهمة",
+    "हिन्दी (Hindi)": "कार्य की नियत तिथि अपडेट की गई"
   },
   "Task priority updated": {
-    "Türkçe": "Görev önceliği güncellendi"
+    "Türkçe": "Görev önceliği güncellendi",
+    "Deutsch": "Aufgabenpriorität aktualisiert",
+    "Français": "Priorité de la tâche mise à jour",
+    "Italiano": "Priorità dell'attività aggiornata",
+    "Español (Spanish)": "Prioridad de la tarea actualizada",
+    "Português": "Prioridade da tarefa atualizada",
+    "Русский (Russian)": "Приоритет задачи обновлён",
+    "日本語 (Japanese)": "タスクの優先度を更新しました",
+    "中文 (Chinese)": "任务优先级已更新",
+    "العربية (Arabic)": "تم تحديث أولوية المهمة",
+    "हिन्दी (Hindi)": "कार्य प्राथमिकता अपडेट की गई"
   },
   "Add a task...": {
-    "Türkçe": "Görev ekle..."
+    "Türkçe": "Görev ekle...",
+    "Deutsch": "Aufgabe hinzufügen...",
+    "Français": "Ajouter une tâche...",
+    "Italiano": "Aggiungi un'attività...",
+    "Español (Spanish)": "Añadir una tarea...",
+    "Português": "Adicionar uma tarefa...",
+    "Русский (Russian)": "Добавить задачу...",
+    "日本語 (Japanese)": "タスクを追加...",
+    "中文 (Chinese)": "添加任务...",
+    "العربية (Arabic)": "أضف مهمة...",
+    "हिन्दी (Hindi)": "एक कार्य जोड़ें..."
   },
   "Optional note": {
-    "Türkçe": "İsteğe bağlı not"
+    "Türkçe": "İsteğe bağlı not",
+    "Deutsch": "Optionale Notiz",
+    "Français": "Note facultative",
+    "Italiano": "Nota facoltativa",
+    "Español (Spanish)": "Nota opcional",
+    "Português": "Nota opcional",
+    "Русский (Russian)": "Необязательная заметка",
+    "日本語 (Japanese)": "任意のメモ",
+    "中文 (Chinese)": "可选备注",
+    "العربية (Arabic)": "ملاحظة اختيارية",
+    "हिन्दी (Hindi)": "वैकल्पिक नोट"
   },
   "Add Task": {
-    "Türkçe": "Görev Ekle"
+    "Türkçe": "Görev Ekle",
+    "Deutsch": "Aufgabe hinzufügen",
+    "Français": "Ajouter une tâche",
+    "Italiano": "Aggiungi attività",
+    "Español (Spanish)": "Añadir tarea",
+    "Português": "Adicionar tarefa",
+    "Русский (Russian)": "Добавить задачу",
+    "日本語 (Japanese)": "タスクを追加",
+    "中文 (Chinese)": "添加任务",
+    "العربية (Arabic)": "إضافة مهمة",
+    "हिन्दी (Hindi)": "कार्य जोड़ें"
   },
   "Assign": {
-    "Türkçe": "Ata"
+    "Türkçe": "Ata",
+    "Deutsch": "Zuweisen",
+    "Français": "Attribuer",
+    "Italiano": "Assegna",
+    "Español (Spanish)": "Asignar",
+    "Português": "Atribuir",
+    "Русский (Russian)": "Назначить",
+    "日本語 (Japanese)": "割り当て",
+    "中文 (Chinese)": "分配",
+    "العربية (Arabic)": "تعيين",
+    "हिन्दी (Hindi)": "असाइन करें"
   },
   "Unassigned": {
-    "Türkçe": "Atanmamış"
+    "Türkçe": "Atanmamış",
+    "Deutsch": "Nicht zugewiesen",
+    "Français": "Non attribué",
+    "Italiano": "Non assegnato",
+    "Español (Spanish)": "Sin asignar",
+    "Português": "Não atribuído",
+    "Русский (Russian)": "Не назначено",
+    "日本語 (Japanese)": "未割り当て",
+    "中文 (Chinese)": "未分配",
+    "العربية (Arabic)": "غير معيّن",
+    "हिन्दी (Hindi)": "अनअसाइन"
   },
   "Assigned to": {
-    "Türkçe": "Atandı:"
+    "Türkçe": "Atandı:",
+    "Deutsch": "Zugewiesen an",
+    "Français": "Attribué à",
+    "Italiano": "Assegnato a",
+    "Español (Spanish)": "Asignado a",
+    "Português": "Atribuído a",
+    "Русский (Russian)": "Назначено",
+    "日本語 (Japanese)": "割り当て先",
+    "中文 (Chinese)": "分配给",
+    "العربية (Arabic)": "معيّن إلى",
+    "हिन्दी (Hindi)": "असाइन किया गया"
   },
   "Assign Project": {
-    "Türkçe": "Projeyi Ata"
+    "Türkçe": "Projeyi Ata",
+    "Deutsch": "Projekt zuweisen",
+    "Français": "Attribuer le projet",
+    "Italiano": "Assegna progetto",
+    "Español (Spanish)": "Asignar proyecto",
+    "Português": "Atribuir projeto",
+    "Русский (Russian)": "Назначить проект",
+    "日本語 (Japanese)": "案件を割り当て",
+    "中文 (Chinese)": "分配项目",
+    "العربية (Arabic)": "تعيين المشروع",
+    "हिन्दी (Hindi)": "परियोजना असाइन करें"
   },
   "Assigned Projects Only": {
-    "Türkçe": "Sadece Atanan Projeler"
+    "Türkçe": "Sadece Atanan Projeler",
+    "Deutsch": "Nur zugewiesene Projekte",
+    "Français": "Projets assignés uniquement",
+    "Italiano": "Solo progetti assegnati",
+    "Español (Spanish)": "Solo proyectos asignados",
+    "Português": "Apenas projetos atribuídos",
+    "Русский (Russian)": "Только назначенные проекты",
+    "日本語 (Japanese)": "割り当て案件のみ",
+    "中文 (Chinese)": "仅分配的项目",
+    "العربية (Arabic)": "المشاريع المعيّنة فقط",
+    "हिन्दी (Hindi)": "केवल असाइन की गई परियोजनाएँ"
   },
   "Me": {
-    "Türkçe": "Ben"
+    "Türkçe": "Ben",
+    "Deutsch": "Ich",
+    "Français": "Moi",
+    "Italiano": "Io",
+    "Español (Spanish)": "Yo",
+    "Português": "Eu",
+    "Русский (Russian)": "Я",
+    "日本語 (Japanese)": "自分",
+    "中文 (Chinese)": "我",
+    "العربية (Arabic)": "أنا",
+    "हिन्दी (Hindi)": "मैं"
   },
   "Due": {
-    "Türkçe": "Tarih"
+    "Türkçe": "Tarih",
+    "Deutsch": "Fällig",
+    "Français": "Échéance",
+    "Italiano": "Scadenza",
+    "Español (Spanish)": "Vence",
+    "Português": "Prazo",
+    "Русский (Russian)": "Срок",
+    "日本語 (Japanese)": "期限",
+    "中文 (Chinese)": "到期",
+    "العربية (Arabic)": "الاستحقاق",
+    "हिन्दी (Hindi)": "देय"
   },
   "Due date": {
-    "Türkçe": "Bitiş tarihi"
+    "Türkçe": "Bitiş tarihi",
+    "Deutsch": "Fälligkeitsdatum",
+    "Français": "Date d'échéance",
+    "Italiano": "Data di scadenza",
+    "Español (Spanish)": "Fecha de vencimiento",
+    "Português": "Data limite",
+    "Русский (Russian)": "Срок",
+    "日本語 (Japanese)": "期限日",
+    "中文 (Chinese)": "截止日期",
+    "العربية (Arabic)": "تاريخ الاستحقاق",
+    "हिन्दी (Hindi)": "नियत तिथि"
   },
   "No due date": {
-    "Türkçe": "Tarih yok"
+    "Türkçe": "Tarih yok",
+    "Deutsch": "Kein Fälligkeitsdatum",
+    "Français": "Pas de date d'échéance",
+    "Italiano": "Nessuna scadenza",
+    "Español (Spanish)": "Sin fecha de vencimiento",
+    "Português": "Sem data limite",
+    "Русский (Russian)": "Без срока",
+    "日本語 (Japanese)": "期限なし",
+    "中文 (Chinese)": "无截止日期",
+    "العربية (Arabic)": "لا يوجد تاريخ استحقاق",
+    "हिन्दी (Hindi)": "कोई नियत तिथि नहीं"
   },
   "Tomorrow": {
-    "Türkçe": "Yarın"
+    "Türkçe": "Yarın",
+    "Deutsch": "Morgen",
+    "Français": "Demain",
+    "Italiano": "Domani",
+    "Español (Spanish)": "Mañana",
+    "Português": "Amanhã",
+    "Русский (Russian)": "Завтра",
+    "日本語 (Japanese)": "明日",
+    "中文 (Chinese)": "明天",
+    "العربية (Arabic)": "غدًا",
+    "हिन्दी (Hindi)": "कल"
   },
   "In 3 days": {
-    "Türkçe": "3 gün içinde"
+    "Türkçe": "3 gün içinde",
+    "Deutsch": "In 3 Tagen",
+    "Français": "Dans 3 jours",
+    "Italiano": "Tra 3 giorni",
+    "Español (Spanish)": "En 3 días",
+    "Português": "Em 3 dias",
+    "Русский (Russian)": "Через 3 дня",
+    "日本語 (Japanese)": "3日後",
+    "中文 (Chinese)": "3 天后",
+    "العربية (Arabic)": "خلال 3 أيام",
+    "हिन्दी (Hindi)": "3 दिन में"
   },
   "In 7 days": {
-    "Türkçe": "7 gün içinde"
+    "Türkçe": "7 gün içinde",
+    "Deutsch": "In 7 Tagen",
+    "Français": "Dans 7 jours",
+    "Italiano": "Tra 7 giorni",
+    "Español (Spanish)": "En 7 días",
+    "Português": "Em 7 dias",
+    "Русский (Russian)": "Через 7 дней",
+    "日本語 (Japanese)": "7日後",
+    "中文 (Chinese)": "7 天后",
+    "العربية (Arabic)": "خلال 7 أيام",
+    "हिन्दी (Hindi)": "7 दिन में"
   },
   "Open": {
-    "Türkçe": "Açık"
+    "Türkçe": "Açık",
+    "Deutsch": "Offen",
+    "Français": "Ouvert",
+    "Italiano": "Aperto",
+    "Español (Spanish)": "Abierto",
+    "Português": "Aberto",
+    "Русский (Russian)": "Открыто",
+    "日本語 (Japanese)": "未完了",
+    "中文 (Chinese)": "进行中",
+    "العربية (Arabic)": "مفتوح",
+    "हिन्दी (Hindi)": "खुला"
   },
   "No tasks here": {
-    "Türkçe": "Burada görev yok"
+    "Türkçe": "Burada görev yok",
+    "Deutsch": "Keine Aufgaben hier",
+    "Français": "Aucune tâche ici",
+    "Italiano": "Nessuna attività qui",
+    "Español (Spanish)": "No hay tareas aquí",
+    "Português": "Sem tarefas aqui",
+    "Русский (Russian)": "Здесь нет задач",
+    "日本語 (Japanese)": "ここにはタスクがありません",
+    "中文 (Chinese)": "这里没有任务",
+    "العربية (Arabic)": "لا توجد مهام هنا",
+    "हिन्दी (Hindi)": "यहाँ कोई कार्य नहीं"
   },
   "Reopen": {
-    "Türkçe": "Yeniden Aç"
+    "Türkçe": "Yeniden Aç",
+    "Deutsch": "Wieder öffnen",
+    "Français": "Rouvrir",
+    "Italiano": "Riapri",
+    "Español (Spanish)": "Reabrir",
+    "Português": "Reabrir",
+    "Русский (Russian)": "Открыть снова",
+    "日本語 (Japanese)": "再開",
+    "中文 (Chinese)": "重新打开",
+    "العربية (Arabic)": "إعادة فتح",
+    "हिन्दी (Hindi)": "फिर से खोलें"
   },
   "You can view tasks, but your role cannot edit them.": {
-    "Türkçe": "Görevleri görüntüleyebilirsiniz, ancak rolünüz düzenleme yapamaz."
+    "Türkçe": "Görevleri görüntüleyebilirsiniz, ancak rolünüz düzenleme yapamaz.",
+    "Deutsch": "Sie können Aufgaben anzeigen, aber Ihre Rolle kann sie nicht bearbeiten.",
+    "Français": "Vous pouvez voir les tâches, mais votre rôle ne peut pas les modifier.",
+    "Italiano": "Puoi vedere le attività, ma il tuo ruolo non può modificarle.",
+    "Español (Spanish)": "Puedes ver las tareas, pero tu rol no puede editarlas.",
+    "Português": "Pode ver as tarefas, mas a sua função não pode editá-las.",
+    "Русский (Russian)": "Вы можете просматривать задачи, но ваша роль не может их редактировать.",
+    "日本語 (Japanese)": "タスクを表示できますが、あなたの役割では編集できません。",
+    "中文 (Chinese)": "您可以查看任务，但您的角色无法编辑它们。",
+    "العربية (Arabic)": "يمكنك عرض المهام، لكن دورك لا يمكنه تعديلها.",
+    "हिन्दी (Hindi)": "आप कार्य देख सकते हैं, लेकिन आपकी भूमिका उन्हें संपादित नहीं कर सकती।"
   },
   "NivaDesk": {
     "Türkçe": "NivaDesk",
