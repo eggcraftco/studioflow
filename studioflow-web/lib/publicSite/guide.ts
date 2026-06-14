@@ -270,6 +270,23 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "para", text: "This card only appears for roles allowed to see finances; for everyone else the order's money stays hidden." }
         ]
+      },
+      {
+        id: "card-status",
+        title: "Production Status card",
+        blocks: [
+          { kind: "para", text: "Track where the order is in production — each stage of your workflow with its own status, so anyone can see progress at a glance." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "One row per workflow step (for example Design, Production or Finishing), each set to a status such as Not Yet, In Progress, Done or Cancelled.",
+            "The available status options come from your workspace and can be customized in Settings."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to add, rename or remove the status steps so they match your craft's workflow.",
+            "Changing a step here updates the colored status badges in the Orders list and the Order Summary card."
+          ] }
+        ]
       }
     ]
   },
@@ -598,6 +615,23 @@ const TREE_TR: GuideNode[] = [
             "Vergi oranı, kuralı ve geçiş tarihi Settings ▸ Financial'dan gelir ve tüm siparişlerinize uygulanır."
           ] },
           { kind: "para", text: "Bu kart yalnızca finansı görmeye izinli rollerde görünür; diğer herkes için siparişin parası gizli kalır." }
+        ]
+      },
+      {
+        id: "card-status",
+        title: "Production Status kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin üretimde nerede olduğunu takip edin — iş akışınızın her aşaması kendi durumuyla; böylece herkes ilerlemeyi bir bakışta görür." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "İş akışındaki her adım için bir satır (örneğin Tasarım, Üretim veya Sonlandırma); her biri Not Yet, In Progress, Done veya Cancelled gibi bir duruma ayarlı.",
+            "Kullanılabilir durum seçenekleri çalışma alanınızdan gelir ve Settings'ten özelleştirilebilir."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile durum adımlarını mesleğinizin iş akışına uyacak şekilde ekleyin, yeniden adlandırın veya kaldırın.",
+            "Buradan bir adımı değiştirmek, Siparişler listesindeki renkli durum rozetlerini ve Order Summary kartını günceller."
+          ] }
         ]
       }
     ]
