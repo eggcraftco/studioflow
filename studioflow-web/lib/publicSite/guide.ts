@@ -351,11 +351,12 @@ const TREE_EN: GuideNode[] = [
     id: "schedule",
     title: "Schedule",
     blocks: [
-      { kind: "para", text: "A calendar-style view of everything that is due across the workspace — delivery dates and reminders from all your orders in one place." },
+      { kind: "para", text: "A calendar view of your orders by delivery date, so you can plan your week and see what is coming up." },
       { kind: "bullets", items: [
-        "See upcoming deliveries and alerts together, so you can plan the week at a glance.",
-        "Open any item to jump straight to its order.",
-        "Reminders you set on an order's Schedule & Alerts card appear here too."
+        "Move through date ranges with Previous and Next, and filter by status.",
+        "Create a new scheduled project right from the calendar.",
+        "Download an all-day calendar file for an order to add it to your own calendar app (available from NivaDesk Lite).",
+        "Open any order in the range to work on it."
       ] }
     ]
   },
@@ -374,11 +375,12 @@ const TREE_EN: GuideNode[] = [
     id: "customers",
     title: "Customers",
     blocks: [
-      { kind: "para", text: "Your client directory — every customer with their contact details and the orders linked to them." },
+      { kind: "para", text: "Your client directory — every customer with their details and the work linked to them." },
       { kind: "bullets", items: [
-        "Add and edit customers, and keep their contact channels in one record.",
-        "Open a customer to see their order history.",
-        "Customer notes stay with the customer and show on each of their orders."
+        "Add a customer, edit their details, or remove one you no longer need.",
+        "Open a customer to see their details and their designs and orders.",
+        "Customer notes stay with the customer and appear on each of their orders.",
+        "Use the collapsible list to find a customer quickly."
       ] }
     ]
   },
@@ -386,11 +388,12 @@ const TREE_EN: GuideNode[] = [
     id: "files",
     title: "Files",
     blocks: [
-      { kind: "para", text: "A library of every client file across all your orders — proofs, designs, PDFs and photos — in one searchable place." },
+      { kind: "para", text: "A read-only index of every client file across all your orders, so you can find any document without opening each order." },
       { kind: "bullets", items: [
-        "Browse, preview and download files without opening each order.",
-        "Uploads follow the same size limit and upload policy set in Settings ▸ Safety & Uploads.",
-        "Each order also has its own Client Files card for files that belong only to it."
+        "Browse and preview files, and open the order a file belongs to.",
+        "See who added each file.",
+        "Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.",
+        "To add or delete files, open that order's own Client Files card."
       ] }
     ]
   },
@@ -398,11 +401,12 @@ const TREE_EN: GuideNode[] = [
     id: "messages",
     title: "Messages",
     blocks: [
-      { kind: "para", text: "Where you raise and track requests — both inside your workspace and to NivaDesk support." },
+      { kind: "para", text: "Talk to your team inside NivaDesk — direct messages and group conversations, kept right next to your work." },
       { kind: "bullets", items: [
-        "Workspace tickets — send a request to your workspace owner or admins (project questions, approvals, missing details).",
-        "NivaDesk support tickets — report app bugs, billing or account questions to the NivaDesk team.",
-        "Track replies and status on your own tickets in one list."
+        "Start a Direct message with a teammate or a Group conversation.",
+        "Send text, files and images; forward, edit or leave a conversation.",
+        "The workspace owner controls whether direct messages, group chats and file sending are allowed.",
+        "Team messaging is available on the Team plan. (To raise a ticket instead, use Settings ▸ Support / Tickets.)"
       ] }
     ]
   },
@@ -410,11 +414,12 @@ const TREE_EN: GuideNode[] = [
     id: "quick-reply",
     title: "AI Replies / Quick Reply",
     blocks: [
-      { kind: "para", text: "Build a library of ready-made messages so you can answer clients quickly and consistently." },
+      { kind: "para", text: "Draft polished customer messages in seconds, in your own style." },
       { kind: "bullets", items: [
-        "Save message templates for the things you send most often.",
-        "Optional AI replies help you draft a message in your tone.",
-        "Channel buttons (such as WhatsApp or email) let you reach a client straight from an order."
+        "Generate a quick reply with AI, then copy it to the clipboard to send.",
+        "Set your reply style — the greeting and sign-off (for example ‘Hi there,’ and ‘Kind regards,’) — and it is reused every time.",
+        "Reference your saved products and prices so replies include the right details.",
+        "Reach clients through the channel buttons on an order."
       ] }
     ]
   },
@@ -865,11 +870,12 @@ const TREE_TR: GuideNode[] = [
     id: "schedule",
     title: "Schedule (Takvim)",
     blocks: [
-      { kind: "para", text: "Çalışma alanındaki tüm teslimleri ve hatırlatıcıları tek yerde gösteren takvim tarzı bir görünüm." },
+      { kind: "para", text: "Siparişlerinizin teslim tarihine göre takvim görünümü; haftanızı planlayın ve yaklaşanları görün." },
       { kind: "bullets", items: [
-        "Yaklaşan teslimatları ve uyarıları birlikte görün; haftayı bir bakışta planlayın.",
-        "Herhangi bir öğeyi açıp doğrudan siparişine gidin.",
-        "Bir siparişin Schedule & Alerts kartında kurduğunuz hatırlatıcılar burada da görünür."
+        "Previous ve Next ile tarih aralıkları arasında gezin, duruma göre filtreleyin.",
+        "Doğrudan takvimden yeni bir planlı proje oluşturun.",
+        "Bir sipariş için tüm-gün takvim dosyası indirip kendi takvim uygulamanıza ekleyin (NivaDesk Lite'tan itibaren).",
+        "Aralıktaki herhangi bir siparişi açıp üzerinde çalışın."
       ] }
     ]
   },
@@ -888,11 +894,12 @@ const TREE_TR: GuideNode[] = [
     id: "customers",
     title: "Customers (Müşteriler)",
     blocks: [
-      { kind: "para", text: "Müşteri rehberiniz — her müşteri, iletişim bilgileri ve ona bağlı siparişlerle birlikte." },
+      { kind: "para", text: "Müşteri rehberiniz — her müşteri, bilgileri ve ona bağlı işlerle birlikte." },
       { kind: "bullets", items: [
-        "Müşteri ekleyip düzenleyin ve iletişim kanallarını tek kayıtta tutun.",
-        "Bir müşteriyi açıp sipariş geçmişini görün.",
-        "Müşteri notları müşteriyle kalır ve onun her siparişinde görünür."
+        "Müşteri ekleyin, bilgilerini düzenleyin veya gerekmeyeni kaldırın.",
+        "Bir müşteriyi açıp bilgilerini, tasarımlarını ve siparişlerini görün.",
+        "Müşteri notları müşteriyle kalır ve onun her siparişinde görünür.",
+        "Bir müşteriyi hızla bulmak için katlanır listeyi kullanın."
       ] }
     ]
   },
@@ -900,11 +907,12 @@ const TREE_TR: GuideNode[] = [
     id: "files",
     title: "Files (Dosyalar)",
     blocks: [
-      { kind: "para", text: "Tüm siparişlerinizdeki müşteri dosyalarının kütüphanesi — provalar, tasarımlar, PDF'ler ve fotoğraflar — tek aranabilir yerde." },
+      { kind: "para", text: "Tüm siparişlerinizdeki müşteri dosyalarının salt-okunur bir indeksi; herhangi bir belgeyi her siparişi açmadan bulun." },
       { kind: "bullets", items: [
-        "Dosyaları her siparişi açmadan tarayın, önizleyin ve indirin.",
-        "Yüklemeler Settings ▸ Safety & Uploads'taki boyut limiti ve upload politikasını izler.",
-        "Her siparişin ayrıca yalnızca kendisine ait dosyalar için kendi Client Files kartı vardır."
+        "Dosyaları tarayıp önizleyin ve bir dosyanın ait olduğu siparişi açın.",
+        "Her dosyayı kimin eklediğini görün.",
+        "Yüklemeler Settings ▸ Safety & Uploads'taki maksimum boyut ve upload politikasını izler.",
+        "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın."
       ] }
     ]
   },
@@ -912,11 +920,12 @@ const TREE_TR: GuideNode[] = [
     id: "messages",
     title: "Messages (Mesajlar)",
     blocks: [
-      { kind: "para", text: "İstekleri açıp takip ettiğiniz yer — hem çalışma alanı içinde hem de NivaDesk desteğine." },
+      { kind: "para", text: "Ekibinizle NivaDesk içinde konuşun — direkt mesajlar ve grup sohbetleri, tam işinizin yanında." },
       { kind: "bullets", items: [
-        "Workspace ticket — çalışma alanı sahibinize veya adminlere istek gönderin (proje soruları, onaylar, eksik bilgiler).",
-        "NivaDesk support ticket — uygulama hataları, ödeme veya hesap sorularını NivaDesk ekibine bildirin.",
-        "Kendi ticketlarınızdaki yanıtları ve durumu tek listede takip edin."
+        "Bir ekip arkadaşıyla Direct mesaj veya bir Group sohbeti başlatın.",
+        "Metin, dosya ve görsel gönderin; bir konuşmayı iletin (forward), düzenleyin veya ayrılın.",
+        "Direkt mesajlara, grup sohbetlerine ve dosya göndermeye izin verilip verilmeyeceğini çalışma alanı sahibi kontrol eder.",
+        "Ekip mesajlaşması Team planında kullanılabilir. (Bunun yerine ticket açmak için Settings ▸ Support / Tickets.)"
       ] }
     ]
   },
@@ -924,11 +933,12 @@ const TREE_TR: GuideNode[] = [
     id: "quick-reply",
     title: "AI Replies / Quick Reply",
     blocks: [
-      { kind: "para", text: "Müşterilere hızlı ve tutarlı yanıt vermek için hazır mesaj kütüphanesi oluşturun." },
+      { kind: "para", text: "Saniyeler içinde, kendi üslubunuzda özenli müşteri mesajları hazırlayın." },
       { kind: "bullets", items: [
-        "En sık gönderdiğiniz şeyler için mesaj şablonları kaydedin.",
-        "İsteğe bağlı AI yanıtları, kendi üslubunuzda mesaj taslağı hazırlamaya yardım eder.",
-        "Kanal butonları (WhatsApp veya e-posta gibi) müşteriye doğrudan siparişten ulaşmanızı sağlar."
+        "AI ile hızlı bir yanıt üretin, sonra göndermek için panoya kopyalayın.",
+        "Yanıt stilinizi — selamlama ve kapanışı (örneğin ‘Hi there,’ ve ‘Kind regards,’) — belirleyin; her seferinde yeniden kullanılır.",
+        "Kayıtlı ürünlerinize ve fiyatlarınıza atıfta bulunun; yanıtlar doğru ayrıntıları içersin.",
+        "Müşterilere bir siparişteki kanal butonlarıyla ulaşın."
       ] }
     ]
   },
