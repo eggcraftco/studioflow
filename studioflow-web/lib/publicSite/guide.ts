@@ -181,6 +181,24 @@ const TREE_EN: GuideNode[] = [
             "Time Remaining and all the colors recalculate automatically as soon as you change a date."
           ] }
         ]
+      },
+      {
+        id: "card-notes",
+        title: "Notes card",
+        blocks: [
+          { kind: "para", text: "Keep written notes about the order — instructions, decisions and reminders — in one place the whole workspace can see." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "The main Customer Notes, which stays linked to the customer's profile.",
+            "One or more Special Notes sections beneath it for anything specific to this order."
+          ] },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Type into any section — it saves automatically.",
+            "Use the + button to add a note field to this order only, give it a title, and remove it when you no longer need it.",
+            "Use Edit headings to add, rename or remove the Special Notes sections that appear on every order across the workspace."
+          ] }
+        ]
       }
     ]
   },
@@ -419,6 +437,24 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Delivery Time (gün olarak), Delivery Due tarihi ve Created Date — herhangi birine dokunup değiştirin.",
             "Bir tarihi değiştirir değiştirmez Kalan Süre ve tüm renkler otomatik yeniden hesaplanır."
+          ] }
+        ]
+      },
+      {
+        id: "card-notes",
+        title: "Notes kartı",
+        blocks: [
+          { kind: "para", text: "Sipariş hakkındaki yazılı notları — talimatlar, kararlar ve hatırlatmalar — tüm çalışma alanının görebileceği tek bir yerde tutun." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Müşterinin profiline bağlı kalan ana Customer Notes (Müşteri Notu).",
+            "Altında, bu siparişe özel her şey için bir veya daha fazla Special Notes (Özel Not) bölümü."
+          ] },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Herhangi bir bölüme yazın — otomatik kaydedilir.",
+            "+ butonuyla yalnızca bu siparişe özel bir not alanı ekleyin, başlık verin ve gerek kalmayınca kaldırın.",
+            "Başlıkları Düzenle ile çalışma alanındaki her siparişte görünen Special Notes bölümlerini ekleyin, yeniden adlandırın veya kaldırın."
           ] }
         ]
       }
