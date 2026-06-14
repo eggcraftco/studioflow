@@ -305,6 +305,23 @@ const TREE_EN: GuideNode[] = [
             "Live tracking support depends on the courier; the system retries automatically and you can still check the courier's own website."
           ] }
         ]
+      },
+      {
+        id: "card-schedule",
+        title: "Schedule & Alerts card",
+        blocks: [
+          { kind: "para", text: "Set reminders tied to this order so important follow-ups — approvals, payments, client updates — never get forgotten." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Pick a Quick Reminder shortcut (for example Ask for approval, Send design update or Check payment) or type your own title.",
+            "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due.",
+            "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to customize the Quick Reminder shortcuts and their default timing so they match how you follow up."
+          ] }
+        ]
       }
     ]
   },
@@ -667,6 +684,23 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Kurye otomatik algılanamazsa elle seçip tekrar yenileyin.",
             "Canlı takip desteği kuryeye bağlıdır; sistem otomatik tekrar dener, ayrıca kuryenin kendi sitesinden de kontrol edebilirsiniz."
+          ] }
+        ]
+      },
+      {
+        id: "card-schedule",
+        title: "Schedule & Alerts kartı",
+        blocks: [
+          { kind: "para", text: "Bu siparişe bağlı hatırlatıcılar kurun; böylece önemli takipler — onaylar, ödemeler, müşteri güncellemeleri — asla unutulmaz." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Bir Quick Reminder kısayolu seçin (örneğin Ask for approval, Send design update veya Check payment) ya da kendi başlığınızı yazın.",
+            "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın.",
+            "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile Quick Reminder kısayollarını ve varsayılan zamanlamalarını, takip etme şeklinize uyacak biçimde özelleştirin."
           ] }
         ]
       }
