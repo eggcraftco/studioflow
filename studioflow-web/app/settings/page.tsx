@@ -1194,9 +1194,9 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
       ) : null}
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow="Business Type" title="Standard workflow template" />
+        <CardTitle icon="checklist" eyebrow={studioT("Business Type", language)} title={studioT("Standard workflow template", language)} />
         <label className="quick-reply-settings-label">
-          <span>Select Industry</span>
+          <span>{studioT("Select Industry", language)}</span>
           <select
             className="input"
             value={blockSettings.businessType}
@@ -1207,19 +1207,19 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
           </select>
         </label>
         <label className="quick-reply-settings-label">
-          <span>Business description</span>
+          <span>{studioT("Business description", language)}</span>
           <textarea
             className="input"
             value={blockSettings.businessDescriptionPrompt}
             disabled={!canEdit || saving}
             rows={4}
-            placeholder="Describe what the business does and which workflow steps matter."
+            placeholder={studioT("Describe what the business does and which workflow steps matter.", language)}
             onChange={event => updateSetting("businessDescriptionPrompt", event.target.value)}
           />
         </label>
         <div className="settings-action-row">
           <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={applyStandardTemplate}>
-            Apply Standard Template
+            {studioT("Apply Standard Template", language)}
           </button>
         </div>
         <p className="muted-copy">Matches the app’s Business Type template flow. Saving writes to app-compatible workflow and block heading fields.</p>
@@ -1330,10 +1330,10 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
-            {saving ? "Saving..." : "Save Workflow Settings"}
+            {saving ? studioT("Saving...", language) : studioT("Save Workflow Settings", language)}
           </button>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
     </div>

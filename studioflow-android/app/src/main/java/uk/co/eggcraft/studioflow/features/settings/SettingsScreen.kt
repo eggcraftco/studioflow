@@ -858,7 +858,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                             onSave(mapOf("businessDescriptionPrompt" to ""), t("Business description cleared."))
                         }) { Text(t("Clear")) }
                     }
-                    Text("Describe what the business does, what information it needs from customers, how the work moves from enquiry to delivery, and whether materials, shipping, appointments, approvals or deposits are important.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("Describe what the business does and which workflow steps matter."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = businessPrompt,
                         onValueChange = {
@@ -870,7 +870,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                             .height(170.dp)
                     )
                     Button(
-                        onClick = { onSave(smartWorkflowTemplateUpdates(businessPrompt, settings.businessType), "Smart template applied.") },
+                        onClick = { onSave(smartWorkflowTemplateUpdates(businessPrompt, settings.businessType), t("Smart template applied.")) },
                         colors = ButtonDefaults.buttonColors(containerColor = StudioPurple)
                     ) {
                         Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
@@ -879,7 +879,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     }
                 }
             }
-            Button(onClick = { onSave(standardWorkflowTemplate(settings.businessType), "Standard template applied.") }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onSave(standardWorkflowTemplate(settings.businessType), t("Standard template applied.")) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Settings, contentDescription = null)
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(t("Apply Standard Template"), fontWeight = FontWeight.ExtraBold)

@@ -2638,6 +2638,33 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   "Other / Prompt Based": {
     "Türkçe": "Diğer / Açıklamaya Dayalı", "Deutsch": "Andere / Beschreibungsbasiert", "Français": "Autre / Basé sur description", "Italiano": "Altro / Basato su descrizione", "Español (Spanish)": "Otro / Basado en descripción", "Português": "Outro / Baseado em descrição", "Русский (Russian)": "Другое / На основе описания", "日本語 (Japanese)": "その他 / 説明ベース", "中文 (Chinese)": "其他 / 基于描述", "العربية (Arabic)": "أخرى / حسب الوصف", "हिन्दी (Hindi)": "अन्य / विवरण आधारित"
   },
+  "Standard workflow template": {
+    "Türkçe": "Standart iş akışı şablonu", "Deutsch": "Standard-Workflow-Vorlage", "Français": "Modèle de workflow standard", "Italiano": "Modello di workflow standard", "Español (Spanish)": "Plantilla de flujo de trabajo estándar", "Português": "Modelo de fluxo de trabalho padrão", "Русский (Russian)": "Стандартный шаблон рабочего процесса", "日本語 (Japanese)": "標準ワークフローテンプレート", "中文 (Chinese)": "标准工作流模板", "العربية (Arabic)": "قالب سير عمل قياسي", "हिन्दी (Hindi)": "मानक वर्कफ़्लो टेम्पलेट"
+  },
+  "Business description": {
+    "Türkçe": "İş açıklaması", "Deutsch": "Geschäftsbeschreibung", "Français": "Description de l'activité", "Italiano": "Descrizione dell'attività", "Español (Spanish)": "Descripción del negocio", "Português": "Descrição do negócio", "Русский (Russian)": "Описание бизнеса", "日本語 (Japanese)": "事業の説明", "中文 (Chinese)": "业务描述", "العربية (Arabic)": "وصف النشاط", "हिन्दी (Hindi)": "व्यवसाय विवरण"
+  },
+  "Describe what the business does and which workflow steps matter.": {
+    "Türkçe": "İşin ne yaptığını ve hangi iş akışı adımlarının önemli olduğunu anlatın.", "Deutsch": "Beschreiben Sie, was das Geschäft macht und welche Workflow-Schritte wichtig sind.", "Français": "Décrivez ce que fait l'activité et quelles étapes du workflow comptent.", "Italiano": "Descrivi cosa fa l'attività e quali fasi del workflow contano.", "Español (Spanish)": "Describe qué hace el negocio y qué pasos del flujo de trabajo importan.", "Português": "Descreva o que o negócio faz e quais etapas do fluxo de trabalho importam.", "Русский (Russian)": "Опишите, чем занимается бизнес и какие этапы рабочего процесса важны.", "日本語 (Japanese)": "ビジネスの内容と重要なワークフローのステップを記述してください。", "中文 (Chinese)": "描述业务内容以及哪些工作流步骤重要。", "العربية (Arabic)": "صف ما يقوم به النشاط وما خطوات سير العمل المهمة.", "हिन्दी (Hindi)": "बताएं कि व्यवसाय क्या करता है और कौन से वर्कफ़्लो चरण महत्वपूर्ण हैं।"
+  },
+  "Save Workflow Settings": {
+    "Türkçe": "İş Akışı Ayarlarını Kaydet", "Deutsch": "Workflow-Einstellungen speichern", "Français": "Enregistrer les paramètres du workflow", "Italiano": "Salva impostazioni workflow", "Español (Spanish)": "Guardar ajustes de flujo de trabajo", "Português": "Guardar definições de fluxo de trabalho", "Русский (Russian)": "Сохранить настройки рабочего процесса", "日本語 (Japanese)": "ワークフロー設定を保存", "中文 (Chinese)": "保存工作流设置", "العربية (Arabic)": "حفظ إعدادات سير العمل", "हिन्दी (Hindi)": "वर्कफ़्लो सेटिंग्स सहेजें"
+  },
+  "Business type saved.": {
+    "Türkçe": "İş türü kaydedildi.", "Deutsch": "Geschäftstyp gespeichert.", "Français": "Type d'activité enregistré.", "Italiano": "Tipo di attività salvato.", "Español (Spanish)": "Tipo de negocio guardado.", "Português": "Tipo de negócio guardado.", "Русский (Russian)": "Тип бизнеса сохранён.", "日本語 (Japanese)": "業種を保存しました。", "中文 (Chinese)": "已保存业务类型。", "العربية (Arabic)": "تم حفظ نوع النشاط.", "हिन्दी (Hindi)": "व्यवसाय प्रकार सहेजा गया।"
+  },
+  "Business description saved.": {
+    "Türkçe": "İş açıklaması kaydedildi.", "Deutsch": "Geschäftsbeschreibung gespeichert.", "Français": "Description de l'activité enregistrée.", "Italiano": "Descrizione dell'attività salvata.", "Español (Spanish)": "Descripción del negocio guardada.", "Português": "Descrição do negócio guardada.", "Русский (Russian)": "Описание бизнеса сохранено.", "日本語 (Japanese)": "事業の説明を保存しました。", "中文 (Chinese)": "已保存业务描述。", "العربية (Arabic)": "تم حفظ وصف النشاط.", "हिन्दी (Hindi)": "व्यवसाय विवरण सहेजा गया।"
+  },
+  "Business description cleared.": {
+    "Türkçe": "İş açıklaması temizlendi.", "Deutsch": "Geschäftsbeschreibung gelöscht.", "Français": "Description de l'activité effacée.", "Italiano": "Descrizione dell'attività cancellata.", "Español (Spanish)": "Descripción del negocio borrada.", "Português": "Descrição do negócio limpa.", "Русский (Russian)": "Описание бизнеса очищено.", "日本語 (Japanese)": "事業の説明をクリアしました。", "中文 (Chinese)": "已清除业务描述。", "العربية (Arabic)": "تم مسح وصف النشاط.", "हिन्दी (Hindi)": "व्यवसाय विवरण साफ़ किया गया।"
+  },
+  "Smart template applied.": {
+    "Türkçe": "Akıllı şablon uygulandı.", "Deutsch": "Smart-Vorlage angewendet.", "Français": "Modèle intelligent appliqué.", "Italiano": "Modello intelligente applicato.", "Español (Spanish)": "Plantilla inteligente aplicada.", "Português": "Modelo inteligente aplicado.", "Русский (Russian)": "Умный шаблон применён.", "日本語 (Japanese)": "スマートテンプレートを適用しました。", "中文 (Chinese)": "已应用智能模板。", "العربية (Arabic)": "تم تطبيق القالب الذكي.", "हिन्दी (Hindi)": "स्मार्ट टेम्पलेट लागू किया गया।"
+  },
+  "Standard template applied.": {
+    "Türkçe": "Standart şablon uygulandı.", "Deutsch": "Standardvorlage angewendet.", "Français": "Modèle standard appliqué.", "Italiano": "Modello standard applicato.", "Español (Spanish)": "Plantilla estándar aplicada.", "Português": "Modelo padrão aplicado.", "Русский (Russian)": "Стандартный шаблон применён.", "日本語 (Japanese)": "標準テンプレートを適用しました。", "中文 (Chinese)": "已应用标准模板。", "العربية (Arabic)": "تم تطبيق القالب القياسي.", "हिन्दी (Hindi)": "मानक टेम्पलेट लागू किया गया।"
+  },
   "Watch Ref.": {
     "Türkçe": "Referans"
   },

@@ -3791,7 +3791,7 @@ struct AyarlarView: View {
                 Image(systemName: "sparkles")
                     .foregroundColor(.purple)
 
-                Text("Smart Business Description")
+                Text(t("Smart Business Description", lang: seciliDil))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.primary)
 
@@ -3801,7 +3801,7 @@ struct AyarlarView: View {
                     Button {
                         businessDescriptionPrompt = ""
                     } label: {
-                        Text("Clear")
+                        Text(t("Clear", lang: seciliDil))
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.gray)
                     }
@@ -3809,7 +3809,7 @@ struct AyarlarView: View {
                 }
             }
 
-            Text("Describe what the business does, what information it needs from customers, how the work moves from enquiry to delivery, and whether materials, shipping, appointments, approvals or deposits are important.")
+            Text(t("Describe what the business does and which workflow steps matter.", lang: seciliDil))
                 .font(.system(size: 11))
                 .foregroundColor(.gray)
                 .lineSpacing(3)
