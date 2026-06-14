@@ -11,6 +11,7 @@ import {
   type WorkspaceMemberAccess,
   type WorkspaceMemberAccessKey
 } from "@/lib/studioflow/firestore";
+import { studioT } from "@/lib/studioflow/language";
 
 type AccessOption = (typeof WORKSPACE_MEMBER_ACCESS_OPTIONS)[number];
 
@@ -32,6 +33,7 @@ type MemberAccessEditorProps = {
   ownerLocked?: boolean;
   heading?: string;
   note?: string;
+  language?: string;
   onChange: (access: WorkspaceMemberAccess) => void;
 };
 
@@ -42,8 +44,10 @@ export function MemberAccessEditor({
   ownerLocked = false,
   heading = "Custom access",
   note,
+  language = "English",
   onChange
 }: MemberAccessEditorProps) {
+  const t = (text: string) => studioT(text, language);
   const normalizedAccess: WorkspaceMemberAccess = {
     ...WORKSPACE_MEMBER_ACCESS_DEFAULTS,
     ...access
@@ -122,7 +126,7 @@ export function MemberAccessEditor({
     <div className="member-access-panel">
       <div className="member-access-panel-heading">
         <strong>{heading}</strong>
-        <span>{ownerLocked ? "Owner always has full access" : saving ? "Saving..." : note ?? "Extra restrictions on top of role"}</span>
+        <span>{ownerLocked ? t("Owner always has full access") : saving ? t("Saving...") : note ?? t("Extra restrictions on top of role")}</span>
       </div>
       <div className="member-access-sections">
         {accessSections.map(section => {
@@ -131,19 +135,19 @@ export function MemberAccessEditor({
             <section className={`member-access-section member-access-section-${section.id}`} key={section.id}>
               <div className="member-access-section-head">
                 <div>
-                  <span>{section.eyebrow}</span>
-                  <strong>{section.title}</strong>
-                  <small>{section.note}</small>
+                  <span>{t(section.eyebrow)}</span>
+                  <strong>{t(section.title)}</strong>
+                  <small>{t(section.note)}</small>
                 </div>
                 <div className="member-access-section-actions">
                   <b>{enabledCount}/{section.options.length}</b>
                   {section.allowBulk ? (
                     <>
                       <button type="button" disabled={disabled || ownerLocked} onClick={() => setSectionAccess(section.options, true)}>
-                        All on
+                        {t("All on")}
                       </button>
                       <button type="button" disabled={disabled || ownerLocked} onClick={() => setSectionAccess(section.options, false)}>
-                        All off
+                        {t("All off")}
                       </button>
                     </>
                   ) : null}
@@ -170,8 +174,8 @@ export function MemberAccessEditor({
                     >
                       <span className="member-access-switch" aria-hidden="true" />
                       <span>
-                        <strong>{option.label}</strong>
-                        <small>{detail}</small>
+                        <strong>{t(option.label)}</strong>
+                        <small>{t(detail)}</small>
                       </span>
                     </button>
                   );

@@ -187,6 +187,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
             saving={savingKey === "custom-role-new"}
             heading={t("Role permissions")}
             note={t("Choose which areas this role can see and use.")}
+            language={language}
             onChange={access => setNewRole(previous => ({ ...previous, access }))}
           />
         ) : null}
@@ -259,6 +260,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
                     saving={savingKey === saveKey}
                     heading={t("Role permissions")}
                     note={t("Changes apply to every member using this role.")}
+                    language={language}
                     onChange={access => updateDraft(role.id, { access })}
                   />
                   <div className="settings-button-row">
