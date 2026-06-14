@@ -236,6 +236,20 @@ const TREE_EN: GuideNode[] = [
             "If your role is view-only, you can see tasks but cannot edit them."
           ] }
         ]
+      },
+      {
+        id: "card-worktime",
+        title: "Work Time card",
+        blocks: [
+          { kind: "para", text: "Track how much time you spend on an order, so you can see the real effort per job and price future work more accurately." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Give the work a title and start a timed session — the card shows ‘Running now’ while it counts.",
+            "Stop a session when you pause, and Continue it later to keep adding to the same task.",
+            "See the Total Work Time for the order, plus a list of every session.",
+            "Delete a session you no longer need."
+          ] }
+        ]
       }
     ]
   },
@@ -529,6 +543,20 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Overdue filtresi bitiş tarihini geçen görevleri öne çıkarır; böylece hiçbir şey kaçmaz.",
             "Rolünüz salt-görüntülemeyse görevleri görebilir ama düzenleyemezsiniz."
+          ] }
+        ]
+      },
+      {
+        id: "card-worktime",
+        title: "Work Time kartı",
+        blocks: [
+          { kind: "para", text: "Bir siparişe ne kadar zaman harcadığınızı takip edin; böylece iş başına gerçek emeği görür ve gelecekteki işleri daha doğru fiyatlandırırsınız." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Çalışmaya bir başlık verip zamanlı bir oturum başlatın — sayarken kartta ‘Running now’ görünür.",
+            "Ara verdiğinizde oturumu Stop ile durdurun, sonra Continue ile aynı işe eklemeye devam edin.",
+            "Sipariş için Total Work Time toplamını ve her oturumun listesini görün.",
+            "Gerekmeyen bir oturumu silin."
           ] }
         ]
       }
