@@ -47,7 +47,12 @@ const TREE_EN: GuideNode[] = [
     id: "dashboard",
     title: "Dashboard",
     blocks: [
-      { kind: "para", text: "Your home overview. It shows active orders, what is due soon and quick stats. Start your day here to see what needs attention." }
+      { kind: "para", text: "Your home overview. Start your day here to see what needs attention before you dive into individual orders." },
+      { kind: "bullets", items: [
+        "Quick stats on active orders, what is due soon and recent activity.",
+        "Spot overdue or at-risk jobs early so they don't slip.",
+        "Jump straight to an order that needs you."
+      ] }
     ]
   },
   {
@@ -163,67 +168,265 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "para", text: "Pick a value from each dropdown and it saves instantly. Priority and risk also feed the smart sort and the status badges in the Orders list, so flagged jobs rise to the top." }
         ]
+      },
+      {
+        id: "card-delivery",
+        title: "Timeline & Delivery card",
+        blocks: [
+          { kind: "para", text: "See the order's timeline at a glance and keep the delivery date front and center, so nothing is delivered late." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Created Date and Delivery Due, shown as two clear date cards.",
+            "Time Remaining — the days left until delivery, color-coded so a tight or overdue deadline stands out.",
+            "Add to Calendar — downloads an all-day calendar file spanning the created date to the delivery date, so the order appears in your calendar app (available from NivaDesk Lite)."
+          ] },
+          { kind: "sub", text: "What you can edit" },
+          { kind: "bullets", items: [
+            "Delivery Time (in days), the Delivery Due date and the Created Date — tap to change any of them.",
+            "Time Remaining and all the colors recalculate automatically as soon as you change a date."
+          ] }
+        ]
+      },
+      {
+        id: "card-notes",
+        title: "Notes card",
+        blocks: [
+          { kind: "para", text: "Keep written notes about the order — instructions, decisions and reminders — in one place the whole workspace can see." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "The main Customer Notes, which stays linked to the customer's profile.",
+            "One or more Special Notes sections beneath it for anything specific to this order."
+          ] },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Type into any section — it saves automatically.",
+            "Use the + button to add a note field to this order only, give it a title, and remove it when you no longer need it.",
+            "Use Edit headings to add, rename or remove the Special Notes sections that appear on every order across the workspace."
+          ] }
+        ]
+      },
+      {
+        id: "card-clientfiles",
+        title: "Client Files card",
+        blocks: [
+          { kind: "para", text: "Attach the documents and images that belong to this order — proofs, designs, receipts, reference photos — so everything for the job lives with it." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Upload File — pick PDF, image, PSD or PSB files. You can also drag and drop files straight onto the card.",
+            "Tap a file to preview it, or use Download all to grab everything at once.",
+            "Delete a file if your role is allowed to.",
+            "Works offline — files are saved on the device and upload automatically when you are back online."
+          ] },
+          { kind: "sub", text: "Safety" },
+          { kind: "bullets", items: [
+            "The maximum file size and the upload policy come from Settings ▸ Safety & Uploads.",
+            "Where required, you tick to accept the upload policy on this browser before uploading."
+          ] }
+        ]
+      },
+      {
+        id: "card-todo",
+        title: "To Do card",
+        blocks: [
+          { kind: "para", text: "A task checklist for this specific order — break the job into steps, assign them and track what is done." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Add a task with the input, then give it a due date, a priority, an assignee and an optional note.",
+            "Filter the list by All, Mine, Open, Overdue or Done to focus on what matters now.",
+            "Mark a task Done or Reopen it, and delete tasks you no longer need."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "The Overdue filter surfaces any task past its due date, so nothing slips.",
+            "If your role is view-only, you can see tasks but cannot edit them."
+          ] }
+        ]
+      },
+      {
+        id: "card-worktime",
+        title: "Work Time card",
+        blocks: [
+          { kind: "para", text: "Track how much time you spend on an order, so you can see the real effort per job and price future work more accurately." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Give the work a title and start a timed session — the card shows ‘Running now’ while it counts.",
+            "Stop a session when you pause, and Continue it later to keep adding to the same task.",
+            "See the Total Work Time for the order, plus a list of every session.",
+            "Delete a session you no longer need."
+          ] }
+        ]
+      },
+      {
+        id: "card-financial",
+        title: "Financial Info card",
+        blocks: [
+          { kind: "para", text: "The full money picture for the order — what was charged, what it costs you, the tax, and the real profit left over." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Order Value, Paid / Received and the Remaining balance, plus the payment method.",
+            "Your costs: Base Cost, Platform Fee and Shipping Cost.",
+            "Tax: VAT Rule, VAT Rate and VAT Amount, following the tax rules you set in Settings.",
+            "Profit: Profit after VAT, Net Profit after Corporation Tax, and the Final Profit."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to customize the Spending / Cost headings so they match how you track costs.",
+            "The tax rate, rule and transition date come from Settings ▸ Financial and apply across your orders."
+          ] },
+          { kind: "para", text: "This card only appears for roles allowed to see finances; for everyone else the order's money stays hidden." }
+        ]
+      },
+      {
+        id: "card-status",
+        title: "Production Status card",
+        blocks: [
+          { kind: "para", text: "Track where the order is in production — each stage of your workflow with its own status, so anyone can see progress at a glance." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "One row per workflow step (for example Design, Production or Finishing), each set to a status such as Not Yet, In Progress, Done or Cancelled.",
+            "The available status options come from your workspace and can be customized in Settings."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to add, rename or remove the status steps so they match your craft's workflow.",
+            "Changing a step here updates the colored status badges in the Orders list and the Order Summary card."
+          ] }
+        ]
+      },
+      {
+        id: "card-shipping",
+        title: "Shipping & Tracking card",
+        blocks: [
+          { kind: "para", text: "Manage delivery for the order — the courier, the tracking number, and live status updates, all without leaving the app." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Set the Courier (Auto Detect, Royal Mail, DHL, FedEx or UPS) and enter the Tracking number.",
+            "Mark the order Dispatched and Delivered as it moves.",
+            "Refresh live status to pull the latest delivery progress from 17TRACK, so you always know where a parcel is."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "If the courier cannot be auto-detected, choose it manually and refresh again.",
+            "Live tracking support depends on the courier; the system retries automatically and you can still check the courier's own website."
+          ] }
+        ]
+      },
+      {
+        id: "card-schedule",
+        title: "Schedule & Alerts card",
+        blocks: [
+          { kind: "para", text: "Set reminders tied to this order so important follow-ups — approvals, payments, client updates — never get forgotten." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Pick a Quick Reminder shortcut (for example Ask for approval, Send design update or Check payment) or type your own title.",
+            "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due.",
+            "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to customize the Quick Reminder shortcuts and their default timing so they match how you follow up."
+          ] }
+        ]
+      },
+      {
+        id: "card-history",
+        title: "History / Log card",
+        blocks: [
+          { kind: "para", text: "An automatic audit trail of the order — what changed and when — so you can always see how it reached its current state." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "A list of recent important changes, newest first.",
+            "Each entry shows what changed, the date and time, and the old value → the new value."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "The log is read-only; it fills in automatically as people edit the order.",
+            "History cards are available from NivaDesk Lite."
+          ] }
+        ]
       }
     ]
   },
   {
-    id: "client-files",
-    title: "Client Files",
-    blocks: [
-      { kind: "para", text: "Attach PDFs and photos that belong to an order. It works offline — files are saved on the device and upload automatically when you are back online." }
-    ]
-  },
-  {
-    id: "tasks",
-    title: "To Do / Tasks",
-    blocks: [
-      { kind: "para", text: "A checklist on each order with due dates, priorities and assignments, so nothing gets forgotten and everyone knows who does what." }
-    ]
-  },
-  {
     id: "schedule",
-    title: "Schedule & Alerts",
+    title: "Schedule",
     blocks: [
-      { kind: "para", text: "Set reminders with one-tap shortcuts (for example ‘ask for approval’ or ‘send invoice’). NivaDesk notifies you before something is due." }
+      { kind: "para", text: "A calendar-style view of everything that is due across the workspace — delivery dates and reminders from all your orders in one place." },
+      { kind: "bullets", items: [
+        "See upcoming deliveries and alerts together, so you can plan the week at a glance.",
+        "Open any item to jump straight to its order.",
+        "Reminders you set on an order's Schedule & Alerts card appear here too."
+      ] }
     ]
   },
   {
-    id: "tracking",
-    title: "Shipment tracking",
+    id: "notes",
+    title: "Notes",
     blocks: [
-      { kind: "para", text: "Add a tracking number to an order for live delivery status, so you always know where a shipment is without leaving the app." }
-    ]
-  },
-  {
-    id: "quick-reply",
-    title: "Quick Reply",
-    blocks: [
-      { kind: "para", text: "Saved message templates and channel buttons (such as WhatsApp or email) to contact clients quickly. Optional AI replies help you draft messages." }
+      { kind: "para", text: "A single place to browse the notes attached to your orders, so you can find an instruction or decision without opening each order." },
+      { kind: "bullets", items: [
+        "Review customer notes and special notes across orders.",
+        "Use it as a quick reference while you work."
+      ] }
     ]
   },
   {
     id: "customers",
     title: "Customers",
     blocks: [
-      { kind: "para", text: "Your client list and their details, linked to their orders so you can find history and contact information in one place." }
+      { kind: "para", text: "Your client directory — every customer with their contact details and the orders linked to them." },
+      { kind: "bullets", items: [
+        "Add and edit customers, and keep their contact channels in one record.",
+        "Open a customer to see their order history.",
+        "Customer notes stay with the customer and show on each of their orders."
+      ] }
+    ]
+  },
+  {
+    id: "files",
+    title: "Files",
+    blocks: [
+      { kind: "para", text: "A library of every client file across all your orders — proofs, designs, PDFs and photos — in one searchable place." },
+      { kind: "bullets", items: [
+        "Browse, preview and download files without opening each order.",
+        "Uploads follow the same size limit and upload policy set in Settings ▸ Safety & Uploads.",
+        "Each order also has its own Client Files card for files that belong only to it."
+      ] }
     ]
   },
   {
     id: "messages",
-    title: "Messages & Support",
+    title: "Messages",
     blocks: [
-      { kind: "para", text: "Send an internal request to your workspace owner or admins, or open a support ticket to the NivaDesk team for app questions." }
+      { kind: "para", text: "Where you raise and track requests — both inside your workspace and to NivaDesk support." },
+      { kind: "bullets", items: [
+        "Workspace tickets — send a request to your workspace owner or admins (project questions, approvals, missing details).",
+        "NivaDesk support tickets — report app bugs, billing or account questions to the NivaDesk team.",
+        "Track replies and status on your own tickets in one list."
+      ] }
+    ]
+  },
+  {
+    id: "quick-reply",
+    title: "AI Replies / Quick Reply",
+    blocks: [
+      { kind: "para", text: "Build a library of ready-made messages so you can answer clients quickly and consistently." },
+      { kind: "bullets", items: [
+        "Save message templates for the things you send most often.",
+        "Optional AI replies help you draft a message in your tone.",
+        "Channel buttons (such as WhatsApp or email) let you reach a client straight from an order."
+      ] }
     ]
   },
   {
     id: "team",
     title: "Team Access",
     blocks: [
-      { kind: "para", text: "Invite your team and give each person a role." },
+      { kind: "para", text: "Invite your team and control exactly what each person can see and do. Reached from Settings ▸ Team Access." },
       { kind: "bullets", items: [
-        "Roles: Member, View Only, Workflow Only, or your own custom role.",
-        "Control exactly which menus, cards and settings each role can see.",
-        "Assign specific projects to specific people."
+        "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
+        "Control which menus, order cards and settings each role can see.",
+        "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
       ] }
     ]
   },
@@ -231,19 +434,29 @@ const TREE_EN: GuideNode[] = [
     id: "settings",
     title: "Settings",
     blocks: [
-      { kind: "para", text: "Where you tailor NivaDesk to your business." },
+      { kind: "para", text: "Where you tailor NivaDesk to your business. The main sections:" },
       { kind: "bullets", items: [
-        "Workflow Steps — edit stages and the industry description that shapes your workflow.",
-        "Financial & tax rules, platform fee and currency.",
-        "Safety & Uploads limits, WooCommerce sync, Data Management, Plan & Access and About."
-      ] }
+        "Workflow Steps — your industry, its workflow description and the production stages.",
+        "Financial — currency, platform fee, tax rules, rate and the VAT transition date.",
+        "Safety & Uploads — maximum upload size, allowed file types and the upload policy.",
+        "AI Replies, PDF Export and WooCommerce sync options.",
+        "Data Management, Plan & Access, Team Access, Account and About."
+      ] },
+      { kind: "para", text: "Some settings are protected and only the owner or admins can change them." }
+    ]
+  },
+  {
+    id: "insights",
+    title: "Insights",
+    blocks: [
+      { kind: "para", text: "A high-level view of how your workspace is doing — overview stats about orders, revenue and activity to help you spot trends." }
     ]
   },
   {
     id: "plan",
     title: "Plan & Billing",
     blocks: [
-      { kind: "para", text: "See your current plan and what each plan includes. You can review Free/Demo, Lite, Pro and Team options here." }
+      { kind: "para", text: "See your current plan and what each plan includes. You can review the Free/Demo, Lite, Pro and Team options here." }
     ]
   },
   {
@@ -269,7 +482,12 @@ const TREE_TR: GuideNode[] = [
     id: "dashboard",
     title: "Panel (Dashboard)",
     blocks: [
-      { kind: "para", text: "Ana özet ekranınız. Aktif siparişleri, yakında teslim edilecekleri ve hızlı istatistikleri gösterir. Güne buradan başlayıp neyin ilgi istediğini görün." }
+      { kind: "para", text: "Ana özet ekranınız. Tek tek siparişlere dalmadan önce neyin ilgi istediğini görmek için güne buradan başlayın." },
+      { kind: "bullets", items: [
+        "Aktif siparişler, yakında teslim edilecekler ve son etkinlik hakkında hızlı istatistikler.",
+        "Geciken veya riskli işleri erkenden fark edin; kaçmasınlar.",
+        "Sizi bekleyen bir siparişe doğrudan gidin."
+      ] }
     ]
   },
   {
@@ -385,80 +603,288 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "para", text: "Her açılır menüden bir değer seçin, anında kaydedilir. Öncelik ve risk ayrıca akıllı sıralamayı ve Siparişler listesindeki durum rozetlerini besler; işaretlenen işler en üste çıkar." }
         ]
+      },
+      {
+        id: "card-delivery",
+        title: "Timeline & Delivery kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin zaman çizelgesini bir bakışta görün ve teslim tarihini hep ön planda tutun; böylece hiçbir şey geç teslim edilmez." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Created Date (Oluşturulma) ve Delivery Due (Teslim Tarihi); iki net tarih kartı olarak.",
+            "Time Remaining (Kalan Süre) — teslime kalan gün sayısı; sıkışık veya geçmiş bir son tarih öne çıksın diye renk kodlu.",
+            "Add to Calendar — oluşturulma tarihinden teslim tarihine kadar uzanan tüm-gün bir takvim dosyası indirir; böylece sipariş takvim uygulamanızda görünür (NivaDesk Lite'tan itibaren)."
+          ] },
+          { kind: "sub", text: "Neleri düzenleyebilirsiniz" },
+          { kind: "bullets", items: [
+            "Delivery Time (gün olarak), Delivery Due tarihi ve Created Date — herhangi birine dokunup değiştirin.",
+            "Bir tarihi değiştirir değiştirmez Kalan Süre ve tüm renkler otomatik yeniden hesaplanır."
+          ] }
+        ]
+      },
+      {
+        id: "card-notes",
+        title: "Notes kartı",
+        blocks: [
+          { kind: "para", text: "Sipariş hakkındaki yazılı notları — talimatlar, kararlar ve hatırlatmalar — tüm çalışma alanının görebileceği tek bir yerde tutun." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Müşterinin profiline bağlı kalan ana Customer Notes (Müşteri Notu).",
+            "Altında, bu siparişe özel her şey için bir veya daha fazla Special Notes (Özel Not) bölümü."
+          ] },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Herhangi bir bölüme yazın — otomatik kaydedilir.",
+            "+ butonuyla yalnızca bu siparişe özel bir not alanı ekleyin, başlık verin ve gerek kalmayınca kaldırın.",
+            "Başlıkları Düzenle ile çalışma alanındaki her siparişte görünen Special Notes bölümlerini ekleyin, yeniden adlandırın veya kaldırın."
+          ] }
+        ]
+      },
+      {
+        id: "card-clientfiles",
+        title: "Client Files kartı",
+        blocks: [
+          { kind: "para", text: "Bu siparişe ait belge ve görselleri — provalar, tasarımlar, fişler, referans fotoğraflar — ekleyin; böylece işe dair her şey onunla birlikte durur." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Upload File — PDF, görsel, PSD veya PSB dosyaları seçin. Dosyaları doğrudan kartın üzerine sürükleyip bırakabilirsiniz.",
+            "Önizlemek için bir dosyaya dokunun veya Download all ile hepsini tek seferde indirin.",
+            "Rolünüz izin veriyorsa bir dosyayı silin.",
+            "Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir."
+          ] },
+          { kind: "sub", text: "Güvenlik" },
+          { kind: "bullets", items: [
+            "Maksimum dosya boyutu ve upload politikası Settings ▸ Safety & Uploads'tan gelir.",
+            "Gerektiğinde, yüklemeden önce bu tarayıcıda upload politikasını kabul etmek için işaretlersiniz."
+          ] }
+        ]
+      },
+      {
+        id: "card-todo",
+        title: "To Do kartı",
+        blocks: [
+          { kind: "para", text: "Bu siparişe özel bir görev kontrol listesi — işi adımlara bölün, atayın ve neyin yapıldığını takip edin." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Giriş alanıyla bir görev ekleyin; sonra ona bitiş tarihi, öncelik, bir sorumlu ve isteğe bağlı bir not verin.",
+            "Listeyi All, Mine, Open, Overdue veya Done'a göre filtreleyip şu an önemli olana odaklanın.",
+            "Bir görevi Mark Done ile tamamlayın veya Reopen ile yeniden açın; gerekmeyen görevleri silin."
+          ] },
+          { kind: "sub", text: "Bilmekte fayda var" },
+          { kind: "bullets", items: [
+            "Overdue filtresi bitiş tarihini geçen görevleri öne çıkarır; böylece hiçbir şey kaçmaz.",
+            "Rolünüz salt-görüntülemeyse görevleri görebilir ama düzenleyemezsiniz."
+          ] }
+        ]
+      },
+      {
+        id: "card-worktime",
+        title: "Work Time kartı",
+        blocks: [
+          { kind: "para", text: "Bir siparişe ne kadar zaman harcadığınızı takip edin; böylece iş başına gerçek emeği görür ve gelecekteki işleri daha doğru fiyatlandırırsınız." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Çalışmaya bir başlık verip zamanlı bir oturum başlatın — sayarken kartta ‘Running now’ görünür.",
+            "Ara verdiğinizde oturumu Stop ile durdurun, sonra Continue ile aynı işe eklemeye devam edin.",
+            "Sipariş için Total Work Time toplamını ve her oturumun listesini görün.",
+            "Gerekmeyen bir oturumu silin."
+          ] }
+        ]
+      },
+      {
+        id: "card-financial",
+        title: "Financial Info kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin tam para tablosu — ne tahsil edildi, size maliyeti ne, vergi ne kadar ve geriye kalan gerçek kâr." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Order Value, Paid / Received ve kalan Remaining bakiyesi, ayrıca ödeme yöntemi.",
+            "Maliyetleriniz: Base Cost, Platform Fee ve Shipping Cost.",
+            "Vergi: Settings'te belirlediğiniz vergi kurallarına göre VAT Rule, VAT Rate ve VAT Amount.",
+            "Kâr: Profit after VAT, Kurumlar Vergisi sonrası Net Profit ve Final Profit."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile Spending / Cost başlıklarını maliyetleri izleme şeklinize göre özelleştirin.",
+            "Vergi oranı, kuralı ve geçiş tarihi Settings ▸ Financial'dan gelir ve tüm siparişlerinize uygulanır."
+          ] },
+          { kind: "para", text: "Bu kart yalnızca finansı görmeye izinli rollerde görünür; diğer herkes için siparişin parası gizli kalır." }
+        ]
+      },
+      {
+        id: "card-status",
+        title: "Production Status kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin üretimde nerede olduğunu takip edin — iş akışınızın her aşaması kendi durumuyla; böylece herkes ilerlemeyi bir bakışta görür." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "İş akışındaki her adım için bir satır (örneğin Tasarım, Üretim veya Sonlandırma); her biri Not Yet, In Progress, Done veya Cancelled gibi bir duruma ayarlı.",
+            "Kullanılabilir durum seçenekleri çalışma alanınızdan gelir ve Settings'ten özelleştirilebilir."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile durum adımlarını mesleğinizin iş akışına uyacak şekilde ekleyin, yeniden adlandırın veya kaldırın.",
+            "Buradan bir adımı değiştirmek, Siparişler listesindeki renkli durum rozetlerini ve Order Summary kartını günceller."
+          ] }
+        ]
+      },
+      {
+        id: "card-shipping",
+        title: "Shipping & Tracking kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin teslimatını yönetin — kurye, takip numarası ve canlı durum güncellemeleri; hepsi uygulamadan çıkmadan." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Courier'i ayarlayın (Auto Detect, Royal Mail, DHL, FedEx veya UPS) ve Tracking numarasını girin.",
+            "Sipariş ilerledikçe Dispatched ve Delivered olarak işaretleyin.",
+            "Refresh live status ile 17TRACK'ten en güncel teslimat ilerlemesini çekin; böylece kargonun nerede olduğunu her zaman bilin."
+          ] },
+          { kind: "sub", text: "Bilmekte fayda var" },
+          { kind: "bullets", items: [
+            "Kurye otomatik algılanamazsa elle seçip tekrar yenileyin.",
+            "Canlı takip desteği kuryeye bağlıdır; sistem otomatik tekrar dener, ayrıca kuryenin kendi sitesinden de kontrol edebilirsiniz."
+          ] }
+        ]
+      },
+      {
+        id: "card-schedule",
+        title: "Schedule & Alerts kartı",
+        blocks: [
+          { kind: "para", text: "Bu siparişe bağlı hatırlatıcılar kurun; böylece önemli takipler — onaylar, ödemeler, müşteri güncellemeleri — asla unutulmaz." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Bir Quick Reminder kısayolu seçin (örneğin Ask for approval, Send design update veya Check payment) ya da kendi başlığınızı yazın.",
+            "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın.",
+            "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile Quick Reminder kısayollarını ve varsayılan zamanlamalarını, takip etme şeklinize uyacak biçimde özelleştirin."
+          ] }
+        ]
+      },
+      {
+        id: "card-history",
+        title: "History / Log kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin otomatik bir değişiklik kaydı — neyin ne zaman değiştiği — böylece mevcut duruma nasıl geldiğini her zaman görebilirsiniz." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Son önemli değişikliklerin listesi, en yeni en üstte.",
+            "Her kayıt; neyin değiştiğini, tarih ve saati, ve eski değer → yeni değeri gösterir."
+          ] },
+          { kind: "sub", text: "Bilmekte fayda var" },
+          { kind: "bullets", items: [
+            "Kayıt salt-okunurdur; insanlar siparişi düzenledikçe otomatik dolar.",
+            "History kartları NivaDesk Lite'tan itibaren kullanılabilir."
+          ] }
+        ]
       }
     ]
   },
   {
-    id: "client-files",
-    title: "Müşteri Dosyaları",
-    blocks: [
-      { kind: "para", text: "Bir siparişe ait PDF ve fotoğrafları ekleyin. Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir." }
-    ]
-  },
-  {
-    id: "tasks",
-    title: "Yapılacaklar / Görevler",
-    blocks: [
-      { kind: "para", text: "Her siparişte tarihli, öncelikli ve atanabilir bir kontrol listesi; böylece hiçbir şey unutulmaz ve kimin ne yapacağı bellidir." }
-    ]
-  },
-  {
     id: "schedule",
-    title: "Plan ve Uyarılar",
+    title: "Schedule (Takvim)",
     blocks: [
-      { kind: "para", text: "Tek dokunuşla kısayollarla hatırlatıcı kurun (örneğin ‘onay iste’ veya ‘fatura gönder’). NivaDesk zamanı gelmeden sizi uyarır." }
+      { kind: "para", text: "Çalışma alanındaki tüm teslimleri ve hatırlatıcıları tek yerde gösteren takvim tarzı bir görünüm." },
+      { kind: "bullets", items: [
+        "Yaklaşan teslimatları ve uyarıları birlikte görün; haftayı bir bakışta planlayın.",
+        "Herhangi bir öğeyi açıp doğrudan siparişine gidin.",
+        "Bir siparişin Schedule & Alerts kartında kurduğunuz hatırlatıcılar burada da görünür."
+      ] }
     ]
   },
   {
-    id: "tracking",
-    title: "Kargo Takibi",
+    id: "notes",
+    title: "Notes (Notlar)",
     blocks: [
-      { kind: "para", text: "Bir siparişe takip numarası ekleyerek canlı teslimat durumunu görün; uygulamadan çıkmadan kargonun nerede olduğunu bilin." }
-    ]
-  },
-  {
-    id: "quick-reply",
-    title: "Hızlı Yanıt (Quick Reply)",
-    blocks: [
-      { kind: "para", text: "Müşterilere hızlı ulaşmak için kayıtlı mesaj şablonları ve kanal butonları (WhatsApp, e-posta gibi). İsteğe bağlı AI yanıtları mesaj taslağı hazırlamaya yardım eder." }
+      { kind: "para", text: "Siparişlerinize ekli notları tek yerden gözden geçirin; bir talimatı veya kararı her siparişi açmadan bulun." },
+      { kind: "bullets", items: [
+        "Siparişler genelinde müşteri notlarını ve özel notları inceleyin.",
+        "Çalışırken hızlı bir başvuru olarak kullanın."
+      ] }
     ]
   },
   {
     id: "customers",
-    title: "Müşteriler",
+    title: "Customers (Müşteriler)",
     blocks: [
-      { kind: "para", text: "Müşteri listeniz ve bilgileri; siparişlerine bağlı olduğu için geçmiş ve iletişim bilgilerini tek yerde bulursunuz." }
+      { kind: "para", text: "Müşteri rehberiniz — her müşteri, iletişim bilgileri ve ona bağlı siparişlerle birlikte." },
+      { kind: "bullets", items: [
+        "Müşteri ekleyip düzenleyin ve iletişim kanallarını tek kayıtta tutun.",
+        "Bir müşteriyi açıp sipariş geçmişini görün.",
+        "Müşteri notları müşteriyle kalır ve onun her siparişinde görünür."
+      ] }
+    ]
+  },
+  {
+    id: "files",
+    title: "Files (Dosyalar)",
+    blocks: [
+      { kind: "para", text: "Tüm siparişlerinizdeki müşteri dosyalarının kütüphanesi — provalar, tasarımlar, PDF'ler ve fotoğraflar — tek aranabilir yerde." },
+      { kind: "bullets", items: [
+        "Dosyaları her siparişi açmadan tarayın, önizleyin ve indirin.",
+        "Yüklemeler Settings ▸ Safety & Uploads'taki boyut limiti ve upload politikasını izler.",
+        "Her siparişin ayrıca yalnızca kendisine ait dosyalar için kendi Client Files kartı vardır."
+      ] }
     ]
   },
   {
     id: "messages",
-    title: "Mesajlar ve Destek",
+    title: "Messages (Mesajlar)",
     blocks: [
-      { kind: "para", text: "Çalışma alanı sahibinize veya adminlere şirket içi istek gönderin ya da uygulama soruları için NivaDesk ekibine destek talebi açın." }
+      { kind: "para", text: "İstekleri açıp takip ettiğiniz yer — hem çalışma alanı içinde hem de NivaDesk desteğine." },
+      { kind: "bullets", items: [
+        "Workspace ticket — çalışma alanı sahibinize veya adminlere istek gönderin (proje soruları, onaylar, eksik bilgiler).",
+        "NivaDesk support ticket — uygulama hataları, ödeme veya hesap sorularını NivaDesk ekibine bildirin.",
+        "Kendi ticketlarınızdaki yanıtları ve durumu tek listede takip edin."
+      ] }
+    ]
+  },
+  {
+    id: "quick-reply",
+    title: "AI Replies / Quick Reply",
+    blocks: [
+      { kind: "para", text: "Müşterilere hızlı ve tutarlı yanıt vermek için hazır mesaj kütüphanesi oluşturun." },
+      { kind: "bullets", items: [
+        "En sık gönderdiğiniz şeyler için mesaj şablonları kaydedin.",
+        "İsteğe bağlı AI yanıtları, kendi üslubunuzda mesaj taslağı hazırlamaya yardım eder.",
+        "Kanal butonları (WhatsApp veya e-posta gibi) müşteriye doğrudan siparişten ulaşmanızı sağlar."
+      ] }
     ]
   },
   {
     id: "team",
-    title: "Ekip Erişimi (Team Access)",
+    title: "Team Access (Ekip Erişimi)",
     blocks: [
-      { kind: "para", text: "Ekibinizi davet edin ve herkese bir rol verin." },
+      { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin. Settings ▸ Team Access'ten erişilir." },
       { kind: "bullets", items: [
-        "Roller: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
-        "Her rolün hangi menü, kart ve ayarları göreceğini tam olarak kontrol edin.",
-        "Belirli projeleri belirli kişilere atayın."
+        "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
+        "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
+        "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
       ] }
     ]
   },
   {
     id: "settings",
-    title: "Ayarlar (Settings)",
+    title: "Settings (Ayarlar)",
     blocks: [
-      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer." },
+      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer. Ana bölümler:" },
       { kind: "bullets", items: [
-        "İş Akışı Adımları — aşamaları ve iş akışınızı şekillendiren iş kolu açıklamasını düzenleyin.",
-        "Finans ve vergi kuralları, platform ücreti ve para birimi.",
-        "Güvenlik ve Yüklemeler limitleri, WooCommerce senkronu, Veri Yönetimi, Plan ve Erişim, Hakkında."
-      ] }
+        "Workflow Steps — iş kolunuz, iş akışı açıklaması ve üretim aşamaları.",
+        "Financial — para birimi, platform ücreti, vergi kuralları, oran ve KDV geçiş tarihi.",
+        "Safety & Uploads — maksimum yükleme boyutu, izin verilen dosya türleri ve upload politikası.",
+        "AI Replies, PDF Export ve WooCommerce senkron seçenekleri.",
+        "Data Management, Plan & Access, Team Access, Account ve About."
+      ] },
+      { kind: "para", text: "Bazı ayarlar korumalıdır ve yalnızca owner veya adminler değiştirebilir." }
+    ]
+  },
+  {
+    id: "insights",
+    title: "Insights",
+    blocks: [
+      { kind: "para", text: "Çalışma alanınızın nasıl gittiğine dair üst düzey bir görünüm — siparişler, ciro ve etkinlik hakkında trendleri yakalamanıza yardımcı özet istatistikler." }
     ]
   },
   {
