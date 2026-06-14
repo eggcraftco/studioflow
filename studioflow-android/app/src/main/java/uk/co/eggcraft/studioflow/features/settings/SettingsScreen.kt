@@ -891,8 +891,8 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue)
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(if (statusExpanded) "Hide Status Options" else "Show Status Options", fontWeight = FontWeight.ExtraBold)
-                        Text("${settings.activeStatuses.size} active statuses selected", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (statusExpanded) t("Hide Status Options") else t("Show Status Options"), fontWeight = FontWeight.ExtraBold)
+                        Text("${settings.activeStatuses.size} " + t("active statuses selected"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(if (statusExpanded) "Collapse" else "Expand", color = StudioBlue, fontWeight = FontWeight.ExtraBold)
                 }
@@ -936,7 +936,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                 }
             }
             Text(t("Order List Badges"), fontWeight = FontWeight.ExtraBold)
-            Text("Choose which two production statuses appear on the small order cards.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Choose which two production statuses appear on the small order cards."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 MenuChip(value = settings.orderListStep1, options = settings.customSteps.ifEmpty { listOf("Design", "Painting") }, modifier = Modifier.weight(1f)) {
                     onSave(mapOf("orderListStep1" to it), "Order list badges saved.")
@@ -988,7 +988,7 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 HorizontalDivider()
-                Text("Your visible non-financial sections", fontWeight = FontWeight.ExtraBold)
+                Text(t("Your visible non-financial sections"), fontWeight = FontWeight.ExtraBold)
                 TwoColumnSwitches(
                     listOf(
                         SwitchSpec("Customer & Design", settings.pdfShowCustomer, "personalPdfShowCustomer"),
@@ -1021,14 +1021,14 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(t("Company invoice numbers"), fontWeight = FontWeight.ExtraBold)
-                        Text("VAT, EORI, company number or any reference you want to show on PDF invoices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("VAT, EORI, company number or any reference you want to show on PDF invoices."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = {
                         onSave(mapOf("companyNumbersJSON" to companyNumbersJson(settings.companyNumbers + StudioCompanyNumber("New Number", ""))), "Invoice numbers saved.")
                     }) {
                         Icon(Icons.Filled.AddCircle, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add")
+                        Text(t("Add"))
                     }
                 }
                 settings.companyNumbers.forEachIndexed { index, item ->
@@ -1113,7 +1113,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     SegmentedRow(listOf("Short", "Balanced", "Detailed"), settings.quickReplyLength) {
                         onSave(mapOf("quickReplyLength" to it), "Reply style saved.")
                     }
-                    Text("These are your personal Quick Reply settings and sync across your devices. Android on-device AI requires Gemini Nano support; Offline Template works now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("These are your personal Quick Reply settings and sync across your devices. Android on-device AI requires Gemini Nano support; Offline Template works now."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             if (canManageCoreAI) {
@@ -1132,8 +1132,8 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                         apiKey = ""
                     },
                     enabled = apiKey.isNotBlank()
-                ) { Text("Save API Key") }
-                Text("The API key is stored server-side and is never shared with team members.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ) { Text(t("Save API Key")) }
+                Text(t("The API key is stored server-side and is never shared with team members."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = knowledge,
                     onValueChange = { knowledge = it },
@@ -1141,18 +1141,18 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     modifier = Modifier.fillMaxWidth().height(180.dp)
                 )
                 Button(onClick = { onSave(mapOf("aiKnowledgeBase" to knowledge), "Knowledge base saved.") }) {
-                    Text("Save Knowledge Base")
+                    Text(t("Save Knowledge Base"))
                 }
             } else {
                 Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("OpenAI Online", fontWeight = FontWeight.ExtraBold)
+                        Text(t("OpenAI Online"), fontWeight = FontWeight.ExtraBold)
                         Text(
                             if (settings.hasOpenAIKey) "Workspace OpenAI key configured" else "Workspace OpenAI key not configured",
                             color = if (settings.hasOpenAIKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Bold
                         )
-                        Text("Only the workspace owner can manage the API key and main Company Knowledge Base. You can use shared AI replies once configured.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("Only the workspace owner can manage the API key and main Company Knowledge Base. You can use shared AI replies once configured."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1163,16 +1163,16 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                         knowledge = it
                         onSave(mapOf("onDeviceKnowledgeBase" to it), "Your on-device knowledge was saved.")
                     },
-                    label = { Text("My On-Device Knowledge") },
+                    label = { Text(t("My On-Device Knowledge")) },
                     modifier = Modifier.fillMaxWidth().height(140.dp)
                 )
-                Text("Android on-device generation is not active in this build. A Gemini Nano / ML Kit GenAI integration is required before this mode can generate locally.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Android on-device generation is not active in this build. A Gemini Nano / ML Kit GenAI integration is required before this mode can generate locally."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             OutlinedTextField(
                 value = contributionText,
                 onValueChange = { contributionText = it },
-                label = { Text("Team Contribution") },
-                placeholder = { Text("Add a useful fact or customer-answer instruction...") },
+                label = { Text(t("Team Contribution")) },
+                placeholder = { Text(t("Add a useful fact or customer-answer instruction...")) },
                 modifier = Modifier.fillMaxWidth().height(130.dp)
             )
             Button(
@@ -1181,7 +1181,7 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
                     contributionText = ""
                 },
                 enabled = contributionText.isNotBlank()
-            ) { Text("Add Contribution") }
+            ) { Text(t("Add Contribution")) }
             if (selectedReplyMode == "Offline") {
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1621,7 +1621,7 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
     }
     DetailColumn {
         DetailCard(title = t("Connect WooCommerce"), icon = Icons.Filled.ShoppingCart) {
-            Text("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("This setup only needs to be done once in WooCommerce."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
@@ -1635,7 +1635,7 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
             StepRow("4", "Paste the Delivery URL", "Paste the copied Delivery URL, save the webhook, then place a test order.")
         }
         DetailCard(title = t("What happens when it is active"), icon = Icons.Filled.CheckCircle) {
-            Text("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1648,7 +1648,7 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
     var deviceAccepted by rememberSaveable { mutableStateOf(true) }
     DetailColumn {
         DetailCard(title = t("Safety & Uploads"), icon = Icons.Filled.Shield) {
-            Text("Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in your company workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in your company workspace."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             SettingSwitch("Require upload policy acceptance before upload", settings.uploadSafetyRequirePolicyAcceptance) {
                 onSave(
                     mapOf("uploadSafetyRequirePolicyAcceptanceV1" to it, "uploadSafetyRequirePolicyAcceptance" to it),
@@ -1669,7 +1669,7 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                     onSave(mapOf("uploadSafetyMaxFileSizeMBV1" to next, "uploadSafetyMaxFileSizeMB" to next), t("Upload limit saved."))
                 }
             )
-            Text("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(10.dp), color = StudioGreen.copy(alpha = 0.10f)) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Security, contentDescription = null, tint = StudioGreen)
@@ -1722,7 +1722,7 @@ private fun DataManagementDetail(
             ActionButton("Import Backup", Icons.Filled.Upload, StudioGreen) {
                 importLauncher.launch("application/json")
             }
-            Text("Import will add the backup into the current workspace. It will not clear existing orders automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Import will add the backup into the current workspace. It will not clear existing orders automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
             ActionButton("Delete Data", Icons.Filled.Delete, DangerRed) { confirmDelete = true }
         }
@@ -1732,7 +1732,7 @@ private fun DataManagementDetail(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(t("Delete all data?")) },
-            text = { Text("All orders and customers in this workspace will be permanently deleted. Export a backup first if you are unsure.") },
+            text = { Text(t("All orders and customers in this workspace will be permanently deleted. Export a backup first if you are unsure.")) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1836,7 +1836,7 @@ private fun AccountDetail(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Avatar(initials = initials(displayName.ifBlank { user?.email.orEmpty() }), size = 86)
                     Text(t("Profile Photo"), fontWeight = FontWeight.ExtraBold)
-                    Text("Your profile photo is shown to team members in this workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("Your profile photo is shown to team members in this workspace."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = { avatarLauncher.launch("image/*") }, enabled = !state.settingsSaving) {
                             Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
@@ -1865,7 +1865,7 @@ private fun AccountDetail(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(t("Change Email"))
             }
-            Text("After changing your sign-in email, you can change it again after 10 days.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("After changing your sign-in email, you can change it again after 10 days."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text(t("Your Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             if (includeWorkspaceIdentity) {
                 OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(t("Company / Studio Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1885,7 +1885,7 @@ private fun AccountDetail(
             }
         }
         if (includeLogo) DetailCard(title = t("Workspace Logo"), icon = Icons.Filled.PhotoLibrary) {
-            Text("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 WorkspaceLogoPreview(
                     logoUrl = settings.appLogoUrl,
@@ -1915,18 +1915,18 @@ private fun AccountDetail(
             if (!canEditLogo) {
                 Text(t("Your current workspace role cannot edit Workspace Logo."), color = DangerRed, fontWeight = FontWeight.Bold)
             }
-            Text("Logo uploads use the same upload safety rules and plan checks as the web and Apple apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Logo uploads use the same upload safety rules and plan checks as the web and Apple apps."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (includeSecurity) DetailCard(title = t("Security"), icon = Icons.Filled.Lock) {
             SecurityStatusPanel(requireDeviceUnlock)
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SettingSwitch("Require Face ID / device passcode on app launch", requireDeviceUnlock, onSetRequireDeviceUnlock)
-                    Text("When enabled, NivaDesk asks for fingerprint, face unlock or your Android screen lock whenever the app opens with an existing session.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("This preference is saved locally on this Android device, matching the Apple app's per-device unlock setting.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("When enabled, NivaDesk asks for fingerprint, face unlock or your Android screen lock whenever the app opens with an existing session."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("This preference is saved locally on this Android device, matching the Apple app's per-device unlock setting."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text("Password changes are handled securely by Firebase. We send a reset link to your account email instead of storing or editing your password inside the app.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Password changes are handled securely by Firebase. We send a reset link to your account email instead of storing or editing your password inside the app."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 if (maxWidth >= 520.dp) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1967,7 +1967,7 @@ private fun AccountDetail(
         AlertDialog(
             onDismissRequest = { pendingLogo = null },
             title = { Text(t(t("Upload Policy"))) },
-            text = { Text("Only upload legal, safe and work-related images that belong in this workspace.") },
+            text = { Text(t("Only upload legal, safe and work-related images that belong in this workspace.")) },
             confirmButton = {
                 Button(onClick = {
                     val upload = pendingLogo ?: return@Button
@@ -2225,7 +2225,7 @@ private fun TeamAccessDetail(
                             CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                         }
                         DetailCard(title = t("Request Access"), icon = Icons.AutoMirrored.Filled.Send) {
-                            Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(t("Enter the owner's email address or Company ID and send a request."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedTextField(
                                     value = requestIdentifier,
@@ -2247,7 +2247,7 @@ private fun TeamAccessDetail(
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         DetailCard(title = t("Workspaces"), icon = Icons.Filled.People) {
-                            Text("Switch to a workspace you own or have joined.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(t("Switch to a workspace you own or have joined."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             state.availableWorkspaces.forEach { option ->
                                 Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                                     Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2260,14 +2260,14 @@ private fun TeamAccessDetail(
                                         if (option.isCurrent) {
                                             Pill("Current", StudioGreen)
                                         } else {
-                                            TextButton(onClick = { onSwitchWorkspace(option.id) }) { Text("Switch") }
+                                            TextButton(onClick = { onSwitchWorkspace(option.id) }) { Text(t("Switch")) }
                                         }
                                     }
                                 }
                             }
                         }
                         DetailCard(title = t("Invite People"), icon = Icons.Filled.ContentCopy) {
-                            Text("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(t("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                         }
                     }
@@ -2283,7 +2283,7 @@ private fun TeamAccessDetail(
                         CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                     }
                     DetailCard(title = t("Workspaces"), icon = Icons.Filled.People) {
-                        Text("Switch to a workspace you own or have joined.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("Switch to a workspace you own or have joined."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         state.availableWorkspaces.forEach { option ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.People, contentDescription = null, tint = StudioOrange)
@@ -2295,13 +2295,13 @@ private fun TeamAccessDetail(
                                 if (option.isCurrent) {
                                     Pill("Current", StudioGreen)
                                 } else {
-                                    TextButton(onClick = { onSwitchWorkspace(option.id) }) { Text("Switch") }
+                                    TextButton(onClick = { onSwitchWorkspace(option.id) }) { Text(t("Switch")) }
                                 }
                             }
                         }
                     }
                     DetailCard(title = t("Request Access"), icon = Icons.AutoMirrored.Filled.Send) {
-                        Text("Enter the owner's email address or Company ID and send a request.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("Enter the owner's email address or Company ID and send a request."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedTextField(
                                 value = requestIdentifier,
@@ -2321,7 +2321,7 @@ private fun TeamAccessDetail(
                         }
                     }
                     DetailCard(title = t("Invite People"), icon = Icons.Filled.ContentCopy) {
-                        Text("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("Share your account email or Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
                     }
                 }
@@ -2373,7 +2373,7 @@ private fun TeamAccessDetail(
             }
             DetailCard(title = t("Role Profiles"), icon = Icons.Filled.Security) {
                 Text(t("Custom Access Roles"), fontWeight = FontWeight.ExtraBold)
-                Text("Create role presets that use the same permission keys as Mac and web.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Create role presets that use the same permission keys as Mac and web."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(
@@ -3425,11 +3425,11 @@ private fun AboutDetail() {
                     .fillMaxWidth()
                     .height(72.dp)
             )
-            Text("Version 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Version") + " 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("An EGGcraft brand for studio workspace management."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
-            Text("(c) 2026 All rights reserved.", fontWeight = FontWeight.ExtraBold)
-            Text("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("(c) 2026 All rights reserved."), fontWeight = FontWeight.ExtraBold)
+            Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
