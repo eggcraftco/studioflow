@@ -113,6 +113,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -3418,6 +3419,7 @@ private fun supportDateText(value: Date?): String {
 private fun AboutDetail() {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val uriHandler = LocalUriHandler.current
     DetailColumn {
         DetailCard(title = t("About"), icon = Icons.Filled.Info) {
             NivaDeskLogoLockup(
@@ -3427,6 +3429,13 @@ private fun AboutDetail() {
             )
             Text(t("Version") + " 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("An EGGcraft brand for studio workspace management."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                t("What's new"),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable { uriHandler.openUri("https://nivadesk.app/changelog") }
+            )
             HorizontalDivider()
             Text(t("(c) 2026 All rights reserved."), fontWeight = FontWeight.ExtraBold)
             Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer."), color = MaterialTheme.colorScheme.onSurfaceVariant)
