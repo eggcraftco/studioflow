@@ -85,6 +85,13 @@ const TREE_EN: GuideNode[] = [
         "Your layout is saved to your own user as a card profile — your teammates keep their own layouts, while the order content stays shared.",
         "Some cards let you Edit headings to rename, add or remove their sections and fields (covered on each card below)."
       ] },
+      { kind: "sub", text: "Export & invoice" },
+      { kind: "bullets", items: [
+        "Export the order as a PDF — a clean summary built from your PDF Export Settings.",
+        "Generate an Invoice — NivaDesk assigns an invoice number automatically (if the order has none) and uses your business details and footer note from Settings.",
+        "You can also print the To Do list and the History log as PDFs.",
+        "Customize how all of these look in Settings ▸ PDF Export Settings."
+      ] },
       { kind: "para", text: "Select a card on the left to see exactly what it does and what you can change in it." }
     ],
     children: [
@@ -651,6 +658,13 @@ const TREE_TR: GuideNode[] = [
         "Bir karta renk verin (8 seçenek) ki öne çıksın.",
         "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir — ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
         "Bazı kartlarda Başlıkları Düzenle ile bölümleri ve alanları yeniden adlandırabilir, ekleyebilir veya kaldırabilirsiniz (aşağıda her kartta anlatılıyor)."
+      ] },
+      { kind: "sub", text: "Dışa aktarma & fatura" },
+      { kind: "bullets", items: [
+        "Siparişi PDF olarak dışa aktarın — PDF Export Settings'inizden oluşturulan derli toplu bir özet.",
+        "Invoice (Fatura) oluşturun — NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
+        "Ayrıca To Do listesini ve History kaydını da PDF olarak yazdırabilirsiniz.",
+        "Bunların tümünün görünümünü Settings ▸ PDF Export Settings'ten özelleştirin."
       ] },
       { kind: "para", text: "Soldan bir kart seçin; tam olarak ne işe yaradığını ve içinde neleri değiştirebileceğinizi görün." }
     ],
