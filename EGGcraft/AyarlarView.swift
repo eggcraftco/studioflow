@@ -3063,13 +3063,13 @@ struct AyarlarView: View {
                     Button("Yes, Delete All", role: .destructive) { tumVerileriSil() }
                     Button("Cancel", role: .cancel) { }
                 } message: {
-                    Text("All orders and customers will be permanently deleted.")
+                    Text(t("All orders and customers will be permanently deleted.", lang: seciliDil))
                 }
                 .alert("Import Backup", isPresented: $importUyarisiGosteriliyor) {
                     Button("Choose Backup File") { iceriAktariliyor = true }
                     Button("Cancel", role: .cancel) { }
                 } message: {
-                    Text("Import adds the selected backup into this workspace. It does not delete your existing data, but duplicate orders may be created if the same backup is imported more than once. Export a backup first if you are unsure.")
+                    Text(t("Import adds the selected backup into this workspace. It does not delete your existing data, but duplicate orders may be created if the same backup is imported more than once. Export a backup first if you are unsure.", lang: seciliDil))
                 }
                 .alert("Import Finished", isPresented: $importSonucGosteriliyor) {
                     Button("OK", role: .cancel) { }
@@ -3489,15 +3489,15 @@ struct AyarlarView: View {
     private var temaAyari: some View {
         SettingsCard(title: t("Theme", lang: seciliDil), iconName: "moon.circle.fill") {
             HStack {
-                Text("Theme")
+                Text(t("Theme", lang: seciliDil))
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
                     .frame(width: 150, alignment: .leading)
                 Spacer()
                 Picker("", selection: themeSelectionBinding) {
-                    Text("System").tag("System")
-                    Text("Light").tag("Light")
-                    Text("Dark").tag("Dark")
+                    Text(t("System", lang: seciliDil)).tag("System")
+                    Text(t("Light", lang: seciliDil)).tag("Light")
+                    Text(t("Dark", lang: seciliDil)).tag("Dark")
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
@@ -3520,7 +3520,7 @@ struct AyarlarView: View {
     private var dilAyari: some View {
         SettingsCard(title: t("Language & Labels", lang: seciliDil), iconName: "globe") {
             HStack {
-                Text("Select Language")
+                Text(t("Select Language", lang: seciliDil))
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
                     .frame(width: 150, alignment: .leading)
@@ -3546,17 +3546,17 @@ struct AyarlarView: View {
                     .frame(maxWidth: 220, maxHeight: 58, alignment: .leading)
                     .padding(.bottom, 5)
                     .accessibilityLabel("NivaDesk")
-                Text("Version 1.0.0")
+                Text(t("Version", lang: seciliDil) + " 1.0.0")
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
-                Text("An EGGcraft brand for studio workspace management.")
+                Text(t("An EGGcraft brand for studio workspace management.", lang: seciliDil))
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
                 Divider().padding(.vertical, 10)
-                Text("© 2026 All rights reserved.")
+                Text(t("© 2026 All rights reserved.", lang: seciliDil))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.primary)
-                Text("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.")
+                Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", lang: seciliDil))
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
                     .lineSpacing(4)
@@ -3635,8 +3635,8 @@ struct AyarlarView: View {
     private var workflowOnlyPdfAyari: some View {
         SettingsCard(title: t("PDF Export Settings", lang: seciliDil), iconName: "doc.richtext") {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Personal finance-free PDF preferences").font(.system(size: 15, weight: .bold))
-                Text("Payment and financial PDF fields remain hidden. These choices apply only to your finance-free export view.").font(.system(size: 12)).foregroundColor(.secondary)
+                Text(t("Personal finance-free PDF preferences", lang: seciliDil)).font(.system(size: 15, weight: .bold))
+                Text(t("Payment and financial PDF fields remain hidden. These choices apply only to your finance-free export view.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.secondary)
                 Divider()
                 Toggle("Customer & Design", isOn: $pdfShowCustomer)
                 Toggle("Contact & Notes", isOn: $pdfShowContact)
@@ -3655,16 +3655,16 @@ struct AyarlarView: View {
         SettingsCard(title: t("PDF Export Settings", lang: seciliDil), iconName: "doc.richtext") {
             VStack(alignment: .leading, spacing: 18) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 15) {
-                    Toggle(isOn: $pdfShowCustomer) { Text("Customer & Design").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowContact) { Text("Contact & Notes").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowPreview) { Text("Preview Image").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowCustomer) { Text(t("Customer & Design", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowContact) { Text(t("Contact & Notes", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowPreview) { Text(t("Preview Image", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $pdfShowMaterials) { Text(t("Materials & Inventory", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $pdfShowPriority) { Text(t("Priority / Risk", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowFinCustomer) { Text("Financials: Paid & Remaining").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowPaymentMethod) { Text("Payment Method").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowFinInternal) { Text("Internal Financials").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowStatus) { Text("Production Status").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowShipping) { Text("Shipping & Tracking").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowFinCustomer) { Text(t("Financials: Paid & Remaining", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowPaymentMethod) { Text(t("Payment Method", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowFinInternal) { Text(t("Internal Financials", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowStatus) { Text(t("Production Status", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowShipping) { Text(t("Shipping & Tracking", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -3675,16 +3675,16 @@ struct AyarlarView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Company invoice numbers")
+                            Text(t("Company invoice numbers", lang: seciliDil))
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(.primary)
-                            Text("VAT, EORI, company number or any reference you want to show on PDF invoices.")
+                            Text(t("VAT, EORI, company number or any reference you want to show on PDF invoices.", lang: seciliDil))
                                 .font(.system(size: 11))
                                 .foregroundColor(.gray)
                         }
                         Spacer()
                         Button(action: { withAnimation { companyNumbers.append(CompanyNumberSettingDTO(title: t("New Number", lang: seciliDil), value: "")) } }) {
-                            HStack(spacing: 6) { Image(systemName: "plus.circle.fill"); Text("Add") }
+                            HStack(spacing: 6) { Image(systemName: "plus.circle.fill"); Text(t("Add", lang: seciliDil)) }
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(.blue)
                         }
@@ -3692,7 +3692,7 @@ struct AyarlarView: View {
                     }
 
                     if companyNumbers.isEmpty {
-                        Text("No company numbers added yet.")
+                        Text(t("No company numbers added yet.", lang: seciliDil))
                             .font(.system(size: 12))
                             .foregroundColor(.gray)
                             .padding(12)
@@ -3828,7 +3828,7 @@ struct AyarlarView: View {
                 )
                 .overlay(alignment: .topLeading) {
                     if businessDescriptionPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Example: We restore vintage watches. We need model, serial number, issue, parts status, customer approval, repair stage, testing, shipping and warranty notes.")
+                        Text(t("Example: We restore vintage watches. We need model, serial number, issue, parts status, customer approval, repair stage, testing, shipping and warranty notes.", lang: seciliDil))
                             .font(.system(size: 12))
                             .foregroundColor(.gray.opacity(0.75))
                             .padding(.horizontal, 14)
@@ -3838,7 +3838,7 @@ struct AyarlarView: View {
                 }
 
             HStack {
-                Text("The smart setup will update cards, workflow steps, fields, toggles, status options, inventory labels and summary steps.")
+                Text(t("The smart setup will update cards, workflow steps, fields, toggles, status options, inventory labels and summary steps.", lang: seciliDil))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineSpacing(3)
@@ -3851,7 +3851,7 @@ struct AyarlarView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "wand.and.stars")
-                        Text("Smart Customize")
+                        Text(t("Smart Customize", lang: seciliDil))
                     }
                     .font(.system(size: 12, weight: .bold))
                     .padding(.horizontal, 14)
@@ -4032,10 +4032,10 @@ struct AyarlarView: View {
             SettingsCard(title: t("Production Steps", lang: seciliDil), iconName: "arrow.triangle.branch") {
                 VStack(alignment: .leading, spacing: 15) {
                     HStack {
-                        Text("Custom Status Menus").font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                        Text(t("Custom Status Menus", lang: seciliDil)).font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                         Spacer()
                         Button(action: { withAnimation { customSteps.append(CustomStep(title: t("New Step", lang: seciliDil))) } }) {
-                            HStack { Image(systemName: "plus.circle.fill"); Text("Add Step") }.font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
+                            HStack { Image(systemName: "plus.circle.fill"); Text(t("Add Step", lang: seciliDil)) }.font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
                         }.buttonStyle(.plain)
                     }
                     ForEach($customSteps) { $step in
@@ -4063,7 +4063,7 @@ struct AyarlarView: View {
                         }
                     }
                     Divider().background(Color.primary.opacity(0.1)).padding(.vertical, 5)
-                    Text("Dashboard Highlights").font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                    Text(t("Dashboard Highlights", lang: seciliDil)).font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                     HStack(spacing: 15) {
                         Picker("Highlight 1", selection: $summaryStep1) {
                             ForEach(customSteps, id: \.title) { step in Text(step.title).tag(step.title) }
@@ -4120,18 +4120,18 @@ struct AyarlarView: View {
             
             SettingsCard(title: "Workspace Blocks", iconName: "square.grid.3x3.fill") {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 15) {
-                    Toggle(isOn: $showCardPreview) { Text("Preview Image").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardSummary) { Text("Order Summary").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardCustomer) { Text("Customer & Design").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardPreview) { Text(t("Preview Image", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardSummary) { Text(t("Order Summary", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardCustomer) { Text(t("Customer & Design", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $showCardCustomerNotes) { Text(t("Customer Notes", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardDelivery) { Text("Delivery Date").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardDelivery) { Text(t("Delivery Date", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $showCardPriority) { Text(t("Priority / Risk", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $showCardMaterials) { Text(t("Materials & Inventory", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardCommunication) { Text("Communication").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardNotes) { Text("Special Notes").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardFinancial) { Text("Financial Info").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardStatus) { Text("Production Status").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $showCardShipping) { Text("Shipping & Tracking").font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardCommunication) { Text(t("Communication", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardNotes) { Text(t("Special Notes", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardFinancial) { Text(t("Financial Info", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardStatus) { Text(t("Production Status", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $showCardShipping) { Text(t("Shipping & Tracking", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -5221,13 +5221,13 @@ struct AyarlarView: View {
     
     private var quickReplyStyleSettings: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Default Reply Style")
+            Text(t("Default Reply Style", lang: seciliDil))
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Politeness")
+                Text(t("Politeness", lang: seciliDil))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.secondary)
 
@@ -5241,7 +5241,7 @@ struct AyarlarView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Length")
+                Text(t("Length", lang: seciliDil))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.secondary)
 
@@ -5254,7 +5254,7 @@ struct AyarlarView: View {
                 .tint(.purple)
             }
 
-            Text("These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.")
+            Text(t("These controls apply to Apple On-Device, OpenAI Online and Offline Template replies, and sync across platforms.", lang: seciliDil))
                 .font(.system(size: 11))
                 .foregroundColor(.gray)
                 .lineSpacing(3)
@@ -5271,9 +5271,9 @@ struct AyarlarView: View {
 
     private var quickReplyContributionAyari: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Team Contributions")
+            Text(t("Team Contributions", lang: seciliDil))
                 .font(.system(size: 16, weight: .bold))
-            Text("Add supporting information for shared OpenAI replies. The main Company Knowledge Base is managed by the workspace owner.")
+            Text(t("Add supporting information for shared OpenAI replies. The main Company Knowledge Base is managed by the workspace owner.", lang: seciliDil))
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
             TextEditor(text: $quickReplyContributionText)
@@ -5344,7 +5344,7 @@ struct AyarlarView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Reply Engine")
+                Text(t("Reply Engine", lang: seciliDil))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
@@ -5405,14 +5405,14 @@ struct AyarlarView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.blue)
 
-                    Text("Apple On-Device AI")
+                    Text(t("Apple On-Device AI", lang: seciliDil))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.primary)
 
                     Spacer()
                 }
 
-                Text("This mode uses Apple Intelligence on the device. Users do not need to download DeepSeek/Ollama models. If Apple Intelligence is not available, Quick Reply will show a clear warning and users can switch to OpenAI Online or Offline Template.")
+                Text(t("This mode uses Apple Intelligence on the device. Users do not need to download DeepSeek/Ollama models. If Apple Intelligence is not available, Quick Reply will show a clear warning and users can switch to OpenAI Online or Offline Template.", lang: seciliDil))
                     .font(.system(size: 11))
                     .foregroundColor(.gray)
                     .lineSpacing(3)
@@ -5440,7 +5440,7 @@ struct AyarlarView: View {
                     }
                     .frame(width: 42, height: 42)
 
-                    Text("OpenAI API Key")
+                    Text(t("OpenAI API Key", lang: seciliDil))
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.primary)
                         .frame(width: 190, alignment: .leading)
@@ -5469,12 +5469,12 @@ struct AyarlarView: View {
                 knowledgeBaseEditor(title: t("Company Knowledge Base (For OpenAI)", lang: seciliDil))
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("OpenAI Online")
+                    Text(t("OpenAI Online", lang: seciliDil))
                         .font(.system(size: 16, weight: .bold))
                     Text(quickReplyHasOpenAIKey ? "Workspace OpenAI key configured" : "Workspace OpenAI key not configured")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(quickReplyHasOpenAIKey ? .green : .orange)
-                    Text("Only the workspace owner can manage the API key and main Company Knowledge Base. You can use shared OpenAI replies once a key is configured.")
+                    Text(t("Only the workspace owner can manage the API key and main Company Knowledge Base. You can use shared OpenAI replies once a key is configured.", lang: seciliDil))
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
@@ -5500,7 +5500,7 @@ struct AyarlarView: View {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "doc.text")
                             .font(.system(size: 13, weight: .semibold))
-                        Text("Add your pricing, process, policies, FAQs and common customer answers here...")
+                        Text(t("Add your pricing, process, policies, FAQs and common customer answers here...", lang: seciliDil))
                             .font(.system(size: 13))
                     }
                     .foregroundColor(.gray.opacity(0.74))
@@ -5520,7 +5520,7 @@ struct AyarlarView: View {
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.primary.opacity(0.10), lineWidth: 1))
             .cornerRadius(10)
 
-            Text("This Knowledge Base is synced across Mac, iPad and iPhone for the same company.")
+            Text(t("This Knowledge Base is synced across Mac, iPad and iPhone for the same company.", lang: seciliDil))
                 .font(.system(size: 11))
                 .foregroundColor(.gray)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -5534,10 +5534,10 @@ struct AyarlarView: View {
     private var quickReplyOfflineTemplateSettings: some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack {
-                Text("Products / Services").font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                Text(t("Products / Services", lang: seciliDil)).font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                 Spacer()
                 Button(action: { withAnimation { customProducts.append(CustomProduct(title: "", desc: "")) } }) {
-                    HStack { Image(systemName: "plus.circle.fill"); Text("Add Product") }
+                    HStack { Image(systemName: "plus.circle.fill"); Text(t("Add Product", lang: seciliDil)) }
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.blue)
                 }
@@ -5557,10 +5557,10 @@ struct AyarlarView: View {
             Divider().background(Color.primary.opacity(0.1)).padding(.vertical, 5)
 
             HStack {
-                Text("Custom Rules / FAQs").font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                Text(t("Custom Rules / FAQs", lang: seciliDil)).font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                 Spacer()
                 Button(action: { withAnimation { customRules.append(CustomRule(title: "", desc: "")) } }) {
-                    HStack { Image(systemName: "plus.circle.fill"); Text("Add Rule") }
+                    HStack { Image(systemName: "plus.circle.fill"); Text(t("Add Rule", lang: seciliDil)) }
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.blue)
                 }
@@ -6041,7 +6041,7 @@ struct AyarlarView: View {
     private var veriYonetimiAyari: some View {
         SettingsCard(title: t("Data Management", lang: seciliDil), iconName: "externaldrive.fill") {
             VStack(alignment: .leading, spacing: 15) {
-                Text("Create a backup before importing or deleting data.")
+                Text(t("Create a backup before importing or deleting data.", lang: seciliDil))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
 
@@ -6059,13 +6059,13 @@ struct AyarlarView: View {
                     }
                 }
 
-                Text("Import will add the backup into the current workspace. It will not clear existing orders automatically.")
+                Text(t("Import will add the backup into the current workspace. It will not clear existing orders automatically.", lang: seciliDil))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Divider().background(Color.primary.opacity(0.1))
-                Button(action: { silmeOnayiGosteriliyor = true }) { HStack { Image(systemName: "trash.fill"); Text("Delete Data") }.font(.system(size: 12, weight: .bold)).padding(.horizontal, 12).padding(.vertical, 8).background(Color.red.opacity(0.8)).foregroundColor(.white).cornerRadius(6) }.buttonStyle(.plain)
+                Button(action: { silmeOnayiGosteriliyor = true }) { HStack { Image(systemName: "trash.fill"); Text(t("Delete Data", lang: seciliDil)) }.font(.system(size: 12, weight: .bold)).padding(.horizontal, 12).padding(.vertical, 8).background(Color.red.opacity(0.8)).foregroundColor(.white).cornerRadius(6) }.buttonStyle(.plain)
             }
         }
     }
@@ -6074,7 +6074,7 @@ struct AyarlarView: View {
         Button(action: hazirlaVeDisariAktar) {
             HStack {
                 Image(systemName: "archivebox")
-                Text("Export Backup")
+                Text(t("Export Backup", lang: seciliDil))
             }
             .font(.system(size: 12, weight: .bold))
             .padding(.horizontal, 12)
@@ -6090,7 +6090,7 @@ struct AyarlarView: View {
         Button(action: exportToCSV) {
             HStack {
                 Image(systemName: "tablecells")
-                Text("Export CSV")
+                Text(t("Export CSV", lang: seciliDil))
             }
             .font(.system(size: 12, weight: .bold))
             .padding(.horizontal, 12)
@@ -6106,7 +6106,7 @@ struct AyarlarView: View {
         Button(action: { importUyarisiGosteriliyor = true }) {
             HStack {
                 Image(systemName: "square.and.arrow.down")
-                Text("Import Backup")
+                Text(t("Import Backup", lang: seciliDil))
             }
             .font(.system(size: 12, weight: .bold))
             .padding(.horizontal, 12)
@@ -7882,11 +7882,12 @@ private struct AIHeatmapView: View {
 private struct AICrumb: View {
     let title: String
     let onBack: () -> Void
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     var body: some View {
         HStack(spacing: 5) {
             Button(action: onBack) {
-                Text("Admin Insights").font(.system(size: 11, weight: .bold)).foregroundColor(.blue)
+                Text(t("Admin Insights", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(.blue)
             }
             .buttonStyle(.plain)
             Text("›").font(.system(size: 11)).foregroundColor(.gray)
