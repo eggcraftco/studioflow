@@ -4155,7 +4155,14 @@ struct AyarlarView: View {
     }
 
     private func seedBusinessPromptIfNeeded(for type: String) {
-        guard businessDescriptionPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Match the onboarding screen: changing the industry refreshes the
+        // description to that industry's seed, unless the owner has typed a
+        // custom description (current text is not one of the known seeds).
+        let current = businessDescriptionPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isCustom = !current.isEmpty && !businessTypes.contains { candidate in
+            localizedBusinessPromptSeed(for: candidate).trimmingCharacters(in: .whitespacesAndNewlines) == current
+        }
+        if isCustom { return }
         businessDescriptionPrompt = localizedBusinessPromptSeed(for: type)
     }
 
@@ -4163,9 +4170,18 @@ struct AyarlarView: View {
         switch smartLanguageCode {
         case "tr":
             switch type {
-            case "Custom Art Studio": return "Müşteriler için özel sanat çalışmaları yapıyoruz. Referans görseller, konsept onayı, malzemeler, üretim aşamaları, müşteri değerlendirmesi, son onay ve teslimat bizim için önemli."
-            case "Repair Service": return "Müşteri ürünlerini tamir ediyoruz. Ürün modeli, seri numarası, sorun açıklaması, arıza tespiti, parça siparişi, müşteri onayı, tamir, test, garanti notları ve teslim alma veya kargo süreçleri gerekiyor."
-            case "Photography Studio": return "Fotoğraf çekimleri yönetiyoruz. Çekim türü, lokasyon, tarih, paket, sözleşme, depozito, çekim, düzenleme, retouch ve dijital teslimat aşamaları var."
+            case "Custom Art Studio": return "Özel sanat çalışmaları/komisyonlar üretiyoruz. Müşteri bilgileri, tasarım teması, referans görseller, onay aşamaları, depozito, üretim aşamaları, son değerlendirme ve kargo gerekiyor."
+            case "Freelancer / Designer": return "Tasarım ve serbest çalışma projeleri teslim ediyoruz. Proje özeti, kapsam, referans dosyalar, revizyon turları, müşteri onayı, teslim tarihi, son dosyalar ve bakiye ödemesi gerekiyor."
+            case "Repair Service": return "Müşteri ürünlerini tamir ediyoruz. Model, seri numarası, bildirilen sorun, arıza tespiti, fiyat onayı, parça siparişi, tamir, test ve teslim alma veya kargo gerekiyor."
+            case "Handmade Products": return "Özel ürünler yapıyoruz. Ürün türü, ölçü, renk, malzeme, müşteri onayı, üretim, paketleme, kargo ve bakiye ödemesi gerekiyor."
+            case "Photography Studio": return "Fotoğraf çekimleri yönetiyoruz. Müşteri bilgileri, çekim türü, lokasyon, tarih, paket, rezervasyon depozitosu, seçim, düzenleme, teslimat ve takip notları gerekiyor."
+            case "Tailor / Alteration Studio": return "Kıyafet dikiyor ve tadilat yapıyoruz. Kıyafet türü, ölçüler, kumaş bilgileri, prova randevuları, tadilat notları, depozito, son prova ve teslim alma tarihi gerekiyor."
+            case "Jewellery Studio": return "Özel takı üretiyoruz. Metal, taş, ölçü, tasarım çizimi, müşteri onayı, depozito, döküm, taş kakma, parlatma, kalite kontrol ve teslimat gerekiyor."
+            case "Agency / Creative Studio": return "Yaratıcı müşteri projeleri yürütüyoruz. Proje özeti, çıktılar, zaman planı, ekip ataması, taslak sürümleri, müşteri geri bildirim turları, onay, lansman ve faturalama gerekiyor."
+            case "Food / Bakery / Catering": return "Özel yemek siparişleri hazırlıyoruz. Etkinlik tarihi, kişi sayısı, lezzetler, diyet notları, tasarım referansı, depozito, hazırlık, süsleme ve teslimat veya teslim alma gerekiyor."
+            case "Beauty / Clinic / Wellness": return "Müşteri randevularını ve uygulamaları yönetiyoruz. Müşteri bilgileri, uygulama türü, danışma notları, randevu tarihi, ödeme, bakım sonrası ve takip hatırlatmaları gerekiyor."
+            case "Consultancy / Professional Service": return "Danışmanlık hizmetleri sunuyoruz. Müşteri bilgileri, kapsam, teklif, sözleşme, kilometre taşları, toplantılar, çıktılar, değerlendirme ve faturalama gerekiyor."
+            case "General Small Business": return "Müşteri siparişlerini yönetiyoruz. Müşteri bilgileri, sipariş kalemleri, fiyatlandırma, depozito, hazırlık, kalite kontrol, teslimat veya teslim alma ve bakiye ödemesi gerekiyor."
             case "Other / Prompt Based": return ""
             default: return "Bu işi burada anlatın: müşteriden gereken bilgiler, iş akışı aşamaları, onay adımları, malzemeler, kargo, randevular, depozitolar ve teslimat süreçleri."
             }
@@ -4251,9 +4267,18 @@ struct AyarlarView: View {
             }
         default:
             switch type {
-            case "Custom Art Studio": return "We create custom artwork for clients. We need references, concept approval, materials, production stages, review, final approval and delivery."
-            case "Repair Service": return "We repair customer items. We need item model, serial number, issue description, diagnostics, parts order, customer approval, repair, testing, warranty and pickup or shipping."
-            case "Photography Studio": return "We manage photo shoots. We need shoot type, location, date, package, contract, deposit, shooting, editing, retouching and digital delivery."
+            case "Custom Art Studio": return "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping."
+            case "Freelancer / Designer": return "We deliver design and freelance projects. We need project brief, scope, reference files, revision rounds, client approval, deadline, final files and balance payment."
+            case "Repair Service": return "We repair customer items. We need model, serial number, issue reported, diagnostics, quote approval, parts order, repair, testing and collection or shipping."
+            case "Handmade Products": return "We make custom products. We need product type, size, colour, material, customer approval, production, packaging, shipping and balance payment."
+            case "Photography Studio": return "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes."
+            case "Tailor / Alteration Studio": return "We tailor and alter garments. We need garment type, measurements, fabric details, fitting appointments, alteration notes, deposit, final fitting and collection date."
+            case "Jewellery Studio": return "We create custom jewellery. We need metal, stone, size, design sketch, customer approval, deposit, casting, setting, polishing, quality check and delivery."
+            case "Agency / Creative Studio": return "We run creative client projects. We need project brief, deliverables, timeline, team assignment, draft versions, client feedback rounds, approval, launch and invoicing."
+            case "Food / Bakery / Catering": return "We prepare custom food orders. We need event date, servings, flavours, dietary notes, design reference, deposit, preparation, decoration and delivery or pickup."
+            case "Beauty / Clinic / Wellness": return "We manage client appointments and treatments. We need client details, treatment type, consultation notes, appointment date, payment, aftercare and follow-up reminders."
+            case "Consultancy / Professional Service": return "We deliver consultancy engagements. We need client details, scope, proposal, contract, milestones, meetings, deliverables, review and invoicing."
+            case "General Small Business": return "We handle customer orders. We need customer details, order items, pricing, deposit, preparation, quality check, delivery or pickup and balance payment."
             case "Other / Prompt Based": return ""
             default: return "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
             }

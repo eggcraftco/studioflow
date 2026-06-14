@@ -925,7 +925,7 @@ private fun WorkspaceOnboardingScreen(
     }
 }
 
-private fun onboardingPromptSeed(type: String): String {
+internal fun onboardingPromptSeed(type: String): String {
     return when (type) {
         "Custom Art Studio" -> "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping."
         "Freelancer / Designer" -> "We deliver design and freelance projects. We need project brief, scope, reference files, revision rounds, client approval, deadline, final files and balance payment."
@@ -943,7 +943,7 @@ private fun onboardingPromptSeed(type: String): String {
     }
 }
 
-private val onboardingBusinessTypeNames = listOf(
+internal val onboardingBusinessTypeNames = listOf(
     "Custom Art Studio",
     "Freelancer / Designer",
     "Repair Service",
@@ -960,7 +960,7 @@ private val onboardingBusinessTypeNames = listOf(
 
 private val onboardingDefaultModelPrompt = uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings().businessDescriptionPrompt
 
-private fun isOnboardingPromptSeed(prompt: String): Boolean {
+internal fun isOnboardingPromptSeed(prompt: String): Boolean {
     val trimmed = prompt.trim()
     if (trimmed.isEmpty()) return true
     return onboardingBusinessTypeNames.any { onboardingPromptSeed(it) == trimmed } ||

@@ -45,6 +45,7 @@ import {
   type BlockHeadingSettings,
   type HeadingItem
 } from "@/lib/studioflow/blockHeadings";
+import { workspaceOnboardingPromptSeed, isWorkspaceOnboardingPromptSeed } from "@/lib/studioflow/workspaceOnboarding";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
@@ -993,21 +994,6 @@ const DEFAULT_WORKFLOW_TEMPLATE: WorkflowTemplate = {
   summaryStep2: "Crafting"
 };
 
-function businessPromptSeed(type: string) {
-  switch (type) {
-    case "Custom Art Studio":
-      return "We create custom artwork for clients. We need references, concept approval, materials, production stages, review, final approval and delivery.";
-    case "Repair Service":
-      return "We repair customer items. We need item model, serial number, issue description, diagnostics, parts order, customer approval, repair, testing, warranty and pickup or shipping.";
-    case "Photography Studio":
-      return "We manage photo shoots. We need shoot type, location, date, package, contract, deposit, shooting, editing, retouching and digital delivery.";
-    case "Other / Prompt Based":
-      return "";
-    default:
-      return "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery.";
-  }
-}
-
 function WorkflowSettingsSection({ workspace }: { workspace: WorkspaceContext }) {
   const [blockSettings, setBlockSettings] = useState<BlockHeadingSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1098,13 +1084,17 @@ function WorkflowSettingsSection({ workspace }: { workspace: WorkspaceContext })
 
   function selectBusinessType(nextBusinessType: string) {
     if (!blockSettings) return;
-    const shouldSeedPrompt = blockSettings.businessDescriptionPrompt.trim().length === 0;
+    // Match the onboarding screen: changing the industry refreshes the
+    // description to that industry's seed, unless the owner has hand-written a
+    // custom description (i.e. the current text is not one of the known seeds).
+    const current = blockSettings.businessDescriptionPrompt;
+    const keepCustom = current.trim().length > 0 && !isWorkspaceOnboardingPromptSeed(current);
     const nextSettings = {
       ...blockSettings,
       businessType: nextBusinessType,
-      businessDescriptionPrompt: shouldSeedPrompt
-        ? businessPromptSeed(nextBusinessType)
-        : blockSettings.businessDescriptionPrompt
+      businessDescriptionPrompt: keepCustom
+        ? current
+        : workspaceOnboardingPromptSeed(nextBusinessType)
     };
     setBlockSettings(nextSettings);
     void persistWorkflowSettings(nextSettings, "Business type saved.");

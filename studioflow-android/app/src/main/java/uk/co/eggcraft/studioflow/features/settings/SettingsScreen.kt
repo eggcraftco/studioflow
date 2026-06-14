@@ -828,19 +828,23 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
             MenuField(
                 label = t("Select Industry"),
                 value = settings.businessType,
-                options = listOf(
-                    "Custom Art Studio",
-                    "Photography Studio",
-                    "Agency / Creative Studio",
-                    "Repair Service",
-                    "Tailor / Alteration Studio",
-                    "Jewellery Studio",
-                    "Food / Bakery",
-                    "Beauty / Wellness",
-                    "Handmade / General",
-                    "Other / Prompt Based"
-                ),
-                onSelect = { onSave(mapOf("businessType" to it), t("Business type saved.")) }
+                options = uk.co.eggcraft.studioflow.features.shell.onboardingBusinessTypeNames +
+                    "Other / Prompt Based",
+                onSelect = { selectedType ->
+                    // Match the onboarding screen: changing the industry refreshes the
+                    // description to that industry's seed, unless the owner has typed a
+                    // custom description (current text is not one of the known seeds).
+                    val current = settings.businessDescriptionPrompt
+                    val keepCustom = current.isNotBlank() &&
+                        !uk.co.eggcraft.studioflow.features.shell.isOnboardingPromptSeed(current)
+                    val updates = mutableMapOf<String, Any?>("businessType" to selectedType)
+                    if (!keepCustom) {
+                        val seed = uk.co.eggcraft.studioflow.features.shell.onboardingPromptSeed(selectedType)
+                        businessPrompt = seed
+                        updates["businessDescriptionPrompt"] = seed
+                    }
+                    onSave(updates, t("Business type saved."))
+                }
             )
             Surface(shape = RoundedCornerShape(12.dp), color = StudioPurple.copy(alpha = 0.08f)) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
