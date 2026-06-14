@@ -149,6 +149,20 @@ const TREE_EN: GuideNode[] = [
             "The default checklist labels follow your workspace Inventory Labels in Settings, so changing them there updates every order."
           ] }
         ]
+      },
+      {
+        id: "card-priority",
+        title: "Priority / Risk card",
+        blocks: [
+          { kind: "para", text: "Flag how urgent an order is and whether anything is holding it up, so the team can focus on what matters and spot stuck jobs early." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Priority — Low, Normal, High or Urgent. High and Urgent stand out in the Orders list so they are easy to catch.",
+            "Risk — None, Waiting, Blocked or Overdue, to mark a job that cannot move forward right now.",
+            "Risk reason — appears once Risk is set to anything other than None. Choose why, for example Waiting for customer, Waiting for payment or Waiting for material."
+          ] },
+          { kind: "para", text: "Pick a value from each dropdown and it saves instantly. Priority and risk also feed the smart sort and the status badges in the Orders list, so flagged jobs rise to the top." }
+        ]
       }
     ]
   },
@@ -356,6 +370,20 @@ const TREE_TR: GuideNode[] = [
             "Notes / Supplier alanını gösterin veya gizleyin ve etiketini yeniden adlandırın.",
             "Varsayılan kontrol listesi etiketleri Settings'teki Envanter Etiketleri'ni izler; orada değiştirmek tüm siparişleri günceller."
           ] }
+        ]
+      },
+      {
+        id: "card-priority",
+        title: "Priority / Risk kartı",
+        blocks: [
+          { kind: "para", text: "Bir siparişin ne kadar acil olduğunu ve onu bekleten bir şey olup olmadığını işaretleyin; böylece ekip önemli olana odaklanır ve takılan işleri erkenden fark eder." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Priority (Öncelik) — Low, Normal, High veya Urgent. High ve Urgent, Siparişler listesinde öne çıkar; kolayca yakalanır.",
+            "Risk — None, Waiting, Blocked veya Overdue; şu an ilerleyemeyen bir işi işaretlemek için.",
+            "Risk reason (Risk nedeni) — Risk, None dışında bir şeye ayarlanınca görünür. Nedenini seçin; örneğin Waiting for customer, Waiting for payment veya Waiting for material."
+          ] },
+          { kind: "para", text: "Her açılır menüden bir değer seçin, anında kaydedilir. Öncelik ve risk ayrıca akıllı sıralamayı ve Siparişler listesindeki durum rozetlerini besler; işaretlenen işler en üste çıkar." }
         ]
       }
     ]
