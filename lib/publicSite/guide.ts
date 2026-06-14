@@ -129,6 +129,26 @@ const TREE_EN: GuideNode[] = [
             "Add, rename or remove channel buttons. Telephone and Email stay as their own fields and can be shown or hidden separately."
           ] }
         ]
+      },
+      {
+        id: "card-materials",
+        title: "Materials & Inventory card",
+        blocks: [
+          { kind: "para", text: "Track the parts and materials a job needs — whether each one is sourced, received and ready — so you never start work missing something." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "A yes/no checklist of material steps. The default labels come from your workspace Inventory Labels (set in Settings), for example ‘Dial Sourced’, ‘Dial Received’ or ‘Materials Ready’.",
+            "Optional extra yes/no toggles for anything else you want to track on this order.",
+            "A Notes / Supplier field for supplier details or a quick note."
+          ] },
+          { kind: "para", text: "Tap a row to flip it between yes and no as materials arrive." },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to add, rename or remove checklist items and extra toggles.",
+            "Show or hide the Notes / Supplier field and rename its label.",
+            "The default checklist labels follow your workspace Inventory Labels in Settings, so changing them there updates every order."
+          ] }
+        ]
       }
     ]
   },
@@ -315,6 +335,26 @@ const TREE_TR: GuideNode[] = [
             "Başlıkları Düzenle ile kendi özel alanlarınızı ekleyin, yeniden adlandırın veya kaldırın.",
             "Telephone, Email ve Address'i gösterin veya gizleyin.",
             "Kanal butonları ekleyin, yeniden adlandırın veya kaldırın. Telephone ve Email kendi alanları olarak kalır ve ayrıca gösterilip gizlenebilir."
+          ] }
+        ]
+      },
+      {
+        id: "card-materials",
+        title: "Materials & Inventory kartı",
+        blocks: [
+          { kind: "para", text: "Bir işin ihtiyaç duyduğu parça ve malzemeleri takip edin — her birinin tedarik edildi mi, geldi mi, hazır mı — böylece işe eksikle başlamazsınız." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Malzeme adımlarının evet/hayır kontrol listesi. Varsayılan etiketler çalışma alanınızın Inventory Labels (Envanter Etiketleri) ayarından gelir; örneğin ‘Dial Sourced’, ‘Dial Received’ veya ‘Materials Ready’.",
+            "Bu siparişte takip etmek istediğiniz başka her şey için isteğe bağlı ekstra evet/hayır geçişleri.",
+            "Tedarikçi bilgisi veya kısa bir not için Notes / Supplier alanı."
+          ] },
+          { kind: "para", text: "Malzemeler geldikçe bir satıra dokunarak evet/hayır arasında değiştirin." },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile kontrol listesi öğelerini ve ekstra geçişleri ekleyin, yeniden adlandırın veya kaldırın.",
+            "Notes / Supplier alanını gösterin veya gizleyin ve etiketini yeniden adlandırın.",
+            "Varsayılan kontrol listesi etiketleri Settings'teki Envanter Etiketleri'ni izler; orada değiştirmek tüm siparişleri günceller."
           ] }
         ]
       }
