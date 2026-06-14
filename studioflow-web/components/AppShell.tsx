@@ -1162,9 +1162,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         ? current
         : workspaceOnboardingPromptSeed(
             onboardingBusinessType || "Photography Studio",
+            language,
           ),
     );
-  }, [showWorkspaceOnboarding, onboardingBusinessType, onboardingPromptEdited]);
+  }, [showWorkspaceOnboarding, onboardingBusinessType, onboardingPromptEdited, language]);
 
   useEffect(() => {
     if (!showAddProjectGuide) {
@@ -1318,7 +1319,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             setOnboardingPrompt((current) =>
               onboardingPromptEdited && !isWorkspaceOnboardingPromptSeed(current)
                 ? current
-                : workspaceOnboardingPromptSeed(nextType),
+                : workspaceOnboardingPromptSeed(nextType, language),
             );
             setOnboardingError("");
           }}

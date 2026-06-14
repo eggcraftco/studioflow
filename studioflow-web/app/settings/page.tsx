@@ -499,7 +499,7 @@ function renderSettingsSection({
     case "language-labels":
       return <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "workflow":
-      return <WorkflowSettingsSection workspace={workspace} />;
+      return <WorkflowSettingsSection workspace={workspace} language={language} />;
     case "pdf":
       return <PdfExportSettingsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
     case "quick-reply":
@@ -994,7 +994,7 @@ const DEFAULT_WORKFLOW_TEMPLATE: WorkflowTemplate = {
   summaryStep2: "Crafting"
 };
 
-function WorkflowSettingsSection({ workspace }: { workspace: WorkspaceContext }) {
+function WorkflowSettingsSection({ workspace, language }: { workspace: WorkspaceContext; language: string }) {
   const [blockSettings, setBlockSettings] = useState<BlockHeadingSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1094,7 +1094,7 @@ function WorkflowSettingsSection({ workspace }: { workspace: WorkspaceContext })
       businessType: nextBusinessType,
       businessDescriptionPrompt: keepCustom
         ? current
-        : workspaceOnboardingPromptSeed(nextBusinessType)
+        : workspaceOnboardingPromptSeed(nextBusinessType, language)
     };
     setBlockSettings(nextSettings);
     void persistWorkflowSettings(nextSettings, "Business type saved.");

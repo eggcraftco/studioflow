@@ -839,7 +839,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
                         !uk.co.eggcraft.studioflow.features.shell.isOnboardingPromptSeed(current)
                     val updates = mutableMapOf<String, Any?>("businessType" to selectedType)
                     if (!keepCustom) {
-                        val seed = uk.co.eggcraft.studioflow.features.shell.onboardingPromptSeed(selectedType)
+                        val seed = uk.co.eggcraft.studioflow.features.shell.onboardingPromptSeed(selectedType, lang)
                         businessPrompt = seed
                         updates["businessDescriptionPrompt"] = seed
                     }
@@ -3692,7 +3692,7 @@ private fun MenuChip(value: String, options: List<String>, modifier: Modifier = 
     Box(modifier = modifier) {
         Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { open = true }) {
             Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(value, color = StudioBlue, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(t(value), color = StudioBlue, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(18.dp))
             }
@@ -3700,7 +3700,7 @@ private fun MenuChip(value: String, options: List<String>, modifier: Modifier = 
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option, fontWeight = if (option == value) FontWeight.ExtraBold else FontWeight.Normal) },
+                    text = { Text(t(option), fontWeight = if (option == value) FontWeight.ExtraBold else FontWeight.Normal) },
                     onClick = {
                         open = false
                         onSelect(option)
