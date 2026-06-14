@@ -16,6 +16,7 @@ type PublicMetadataKey =
   | "dataProcessingAgreement"
   | "acceptableUse"
   | "changelog"
+  | "guide"
   | "contact"
   | "login";
 
@@ -112,6 +113,12 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
     description:
       "The NivaDesk changelog: every release with new features, improvements and fixes, newest first, across Mac, iPhone, iPad, Android and web.",
     path: "/changelog"
+  },
+  guide: {
+    title: "How to Use NivaDesk | User Guide",
+    description:
+      "A short tour of every NivaDesk menu — orders, client files, tasks, schedule, team access, settings and more — what each does and how to use it, on Mac, iPhone, iPad, Android and web.",
+    path: "/guide"
   },
   contact: {
     title: "NivaDesk Support and Contact",

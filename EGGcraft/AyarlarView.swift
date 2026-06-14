@@ -3552,9 +3552,15 @@ struct AyarlarView: View {
                 Text(t("An EGGcraft brand for studio workspace management.", lang: seciliDil))
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
-                if let changelogURL = URL(string: "https://nivadesk.app/changelog") {
-                    Link(t("What's new", lang: seciliDil), destination: changelogURL)
-                        .font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 14) {
+                    if let guideURL = URL(string: "https://nivadesk.app/guide") {
+                        Link(t("User guide", lang: seciliDil), destination: guideURL)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    if let changelogURL = URL(string: "https://nivadesk.app/changelog") {
+                        Link(t("What's new", lang: seciliDil), destination: changelogURL)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
                 }
                 Divider().padding(.vertical, 10)
                 Text(t("© 2026 All rights reserved.", lang: seciliDil))

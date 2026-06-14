@@ -3430,6 +3430,13 @@ private fun AboutDetail() {
             Text(t("Version") + " 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("An EGGcraft brand for studio workspace management."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
+                t("User guide"),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable { uriHandler.openUri("https://nivadesk.app/guide") }
+            )
+            Text(
                 t("What's new"),
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,

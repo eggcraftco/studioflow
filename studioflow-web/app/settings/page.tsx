@@ -4591,7 +4591,11 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
             <strong>NivaDesk</strong>
             <p>{t("Version")} 1.0.0</p>
             <p>{t("An EGGcraft brand for studio workspace management.")}</p>
-            <p><Link className="about-changelog-link" href="/changelog" target="_blank" rel="noopener noreferrer">{t("What's new")}</Link></p>
+            <p>
+              <Link className="about-changelog-link" href="/guide" target="_blank" rel="noopener noreferrer">{t("User guide")}</Link>
+              {" · "}
+              <Link className="about-changelog-link" href="/changelog" target="_blank" rel="noopener noreferrer">{t("What's new")}</Link>
+            </p>
           </div>
         </div>
         <div className="settings-divider" />
