@@ -7091,16 +7091,49 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
 // (no orders, no customers, no teammates). Anything with real data — even if
 // unverified — is left untouched and stays behind the in-app verification gate.
 //
-// SAFETY: starts in dry-run. While ACCOUNT_CLEANUP_DRY_RUN is true the job only
-// logs what it WOULD delete and changes nothing. Review the logs first, then
-// flip the flag to false to enable real deletion.
-const ACCOUNT_CLEANUP_DRY_RUN = true;
+// SAFETY: when ACCOUNT_CLEANUP_DRY_RUN is true the job only logs what it WOULD
+// delete and changes nothing. Set to false to enable real deletion. Every
+// candidate is still logged before it is removed, so the audit trail remains.
+const ACCOUNT_CLEANUP_DRY_RUN = false;
 // Days after signup before an unverified, empty account becomes eligible.
 const UNVERIFIED_ACCOUNT_DELETE_DAYS = 30;
 
+// Scan every workspace once and build a uid -> access index so we never delete
+// an account that has access to ANY workspace we can't independently prove is
+// its own empty one. Each entry lists the companies the uid can reach and
+// whether it owns them. This closes the edge case where a collaborator's
+// activeCompanyId is stale/empty: we'd otherwise miss their membership.
+async function buildWorkspaceAccessIndex() {
+  const index = new Map(); // uid -> [{ companyId, owns, data }]
+  const add = (uid, entry) => {
+    const key = String(uid || "").trim();
+    if (!key) return;
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(entry);
+  };
+  const snap = await admin.firestore().collection("companies").select(
+    "ownerUid", "id", "members", "memberRoles"
+  ).get();
+  for (const doc of snap.docs) {
+    const data = doc.data() || {};
+    const companyId = doc.id;
+    const ownerUid = String(data.ownerUid || "").trim();
+    if (ownerUid) add(ownerUid, { companyId, owns: true, data });
+    for (const memberUid of Object.keys(companyMembersMap(data))) {
+      if (memberUid && memberUid !== ownerUid) add(memberUid, { companyId, owns: false, data });
+    }
+    for (const memberUid of Object.keys(companyMemberRolesMap(data))) {
+      if (memberUid && memberUid !== ownerUid && !companyMembersMap(data)[memberUid]) {
+        add(memberUid, { companyId, owns: false, data });
+      }
+    }
+  }
+  return index;
+}
+
 // Decide whether a single unverified user is a safe deletion candidate.
-// Returns { deletable, reason, companyId, orderCount, customerCount, memberCount }.
-async function evaluateStaleUnverifiedUser(userRecord) {
+// `accessIndex` comes from buildWorkspaceAccessIndex().
+async function evaluateStaleUnverifiedUser(userRecord, accessIndex) {
   const uid = userRecord.uid;
   const isPasswordUser = (userRecord.providerData || []).some((p) => p.providerId === "password");
   if (!isPasswordUser) return { deletable: false, reason: "not a password account (OAuth verifies email)" };
@@ -7113,45 +7146,47 @@ async function evaluateStaleUnverifiedUser(userRecord) {
     return { deletable: false, reason: `within grace (${ageDays.toFixed(1)}d of ${UNVERIFIED_ACCOUNT_DELETE_DAYS}d)` };
   }
 
-  const companyId = await activeCompanyIdForUid(uid);
-  let companyData = null;
-  if (companyId) {
-    const snap = await admin.firestore().collection("companies").doc(companyId).get();
-    companyData = snap.exists ? (snap.data() || {}) : null;
+  const access = accessIndex.get(uid) || [];
+
+  // Has access to any workspace it does NOT own → it's a collaborator. Never
+  // auto-delete; removing the Auth record would break that membership.
+  if (access.some((entry) => !entry.owns)) {
+    return { deletable: false, reason: "member of another workspace" };
   }
 
-  // Member of someone else's workspace — never auto-delete a collaborator.
-  if (companyData && !uidIsCompanyOwner(companyData, uid)) {
-    return { deletable: false, reason: "member of another workspace", companyId };
+  // Every reachable workspace is owned by this user. They must all be empty
+  // (no orders, no customers, no other members) for deletion to be safe.
+  for (const entry of access) {
+    const [orderCount, customerCount] = await Promise.all([
+      countCompanyCollection("siparisler", entry.companyId),
+      countCompanyCollection("musteriler", entry.companyId)
+    ]);
+    const memberCount = teamMemberCountFromCompanyData(entry.data);
+    if (orderCount > 0 || customerCount > 0 || memberCount > 1) {
+      return {
+        deletable: false,
+        reason: `has data (company=${entry.companyId} orders=${orderCount}, customers=${customerCount}, members=${memberCount})`,
+        companyId: entry.companyId, orderCount, customerCount, memberCount
+      };
+    }
   }
 
-  const [orderCount, customerCount] = await Promise.all([
-    countCompanyCollection("siparisler", companyId),
-    countCompanyCollection("musteriler", companyId)
-  ]);
-  const memberCount = companyData ? teamMemberCountFromCompanyData(companyData) : 1;
-
-  if (orderCount > 0 || customerCount > 0 || memberCount > 1) {
-    return {
-      deletable: false,
-      reason: `has data (orders=${orderCount}, customers=${customerCount}, members=${memberCount})`,
-      companyId, orderCount, customerCount, memberCount
-    };
-  }
-
+  // No workspace at all, or only empty self-owned ones.
+  const ownedCompanyIds = access.map((entry) => entry.companyId);
   return {
     deletable: true,
     reason: `unverified ${ageDays.toFixed(0)}d, empty account`,
-    companyId, ownsCompany: Boolean(companyData), orderCount, customerCount, memberCount
+    companyId: ownedCompanyIds[0] || null,
+    ownedCompanyIds
   };
 }
 
 // Permanently remove an empty, unverified account: its owned (empty) workspace
-// doc, its user profile doc, then the Auth record itself.
-async function deleteStaleUnverifiedUser(uid, companyId, ownsCompany) {
+// docs, its user profile doc, then the Auth record itself.
+async function deleteStaleUnverifiedUser(uid, ownedCompanyIds = []) {
   const db = admin.firestore();
-  if (ownsCompany && companyId) {
-    await db.collection("companies").doc(companyId).delete().catch(() => undefined);
+  for (const companyId of ownedCompanyIds) {
+    if (companyId) await db.collection("companies").doc(companyId).delete().catch(() => undefined);
   }
   await db.collection("users").doc(uid).delete().catch(() => undefined);
   await admin.auth().deleteUser(uid);
@@ -7166,13 +7201,15 @@ exports.cleanupStaleUnverifiedAccounts = onSchedule(
     let deleted = 0;
     const mode = ACCOUNT_CLEANUP_DRY_RUN ? "DRY-RUN" : "LIVE";
 
+    const accessIndex = await buildWorkspaceAccessIndex();
+
     do {
       const page = await admin.auth().listUsers(1000, pageToken);
       for (const userRecord of page.users) {
         scanned += 1;
         let verdict;
         try {
-          verdict = await evaluateStaleUnverifiedUser(userRecord);
+          verdict = await evaluateStaleUnverifiedUser(userRecord, accessIndex);
         } catch (error) {
           console.warn(`[acct-cleanup] evaluate failed for ${userRecord.uid}:`, error?.message || error);
           continue;
@@ -7182,12 +7219,12 @@ exports.cleanupStaleUnverifiedAccounts = onSchedule(
         wouldDelete += 1;
         console.log(
           `[acct-cleanup][${mode}] candidate uid=${userRecord.uid} email=${userRecord.email || "?"} ` +
-          `companyId=${verdict.companyId || "-"} ownsCompany=${Boolean(verdict.ownsCompany)} reason="${verdict.reason}"`
+          `companyId=${verdict.companyId || "-"} reason="${verdict.reason}"`
         );
 
         if (!ACCOUNT_CLEANUP_DRY_RUN) {
           try {
-            await deleteStaleUnverifiedUser(userRecord.uid, verdict.companyId, verdict.ownsCompany);
+            await deleteStaleUnverifiedUser(userRecord.uid, verdict.ownedCompanyIds || []);
             deleted += 1;
           } catch (error) {
             console.error(`[acct-cleanup] delete failed for ${userRecord.uid}:`, error?.message || error);
