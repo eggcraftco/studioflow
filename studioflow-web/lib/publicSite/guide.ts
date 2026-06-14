@@ -455,7 +455,8 @@ const TREE_EN: GuideNode[] = [
         "Set your reply style — the greeting and sign-off (for example ‘Hi there,’ and ‘Kind regards,’) — and it is reused every time.",
         "Reference your saved products and prices so replies include the right details.",
         "Reach clients through the channel buttons on an order."
-      ] }
+      ] },
+      { kind: "para", text: "Choose the engine and add your OpenAI API key, company knowledge base, products and rules in Settings ▸ Quick Reply Settings." }
     ]
   },
   {
@@ -501,7 +502,21 @@ const TREE_EN: GuideNode[] = [
         id: "set-quickreply",
         title: "Quick Reply Settings",
         blocks: [
-          { kind: "para", text: "Manage your saved quick-reply templates and the channel buttons used to contact clients from an order." }
+          { kind: "para", text: "Set up how NivaDesk drafts replies to customers and what it knows about your business." },
+          { kind: "sub", text: "Choose how replies are generated" },
+          { kind: "bullets", items: [
+            "OpenAI Online — uses OpenAI with your own OpenAI API key. Paste your key here, and replace or clear it any time.",
+            "On-Device (Apple) — uses Apple's on-device AI on supported Apple Intelligence devices, with no API key needed.",
+            "Offline Template — builds replies from your saved products and rules, without any AI model."
+          ] },
+          { kind: "sub", text: "Teach it about your business" },
+          { kind: "bullets", items: [
+            "Company Knowledge Base — extra facts, rules and FAQs you give the AI so replies stay accurate and on-brand.",
+            "Products — your services or products with prices, so quotes include the right figures.",
+            "Rules / FAQs — common answers such as delivery times or deposit policy.",
+            "Reply style — your greeting and sign-off, reused on every reply."
+          ] },
+          { kind: "para", text: "Your OpenAI key belongs to you and is stored securely for your workspace; remove it whenever you like." }
         ]
       },
       {
@@ -1007,7 +1022,8 @@ const TREE_TR: GuideNode[] = [
         "Yanıt stilinizi — selamlama ve kapanışı (örneğin ‘Hi there,’ ve ‘Kind regards,’) — belirleyin; her seferinde yeniden kullanılır.",
         "Kayıtlı ürünlerinize ve fiyatlarınıza atıfta bulunun; yanıtlar doğru ayrıntıları içersin.",
         "Müşterilere bir siparişteki kanal butonlarıyla ulaşın."
-      ] }
+      ] },
+      { kind: "para", text: "Motoru seçin ve OpenAI API anahtarınızı, şirket bilgi tabanınızı, ürünlerinizi ve kurallarınızı Settings ▸ Quick Reply Settings altından ekleyin." }
     ]
   },
   {
@@ -1053,7 +1069,21 @@ const TREE_TR: GuideNode[] = [
         id: "set-quickreply",
         title: "Quick Reply Settings",
         blocks: [
-          { kind: "para", text: "Kayıtlı hızlı yanıt şablonlarınızı ve siparişlerden müşteriye ulaşmak için kullanılan kanal butonlarını yönetin." }
+          { kind: "para", text: "NivaDesk'in müşterilere yanıtları nasıl hazırlayacağını ve işiniz hakkında neleri bildiğini ayarlayın." },
+          { kind: "sub", text: "Yanıtların nasıl üretileceğini seçin" },
+          { kind: "bullets", items: [
+            "OpenAI Online — kendi OpenAI API anahtarınızla OpenAI'ı kullanır. Anahtarınızı buraya yapıştırın; istediğiniz zaman değiştirin veya silin.",
+            "On-Device (Apple) — desteklenen Apple Intelligence cihazlarında Apple'ın cihaz üstü yapay zekâsını kullanır; API anahtarı gerekmez.",
+            "Offline Template — kayıtlı ürün ve kurallarınızdan, herhangi bir yapay zekâ modeli olmadan yanıt oluşturur."
+          ] },
+          { kind: "sub", text: "İşinizi ona öğretin" },
+          { kind: "bullets", items: [
+            "Company Knowledge Base — yapay zekâya verdiğiniz ek bilgiler, kurallar ve SSS; böylece yanıtlar doğru ve markanıza uygun kalır.",
+            "Products — fiyatlarıyla birlikte hizmet veya ürünleriniz; teklifler doğru rakamları içersin.",
+            "Rules / FAQs — teslim süreleri veya kapora politikası gibi sık yanıtlar.",
+            "Reply style — her yanıtta yeniden kullanılan selamlama ve kapanışınız."
+          ] },
+          { kind: "para", text: "OpenAI anahtarınız size aittir ve çalışma alanınız için güvenli biçimde saklanır; istediğiniz zaman kaldırabilirsiniz." }
         ]
       },
       {
