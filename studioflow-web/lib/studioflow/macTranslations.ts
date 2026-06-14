@@ -3442,6 +3442,63 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   "Delete my account": {
     "Türkçe": "Hesabımı sil", "Deutsch": "Mein Konto löschen", "Français": "Supprimer mon compte", "Italiano": "Elimina il mio account", "Español (Spanish)": "Eliminar mi cuenta", "Português": "Eliminar a minha conta", "Русский (Russian)": "Удалить мой аккаунт", "日本語 (Japanese)": "アカウントを削除する", "中文 (Chinese)": "删除我的账户", "العربية (Arabic)": "حذف حسابي", "हिन्दी (Hindi)": "मेरा खाता हटाएं"
   },
+  "Add a role beside Member, View Only and Workflow Only.": {
+    "Türkçe": "Üye, Yalnızca Görüntüleme ve Yalnızca İş Akışı yanına bir rol ekleyin.", "Deutsch": "Fügen Sie neben Mitglied, Nur Ansicht und Nur Workflow eine Rolle hinzu.", "Français": "Ajoutez un rôle à côté de Membre, Lecture seule et Workflow seul.", "Italiano": "Aggiungi un ruolo accanto a Membro, Solo visualizzazione e Solo workflow.", "Español (Spanish)": "Añade un rol junto a Miembro, Solo lectura y Solo flujo de trabajo.", "Português": "Adicione uma função ao lado de Membro, Apenas visualização e Apenas fluxo de trabalho.", "Русский (Russian)": "Добавьте роль рядом с «Участник», «Только просмотр» и «Только рабочий процесс».", "日本語 (Japanese)": "メンバー、閲覧のみ、ワークフローのみに加えて役割を追加します。", "中文 (Chinese)": "在成员、仅查看和仅工作流之外添加一个角色。", "العربية (Arabic)": "أضف دورًا إلى جانب عضو وعرض فقط وسير العمل فقط.", "हिन्दी (Hindi)": "सदस्य, केवल देखें और केवल वर्कफ़्लो के साथ एक भूमिका जोड़ें।"
+  },
+  "Workshop Assistant": {
+    "Türkçe": "Atölye Asistanı", "Deutsch": "Werkstattassistent", "Français": "Assistant d'atelier", "Italiano": "Assistente di laboratorio", "Español (Spanish)": "Asistente de taller", "Português": "Assistente de oficina", "Русский (Russian)": "Помощник мастерской", "日本語 (Japanese)": "ワークショップアシスタント", "中文 (Chinese)": "工作室助理", "العربية (Arabic)": "مساعد ورشة", "हिन्दी (Hindi)": "वर्कशॉप सहायक"
+  },
+  "Role permissions": {
+    "Türkçe": "Rol izinleri", "Deutsch": "Rollenberechtigungen", "Français": "Autorisations du rôle", "Italiano": "Autorizzazioni del ruolo", "Español (Spanish)": "Permisos del rol", "Português": "Permissões da função", "Русский (Russian)": "Разрешения роли", "日本語 (Japanese)": "役割の権限", "中文 (Chinese)": "角色权限", "العربية (Arabic)": "أذونات الدور", "हिन्दी (Hindi)": "भूमिका अनुमतियाँ"
+  },
+  "Choose which areas this role can see and use.": {
+    "Türkçe": "Bu rolün hangi alanları görüp kullanabileceğini seçin.", "Deutsch": "Wählen Sie, welche Bereiche diese Rolle sehen und nutzen kann.", "Français": "Choisissez les zones que ce rôle peut voir et utiliser.", "Italiano": "Scegli quali aree questo ruolo può vedere e usare.", "Español (Spanish)": "Elige qué áreas puede ver y usar este rol.", "Português": "Escolha que áreas esta função pode ver e usar.", "Русский (Russian)": "Выберите, какие области эта роль может видеть и использовать.", "日本語 (Japanese)": "この役割が表示・使用できる領域を選択します。", "中文 (Chinese)": "选择此角色可以查看和使用的区域。", "العربية (Arabic)": "اختر المناطق التي يمكن لهذا الدور رؤيتها واستخدامها.", "हिन्दी (Hindi)": "चुनें कि यह भूमिका कौन-से क्षेत्र देख और उपयोग कर सकती है।"
+  },
+  "Changes apply to every member using this role.": {
+    "Türkçe": "Değişiklikler bu rolü kullanan her üyeye uygulanır.", "Deutsch": "Änderungen gelten für jedes Mitglied, das diese Rolle verwendet.", "Français": "Les modifications s'appliquent à chaque membre utilisant ce rôle.", "Italiano": "Le modifiche si applicano a ogni membro che usa questo ruolo.", "Español (Spanish)": "Los cambios se aplican a cada miembro que usa este rol.", "Português": "As alterações aplicam-se a cada membro que usa esta função.", "Русский (Russian)": "Изменения применяются к каждому участнику с этой ролью.", "日本語 (Japanese)": "変更はこの役割を使用するすべてのメンバーに適用されます。", "中文 (Chinese)": "更改适用于使用此角色的每位成员。", "العربية (Arabic)": "تنطبق التغييرات على كل عضو يستخدم هذا الدور.", "हिन्दी (Hindi)": "परिवर्तन इस भूमिका का उपयोग करने वाले हर सदस्य पर लागू होते हैं।"
+  },
+  "Delete the": {
+    "Türkçe": "Şu rolü sil:", "Deutsch": "Löschen Sie die Rolle", "Français": "Supprimer le", "Italiano": "Elimina il", "Español (Spanish)": "Eliminar el", "Português": "Eliminar o", "Русский (Russian)": "Удалить", "日本語 (Japanese)": "次を削除:", "中文 (Chinese)": "删除", "العربية (Arabic)": "حذف", "हिन्दी (Hindi)": "हटाएं"
+  },
+  "role profile? Members must be moved away from it first.": {
+    "Türkçe": "rol profili? Önce üyeler bu rolden taşınmalıdır.", "Deutsch": "Rollenprofil? Mitglieder müssen zuerst davon entfernt werden.", "Français": "profil de rôle ? Les membres doivent d'abord en être retirés.", "Italiano": "profilo ruolo? I membri devono prima essere spostati altrove.", "Español (Spanish)": "perfil de rol? Primero hay que mover a los miembros fuera de él.", "Português": "perfil de função? Os membros têm de ser movidos para fora primeiro.", "Русский (Russian)": "профиль роли? Сначала участников нужно перевести с неё.", "日本語 (Japanese)": "役割プロファイルを削除しますか？まずメンバーをこの役割から外す必要があります。", "中文 (Chinese)": "角色配置？必须先将成员移出该角色。", "العربية (Arabic)": "ملف الدور؟ يجب نقل الأعضاء منه أولاً.", "हिन्दी (Hindi)": "भूमिका प्रोफ़ाइल? पहले सदस्यों को इससे हटाना होगा।"
+  },
+  "assigned projects only": {
+    "Türkçe": "yalnızca atanan projeler", "Deutsch": "nur zugewiesene Projekte", "Français": "projets assignés uniquement", "Italiano": "solo progetti assegnati", "Español (Spanish)": "solo proyectos asignados", "Português": "apenas projetos atribuídos", "Русский (Russian)": "только назначенные проекты", "日本語 (Japanese)": "割り当て案件のみ", "中文 (Chinese)": "仅分配的项目", "العربية (Arabic)": "المشاريع المعيّنة فقط", "हिन्दी (Hindi)": "केवल असाइन की गई परियोजनाएँ"
+  },
+  "can assign projects": {
+    "Türkçe": "proje atayabilir", "Deutsch": "kann Projekte zuweisen", "Français": "peut assigner des projets", "Italiano": "può assegnare progetti", "Español (Spanish)": "puede asignar proyectos", "Português": "pode atribuir projetos", "Русский (Russian)": "может назначать проекты", "日本語 (Japanese)": "案件を割り当て可能", "中文 (Chinese)": "可分配项目", "العربية (Arabic)": "يمكنه تعيين المشاريع", "हिन्दी (Hindi)": "परियोजनाएँ असाइन कर सकता है"
+  },
+  "read-only behavior": {
+    "Türkçe": "salt okunur davranış", "Deutsch": "schreibgeschütztes Verhalten", "Français": "comportement en lecture seule", "Italiano": "comportamento in sola lettura", "Español (Spanish)": "comportamiento de solo lectura", "Português": "comportamento apenas de leitura", "Русский (Russian)": "поведение только для чтения", "日本語 (Japanese)": "読み取り専用の動作", "中文 (Chinese)": "只读行为", "العربية (Arabic)": "سلوك للقراءة فقط", "हिन्दी (Hindi)": "केवल-पढ़ने का व्यवहार"
+  },
+  "non-finance workflow behavior": {
+    "Türkçe": "finans dışı iş akışı davranışı", "Deutsch": "Workflow-Verhalten ohne Finanzen", "Français": "comportement de workflow sans finances", "Italiano": "comportamento di workflow senza dati finanziari", "Español (Spanish)": "comportamiento de flujo de trabajo sin finanzas", "Português": "comportamento de fluxo de trabalho sem finanças", "Русский (Russian)": "поведение рабочего процесса без финансов", "日本語 (Japanese)": "財務情報なしのワークフロー動作", "中文 (Chinese)": "无财务的工作流行为", "العربية (Arabic)": "سلوك سير عمل بدون بيانات مالية", "हिन्दी (Hindi)": "गैर-वित्तीय वर्कफ़्लो व्यवहार"
+  },
+  "member edit behavior": {
+    "Türkçe": "üye düzenleme davranışı", "Deutsch": "Mitglieder-Bearbeitungsverhalten", "Français": "comportement d'édition de membre", "Italiano": "comportamento di modifica membro", "Español (Spanish)": "comportamiento de edición de miembro", "Português": "comportamento de edição de membro", "Русский (Russian)": "поведение редактирования участника", "日本語 (Japanese)": "メンバー編集の動作", "中文 (Chinese)": "成员编辑行为", "العربية (Arabic)": "سلوك تحرير العضو", "हिन्दी (Hindi)": "सदस्य संपादन व्यवहार"
+  },
+  "with": {
+    "Türkçe": "—", "Deutsch": "mit", "Français": "avec", "Italiano": "con", "Español (Spanish)": "con", "Português": "com", "Русский (Russian)": "—", "日本語 (Japanese)": "—", "中文 (Chinese)": "—", "العربية (Arabic)": "مع", "हिन्दी (Hindi)": "के साथ"
+  },
+  "menu hidden": {
+    "Türkçe": "menü gizli", "Deutsch": "Menü ausgeblendet", "Français": "menu masqué", "Italiano": "menu nascosto", "Español (Spanish)": "menú oculto", "Português": "menu oculto", "Русский (Russian)": "меню скрыто", "日本語 (Japanese)": "メニュー非表示", "中文 (Chinese)": "个菜单已隐藏", "العربية (Arabic)": "قائمة مخفية", "हिन्दी (Hindi)": "मेन्यू छिपा"
+  },
+  "menus hidden": {
+    "Türkçe": "menü gizli", "Deutsch": "Menüs ausgeblendet", "Français": "menus masqués", "Italiano": "menu nascosti", "Español (Spanish)": "menús ocultos", "Português": "menus ocultos", "Русский (Russian)": "меню скрыто", "日本語 (Japanese)": "メニュー非表示", "中文 (Chinese)": "个菜单已隐藏", "العربية (Arabic)": "قوائم مخفية", "हिन्दी (Hindi)": "मेन्यू छिपे"
+  },
+  "card hidden": {
+    "Türkçe": "kart gizli", "Deutsch": "Karte ausgeblendet", "Français": "carte masquée", "Italiano": "scheda nascosta", "Español (Spanish)": "tarjeta oculta", "Português": "cartão oculto", "Русский (Russian)": "карточка скрыта", "日本語 (Japanese)": "カード非表示", "中文 (Chinese)": "个卡片已隐藏", "العربية (Arabic)": "بطاقة مخفية", "हिन्दी (Hindi)": "कार्ड छिपा"
+  },
+  "cards hidden": {
+    "Türkçe": "kart gizli", "Deutsch": "Karten ausgeblendet", "Français": "cartes masquées", "Italiano": "schede nascoste", "Español (Spanish)": "tarjetas ocultas", "Português": "cartões ocultos", "Русский (Russian)": "карточек скрыто", "日本語 (Japanese)": "カード非表示", "中文 (Chinese)": "个卡片已隐藏", "العربية (Arabic)": "بطاقات مخفية", "हिन्दी (Hindi)": "कार्ड छिपे"
+  },
+  "setting menu hidden": {
+    "Türkçe": "ayar menüsü gizli", "Deutsch": "Einstellungsmenü ausgeblendet", "Français": "menu de réglages masqué", "Italiano": "menu impostazioni nascosto", "Español (Spanish)": "menú de ajustes oculto", "Português": "menu de definições oculto", "Русский (Russian)": "меню настроек скрыто", "日本語 (Japanese)": "設定メニュー非表示", "中文 (Chinese)": "个设置菜单已隐藏", "العربية (Arabic)": "قائمة إعدادات مخفية", "हिन्दी (Hindi)": "सेटिंग मेन्यू छिपा"
+  },
+  "setting menus hidden": {
+    "Türkçe": "ayar menüsü gizli", "Deutsch": "Einstellungsmenüs ausgeblendet", "Français": "menus de réglages masqués", "Italiano": "menu impostazioni nascosti", "Español (Spanish)": "menús de ajustes ocultos", "Português": "menus de definições ocultos", "Русский (Russian)": "меню настроек скрыто", "日本語 (Japanese)": "設定メニュー非表示", "中文 (Chinese)": "个设置菜单已隐藏", "العربية (Arabic)": "قوائم إعدادات مخفية", "हिन्दी (Hindi)": "सेटिंग मेन्यू छिपे"
+  },
   "NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.": {
     "Türkçe": "NivaDesk; siparişleri, Müşteri Dosyalarını, plan korumalarını ve kart profillerini Swift uygulaması, web portalı ve Firebase arka ucu arasında senkron tutar.", "Deutsch": "NivaDesk hält Aufträge, Client-Dateien, Plan-Schutz und Kartenprofile zwischen der Swift-App, dem Web-Portal und dem Firebase-Backend synchron.", "Français": "NivaDesk synchronise les commandes, les fichiers client, les protections de plan et les profils de cartes entre l'app Swift, le portail web et le backend Firebase.", "Italiano": "NivaDesk mantiene sincronizzati ordini, file cliente, protezioni del piano e profili scheda tra l'app Swift, il portale web e il backend Firebase.", "Español (Spanish)": "NivaDesk mantiene sincronizados los pedidos, los archivos de cliente, las protecciones de plan y los perfiles de tarjeta entre la app Swift, el portal web y el backend de Firebase.", "Português": "O NivaDesk mantém encomendas, ficheiros de cliente, proteções de plano e perfis de cartão sincronizados entre a app Swift, o portal web e o backend Firebase.", "Русский (Russian)": "NivaDesk синхронизирует заказы, файлы клиентов, ограничения тарифа и профили карточек между приложением Swift, веб-порталом и бэкендом Firebase.", "日本語 (Japanese)": "NivaDesk は注文、クライアントファイル、プラン制限、カードプロファイルを Swift アプリ・Webポータル・Firebase バックエンド間で同期します。", "中文 (Chinese)": "NivaDesk 在 Swift 应用、网页门户和 Firebase 后端之间同步订单、客户文件、套餐限制和卡片配置。", "العربية (Arabic)": "يحافظ NivaDesk على مزامنة الطلبات وملفات العملاء وحدود الخطة وملفات البطاقات بين تطبيق Swift وبوابة الويب وخلفية Firebase.", "हिन्दी (Hindi)": "NivaDesk ऑर्डर, क्लाइंट फ़ाइलें, प्लान गार्ड और कार्ड प्रोफ़ाइल को Swift ऐप, वेब पोर्टल और Firebase बैकएंड में सिंक रखता है।"
   },

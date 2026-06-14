@@ -3925,6 +3925,7 @@ function TeamAccessSection({
             roles={customRoles}
             disabled={Boolean(actioning)}
             savingKey={actioning}
+            language={language}
             onSave={role => runTeamAction(
               role.id ? `custom-role-${role.id}` : "custom-role-new",
               () => saveWorkspaceCustomRole(workspace, role),
