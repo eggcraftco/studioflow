@@ -503,7 +503,7 @@ function renderSettingsSection({
     case "pdf":
       return <PdfExportSettingsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "quick-reply":
-      return <QuickReplySettingsSection workspace={workspace} settings={quickReplySettings} onSaved={onQuickReplySettingsChange} />;
+      return <QuickReplySettingsSection workspace={workspace} settings={quickReplySettings} onSaved={onQuickReplySettingsChange} language={language} />;
     case "financial":
       return <FinancialSettingsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "woocommerce":
@@ -1600,12 +1600,15 @@ function quickReplyEngineDescription(mode: string) {
 function QuickReplySettingsSection({
   workspace,
   settings,
-  onSaved
+  onSaved,
+  language = "English"
 }: {
   workspace: WorkspaceContext;
   settings: QuickReplySettings | null;
   onSaved: (settings: QuickReplySettings) => void;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   const [replyMode, setReplyMode] = useState("AI");
   const [politeness, setPoliteness] = useState("Warm");
   const [replyLength, setReplyLength] = useState("Short");
@@ -1745,7 +1748,7 @@ function QuickReplySettingsSection({
   }
 
   if (!settings) {
-    return <PlaceholderSection title="Quick Reply Settings" detail="Quick Reply settings could not be loaded yet." />;
+    return <PlaceholderSection title={t("Quick Reply Settings")} detail={t("Quick Reply settings could not be loaded yet.")} />;
   }
 
   const showMaskedOpenAIKey = canEditCore && settings.hasOpenAIKey && !isReplacingOpenAIKey && !clearOpenAIKey;
@@ -1755,14 +1758,14 @@ function QuickReplySettingsSection({
       <section className="card app-card quick-reply-settings-card quick-reply-settings-shell">
         <div className="quick-reply-settings-main-title">
           <span className="quick-reply-settings-main-icon" aria-hidden="true">✦</span>
-          <h2>Quick Reply Settings</h2>
+          <h2>{t("Quick Reply Settings")}</h2>
         </div>
 
         {canEditCore ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "12px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--panel)", marginBottom: 12 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-              <strong style={{ fontSize: 14 }}>Show &ldquo;AI Replies&rdquo; in the menu</strong>
-              <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Turn this off to hide the AI Replies item from your main menu.</span>
+              <strong style={{ fontSize: 14 }}>{t("Show “AI Replies” in the menu")}</strong>
+              <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{t("Turn this off to hide the AI Replies item from your main menu.")}</span>
             </div>
             <button
               type="button"
@@ -1778,7 +1781,7 @@ function QuickReplySettingsSection({
         ) : null}
 
         <div className="quick-reply-engine-block">
-          <h3>Your Reply Engine</h3>
+          <h3>{t("Your Reply Engine")}</h3>
           <div className={canEditPersonal ? "quick-reply-engine-segment" : "quick-reply-engine-segment is-disabled"}>
             {[
               ["Apple", "◉", "On-Device Settings"],
@@ -1793,47 +1796,48 @@ function QuickReplySettingsSection({
                 onClick={() => setReplyMode(value)}
               >
                 <span aria-hidden="true">{icon}</span>
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
           {replyMode === "Apple" ? (
-            <p className="muted-copy">Configure personal on-device knowledge here. On-device generation runs in the supported mobile or desktop app, not in the web browser.</p>
+            <p className="muted-copy">{t("Configure personal on-device knowledge here. On-device generation runs in the supported mobile or desktop app, not in the web browser.")}</p>
           ) : (
-            <p className="muted-copy">{quickReplyEngineDescription(replyMode)}</p>
+            <p className="muted-copy">{t(quickReplyEngineDescription(replyMode))}</p>
           )}
         </div>
 
         <div className="quick-reply-style-panel">
-          <h3>Your Default Reply Style</h3>
+          <h3>{t("Your Default Reply Style")}</h3>
           <div className="quick-reply-setting-group">
-            <span>Politeness</span>
+            <span>{t("Politeness")}</span>
             <div className={canEditPersonal ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
               {["Direct", "Warm", "Very Polite"].map(option => (
-                <button key={option} className={politeness === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setPoliteness(option)}>{option}</button>
+                <button key={option} className={politeness === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setPoliteness(option)}>{t(option)}</button>
               ))}
             </div>
           </div>
           <div className="quick-reply-setting-group">
-            <span>Length</span>
+            <span>{t("Length")}</span>
             <div className={canEditPersonal ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
               {["Short", "Balanced", "Detailed"].map(option => (
-                <button key={option} className={replyLength === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setReplyLength(option)}>{option}</button>
+                <button key={option} className={replyLength === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setReplyLength(option)}>{t(option)}</button>
               ))}
             </div>
           </div>
-          <p className="muted-copy">These personal settings sync across your devices and do not change another team member&apos;s templates.</p>
+          <p className="muted-copy">{t("These personal settings sync across your devices and do not change another team member’s templates.")}</p>
         </div>
 
         {replyMode === "Apple" ? (
           <div className="quick-reply-settings-panel">
-            <CardTitle icon="dashboard" eyebrow="On-Device Settings" title="Personal On-Device Knowledge" />
-            <p className="muted-copy">Use this knowledge with Apple On-Device AI in the Mac/iPhone/iPad app. Android on-device generation requires a separate Gemini Nano integration and is not presented as active on web.</p>
+            <CardTitle icon="dashboard" eyebrow={t("On-Device Settings")} title={t("Personal On-Device Knowledge")} />
+            <p className="muted-copy">{t("Use this knowledge with Apple On-Device AI in the Mac/iPhone/iPad app. Android on-device generation requires a separate Gemini Nano integration and is not presented as active on web.")}</p>
             <KnowledgeBaseEditor
               title="My On-Device Knowledge"
               value={onDeviceKnowledgeBase}
               disabled={!canEditPersonal}
               onChange={setOnDeviceKnowledgeBase}
+              language={language}
             />
           </div>
         ) : null}
@@ -1844,7 +1848,7 @@ function QuickReplySettingsSection({
               <>
                 <div className="quick-reply-api-card">
                   <span className="quick-reply-api-icon" aria-hidden="true">⌕</span>
-                  <div className="quick-reply-api-title">OpenAI API Key</div>
+                  <div className="quick-reply-api-title">{t("OpenAI API Key")}</div>
                   <div className="quick-reply-api-fields">
                     <input
                       className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
@@ -1854,41 +1858,41 @@ function QuickReplySettingsSection({
                       disabled={clearOpenAIKey}
                       onFocus={() => { if (showMaskedOpenAIKey) setIsReplacingOpenAIKey(true); }}
                       onChange={event => { if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value); }}
-                      placeholder={settings.hasOpenAIKey ? "Paste a new key to replace" : "sk-proj-..."}
+                      placeholder={settings.hasOpenAIKey ? t("Paste a new key to replace") : "sk-proj-..."}
                     />
-                    <span>Stored server-side and never shared with workspace members.</span>
+                    <span>{t("Stored server-side and never shared with workspace members.")}</span>
                   </div>
                 </div>
                 <div className="quick-reply-key-row">
                   <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
-                    {clearOpenAIKey ? "Key will be cleared" : settings.hasOpenAIKey ? "API key configured" : "No API key configured"}
+                    {clearOpenAIKey ? t("Key will be cleared") : settings.hasOpenAIKey ? t("API key configured") : t("No API key configured")}
                   </span>
-                  {showMaskedOpenAIKey ? <button className="button secondary" type="button" onClick={() => setIsReplacingOpenAIKey(true)}>Replace Key</button> : null}
-                  {isReplacingOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>Cancel Replace</button> : null}
-                  {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setClearOpenAIKey(current => !current); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? "Keep Key" : "Clear Key"}</button> : null}
+                  {showMaskedOpenAIKey ? <button className="button secondary" type="button" onClick={() => setIsReplacingOpenAIKey(true)}>{t("Replace Key")}</button> : null}
+                  {isReplacingOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{t("Cancel Replace")}</button> : null}
+                  {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setClearOpenAIKey(current => !current); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? t("Keep Key") : t("Clear Key")}</button> : null}
                 </div>
-                <KnowledgeBaseEditor title="Company Knowledge Base (For OpenAI)" value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} />
+                <KnowledgeBaseEditor title="Company Knowledge Base (For OpenAI)" value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
               </>
             ) : (
               <div className="quick-reply-settings-panel">
-                <CardTitle icon="lock" eyebrow="OpenAI Online" title="Workspace AI Access" />
+                <CardTitle icon="lock" eyebrow={t("OpenAI Online")} title={t("Workspace AI Access")} />
                 <span className={settings.hasOpenAIKey ? "studio-pill success" : "studio-pill"}>
-                  {settings.hasOpenAIKey ? "Workspace OpenAI key configured" : "Workspace OpenAI key not configured"}
+                  {settings.hasOpenAIKey ? t("Workspace OpenAI key configured") : t("Workspace OpenAI key not configured")}
                 </span>
-                <p className="muted-copy">Only the workspace owner can view or change the API key and main Company Knowledge Base. You can use OpenAI replies once a key is configured.</p>
+                <p className="muted-copy">{t("Only the workspace owner can view or change the API key and main Company Knowledge Base. You can use OpenAI replies once a key is configured.")}</p>
               </div>
             )}
             {canContribute ? (
               <section className="quick-reply-settings-panel">
-                <CardTitle icon="notes" eyebrow="Team Contributions" title="Additional Knowledge for OpenAI" />
-                <p className="muted-copy">Add supporting information for shared OpenAI replies without changing the owner-managed Company Knowledge Base.</p>
-                <textarea className="quick-reply-settings-textarea" value={contributionDraft} onChange={event => setContributionDraft(event.target.value)} placeholder="Add an additional fact or instruction for AI replies..." />
-                <button className="button" type="button" disabled={contributionSaving || !contributionDraft.trim()} onClick={addTeamContribution}>{contributionSaving ? "Adding..." : "Add Contribution"}</button>
+                <CardTitle icon="notes" eyebrow={t("Team Contributions")} title={t("Additional Knowledge for OpenAI")} />
+                <p className="muted-copy">{t("Add supporting information for shared OpenAI replies without changing the owner-managed Company Knowledge Base.")}</p>
+                <textarea className="quick-reply-settings-textarea" value={contributionDraft} onChange={event => setContributionDraft(event.target.value)} placeholder={t("Add an additional fact or instruction for AI replies...")} />
+                <button className="button" type="button" disabled={contributionSaving || !contributionDraft.trim()} onClick={addTeamContribution}>{contributionSaving ? t("Adding...") : t("Add Contribution")}</button>
                 <div className="quick-reply-template-list">
                   {contributions.map(item => (
                     <div className="quick-reply-template-row" key={item.id}>
                       <div><strong>{item.authorName}</strong><p className="muted-copy">{item.text}</p></div>
-                      {item.canDelete ? <button className="icon-action danger" type="button" onClick={() => removeTeamContribution(item.id)} aria-label="Remove">×</button> : null}
+                      {item.canDelete ? <button className="icon-action danger" type="button" onClick={() => removeTeamContribution(item.id)} aria-label={t("Remove")}>×</button> : null}
                     </div>
                   ))}
                 </div>
@@ -1899,21 +1903,21 @@ function QuickReplySettingsSection({
 
         {replyMode === "Offline" ? (
           <div className="quick-reply-settings-panel">
-            <CardTitle icon="notes" eyebrow="Offline Template" title="My Offline Template" />
-            <p className="muted-copy">Your own reusable products and rules sync across your devices without changing the workspace owner&apos;s Company Knowledge Base.</p>
-            <QuickReplyTemplateEditor title="Products / Services" addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} />
+            <CardTitle icon="notes" eyebrow={t("Offline Template")} title={t("My Offline Template")} />
+            <p className="muted-copy">{t("Your own reusable products and rules sync across your devices without changing the workspace owner’s Company Knowledge Base.")}</p>
+            <QuickReplyTemplateEditor title="Products / Services" addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} language={language} />
             <div className="settings-divider" />
-            <QuickReplyTemplateEditor title="Custom Rules / FAQs" addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} />
+            <QuickReplyTemplateEditor title="Custom Rules / FAQs" addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} language={language} />
           </div>
         ) : null}
 
         <div className="quick-reply-settings-actions quick-reply-settings-footer">
-          <Link className="button secondary" href="/quick-reply">Open Quick Reply</Link>
+          <Link className="button secondary" href="/quick-reply">{t("Open Quick Reply")}</Link>
           <button className="button" type="button" disabled={!canEditPersonal || !personalLoaded || saving} onClick={handleSave}>
-            {saving ? "Saving..." : "Save My Settings"}
+            {saving ? t("Saving...") : t("Save My Settings")}
           </button>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
     </div>
@@ -1924,24 +1928,27 @@ function KnowledgeBaseEditor({
   title,
   value,
   disabled,
-  onChange
+  onChange,
+  language = "English"
 }: {
   title: string;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   return (
     <label className="quick-reply-settings-label quick-reply-knowledge-panel">
-      <span>{title}</span>
+      <span>{t(title)}</span>
       <textarea
         className="quick-reply-settings-textarea"
         value={value}
         disabled={disabled}
         onChange={event => onChange(event.target.value)}
-        placeholder="Add your pricing, process, policies, FAQs and common customer answers here..."
+        placeholder={t("Add your pricing, process, policies, FAQs and common customer answers here...")}
       />
-      <span>This Knowledge Base is synced across Mac, iPad and iPhone for the same company.</span>
+      <span>{t("This Knowledge Base is synced across Mac, iPad and iPhone for the same company.")}</span>
     </label>
   );
 }
@@ -1955,7 +1962,8 @@ function QuickReplyTemplateEditor({
   disabled,
   onAdd,
   onRemove,
-  onChange
+  onChange,
+  language = "English"
 }: {
   title: string;
   addLabel: string;
@@ -1966,12 +1974,14 @@ function QuickReplyTemplateEditor({
   onAdd: () => void;
   onRemove: (index: number) => void;
   onChange: (index: number, patch: Partial<QuickReplyTemplateItem>) => void;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   return (
     <div className="quick-reply-template-editor">
       <div className="quick-reply-template-heading">
-        <strong>{title}</strong>
-        <button className="button secondary" type="button" disabled={disabled} onClick={onAdd}>{addLabel}</button>
+        <strong>{t(title)}</strong>
+        <button className="button secondary" type="button" disabled={disabled} onClick={onAdd}>{t(addLabel)}</button>
       </div>
       <div className="quick-reply-template-list">
         {items.map((item, index) => (
@@ -1982,17 +1992,17 @@ function QuickReplyTemplateEditor({
                 value={item.title}
                 disabled={disabled}
                 onChange={event => onChange(index, { title: event.target.value })}
-                placeholder={titlePlaceholder}
+                placeholder={t(titlePlaceholder)}
               />
               <textarea
                 className="quick-reply-template-description"
                 value={item.desc}
                 disabled={disabled}
                 onChange={event => onChange(index, { desc: event.target.value })}
-                placeholder={descPlaceholder}
+                placeholder={t(descPlaceholder)}
               />
             </div>
-            <button className="icon-action danger" type="button" disabled={disabled || items.length <= 1} onClick={() => onRemove(index)} aria-label="Remove">
+            <button className="icon-action danger" type="button" disabled={disabled || items.length <= 1} onClick={() => onRemove(index)} aria-label={t("Remove")}>
               ×
             </button>
           </div>
