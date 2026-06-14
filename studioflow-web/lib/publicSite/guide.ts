@@ -287,6 +287,24 @@ const TREE_EN: GuideNode[] = [
             "Changing a step here updates the colored status badges in the Orders list and the Order Summary card."
           ] }
         ]
+      },
+      {
+        id: "card-shipping",
+        title: "Shipping & Tracking card",
+        blocks: [
+          { kind: "para", text: "Manage delivery for the order — the courier, the tracking number, and live status updates, all without leaving the app." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Set the Courier (Auto Detect, Royal Mail, DHL, FedEx or UPS) and enter the Tracking number.",
+            "Mark the order Dispatched and Delivered as it moves.",
+            "Refresh live status to pull the latest delivery progress from 17TRACK, so you always know where a parcel is."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "If the courier cannot be auto-detected, choose it manually and refresh again.",
+            "Live tracking support depends on the courier; the system retries automatically and you can still check the courier's own website."
+          ] }
+        ]
       }
     ]
   },
@@ -631,6 +649,24 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Başlıkları Düzenle ile durum adımlarını mesleğinizin iş akışına uyacak şekilde ekleyin, yeniden adlandırın veya kaldırın.",
             "Buradan bir adımı değiştirmek, Siparişler listesindeki renkli durum rozetlerini ve Order Summary kartını günceller."
+          ] }
+        ]
+      },
+      {
+        id: "card-shipping",
+        title: "Shipping & Tracking kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin teslimatını yönetin — kurye, takip numarası ve canlı durum güncellemeleri; hepsi uygulamadan çıkmadan." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Courier'i ayarlayın (Auto Detect, Royal Mail, DHL, FedEx veya UPS) ve Tracking numarasını girin.",
+            "Sipariş ilerledikçe Dispatched ve Delivered olarak işaretleyin.",
+            "Refresh live status ile 17TRACK'ten en güncel teslimat ilerlemesini çekin; böylece kargonun nerede olduğunu her zaman bilin."
+          ] },
+          { kind: "sub", text: "Bilmekte fayda var" },
+          { kind: "bullets", items: [
+            "Kurye otomatik algılanamazsa elle seçip tekrar yenileyin.",
+            "Canlı takip desteği kuryeye bağlıdır; sistem otomatik tekrar dener, ayrıca kuryenin kendi sitesinden de kontrol edebilirsiniz."
           ] }
         ]
       }
