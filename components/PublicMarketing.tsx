@@ -29,6 +29,11 @@ import {
   type ChangeTag
 } from "@/lib/publicSite/changelog";
 import {
+  GUIDE_LAST_UPDATED,
+  getGuideChrome,
+  getGuideItems
+} from "@/lib/publicSite/guide";
+import {
   getPrivacyPolicyLastUpdatedLabel,
   getPrivacyPolicySections,
   PRIVACY_POLICY_LAST_UPDATED,
@@ -869,6 +874,7 @@ function PublicFooter() {
             <nav aria-label={t("footer.product")}>
               <Link href="/features">{t("nav.features")}</Link>
               <Link href="/pricing">{t("nav.pricing")}</Link>
+              <Link href="/guide">{t("nav.guide")}</Link>
               <Link href="/faq">{t("nav.faq")}</Link>
               <Link href="/changelog">{t("nav.changelog")}</Link>
             </nav>
@@ -2552,6 +2558,58 @@ export function PublicRefundCancellationPage() {
             {refundCancellationPolicySections.map(section => (
               <PublicLegalSection key={section.title} section={section} />
             ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicGuidePage() {
+  const Page = () => {
+    const { language } = usePublicSiteLanguage();
+    const chrome = getGuideChrome(language);
+    const items = getGuideItems(language);
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{chrome.eyebrow}</span>
+            <h1>{chrome.title}</h1>
+            <p>{chrome.intro}</p>
+            <p className="public-legal-updated">
+              {chrome.lastUpdated}: {GUIDE_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell guide-layout">
+            <nav className="guide-toc" aria-label={chrome.onThisPage}>
+              <span className="guide-toc-title">{chrome.onThisPage}</span>
+              {items.map(item => (
+                <a key={item.id} href={`#${item.id}`}>{item.title}</a>
+              ))}
+            </nav>
+            <div className="guide-content">
+              {items.map(item => (
+                <article key={item.id} id={item.id} className="guide-item">
+                  <h2>{item.title}</h2>
+                  <p>{item.body}</p>
+                  {item.points ? (
+                    <ul className="guide-points">
+                      {item.points.map((point, i) => <li key={i}>{point}</li>)}
+                    </ul>
+                  ) : null}
+                </article>
+              ))}
+            </div>
           </div>
         </section>
       </>

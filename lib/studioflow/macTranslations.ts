@@ -14,6 +14,19 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "ما الجديد",
     "हिन्दी (Hindi)": "नया क्या है"
   },
+  "User guide": {
+    "Türkçe": "Kullanım kılavuzu",
+    "Deutsch": "Benutzerhandbuch",
+    "Français": "Guide d'utilisation",
+    "Italiano": "Guida utente",
+    "Español (Spanish)": "Guía de uso",
+    "Português": "Guia do utilizador",
+    "Русский (Russian)": "Руководство пользователя",
+    "日本語 (Japanese)": "ユーザーガイド",
+    "中文 (Chinese)": "用户指南",
+    "العربية (Arabic)": "دليل المستخدم",
+    "हिन्दी (Hindi)": "उपयोगकर्ता गाइड"
+  },
   "Start with Add Project": {
     "Türkçe": "Add Project ile başlayın",
     "Deutsch": "Mit Add Project beginnen",

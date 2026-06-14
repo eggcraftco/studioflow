@@ -7,6 +7,7 @@ const PUBLIC_PAGES: { path: string; priority: number; changeFrequency: MetadataR
   { path: "/features", priority: 0.9, changeFrequency: "weekly" },
   { path: "/pricing", priority: 0.9, changeFrequency: "weekly" },
   { path: "/faq", priority: 0.8, changeFrequency: "weekly" },
+  { path: "/guide", priority: 0.7, changeFrequency: "monthly" },
   { path: "/changelog", priority: 0.6, changeFrequency: "weekly" },
   { path: "/signup", priority: 0.8, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.6, changeFrequency: "monthly" },
