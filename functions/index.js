@@ -7082,6 +7082,125 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
   }
 );
 
+// --- Stale unverified account cleanup --------------------------------------
+//
+// Email/password accounts that never verify their address keep that email
+// permanently locked in Firebase Auth ("email already in use"), so the real
+// owner can never sign up later. This job frees those addresses by removing
+// accounts that are unverified, past the grace window, AND completely empty
+// (no orders, no customers, no teammates). Anything with real data — even if
+// unverified — is left untouched and stays behind the in-app verification gate.
+//
+// SAFETY: starts in dry-run. While ACCOUNT_CLEANUP_DRY_RUN is true the job only
+// logs what it WOULD delete and changes nothing. Review the logs first, then
+// flip the flag to false to enable real deletion.
+const ACCOUNT_CLEANUP_DRY_RUN = true;
+// Days after signup before an unverified, empty account becomes eligible.
+const UNVERIFIED_ACCOUNT_DELETE_DAYS = 30;
+
+// Decide whether a single unverified user is a safe deletion candidate.
+// Returns { deletable, reason, companyId, orderCount, customerCount, memberCount }.
+async function evaluateStaleUnverifiedUser(userRecord) {
+  const uid = userRecord.uid;
+  const isPasswordUser = (userRecord.providerData || []).some((p) => p.providerId === "password");
+  if (!isPasswordUser) return { deletable: false, reason: "not a password account (OAuth verifies email)" };
+  if (userRecord.emailVerified) return { deletable: false, reason: "already verified" };
+
+  const createdMs = Date.parse(userRecord.metadata?.creationTime || "");
+  if (!Number.isFinite(createdMs)) return { deletable: false, reason: "no creation time" };
+  const ageDays = (Date.now() - createdMs) / 86400000;
+  if (ageDays <= UNVERIFIED_ACCOUNT_DELETE_DAYS) {
+    return { deletable: false, reason: `within grace (${ageDays.toFixed(1)}d of ${UNVERIFIED_ACCOUNT_DELETE_DAYS}d)` };
+  }
+
+  const companyId = await activeCompanyIdForUid(uid);
+  let companyData = null;
+  if (companyId) {
+    const snap = await admin.firestore().collection("companies").doc(companyId).get();
+    companyData = snap.exists ? (snap.data() || {}) : null;
+  }
+
+  // Member of someone else's workspace — never auto-delete a collaborator.
+  if (companyData && !uidIsCompanyOwner(companyData, uid)) {
+    return { deletable: false, reason: "member of another workspace", companyId };
+  }
+
+  const [orderCount, customerCount] = await Promise.all([
+    countCompanyCollection("siparisler", companyId),
+    countCompanyCollection("musteriler", companyId)
+  ]);
+  const memberCount = companyData ? teamMemberCountFromCompanyData(companyData) : 1;
+
+  if (orderCount > 0 || customerCount > 0 || memberCount > 1) {
+    return {
+      deletable: false,
+      reason: `has data (orders=${orderCount}, customers=${customerCount}, members=${memberCount})`,
+      companyId, orderCount, customerCount, memberCount
+    };
+  }
+
+  return {
+    deletable: true,
+    reason: `unverified ${ageDays.toFixed(0)}d, empty account`,
+    companyId, ownsCompany: Boolean(companyData), orderCount, customerCount, memberCount
+  };
+}
+
+// Permanently remove an empty, unverified account: its owned (empty) workspace
+// doc, its user profile doc, then the Auth record itself.
+async function deleteStaleUnverifiedUser(uid, companyId, ownsCompany) {
+  const db = admin.firestore();
+  if (ownsCompany && companyId) {
+    await db.collection("companies").doc(companyId).delete().catch(() => undefined);
+  }
+  await db.collection("users").doc(uid).delete().catch(() => undefined);
+  await admin.auth().deleteUser(uid);
+}
+
+exports.cleanupStaleUnverifiedAccounts = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
+  async () => {
+    let pageToken;
+    let scanned = 0;
+    let wouldDelete = 0;
+    let deleted = 0;
+    const mode = ACCOUNT_CLEANUP_DRY_RUN ? "DRY-RUN" : "LIVE";
+
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken);
+      for (const userRecord of page.users) {
+        scanned += 1;
+        let verdict;
+        try {
+          verdict = await evaluateStaleUnverifiedUser(userRecord);
+        } catch (error) {
+          console.warn(`[acct-cleanup] evaluate failed for ${userRecord.uid}:`, error?.message || error);
+          continue;
+        }
+        if (!verdict.deletable) continue;
+
+        wouldDelete += 1;
+        console.log(
+          `[acct-cleanup][${mode}] candidate uid=${userRecord.uid} email=${userRecord.email || "?"} ` +
+          `companyId=${verdict.companyId || "-"} ownsCompany=${Boolean(verdict.ownsCompany)} reason="${verdict.reason}"`
+        );
+
+        if (!ACCOUNT_CLEANUP_DRY_RUN) {
+          try {
+            await deleteStaleUnverifiedUser(userRecord.uid, verdict.companyId, verdict.ownsCompany);
+            deleted += 1;
+          } catch (error) {
+            console.error(`[acct-cleanup] delete failed for ${userRecord.uid}:`, error?.message || error);
+          }
+        }
+      }
+      pageToken = page.pageToken;
+    } while (pageToken);
+
+    console.log(`[acct-cleanup][${mode}] done: scanned=${scanned} candidates=${wouldDelete} deleted=${deleted}`);
+  }
+);
+
 // Runs daily and permanently deletes the Storage blobs for orders whose grace
 // period has elapsed, then removes the bookkeeping record.
 exports.cleanupExpiredOrderFiles = onSchedule(
