@@ -250,6 +250,26 @@ const TREE_EN: GuideNode[] = [
             "Delete a session you no longer need."
           ] }
         ]
+      },
+      {
+        id: "card-financial",
+        title: "Financial Info card",
+        blocks: [
+          { kind: "para", text: "The full money picture for the order — what was charged, what it costs you, the tax, and the real profit left over." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Order Value, Paid / Received and the Remaining balance, plus the payment method.",
+            "Your costs: Base Cost, Platform Fee and Shipping Cost.",
+            "Tax: VAT Rule, VAT Rate and VAT Amount, following the tax rules you set in Settings.",
+            "Profit: Profit after VAT, Net Profit after Corporation Tax, and the Final Profit."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to customize the Spending / Cost headings so they match how you track costs.",
+            "The tax rate, rule and transition date come from Settings ▸ Financial and apply across your orders."
+          ] },
+          { kind: "para", text: "This card only appears for roles allowed to see finances; for everyone else the order's money stays hidden." }
+        ]
       }
     ]
   },
@@ -558,6 +578,26 @@ const TREE_TR: GuideNode[] = [
             "Sipariş için Total Work Time toplamını ve her oturumun listesini görün.",
             "Gerekmeyen bir oturumu silin."
           ] }
+        ]
+      },
+      {
+        id: "card-financial",
+        title: "Financial Info kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin tam para tablosu — ne tahsil edildi, size maliyeti ne, vergi ne kadar ve geriye kalan gerçek kâr." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Order Value, Paid / Received ve kalan Remaining bakiyesi, ayrıca ödeme yöntemi.",
+            "Maliyetleriniz: Base Cost, Platform Fee ve Shipping Cost.",
+            "Vergi: Settings'te belirlediğiniz vergi kurallarına göre VAT Rule, VAT Rate ve VAT Amount.",
+            "Kâr: Profit after VAT, Kurumlar Vergisi sonrası Net Profit ve Final Profit."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile Spending / Cost başlıklarını maliyetleri izleme şeklinize göre özelleştirin.",
+            "Vergi oranı, kuralı ve geçiş tarihi Settings ▸ Financial'dan gelir ve tüm siparişlerinize uygulanır."
+          ] },
+          { kind: "para", text: "Bu kart yalnızca finansı görmeye izinli rollerde görünür; diğer herkes için siparişin parası gizli kalır." }
         ]
       }
     ]
