@@ -108,6 +108,27 @@ const TREE_EN: GuideNode[] = [
             "The status badges and the Delivery In color update automatically as the order progresses, so the card always reflects the real state."
           ] }
         ]
+      },
+      {
+        id: "card-customer",
+        title: "Customer & Communication card",
+        blocks: [
+          { kind: "para", text: "This card holds who the order is for and how to reach them — the customer's details and your communication channels, all editable in place." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Customer Name and Design Name.",
+            "Any custom fields you add — for example a reference number, an Instagram handle or a project code.",
+            "A Communication section with Telephone, Email and Address.",
+            "Channel buttons such as Instagram, WhatsApp or TikTok for quick contact."
+          ] },
+          { kind: "para", text: "Tap any value to edit it in place (if your role can edit order details)." },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to add, rename or remove your own custom fields.",
+            "Show or hide Telephone, Email and Address.",
+            "Add, rename or remove channel buttons. Telephone and Email stay as their own fields and can be shown or hidden separately."
+          ] }
+        ]
       }
     ]
   },
@@ -273,6 +294,27 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Başlıkları Düzenle ile burada hangi iki durum adımının görüneceğini seçin ve etiketlerini kendi iş akışınıza göre yeniden adlandırın.",
             "Durum rozetleri ve Delivery In rengi sipariş ilerledikçe otomatik güncellenir; böylece kart her zaman gerçek durumu yansıtır."
+          ] }
+        ]
+      },
+      {
+        id: "card-customer",
+        title: "Customer & Communication kartı",
+        blocks: [
+          { kind: "para", text: "Bu kart, siparişin kime ait olduğunu ve müşteriye nasıl ulaşacağınızı tutar — müşteri bilgileri ve iletişim kanallarınız; hepsi yerinde düzenlenebilir." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Customer Name (Müşteri Adı) ve Design Name (Tasarım Adı).",
+            "Eklediğiniz özel alanlar — örneğin bir referans numarası, Instagram kullanıcı adı veya proje kodu.",
+            "Telephone, Email ve Address içeren bir İletişim (Communication) bölümü.",
+            "Hızlı iletişim için Instagram, WhatsApp veya TikTok gibi kanal butonları."
+          ] },
+          { kind: "para", text: "Herhangi bir değere dokunarak yerinde düzenleyin (rolünüz sipariş detaylarını düzenleyebiliyorsa)." },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile kendi özel alanlarınızı ekleyin, yeniden adlandırın veya kaldırın.",
+            "Telephone, Email ve Address'i gösterin veya gizleyin.",
+            "Kanal butonları ekleyin, yeniden adlandırın veya kaldırın. Telephone ve Email kendi alanları olarak kalır ve ayrıca gösterilip gizlenebilir."
           ] }
         ]
       }
