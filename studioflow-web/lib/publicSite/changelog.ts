@@ -33,14 +33,12 @@ export const CHANGELOG_LAST_UPDATED = "14 June 2026";
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "0.1.3",
-    date: "14 June 2026",
-    highlight: "Full 12-language support across the whole app, plus a refined dark mode.",
+    date: "June 2026",
+    highlight: "Welcome to NivaDesk — this is our first release, and we're just getting started.",
     changes: [
-      { tag: "new", text: "Every Settings and workflow screen is now fully translated into 12 languages on Mac, iPhone, iPad, Android and web." },
-      { tag: "new", text: "Workflow step descriptions fill in automatically for your industry and update when you change your trade." },
-      { tag: "improved", text: "Refined dark mode with the premium silver NivaDesk logo." },
-      { tag: "improved", text: "Cleaner header icons and order cards that size to their content." },
-      { tag: "fixed", text: "The Free Demo financial card no longer clips its content while resizing." },
+      { tag: "new", text: "First release of NivaDesk: run your studio, orders, client files, tasks and team from one place across Mac, iPhone, iPad, Android and web." },
+      { tag: "improved", text: "NivaDesk is under active development. We're improving it continuously and listening to early feedback." },
+      { tag: "new", text: "From here on, the specific new features, improvements and fixes in each update will be listed on this page." },
     ],
   },
 ];
