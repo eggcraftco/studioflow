@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -1306,7 +1307,7 @@ private fun StudioLargeTopBar(
                 compact = compact
             )
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shadowElevation = 1.dp
@@ -2051,7 +2052,7 @@ private fun HeaderIconButton(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = CircleShape,
         color = container,
         border = BorderStroke(1.dp, border),
         shadowElevation = 1.dp
