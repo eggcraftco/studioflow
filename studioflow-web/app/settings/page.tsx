@@ -2252,14 +2252,14 @@ function AccountSection({
     setProfileStatus("");
     setProfileError("");
     if (!cleanEmail) {
-      setProfileError("Enter a valid email address.");
+      setProfileError(t("Enter a valid email address."));
       return;
     }
     if (cleanEmail === currentEmail) {
-      setProfileStatus("This is already your sign-in email.");
+      setProfileStatus(t("This is already your sign-in email."));
       return;
     }
-    const confirmed = window.confirm("Change your sign-in email to " + cleanEmail + "? You can change it again after 10 days.");
+    const confirmed = window.confirm(t("Change your sign-in email to") + " " + cleanEmail + "? " + t("You can change it again after 10 days."));
     if (!confirmed) return;
 
     setSavingEmail(true);
@@ -2270,9 +2270,9 @@ function AccountSection({
       setEmailDraft(nextEmail);
       await auth.currentUser?.reload();
       await auth.currentUser?.getIdToken(true);
-      setProfileStatus(result.message || "Email updated. You can change it again after 10 days.");
+      setProfileStatus(result.message || t("Email updated. You can change it again after 10 days."));
     } catch (emailError) {
-      setProfileError(emailError instanceof Error ? emailError.message : "Email could not be changed.");
+      setProfileError(emailError instanceof Error ? emailError.message : t("Email could not be changed."));
     } finally {
       setSavingEmail(false);
     }
@@ -2289,9 +2289,9 @@ function AccountSection({
         setDisplayName(profile.displayName);
         setCompanyName(profile.companyName);
       }
-      setProfileStatus(result.message || "Profile updated.");
+      setProfileStatus(result.message || t("Profile updated."));
     } catch (saveError) {
-      setProfileError(saveError instanceof Error ? saveError.message : "Profile could not be saved.");
+      setProfileError(saveError instanceof Error ? saveError.message : t("Profile could not be saved."));
     } finally {
       setSavingProfile(false);
     }
@@ -2305,9 +2305,9 @@ function AccountSection({
     try {
       const result = await saveAccountAvatar(workspace, { photoURL: googlePhotoUrl });
       setAccountPhotoUrl(result.profile?.photoURL ?? googlePhotoUrl);
-      setProfileStatus(result.message || "Avatar updated.");
+      setProfileStatus(result.message || t("Avatar updated."));
     } catch (avatarError) {
-      setProfileError(avatarError instanceof Error ? avatarError.message : "Avatar could not be saved.");
+      setProfileError(avatarError instanceof Error ? avatarError.message : t("Avatar could not be saved."));
     } finally {
       setSavingAvatar(false);
     }
@@ -2320,9 +2320,9 @@ function AccountSection({
     try {
       const result = await saveAccountAvatar(workspace, { photoURL: "" });
       setAccountPhotoUrl(result.profile?.photoURL ?? "");
-      setProfileStatus(result.message || "Avatar removed.");
+      setProfileStatus(result.message || t("Avatar removed."));
     } catch (avatarError) {
-      setProfileError(avatarError instanceof Error ? avatarError.message : "Avatar could not be removed.");
+      setProfileError(avatarError instanceof Error ? avatarError.message : t("Avatar could not be removed."));
     } finally {
       setSavingAvatar(false);
     }
@@ -2336,10 +2336,10 @@ function AccountSection({
     try {
       const result = await uploadAccountAvatar(workspace, file);
       setAccountPhotoUrl(result.profile?.photoURL ?? "");
-      setProfileStatus(result.message || "Avatar updated.");
+      setProfileStatus(result.message || t("Avatar updated."));
       if (avatarInputRef.current) avatarInputRef.current.value = "";
     } catch (avatarError) {
-      setProfileError(avatarError instanceof Error ? avatarError.message : "Avatar could not be uploaded.");
+      setProfileError(avatarError instanceof Error ? avatarError.message : t("Avatar could not be uploaded."));
     } finally {
       setSavingAvatar(false);
     }
@@ -2351,16 +2351,16 @@ function AccountSection({
     setProfileError("");
     try {
       await sendAccountPasswordReset(accountEmail || userEmail);
-      setProfileStatus("Password reset email sent.");
+      setProfileStatus(t("Password reset email sent."));
     } catch (resetError) {
-      setProfileError(resetError instanceof Error ? resetError.message : "Password reset email could not be sent.");
+      setProfileError(resetError instanceof Error ? resetError.message : t("Password reset email could not be sent."));
     } finally {
       setSendingReset(false);
     }
   }
 
   async function handleSignOut() {
-    const confirmed = window.confirm("Sign out of NivaDesk on this browser?");
+    const confirmed = window.confirm(t("Sign out of NivaDesk on this browser?"));
     if (!confirmed) return;
     setSigningOut(true);
     setProfileStatus("");
@@ -2369,7 +2369,7 @@ function AccountSection({
       await signOut(auth);
       router.replace("/login");
     } catch (signOutError) {
-      setProfileError(signOutError instanceof Error ? signOutError.message : "Could not sign out.");
+      setProfileError(signOutError instanceof Error ? signOutError.message : t("Could not sign out."));
       setSigningOut(false);
     }
   }
@@ -2378,7 +2378,7 @@ function AccountSection({
     if (!settings) return;
     const nextSettings = { ...settings, ...(result.settings ?? {}) };
     onSaved(nextSettings);
-    setStatus(result.message || "Workspace logo saved.");
+    setStatus(result.message || t("Workspace logo saved."));
   }
 
   async function uploadLogo(file: File, acceptedPolicy: boolean) {
@@ -2402,7 +2402,7 @@ function AccountSection({
       setPendingLogoFile(null);
       if (logoInputRef.current) logoInputRef.current.value = "";
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Workspace logo could not be uploaded.");
+      setError(uploadError instanceof Error ? uploadError.message : t("Workspace logo could not be uploaded."));
     } finally {
       setUploadingLogo(false);
     }
@@ -2411,11 +2411,11 @@ function AccountSection({
   function handleLogoFile(file: File | undefined) {
     if (!file) return;
     if (!settings) {
-      setError("Workspace settings are still loading.");
+      setError(t("Workspace settings are still loading."));
       return;
     }
     if (!canEditLogo) {
-      setError("Your workspace role cannot edit Workspace Logo.");
+      setError(t("Your workspace role cannot edit Workspace Logo."));
       return;
     }
     if (requirePolicy && !policyAccepted) {
@@ -2431,11 +2431,11 @@ function AccountSection({
     setStatus("");
     setError("");
     if (!settings) {
-      setError("Workspace settings are still loading.");
+      setError(t("Workspace settings are still loading."));
       return;
     }
     if (!canEditLogo) {
-      setError("Your workspace role cannot edit Workspace Logo.");
+      setError(t("Your workspace role cannot edit Workspace Logo."));
       return;
     }
     logoInputRef.current?.click();
@@ -2460,7 +2460,7 @@ function AccountSection({
       const result = await saveWorkspaceLogoUrl(workspace, "");
       await saveLogoResult(result);
     } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : "Workspace logo could not be removed.");
+      setError(removeError instanceof Error ? removeError.message : t("Workspace logo could not be removed."));
     } finally {
       setUploadingLogo(false);
     }
@@ -2469,18 +2469,18 @@ function AccountSection({
   return (
     <div className="settings-card-stack">
       <section className="card app-card account-profile-card">
-        <CardTitle icon="customer" eyebrow="General" title="Profile & Security" />
+        <CardTitle icon="customer" eyebrow={t("General")} title={t("Profile & Security")} />
         <div className="account-profile-panel">
           <div className="account-avatar-preview">
             {accountPhotoUrl ? (
-              <img src={accountPhotoUrl} alt={displayName || userEmail || "Account avatar"} />
+              <img src={accountPhotoUrl} alt={displayName || userEmail || t("Account avatar")} />
             ) : (
               <span>{accountInitials}</span>
             )}
           </div>
           <div className="account-profile-copy">
-            <strong>Profile Photo</strong>
-            <p className="muted-copy">Your profile photo is shown to team members in this workspace.</p>
+            <strong>{t("Profile Photo")}</strong>
+            <p className="muted-copy">{t("Your profile photo is shown to team members in this workspace.")}</p>
             <div className="workspace-logo-actions">
               <input
                 ref={avatarInputRef}
@@ -2490,16 +2490,16 @@ function AccountSection({
                 onChange={event => void handleAvatarFile(event.target.files?.[0])}
               />
               <button className="button secondary" type="button" disabled={savingAvatar} onClick={() => avatarInputRef.current?.click()}>
-                {savingAvatar ? "Saving..." : accountPhotoUrl ? "Change Avatar" : "Upload Avatar"}
+                {savingAvatar ? t("Saving...") : accountPhotoUrl ? t("Change Avatar") : t("Upload Avatar")}
               </button>
               {googlePhotoUrl && googlePhotoUrl !== accountPhotoUrl ? (
                 <button className="button secondary" type="button" disabled={savingAvatar} onClick={handleUseGooglePhoto}>
-                  {savingAvatar ? "Saving..." : "Use Google Photo"}
+                  {savingAvatar ? t("Saving...") : t("Use Google Photo")}
                 </button>
               ) : null}
               {accountPhotoUrl ? (
                 <button className="button secondary" type="button" disabled={savingAvatar} onClick={handleRemoveAvatar}>
-                  {savingAvatar ? "Saving..." : "Remove Avatar"}
+                  {savingAvatar ? t("Saving...") : t("Remove Avatar")}
                 </button>
               ) : null}
             </div>
@@ -2508,7 +2508,7 @@ function AccountSection({
 
         <div className="account-profile-fields">
           <label className="quick-reply-settings-label">
-            Email
+            {t("Email")}
             <div className="settings-inline-row">
               <input
                 className="input"
@@ -2527,44 +2527,44 @@ function AccountSection({
                 disabled={savingEmail || emailDraft.trim().toLowerCase() === accountEmail.trim().toLowerCase()}
                 onClick={() => void handleChangeEmail()}
               >
-                {savingEmail ? "Changing..." : "Change Email"}
+                {savingEmail ? t("Changing...") : t("Change Email")}
               </button>
             </div>
-            <span className="muted-copy">After changing your sign-in email, you can change it again after 10 days.</span>
+            <span className="muted-copy">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
           </label>
           <label className="quick-reply-settings-label">
-            Your Name
+            {t("Your Name")}
             <input
               className="input"
               value={displayName}
               disabled={savingProfile}
-              placeholder="Your name"
+              placeholder={t("Your name")}
               onChange={event => setDisplayName(event.target.value)}
             />
           </label>
           {!hideWorkspaceIdentity ? (
             <label className="quick-reply-settings-label">
-              Company / Studio Name
+              {t("Company / Studio Name")}
               <input
                 className="input"
                 value={companyName}
                 disabled={!canEditCompanyName || savingProfile}
-                placeholder="My Studio"
+                placeholder={t("My Studio")}
                 onChange={event => setCompanyName(event.target.value)}
               />
             </label>
           ) : null}
         </div>
 
-        {!hideWorkspaceIdentity && !canEditCompanyName ? <p className="muted-copy">Company / Studio Name can only be changed by the workspace owner.</p> : null}
+        {!hideWorkspaceIdentity && !canEditCompanyName ? <p className="muted-copy">{t("Company / Studio Name can only be changed by the workspace owner.")}</p> : null}
         <div className="settings-mini-grid">
-          <InfoTile label="Workspace" value={workspace.name} />
-          <InfoTile label="Role" value={workspace.roleLabel} />
-          <InfoTile label="User ID" value={user?.uid ?? "-"} />
+          <InfoTile label={t("Workspace")} value={workspace.name} />
+          <InfoTile label={t("Role")} value={workspace.roleLabel} />
+          <InfoTile label={t("User ID")} value={user?.uid ?? "-"} />
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={savingProfile} onClick={handleSaveProfile}>
-            {savingProfile ? "Saving..." : "Save Profile"}
+            {savingProfile ? t("Saving...") : t("Save Profile")}
           </button>
         </div>
         {profileStatus ? <p className="success-copy">{profileStatus}</p> : null}
@@ -2572,27 +2572,27 @@ function AccountSection({
       </section>
 
       <section className="card app-card account-security-card">
-        <CardTitle icon="lock" eyebrow="Security" title="Sign-in security" />
+        <CardTitle icon="lock" eyebrow={t("Security")} title={t("Sign-in security")} />
         <div className="account-security-panel">
           <div>
-            <strong>Face ID / device passcode</strong>
-            <p className="muted-copy">The Mac and iPhone app can require Face ID, Touch ID or device passcode on launch. Browser Face ID is not enabled on web yet, so use Sign Out on shared computers.</p>
+            <strong>{t("Face ID / device passcode")}</strong>
+            <p className="muted-copy">{t("The Mac and iPhone app can require Face ID, Touch ID or device passcode on launch. Browser Face ID is not enabled on web yet, so use Sign Out on shared computers.")}</p>
           </div>
-          <span className="status-pill neutral">App only</span>
+          <span className="status-pill neutral">{t("App only")}</span>
         </div>
-        <p className="muted-copy">Password changes are handled securely by Firebase. Web sends a reset link to your account email instead of storing or editing your password here.</p>
+        <p className="muted-copy">{t("Password changes are handled securely by Firebase. Web sends a reset link to your account email instead of storing or editing your password here.")}</p>
         <div className="settings-action-row">
           <button className="button secondary" type="button" disabled={sendingReset} onClick={handlePasswordReset}>
-            {sendingReset ? "Sending..." : "Send Password Reset Email"}
+            {sendingReset ? t("Sending...") : t("Send Password Reset Email")}
           </button>
           <button className="button secondary danger-button" type="button" disabled={signingOut} onClick={handleSignOut}>
-            {signingOut ? "Signing out..." : "Sign Out"}
+            {signingOut ? t("Signing out...") : t("Sign Out")}
           </button>
         </div>
       </section>
 
       {!hideWorkspaceIdentity ? <section className="card app-card">
-        <CardTitle icon="storage" eyebrow="Workspace Logo" title="Upload or replace only" />
+        <CardTitle icon="storage" eyebrow={t("Workspace Logo")} title={t("Upload or replace only")} />
         <div className="workspace-logo-row workspace-logo-editor">
           {logoUrl ? (
             <img src={logoUrl} alt={`${workspace.name} logo`} />
@@ -2605,8 +2605,8 @@ function AccountSection({
             </div>
           )}
           <div className="workspace-logo-copy">
-            <strong>{logoUrl ? "Workspace logo is set" : "No logo uploaded yet"}</strong>
-            <p className="muted-copy">Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.</p>
+            <strong>{logoUrl ? t("Workspace logo is set") : t("No logo uploaded yet")}</strong>
+            <p className="muted-copy">{t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.")}</p>
             <div className="workspace-logo-actions">
               <input
                 ref={logoInputRef}
@@ -2624,7 +2624,7 @@ function AccountSection({
                 disabled={uploadingLogo || !settings}
                 onClick={openLogoPicker}
               >
-                {uploadingLogo ? "Uploading..." : logoUrl ? "Replace Logo" : "Upload Logo"}
+                {uploadingLogo ? t("Uploading...") : logoUrl ? t("Replace Logo") : t("Upload Logo")}
               </button>
               {logoUrl ? (
                 <button
@@ -2633,33 +2633,34 @@ function AccountSection({
                   disabled={!canEditLogo || uploadingLogo || !settings}
                   onClick={handleRemoveLogo}
                 >
-                  Remove Logo
+                  {t("Remove Logo")}
                 </button>
               ) : null}
             </div>
-            {!canUploadLogo ? <p className="muted-copy">Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.</p> : null}
-            {!canEditLogo ? <p className="muted-copy">Your current workspace role cannot edit Workspace Logo.</p> : null}
-            {status ? <p className="success-copy">{status}</p> : null}
+            {!canUploadLogo ? <p className="muted-copy">{t("Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.")}</p> : null}
+            {!canEditLogo ? <p className="muted-copy">{t("Your current workspace role cannot edit Workspace Logo.")}</p> : null}
+            {status ? <p className="success-copy">{studioT(status, accountLanguage)}</p> : null}
             {error ? <p className="layout-error">{error}</p> : null}
           </div>
         </div>
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
-            <strong>Upload Policy</strong>
-            <p>Only upload legal, safe and work-related images that belong in this workspace.</p>
+            <strong>{t("Upload Policy")}</strong>
+            <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
             <div className="workspace-logo-actions">
-              <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>Cancel</button>
-              <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>I Agree and Upload</button>
+              <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
+              <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>{t("I Agree and Upload")}</button>
             </div>
           </div>
         ) : null}
       </section> : null}
-      <DeleteAccountCard />
+      <DeleteAccountCard language={accountLanguage} />
     </div>
   );
 }
 
-function DeleteAccountCard() {
+function DeleteAccountCard({ language = "English" }: { language?: string }) {
+  const t = (text: string) => studioT(text, language);
   const router = useRouter();
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2667,10 +2668,10 @@ function DeleteAccountCard() {
 
   async function handleDelete() {
     if (confirmText.trim().toUpperCase() !== "DELETE") {
-      setError('Type DELETE to confirm.');
+      setError(t("Type DELETE to confirm."));
       return;
     }
-    if (!window.confirm("This permanently deletes your account, your workspace, all orders, customers, notes and files. This cannot be undone. Continue?")) {
+    if (!window.confirm(t("This permanently deletes your account, your workspace, all orders, customers, notes and files. This cannot be undone. Continue?"))) {
       return;
     }
     setBusy(true);
@@ -2685,23 +2686,22 @@ function DeleteAccountCard() {
       }
       router.replace("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete the account.");
+      setError(err instanceof Error ? err.message : t("Could not delete the account."));
       setBusy(false);
     }
   }
 
   return (
     <section className="card app-card" style={{ borderColor: "rgba(217, 45, 32, 0.4)" }}>
-      <CardTitle icon="lock" eyebrow="Danger zone" title="Delete account" />
+      <CardTitle icon="lock" eyebrow={t("Danger zone")} title={t("Delete account")} />
       <p className="muted-copy">
-        Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files).
-        This cannot be undone. Memberships in other teams&apos; workspaces are removed too.
+        {t("Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone. Memberships in other teams’ workspaces are removed too.")}
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
         <input
           className="input"
           style={{ flex: "1 1 180px" }}
-          placeholder='Type DELETE to confirm'
+          placeholder={t("Type DELETE to confirm")}
           value={confirmText}
           onChange={event => setConfirmText(event.target.value)}
           disabled={busy}
@@ -2713,7 +2713,7 @@ function DeleteAccountCard() {
           onClick={() => void handleDelete()}
           disabled={busy || confirmText.trim().toUpperCase() !== "DELETE"}
         >
-          {busy ? "Deleting…" : "Delete my account"}
+          {busy ? t("Deleting…") : t("Delete my account")}
         </button>
       </div>
       {error ? <p style={{ color: "var(--danger)", marginTop: 8 }}>{error}</p> : null}
