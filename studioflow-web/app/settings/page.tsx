@@ -1003,6 +1003,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
   const [error, setError] = useState("");
   const canEditRole = canEditWorkspaceSettingsForRole(workspace.role);
   const canEdit = canEditRole && workspace.entitlements.features.card_customization;
+  const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
     let cancelled = false;
@@ -1136,13 +1137,13 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     return (
       <div className="workflow-settings-list">
         <div className="quick-reply-template-heading">
-          <strong>{emptyTitle}</strong>
+          <strong>{t(emptyTitle)}</strong>
           <button className="button secondary" type="button" disabled={!canEdit || saving || !blockSettings} onClick={() => addListItem(key, addTitle)}>
-            Add
+            {t("Add")}
           </button>
         </div>
         {items.length === 0 ? (
-          <p className="muted-copy">No custom rows yet.</p>
+          <p className="muted-copy">{t("No custom rows yet.")}</p>
         ) : null}
         {items.map((item, index) => (
           <div className="workflow-settings-row" key={item.id}>
@@ -1154,7 +1155,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
               placeholder={placeholder}
               onChange={event => renameListItem(key, item.id, event.target.value)}
             />
-            <button className="icon-action danger" type="button" disabled={!canEdit || saving} onClick={() => removeListItem(key, item.id)} aria-label="Remove">
+            <button className="icon-action danger" type="button" disabled={!canEdit || saving} onClick={() => removeListItem(key, item.id)} aria-label={t("Remove")}>
               ×
             </button>
           </div>
@@ -1166,14 +1167,14 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
   if (loading) {
     return (
       <section className="card app-card">
-        <CardTitle icon="checklist" eyebrow="Workflow Steps" title="Loading workflow settings" />
-        <p className="muted-copy">Loading app-compatible workspace block settings...</p>
+        <CardTitle icon="checklist" eyebrow={t("Workflow Steps")} title={t("Loading workflow settings")} />
+        <p className="muted-copy">{t("Loading app-compatible workspace block settings...")}</p>
       </section>
     );
   }
 
   if (!blockSettings) {
-    return <PlaceholderSection title="Workflow Steps" detail={error || "Workflow settings could not be loaded yet."} />;
+    return <PlaceholderSection title={t("Workflow Steps")} detail={error || t("Workflow settings could not be loaded yet.")} />;
   }
 
   const steps = workflowStepOptions(blockSettings);
@@ -1186,9 +1187,9 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     <div className="settings-card-stack">
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Locked" title={canEditRole ? "Workflow customization starts with NivaDesk Lite" : "Workflow settings are read-only"} />
+          <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Lite") : t("Workflow settings are read-only")} />
           <p className="muted-copy">
-            {canEditRole ? "Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Lite." : "Your current workspace role cannot edit workflow settings."}
+            {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Lite.") : t("Your current workspace role cannot edit workflow settings.")}
           </p>
         </section>
       ) : null}
@@ -1222,18 +1223,18 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             {studioT("Apply Standard Template", language)}
           </button>
         </div>
-        <p className="muted-copy">Matches the app’s Business Type template flow. Saving writes to app-compatible workflow and block heading fields.</p>
+        <p className="muted-copy">{t("Matches the app’s Business Type template flow. Saving writes to app-compatible workflow and block heading fields.")}</p>
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow="Status Menu Options" title="Order status dropdowns" />
+        <CardTitle icon="checklist" eyebrow={t("Status Menu Options")} title={t("Order status dropdowns")} />
         <button className="status-menu-toggle-card" type="button" onClick={() => setStatusMenuOpen(open => !open)}>
           <span className="status-menu-toggle-icon" aria-hidden="true">{statusMenuOpen ? "⌄" : "›"}</span>
           <span>
-            <strong>{statusMenuOpen ? "Hide Status Options" : "Show Status Options"}</strong>
-            <small>{activeStatuses.length} active statuses selected</small>
+            <strong>{statusMenuOpen ? t("Hide Status Options") : t("Show Status Options")}</strong>
+            <small>{activeStatuses.length} {t("active statuses selected")}</small>
           </span>
-          <b>{statusMenuOpen ? "Collapse" : "Expand"}</b>
+          <b>{statusMenuOpen ? t("Collapse") : t("Expand")}</b>
         </button>
 
         {statusMenuOpen ? (
@@ -1255,29 +1256,29 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             })}
           </div>
         ) : null}
-        <p className="muted-copy">These options match the app’s status menu pool and control the dropdowns used in web order cards.</p>
+        <p className="muted-copy">{t("These options match the app’s status menu pool and control the dropdowns used in web order cards.")}</p>
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow="Production Steps" title="Status dropdown headings" />
+        <CardTitle icon="checklist" eyebrow={t("Production Steps")} title={t("Status dropdown headings")} />
         {renderHeadingList("customSteps", "Custom Status Menus", "New Step", "Step name")}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="check" eyebrow="Production Toggles" title="Yes / No checks" />
+        <CardTitle icon="check" eyebrow={t("Production Toggles")} title={t("Yes / No checks")} />
         {renderHeadingList("customToggles", "Extra Yes / No checks", "New Toggle", "Toggle name")}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="shippingBox" eyebrow="Materials & Inventory" title="Material check headings" />
+        <CardTitle icon="shippingBox" eyebrow={t("Materials & Inventory")} title={t("Material check headings")} />
         {renderHeadingList("materialsDefaultChecks", "Default material checks", "New Material Check", "Material check name")}
         <div className="settings-divider" />
         {renderHeadingList("materialsToggles", "Extra Yes / No checks", "New Material Toggle", "Material toggle name")}
         <div className="settings-divider" />
         <label className="settings-toggle-row">
           <span>
-            <strong>Show Notes / Supplier</strong>
-            <small>Matches the app’s Materials & Inventory notes/supplier field visibility.</small>
+            <strong>{t("Show Notes / Supplier")}</strong>
+            <small>{t("Matches the app’s Materials & Inventory notes/supplier field visibility.")}</small>
           </span>
           <input
             type="checkbox"
@@ -1287,19 +1288,19 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
           />
         </label>
         <label className="quick-reply-settings-label">
-          Notes / Supplier heading
+          {t("Notes / Supplier heading")}
           <input
             className="input"
             value={blockSettings.materialsNotesSupplierLabel}
             disabled={!canEdit || saving}
             onChange={event => updateSetting("materialsNotesSupplierLabel", event.target.value)}
-            placeholder="Notes / Supplier"
+            placeholder={t("Notes / Supplier")}
           />
         </label>
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="orders" eyebrow="Order Summary" title="Summary rows and small order badges" />
+        <CardTitle icon="orders" eyebrow={t("Order Summary")} title={t("Summary rows and small order badges")} />
         <div className="workflow-select-grid">
           {[
             ["Summary 1", "summaryStep1"],
@@ -1308,7 +1309,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             ["Badge 2", "orderListStep2"]
           ].map(([label, key]) => (
             <label className="quick-reply-settings-label" key={key}>
-              {label}
+              {t(label)}
               <select
                 className="input"
                 value={String(blockSettings[key as keyof BlockHeadingSettings] || "")}
@@ -1320,13 +1321,13 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             </label>
           ))}
         </div>
-        <p className="muted-copy">These fields match the app’s Order Summary status rows and the shortened badges on the small order cards.</p>
+        <p className="muted-copy">{t("These fields match the app’s Order Summary status rows and the shortened badges on the small order cards.")}</p>
       </section>
 
       <section className="card app-card quick-reply-settings-actions">
         <div>
-          <strong>Shared workflow settings</strong>
-          <p className="muted-copy">Saved values write to the same app-compatible companySettings block heading fields used by Mac, iPad, iPhone and web.</p>
+          <strong>{t("Shared workflow settings")}</strong>
+          <p className="muted-copy">{t("Saved values write to the same app-compatible companySettings block heading fields used by Mac, iPad, iPhone and web.")}</p>
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
