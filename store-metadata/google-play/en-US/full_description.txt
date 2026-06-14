@@ -1,0 +1,34 @@
+NivaDesk is the order and studio management app for makers, repairers and creative workshops — watchmakers, jewellers, tailors, artists, photographers and more. Track every order from first enquiry to handover, see your real profit after fees and tax, and keep your whole team on the same page across Mac, iPhone, iPad, Android and the web.
+
+WORKFLOW BUILT FOR YOUR CRAFT
+• Pick your industry and get workflow steps that fit it out of the box.
+• Move each order through clear stages so nothing slips.
+• Per-order checkpoints (deposit cleared, client approved, hallmarked, contract signed and more).
+
+KNOW YOUR REAL NUMBERS
+• Automatic tax and platform-fee calculations.
+• See final profit per order, not just the price.
+• Flexible tax rules (standard, margin scheme) with a VAT registration transition date.
+
+CLIENT FILES & TASKS ON EVERY ORDER
+• Attach PDFs and photos straight to an order.
+• Built-in to-do list with due dates, priorities and assignments.
+• Works offline — files upload automatically when you are back online.
+
+STAY ON TIME
+• Schedule & Alerts with one-tap reminder shortcuts.
+• Live shipment tracking so you always know where a delivery is.
+
+YOUR TEAM, THE RIGHT ACCESS
+• Invite your team and assign roles: Member, View Only, Workflow Only or custom.
+• Control exactly which menus, cards and settings each role can see.
+• Assign projects to specific people.
+
+WORKS EVERYWHERE
+• Native Mac, iPhone and iPad apps, plus Android and web — all in sync.
+• Available in 12 languages.
+• Optional WooCommerce sync and PDF export.
+
+Start free with the built-in demo workspace, then make it your own.
+
+NivaDesk is a product of EGGCRAFT LIMITED.

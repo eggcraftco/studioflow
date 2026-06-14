@@ -1,0 +1,34 @@
+NivaDesk; üreticiler, tamirciler ve yaratıcı atölyeler için sipariş ve stüdyo yönetim uygulamasıdır — saatçiler, kuyumcular, terziler, sanatçılar, fotoğrafçılar ve daha fazlası. Her siparişi ilk talepten teslimata kadar takip edin, masraf ve vergi sonrası gerçek kârınızı görün ve tüm ekibinizi Mac, iPhone, iPad, Android ve web üzerinde aynı sayfada tutun.
+
+İŞ KOLUNUZA GÖRE İŞ AKIŞI
+• İş kolunuzu seçin, ona uygun iş akışı adımları hazır gelsin.
+• Her siparişi net aşamalardan geçirin; hiçbir şey gözden kaçmasın.
+• Sipariş bazlı kontrol noktaları (kapora alındı, müşteri onayladı, damgalandı, sözleşme imzalandı ve daha fazlası).
+
+GERÇEK RAKAMLARINIZI BİLİN
+• Otomatik vergi ve platform ücreti hesaplaması.
+• Sadece fiyatı değil, sipariş başına nihai kârı görün.
+• Esnek vergi kuralları (standart, margin scheme) ve KDV geçiş tarihi.
+
+HER SİPARİŞTE MÜŞTERİ DOSYALARI VE GÖREVLER
+• PDF ve fotoğrafları doğrudan siparişe ekleyin.
+• Tarihli, öncelikli ve atanabilir yerleşik yapılacaklar listesi.
+• Çevrimdışı çalışır — bağlantı gelince dosyalar otomatik yüklenir.
+
+ZAMANINDA KALIN
+• Tek dokunuşla hatırlatıcı kısayolları içeren Plan ve Uyarılar.
+• Canlı kargo takibi ile teslimatın nerede olduğunu her zaman bilin.
+
+EKİBİNİZ, DOĞRU ERİŞİM
+• Ekibinizi davet edin ve rol atayın: Üye, Sadece Görüntüleme, Sadece İş Akışı veya özel.
+• Her rolün hangi menü, kart ve ayarları göreceğini tam olarak kontrol edin.
+• Projeleri belirli kişilere atayın.
+
+HER YERDE ÇALIŞIR
+• Yerel Mac, iPhone ve iPad uygulamaları, ayrıca Android ve web — tümü senkron.
+• 12 dilde kullanılabilir.
+• İsteğe bağlı WooCommerce senkronu ve PDF dışa aktarımı.
+
+Yerleşik demo çalışma alanıyla ücretsiz başlayın, sonra kendinize göre düzenleyin.
+
+NivaDesk, EGGCRAFT LIMITED ürünüdür.
