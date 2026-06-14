@@ -1,6 +1,19 @@
 // AUTO-GENERATED from EGGcraft/DilMotoru.swift — do not edit by hand.
 // Run the porting script to regenerate. Provides full 12-language translations.
 export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
+  "What's new": {
+    "Türkçe": "Neler yeni",
+    "Deutsch": "Neuigkeiten",
+    "Français": "Nouveautés",
+    "Italiano": "Novità",
+    "Español (Spanish)": "Novedades",
+    "Português": "Novidades",
+    "Русский (Russian)": "Что нового",
+    "日本語 (Japanese)": "新着情報",
+    "中文 (Chinese)": "新功能",
+    "العربية (Arabic)": "ما الجديد",
+    "हिन्दी (Hindi)": "नया क्या है"
+  },
   "Start with Add Project": {
     "Türkçe": "Add Project ile başlayın",
     "Deutsch": "Mit Add Project beginnen",

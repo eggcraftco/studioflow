@@ -23,6 +23,12 @@ import {
 } from "@/lib/publicSite/i18n";
 import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import {
+  CHANGELOG,
+  CHANGELOG_LAST_UPDATED,
+  getChangelogLabels,
+  type ChangeTag
+} from "@/lib/publicSite/changelog";
+import {
   getPrivacyPolicyLastUpdatedLabel,
   getPrivacyPolicySections,
   PRIVACY_POLICY_LAST_UPDATED,
@@ -864,6 +870,7 @@ function PublicFooter() {
               <Link href="/features">{t("nav.features")}</Link>
               <Link href="/pricing">{t("nav.pricing")}</Link>
               <Link href="/faq">{t("nav.faq")}</Link>
+              <Link href="/changelog">{t("nav.changelog")}</Link>
             </nav>
           </section>
           <section className="public-footer-group">
@@ -2544,6 +2551,63 @@ export function PublicRefundCancellationPage() {
             <PublicLegalLanguageNotice language={language} />
             {refundCancellationPolicySections.map(section => (
               <PublicLegalSection key={section.title} section={section} />
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <PublicShell>
+      <Page />
+    </PublicShell>
+  );
+}
+
+export function PublicChangelogPage() {
+  const Page = () => {
+    const { language } = usePublicSiteLanguage();
+    const labels = getChangelogLabels(language);
+    const tagClass: Record<ChangeTag, string> = {
+      new: "changelog-tag changelog-tag-new",
+      improved: "changelog-tag changelog-tag-improved",
+      fixed: "changelog-tag changelog-tag-fixed"
+    };
+    return (
+      <>
+        <section className="public-page-hero public-info-hero">
+          <div className="public-shell">
+            <span className="public-eyebrow">{labels.eyebrow}</span>
+            <h1>{labels.title}</h1>
+            <p>{labels.intro}</p>
+            <p className="public-legal-updated">
+              {labels.lastUpdated}: {CHANGELOG_LAST_UPDATED}
+            </p>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell changelog-list">
+            {CHANGELOG.map((entry, index) => (
+              <article key={entry.version} className="changelog-entry">
+                <header className="changelog-entry-head">
+                  <div className="changelog-version">
+                    <span className="changelog-version-number">{labels.versionWord} {entry.version}</span>
+                    {index === 0 ? <span className="changelog-latest-pill">{labels.latest}</span> : null}
+                  </div>
+                  <time className="changelog-date">{entry.date}</time>
+                </header>
+                {entry.highlight ? <p className="changelog-highlight">{entry.highlight}</p> : null}
+                <ul className="changelog-changes">
+                  {entry.changes.map((change, i) => (
+                    <li key={i} className="changelog-change">
+                      <span className={tagClass[change.tag]}>{labels.tags[change.tag]}</span>
+                      <span className="changelog-change-text">{change.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
             ))}
           </div>
         </section>
