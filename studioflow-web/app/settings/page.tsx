@@ -517,7 +517,7 @@ function renderSettingsSection({
     case "plan-access":
       return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} language={language} />;
     case "team-access":
-      return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} />;
+      return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
@@ -3501,12 +3501,15 @@ function PlanAccessSection({
 function TeamAccessSection({
   workspace,
   teamData,
-  onRefreshTeamAccess
+  onRefreshTeamAccess,
+  language = "English"
 }: {
   workspace: WorkspaceContext;
   teamData: TeamAccessData | null;
   onRefreshTeamAccess: () => Promise<TeamAccessData | null>;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   const members = teamData?.members ?? [];
   const joinRequests = teamData?.joinRequests ?? [];
   const customRoles = teamData?.customRoles ?? [];
@@ -3528,7 +3531,7 @@ function TeamAccessSection({
         if (!cancelled) setJoinedWorkspaces(options);
       })
       .catch(loadError => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Workspaces could not be loaded.");
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : t("Workspaces could not be loaded."));
       });
     return () => {
       cancelled = true;
@@ -3544,7 +3547,7 @@ function TeamAccessSection({
       await switchActiveWorkspace(user.uid, option.id);
       window.location.reload();
     } catch (switchError) {
-      setError(switchError instanceof Error ? switchError.message : "Could not switch workspace.");
+      setError(switchError instanceof Error ? switchError.message : t("Could not switch workspace."));
       setSwitchingWorkspaceId("");
     }
   }
@@ -3552,10 +3555,10 @@ function TeamAccessSection({
   const workspaceSwitchPanel = (
     <section className="card app-card team-access-panel-card">
       <div className="team-access-panel-heading">
-        <strong>Workspaces</strong>
-        <span>{joinedWorkspaces.length} connected</span>
+        <strong>{t("Workspaces")}</strong>
+        <span>{joinedWorkspaces.length} {t("connected")}</span>
       </div>
-      <p className="muted-copy">Switch to a workspace you own or have joined. Your assigned role controls what you can see after switching.</p>
+      <p className="muted-copy">{t("Switch to a workspace you own or have joined. Your assigned role controls what you can see after switching.")}</p>
       {joinedWorkspaces.map(option => (
         <div className="team-access-workspace-option" key={option.id}>
           <span className="team-access-icon team-access-icon-owner" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
@@ -3564,7 +3567,7 @@ function TeamAccessSection({
             <small>{option.roleLabel}</small>
           </div>
           {option.isCurrent ? (
-            <span className="studio-pill success">Current</span>
+            <span className="studio-pill success">{t("Current")}</span>
           ) : (
             <button
               className="button secondary"
@@ -3572,7 +3575,7 @@ function TeamAccessSection({
               onClick={() => void switchWorkspace(option)}
               disabled={Boolean(switchingWorkspaceId)}
             >
-              {switchingWorkspaceId === option.id ? "Switching..." : "Switch"}
+              {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
             </button>
           )}
         </div>
@@ -3595,7 +3598,7 @@ function TeamAccessSection({
   const canViewTeamManagement = Boolean(hasTeamPlan && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canManageTeam = Boolean(isOwner && canViewTeamManagement);
   const roleOptions = useMemo(() => standardAndCustomRoleOptions(customRoles), [customRoles]);
-  const teamLimit = workspace.billingTeamMemberLimit > 9999 ? "Unlimited" : `${members.length} / ${workspace.billingTeamMemberLimit}`;
+  const teamLimit = workspace.billingTeamMemberLimit > 9999 ? t("Unlimited") : `${members.length} / ${workspace.billingTeamMemberLimit}`;
   const roleCounts = useMemo(() => {
     return members.reduce<Record<string, number>>((acc, member) => {
       acc[member.roleLabel] = (acc[member.roleLabel] ?? 0) + 1;
@@ -3623,7 +3626,7 @@ function TeamAccessSection({
       setStatus(success);
       await onRefreshTeamAccess();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Team action failed.");
+      setError(actionError instanceof Error ? actionError.message : t("Team action failed."));
     } finally {
       setActioning("");
     }
@@ -3635,7 +3638,7 @@ function TeamAccessSection({
     await runTeamAction(
       "request-access",
       () => requestWorkspaceAccess(cleanIdentifier),
-      "Access request sent. The workspace owner can approve it from Team Access."
+      t("Access request sent. The workspace owner can approve it from Team Access.")
     );
     setRequestOwnerIdentifier("");
   }
@@ -3644,13 +3647,13 @@ function TeamAccessSection({
     return (
       <div className="settings-stack team-access-shell">
         <section className="card app-card team-access-hero-card">
-          <CardTitle icon="team" title="Join an existing Team workspace">
+          <CardTitle icon="team" title={t("Join an existing Team workspace")}>
             <p className="team-access-hero-subtitle">
-              Request access using the Company ID or owner email shared by a Team workspace owner.
+              {t("Request access using the Company ID or owner email shared by a Team workspace owner.")}
             </p>
           </CardTitle>
           <p className="muted-copy">
-            Requesting access is available on every plan. Team management remains available only inside a Team workspace with permission.
+            {t("Requesting access is available on every plan. Team management remains available only inside a Team workspace with permission.")}
           </p>
           {status ? <p className="layout-status">{status}</p> : null}
           {error ? <p className="layout-error">{error}</p> : null}
@@ -3663,19 +3666,19 @@ function TeamAccessSection({
           void submitAccessRequest();
         }}>
           <div className="team-access-panel-heading">
-            <strong>Request Access</strong>
-            <span>Every plan</span>
+            <strong>{t("Request Access")}</strong>
+            <span>{t("Every plan")}</span>
           </div>
-          <p className="muted-copy">Enter the Team workspace owner’s email address or Company ID.</p>
+          <p className="muted-copy">{t("Enter the Team workspace owner’s email address or Company ID.")}</p>
           <div className="team-access-request-row">
             <input
               className="input"
               value={requestOwnerIdentifier}
               onChange={event => setRequestOwnerIdentifier(event.target.value)}
-              placeholder="Owner email or Company ID"
+              placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
             />
-            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label="Send access request">
+            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label={t("Send access request")}>
               {actioning === "request-access" ? "..." : "➤"}
             </button>
           </div>
@@ -3688,18 +3691,18 @@ function TeamAccessSection({
     return (
       <div className="settings-stack team-access-shell">
         <section className="card app-card team-access-hero-card">
-          <CardTitle icon="team" title="Team workspace membership">
+          <CardTitle icon="team" title={t("Team workspace membership")}>
             <p className="team-access-hero-subtitle">
-              You have joined this workspace as {workspace.roleLabel}.
+              {t("You have joined this workspace as")} {workspace.roleLabel}.
             </p>
           </CardTitle>
           <div className="team-access-hero-meta">
             <span>{workspace.billingPlanName}</span>
             <span>{workspace.roleLabel}</span>
-            <span>Shared with you</span>
+            <span>{t("Shared with you")}</span>
           </div>
           <p className="muted-copy">
-            You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.
+            {t("You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.")}
           </p>
           {status ? <p className="layout-status">{status}</p> : null}
           {error ? <p className="layout-error">{error}</p> : null}
@@ -3712,19 +3715,19 @@ function TeamAccessSection({
           void submitAccessRequest();
         }}>
           <div className="team-access-panel-heading">
-            <strong>Request Access</strong>
-            <span>Every plan</span>
+            <strong>{t("Request Access")}</strong>
+            <span>{t("Every plan")}</span>
           </div>
-          <p className="muted-copy">Enter another Team workspace owner’s email address or Company ID.</p>
+          <p className="muted-copy">{t("Enter another Team workspace owner’s email address or Company ID.")}</p>
           <div className="team-access-request-row">
             <input
               className="input"
               value={requestOwnerIdentifier}
               onChange={event => setRequestOwnerIdentifier(event.target.value)}
-              placeholder="Owner email or Company ID"
+              placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
             />
-            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label="Send access request">
+            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label={t("Send access request")}>
               {actioning === "request-access" ? "..." : "➤"}
             </button>
           </div>
@@ -3736,22 +3739,22 @@ function TeamAccessSection({
   return (
     <div className="settings-stack team-access-shell">
       <section className="card app-card team-access-hero-card">
-        <CardTitle icon="team" title="Team Access">
-          <p className="team-access-hero-subtitle">Manage workspace members, roles and join requests.</p>
+        <CardTitle icon="team" title={t("Team Access")}>
+          <p className="team-access-hero-subtitle">{t("Manage workspace members, roles and join requests.")}</p>
         </CardTitle>
         <div className="team-access-hero-meta">
-          <span>{hasTeamPlan ? "Team plan available" : "Team plan locked"}</span>
-          <span>{teamLimit} members</span>
-          <span>{joinRequests.length} join requests</span>
+          <span>{hasTeamPlan ? t("Team plan available") : t("Team plan locked")}</span>
+          <span>{teamLimit} {t("members")}</span>
+          <span>{joinRequests.length} {t("join requests")}</span>
           <span>{workspace.roleLabel}</span>
         </div>
         {!hasTeamPlan ? (
-          <p className="muted-copy">Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.</p>
+          <p className="muted-copy">{t("Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.")}</p>
         ) : (
-          <p className="muted-copy">Team includes 5 seats. Additional seats will be available for £5/month or £50/year each, up to 10 users. For larger teams, contact contact@nivadesk.co.uk.</p>
+          <p className="muted-copy">{t("Team includes 5 seats. Additional seats will be available for £5/month or £50/year each, up to 10 users. For larger teams, contact contact@nivadesk.co.uk.")}</p>
         )}
         {!isOwner ? (
-          <p className="muted-copy">Only workspace owners can approve join requests, change roles or remove members.</p>
+          <p className="muted-copy">{t("Only workspace owners can approve join requests, change roles or remove members.")}</p>
         ) : null}
         {status ? <p className="layout-status">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
@@ -3761,7 +3764,7 @@ function TeamAccessSection({
       <div className="team-access-top-grid">
         <section className="card app-card team-access-panel-card">
           <div className="team-access-panel-heading">
-            <strong>Current Workspace</strong>
+            <strong>{t("Current Workspace")}</strong>
           </div>
           <div className="team-access-workspace-row">
             <span className="team-access-icon team-access-icon-owner" aria-hidden="true">♛</span>
@@ -3769,23 +3772,23 @@ function TeamAccessSection({
               <strong>{workspace.name || "NivaDesk"}</strong>
               <div className="team-access-inline-meta">
                 <span className="studio-pill team-access-owner-pill">{workspace.roleLabel}</span>
-                <small>{isOwner ? "You own this workspace" : "Shared with you"}</small>
+                <small>{isOwner ? t("You own this workspace") : t("Shared with you")}</small>
               </div>
             </div>
           </div>
           <label className="team-access-copy-field">
-            <span>Company ID</span>
+            <span>{t("Company ID")}</span>
             <div>
               <code>{workspace.id}</code>
-              <button className="team-access-copy-icon-button" type="button" aria-label="Copy Company ID" onClick={() => copyText(workspace.id, "Company ID copied")}>⧉</button>
+              <button className="team-access-copy-icon-button" type="button" aria-label={t("Copy Company ID")} onClick={() => copyText(workspace.id, t("Company ID copied"))}>⧉</button>
             </div>
           </label>
         </section>
 
         <section className="card app-card team-access-panel-card">
           <div className="team-access-panel-heading">
-            <strong>Workspaces</strong>
-            <button className="team-access-icon-button" type="button" onClick={() => void onRefreshTeamAccess()} aria-label="Refresh workspaces">↻</button>
+            <strong>{t("Workspaces")}</strong>
+            <button className="team-access-icon-button" type="button" onClick={() => void onRefreshTeamAccess()} aria-label={t("Refresh workspaces")}>↻</button>
           </div>
           {joinedWorkspaces.map(option => (
             <div className="team-access-workspace-option" key={option.id}>
@@ -3796,17 +3799,17 @@ function TeamAccessSection({
               </div>
               {option.isCurrent ? (
                 <>
-                  <span className="studio-pill success">Current</span>
-                  <span className="studio-pill team-access-connected-pill">Connected</span>
+                  <span className="studio-pill success">{t("Current")}</span>
+                  <span className="studio-pill team-access-connected-pill">{t("Connected")}</span>
                 </>
               ) : (
                 <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
-                  {switchingWorkspaceId === option.id ? "Switching..." : "Switch"}
+                  {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
                 </button>
               )}
             </div>
           ))}
-          <Link className="team-access-advanced-link" href="/team">Advanced: connect with Company ID</Link>
+          <Link className="team-access-advanced-link" href="/team">{t("Advanced: connect with Company ID")}</Link>
         </section>
 
         <form className="card app-card team-access-panel-card" onSubmit={event => {
@@ -3814,18 +3817,18 @@ function TeamAccessSection({
           void submitAccessRequest();
         }}>
           <div className="team-access-panel-heading">
-            <strong>Request Access</strong>
+            <strong>{t("Request Access")}</strong>
           </div>
-          <p className="muted-copy">Enter the owner’s email address or Company ID and send a request.</p>
+          <p className="muted-copy">{t("Enter the owner’s email address or Company ID and send a request.")}</p>
           <div className="team-access-request-row">
             <input
               className="input"
               value={requestOwnerIdentifier}
               onChange={event => setRequestOwnerIdentifier(event.target.value)}
-              placeholder="Owner email or Company ID"
+              placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
             />
-            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label="Send access request">
+            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label={t("Send access request")}>
               {actioning === "request-access" ? "..." : "➤"}
             </button>
           </div>
@@ -3833,16 +3836,16 @@ function TeamAccessSection({
 
         <section className="card app-card team-access-panel-card">
           <div className="team-access-panel-heading">
-            <strong>Invite People</strong>
+            <strong>{t("Invite People")}</strong>
           </div>
-          <p className="muted-copy">Share your account email or Company ID with the person you want to invite. They will send a request, then you approve it here.</p>
+          <p className="muted-copy">{t("Share your account email or Company ID with the person you want to invite. They will send a request, then you approve it here.")}</p>
           {isOwner && hasTeamPlan ? (
             <div className="team-access-id-box">
               <code>{workspace.id}</code>
-              <button className="button secondary team-access-copy-button" type="button" onClick={() => copyText(workspace.id, "Company ID copied")}>⧉ Copy</button>
+              <button className="button secondary team-access-copy-button" type="button" onClick={() => copyText(workspace.id, t("Company ID copied"))}>⧉ {t("Copy")}</button>
             </div>
           ) : (
-            <p className="muted-copy">{isOwner ? "Upgrade to NivaDesk Team to approve new members." : "Only the workspace owner can invite and approve new members."}</p>
+            <p className="muted-copy">{isOwner ? t("Upgrade to NivaDesk Team to approve new members.") : t("Only the workspace owner can invite and approve new members.")}</p>
           )}
         </section>
       </div>
@@ -3851,8 +3854,8 @@ function TeamAccessSection({
         <div className="team-access-panel-heading">
           <span className="team-access-join-icon" aria-hidden="true"><CardIconGlyph icon="team" /></span>
           <div>
-            <strong>Join Requests</strong>
-            <p className="muted-copy">{!isOwner ? "Only workspace owners can see and review join requests." : joinRequests.length === 0 ? "No pending requests." : `${joinRequests.length} pending requests.`}</p>
+            <strong>{t("Join Requests")}</strong>
+            <p className="muted-copy">{!isOwner ? t("Only workspace owners can see and review join requests.") : joinRequests.length === 0 ? t("No pending requests.") : `${joinRequests.length} ${t("pending requests.")}`}</p>
           </div>
           <span className="team-access-chevron" aria-hidden="true">›</span>
         </div>
@@ -3868,7 +3871,7 @@ function TeamAccessSection({
                     <span>{requestLabel(request).slice(0, 1).toUpperCase()}</span>
                     <div>
                       <strong>{requestLabel(request)}</strong>
-                      <small>Requested {formatTeamDate(request.createdAt)}</small>
+                      <small>{t("Requested")} {formatTeamDate(request.createdAt)}</small>
                     </div>
                   </div>
                   <div className="settings-team-actions">
@@ -3888,21 +3891,21 @@ function TeamAccessSection({
                       onClick={() => void runTeamAction(
                         approveKey,
                         () => approveJoinRequest(workspace, request, selectedRole),
-                        "Access request approved."
+                        t("Access request approved.")
                       )}
                     >
-                      {actioning === approveKey ? "Approving..." : "Approve"}
+                      {actioning === approveKey ? t("Approving...") : t("Approve")}
                     </button>
                     <button
                       className="button secondary"
                       type="button"
                       disabled={!isOwner || Boolean(actioning)}
-                      onClick={() => void runTeamAction(declineKey, () => declineJoinRequest(workspace, request), "Access request declined.")}
+                      onClick={() => void runTeamAction(declineKey, () => declineJoinRequest(workspace, request), t("Access request declined."))}
                     >
-                      {actioning === declineKey ? "Declining..." : "Decline"}
+                      {actioning === declineKey ? t("Declining...") : t("Decline")}
                     </button>
                   </div>
-                  {!hasTeamPlan ? <p className="muted-copy">Approving new team members requires NivaDesk Team. Decline remains available for cleanup.</p> : null}
+                  {!hasTeamPlan ? <p className="muted-copy">{t("Approving new team members requires NivaDesk Team. Decline remains available for cleanup.")}</p> : null}
                 </article>
               );
             })}
@@ -3913,8 +3916,8 @@ function TeamAccessSection({
       <section className="card app-card team-access-panel-card">
         <div className="team-access-panel-heading">
           <div>
-            <strong>Role Profiles</strong>
-            <p className="muted-copy">Create custom access roles, then assign one to any workspace member.</p>
+            <strong>{t("Role Profiles")}</strong>
+            <p className="muted-copy">{t("Create custom access roles, then assign one to any workspace member.")}</p>
           </div>
         </div>
         {canManageTeam ? (
@@ -3925,22 +3928,22 @@ function TeamAccessSection({
             onSave={role => runTeamAction(
               role.id ? `custom-role-${role.id}` : "custom-role-new",
               () => saveWorkspaceCustomRole(workspace, role),
-              "Role profile saved."
+              t("Role profile saved.")
             )}
             onDelete={role => runTeamAction(
               `delete-custom-role-${role.id}`,
               () => deleteWorkspaceCustomRole(workspace, role),
-              "Role profile deleted."
+              t("Role profile deleted.")
             )}
           />
         ) : (
-          <p className="muted-copy">Only the workspace owner on NivaDesk Team can create custom role profiles.</p>
+          <p className="muted-copy">{t("Only the workspace owner on NivaDesk Team can create custom role profiles.")}</p>
         )}
       </section>
 
       <section className="card app-card team-access-panel-card">
         <div className="team-access-panel-heading">
-          <strong>Team Members</strong>
+          <strong>{t("Team Members")}</strong>
         </div>
         <div className="settings-team-list team-access-member-list">
           {members.map(member => {
@@ -3957,9 +3960,9 @@ function TeamAccessSection({
                   </div>
                 </div>
                 <div className="settings-team-actions">
-                  {member.isOwner ? <span className="studio-pill">Owner</span> : null}
+                  {member.isOwner ? <span className="studio-pill">{t("Owner")}</span> : null}
                   <span className="studio-pill">{member.roleLabel}</span>
-                  <button className="button secondary" type="button" onClick={() => copyText(member.id, "User ID copied")}>Copy ID</button>
+                  <button className="button secondary" type="button" onClick={() => copyText(member.id, t("User ID copied"))}>{t("Copy ID")}</button>
                   {canChangeRole ? (
                     <>
                       <select
@@ -3972,7 +3975,7 @@ function TeamAccessSection({
                           void runTeamAction(
                             changingKey,
                             () => updateTeamMemberRole(workspace, member, nextRole),
-                            `Role updated to ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
+                            `${t("Role updated to")} ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
                           );
                         }}
                       >
@@ -3983,33 +3986,33 @@ function TeamAccessSection({
                         type="button"
                         disabled={Boolean(actioning)}
                         onClick={() => {
-                          if (!window.confirm(`Remove ${memberLabel(member)} from this workspace?`)) return;
-                          void runTeamAction(removeKey, () => removeTeamMember(workspace, member), "Team member removed.");
+                          if (!window.confirm(`${t("Remove")} ${memberLabel(member)} ${t("from this workspace?")}`)) return;
+                          void runTeamAction(removeKey, () => removeTeamMember(workspace, member), t("Team member removed."));
                         }}
                       >
-                        {actioning === removeKey ? "Removing..." : "Remove"}
+                        {actioning === removeKey ? t("Removing...") : t("Remove")}
                       </button>
                     </>
                   ) : null}
-                  {actioning === changingKey ? <span className="studio-pill">Updating...</span> : null}
+                  {actioning === changingKey ? <span className="studio-pill">{t("Updating...")}</span> : null}
                 </div>
               </article>
             );
           })}
-          {members.length === 0 ? <p className="muted-copy">No members found.</p> : null}
+          {members.length === 0 ? <p className="muted-copy">{t("No members found.")}</p> : null}
         </div>
       </section>
 
       <section className="card app-card team-access-panel-card">
         <div className="team-access-panel-heading">
           <div>
-            <strong>Current role mix</strong>
-            <p className="muted-copy">Role counts</p>
+            <strong>{t("Current role mix")}</strong>
+            <p className="muted-copy">{t("Role counts")}</p>
           </div>
         </div>
         <div className="settings-mini-grid team-access-role-mix-grid">
           {Object.entries(roleCounts).map(([role, count]) => <InfoTile key={role} label={role} value={`${count}`} />)}
-          {Object.keys(roleCounts).length === 0 ? <InfoTile label="Members" value="0" /> : null}
+          {Object.keys(roleCounts).length === 0 ? <InfoTile label={t("Members")} value="0" /> : null}
         </div>
       </section>
     </div>
