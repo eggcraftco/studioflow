@@ -218,6 +218,24 @@ const TREE_EN: GuideNode[] = [
             "Where required, you tick to accept the upload policy on this browser before uploading."
           ] }
         ]
+      },
+      {
+        id: "card-todo",
+        title: "To Do card",
+        blocks: [
+          { kind: "para", text: "A task checklist for this specific order — break the job into steps, assign them and track what is done." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Add a task with the input, then give it a due date, a priority, an assignee and an optional note.",
+            "Filter the list by All, Mine, Open, Overdue or Done to focus on what matters now.",
+            "Mark a task Done or Reopen it, and delete tasks you no longer need."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "The Overdue filter surfaces any task past its due date, so nothing slips.",
+            "If your role is view-only, you can see tasks but cannot edit them."
+          ] }
+        ]
       }
     ]
   },
@@ -493,6 +511,24 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Maksimum dosya boyutu ve upload politikası Settings ▸ Safety & Uploads'tan gelir.",
             "Gerektiğinde, yüklemeden önce bu tarayıcıda upload politikasını kabul etmek için işaretlersiniz."
+          ] }
+        ]
+      },
+      {
+        id: "card-todo",
+        title: "To Do kartı",
+        blocks: [
+          { kind: "para", text: "Bu siparişe özel bir görev kontrol listesi — işi adımlara bölün, atayın ve neyin yapıldığını takip edin." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Giriş alanıyla bir görev ekleyin; sonra ona bitiş tarihi, öncelik, bir sorumlu ve isteğe bağlı bir not verin.",
+            "Listeyi All, Mine, Open, Overdue veya Done'a göre filtreleyip şu an önemli olana odaklanın.",
+            "Bir görevi Mark Done ile tamamlayın veya Reopen ile yeniden açın; gerekmeyen görevleri silin."
+          ] },
+          { kind: "sub", text: "Bilmekte fayda var" },
+          { kind: "bullets", items: [
+            "Overdue filtresi bitiş tarihini geçen görevleri öne çıkarır; böylece hiçbir şey kaçmaz.",
+            "Rolünüz salt-görüntülemeyse görevleri görebilir ama düzenleyemezsiniz."
           ] }
         ]
       }
