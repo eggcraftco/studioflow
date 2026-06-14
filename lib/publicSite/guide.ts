@@ -89,6 +89,25 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "para", text: "Tip: a good preview photo makes orders far easier to recognize at a glance in a busy list." }
         ]
+      },
+      {
+        id: "card-summary",
+        title: "Order Summary card",
+        blocks: [
+          { kind: "para", text: "The Order Summary card is your at-a-glance status panel — the key numbers, stages and dates you check most often, all in one place." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Order Value — the total value of the order. If your role cannot see finances it shows ‘Hidden’ instead.",
+            "Two status steps — the two most important stages of the job (for example design and production), each with a colored badge that reflects its current status.",
+            "Placed On — the date the order was started.",
+            "Delivery In — a live countdown to the delivery date that turns red when the order is due soon or overdue."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Use Edit headings to choose which two status steps appear here and rename their labels to match your own workflow.",
+            "The status badges and the Delivery In color update automatically as the order progresses, so the card always reflects the real state."
+          ] }
+        ]
       }
     ]
   },
@@ -236,6 +255,25 @@ const TREE_TR: GuideNode[] = [
             "Önizleme görselleri standart görsel dosyalarını kabul eder (JPG, PNG, HEIC ve benzeri)."
           ] },
           { kind: "para", text: "İpucu: iyi bir önizleme fotoğrafı, kalabalık bir listede siparişleri bir bakışta tanımayı çok kolaylaştırır." }
+        ]
+      },
+      {
+        id: "card-summary",
+        title: "Order Summary kartı",
+        blocks: [
+          { kind: "para", text: "Order Summary (Sipariş Özeti) kartı, bir bakışta durum panelinizdir — en sık kontrol ettiğiniz temel rakamlar, aşamalar ve tarihler tek yerde." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Order Value (Sipariş Değeri) — siparişin toplam değeri. Rolünüz finansı göremiyorsa bunun yerine ‘Hidden’ (Gizli) yazar.",
+            "İki durum adımı — işin en önemli iki aşaması (örneğin tasarım ve üretim); her biri mevcut durumu yansıtan renkli bir rozetle.",
+            "Placed On — siparişin başlatıldığı tarih.",
+            "Delivery In — teslim tarihine canlı geri sayım; sipariş yaklaştığında veya geciktiğinde kırmızıya döner."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Başlıkları Düzenle ile burada hangi iki durum adımının görüneceğini seçin ve etiketlerini kendi iş akışınıza göre yeniden adlandırın.",
+            "Durum rozetleri ve Delivery In rengi sipariş ilerledikçe otomatik güncellenir; böylece kart her zaman gerçek durumu yansıtır."
+          ] }
         ]
       }
     ]
