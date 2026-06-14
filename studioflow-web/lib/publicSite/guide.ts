@@ -419,30 +419,116 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
-    id: "team",
-    title: "Team Access",
-    blocks: [
-      { kind: "para", text: "Invite your team and control exactly what each person can see and do. Reached from Settings ▸ Team Access." },
-      { kind: "bullets", items: [
-        "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
-        "Control which menus, order cards and settings each role can see.",
-        "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
-      ] }
-    ]
-  },
-  {
     id: "settings",
     title: "Settings",
     blocks: [
-      { kind: "para", text: "Where you tailor NivaDesk to your business. The main sections:" },
-      { kind: "bullets", items: [
-        "Workflow Steps — your industry, its workflow description and the production stages.",
-        "Financial — currency, platform fee, tax rules, rate and the VAT transition date.",
-        "Safety & Uploads — maximum upload size, allowed file types and the upload policy.",
-        "AI Replies, PDF Export and WooCommerce sync options.",
-        "Data Management, Plan & Access, Team Access, Account and About."
-      ] },
-      { kind: "para", text: "Some settings are protected and only the owner or admins can change them." }
+      { kind: "para", text: "Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls. Some settings are protected, so only the owner or admins can change them." }
+    ],
+    children: [
+      {
+        id: "set-general",
+        title: "General",
+        blocks: [
+          { kind: "para", text: "Your personal and appearance settings." },
+          { kind: "bullets", items: [
+            "Appearance & theme — switch between light and dark mode.",
+            "Language — choose one of 12 languages for the whole app.",
+            "Profile — your name and account details.",
+            "Security — manage how you sign in and protect your account."
+          ] }
+        ]
+      },
+      {
+        id: "set-workflow",
+        title: "Workflow Steps",
+        blocks: [
+          { kind: "para", text: "Shape how orders flow for your craft." },
+          { kind: "bullets", items: [
+            "Your industry and its workflow description, which auto-fills to fit your trade and changes when you switch industry.",
+            "The production stages (status steps) that appear on every order.",
+            "Custom fields and the Inventory Labels used by the Materials card."
+          ] }
+        ]
+      },
+      {
+        id: "set-pdf",
+        title: "PDF Export Settings",
+        blocks: [
+          { kind: "para", text: "Control how invoices and order PDFs look — your business details, logo and a footer note, plus what is included in the export." }
+        ]
+      },
+      {
+        id: "set-quickreply",
+        title: "Quick Reply Settings",
+        blocks: [
+          { kind: "para", text: "Manage your saved quick-reply templates and the channel buttons used to contact clients from an order." }
+        ]
+      },
+      {
+        id: "set-financial",
+        title: "Financial Settings",
+        blocks: [
+          { kind: "para", text: "Set the money rules that drive every order's Financial card." },
+          { kind: "bullets", items: [
+            "Currency and decimal separator.",
+            "Average platform fee and default tax rate.",
+            "Tax rule (standard or margin scheme), the VAT transition date and Corporation Tax.",
+            "Recalculate taxes for past orders after a change."
+          ] }
+        ]
+      },
+      {
+        id: "set-woocommerce",
+        title: "WooCommerce Integration",
+        blocks: [
+          { kind: "para", text: "Connect a WooCommerce store so live website orders flow into NivaDesk automatically through a webhook. The screen shows your per-workspace signed delivery URL to paste into WooCommerce." }
+        ]
+      },
+      {
+        id: "set-safety",
+        title: "Safety & Uploads",
+        blocks: [
+          { kind: "para", text: "Protect your workspace when people upload files." },
+          { kind: "bullets", items: [
+            "Maximum upload size and allowed file types.",
+            "The upload policy users accept before adding files.",
+            "These limits apply to Client Files across every order."
+          ] }
+        ]
+      },
+      {
+        id: "set-data",
+        title: "Data Management",
+        blocks: [
+          { kind: "para", text: "Import, export and back up your workspace data, and manage data clean-up." }
+        ]
+      },
+      {
+        id: "set-plan",
+        title: "Plan & Access",
+        blocks: [
+          { kind: "para", text: "See your current plan, your usage limits and which features are available, and manage billing. Review the Free/Demo, Lite, Pro and Team options here." }
+        ]
+      },
+      {
+        id: "set-team",
+        title: "Team Access",
+        blocks: [
+          { kind: "para", text: "Invite your team and control exactly what each person can see and do." },
+          { kind: "bullets", items: [
+            "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
+            "Control which menus, order cards and settings each role can see.",
+            "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
+          ] }
+        ]
+      },
+      {
+        id: "set-support",
+        title: "Support / Tickets",
+        blocks: [
+          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team — the same tickets you see in the Messages menu." }
+        ]
+      }
     ]
   },
   {
@@ -450,13 +536,6 @@ const TREE_EN: GuideNode[] = [
     title: "Insights",
     blocks: [
       { kind: "para", text: "A high-level view of how your workspace is doing — overview stats about orders, revenue and activity to help you spot trends." }
-    ]
-  },
-  {
-    id: "plan",
-    title: "Plan & Billing",
-    blocks: [
-      { kind: "para", text: "See your current plan and what each plan includes. You can review the Free/Demo, Lite, Pro and Team options here." }
     ]
   },
   {
@@ -854,30 +933,116 @@ const TREE_TR: GuideNode[] = [
     ]
   },
   {
-    id: "team",
-    title: "Team Access (Ekip Erişimi)",
-    blocks: [
-      { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin. Settings ▸ Team Access'ten erişilir." },
-      { kind: "bullets", items: [
-        "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
-        "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
-        "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
-      ] }
-    ]
-  },
-  {
     id: "settings",
     title: "Settings (Ayarlar)",
     blocks: [
-      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer. Ana bölümler:" },
-      { kind: "bullets", items: [
-        "Workflow Steps — iş kolunuz, iş akışı açıklaması ve üretim aşamaları.",
-        "Financial — para birimi, platform ücreti, vergi kuralları, oran ve KDV geçiş tarihi.",
-        "Safety & Uploads — maksimum yükleme boyutu, izin verilen dosya türleri ve upload politikası.",
-        "AI Replies, PDF Export ve WooCommerce senkron seçenekleri.",
-        "Data Management, Plan & Access, Team Access, Account ve About."
-      ] },
-      { kind: "para", text: "Bazı ayarlar korumalıdır ve yalnızca owner veya adminler değiştirebilir." }
+      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer. Soldan bir bölüm seçin. Bazı ayarlar korumalıdır; yalnızca owner veya adminler değiştirebilir." }
+    ],
+    children: [
+      {
+        id: "set-general",
+        title: "General (Genel)",
+        blocks: [
+          { kind: "para", text: "Kişisel ve görünüm ayarlarınız." },
+          { kind: "bullets", items: [
+            "Görünüm & tema — açık ve koyu mod arasında geçiş.",
+            "Dil — tüm uygulama için 12 dilden birini seçin.",
+            "Profil — adınız ve hesap bilgileriniz.",
+            "Güvenlik — nasıl giriş yaptığınızı ve hesabınızı korumanızı yönetin."
+          ] }
+        ]
+      },
+      {
+        id: "set-workflow",
+        title: "Workflow Steps",
+        blocks: [
+          { kind: "para", text: "Siparişlerin mesleğinize göre nasıl aktığını şekillendirin." },
+          { kind: "bullets", items: [
+            "İş kolunuz ve iş akışı açıklaması; mesleğinize uyacak şekilde otomatik dolar ve iş kolunu değiştirince değişir.",
+            "Her siparişte görünen üretim aşamaları (durum adımları).",
+            "Materials kartının kullandığı özel alanlar ve Envanter Etiketleri."
+          ] }
+        ]
+      },
+      {
+        id: "set-pdf",
+        title: "PDF Export Settings",
+        blocks: [
+          { kind: "para", text: "Fatura ve sipariş PDF'lerinin görünümünü — işletme bilgileri, logo ve alt not — ve dışa aktarıma neyin dahil edileceğini ayarlayın." }
+        ]
+      },
+      {
+        id: "set-quickreply",
+        title: "Quick Reply Settings",
+        blocks: [
+          { kind: "para", text: "Kayıtlı hızlı yanıt şablonlarınızı ve siparişlerden müşteriye ulaşmak için kullanılan kanal butonlarını yönetin." }
+        ]
+      },
+      {
+        id: "set-financial",
+        title: "Financial Settings",
+        blocks: [
+          { kind: "para", text: "Her siparişin Financial kartını besleyen para kurallarını ayarlayın." },
+          { kind: "bullets", items: [
+            "Para birimi ve ondalık ayracı.",
+            "Ortalama platform ücreti ve varsayılan vergi oranı.",
+            "Vergi kuralı (standart veya margin scheme), KDV geçiş tarihi ve Kurumlar Vergisi.",
+            "Bir değişiklikten sonra geçmiş siparişlerin vergisini yeniden hesaplayın."
+          ] }
+        ]
+      },
+      {
+        id: "set-woocommerce",
+        title: "WooCommerce Integration",
+        blocks: [
+          { kind: "para", text: "Bir WooCommerce mağazası bağlayın; canlı web sitesi siparişleri bir webhook ile NivaDesk'e otomatik aksın. Ekran, WooCommerce'e yapıştıracağınız çalışma alanına özel imzalı delivery URL'ini gösterir." }
+        ]
+      },
+      {
+        id: "set-safety",
+        title: "Safety & Uploads",
+        blocks: [
+          { kind: "para", text: "İnsanlar dosya yüklerken çalışma alanınızı koruyun." },
+          { kind: "bullets", items: [
+            "Maksimum yükleme boyutu ve izin verilen dosya türleri.",
+            "Kullanıcıların dosya eklemeden önce kabul ettiği upload politikası.",
+            "Bu limitler her siparişteki Client Files için geçerlidir."
+          ] }
+        ]
+      },
+      {
+        id: "set-data",
+        title: "Data Management",
+        blocks: [
+          { kind: "para", text: "Çalışma alanı verilerinizi içe/dışa aktarın, yedeğini alın ve veri temizliğini yönetin." }
+        ]
+      },
+      {
+        id: "set-plan",
+        title: "Plan & Access",
+        blocks: [
+          { kind: "para", text: "Mevcut planınızı, kullanım limitlerinizi ve hangi özelliklerin kullanılabilir olduğunu görün ve faturalandırmayı yönetin. Free/Demo, Lite, Pro ve Team seçeneklerini buradan inceleyin." }
+        ]
+      },
+      {
+        id: "set-team",
+        title: "Team Access",
+        blocks: [
+          { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin." },
+          { kind: "bullets", items: [
+            "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
+            "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
+            "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
+          ] }
+        ]
+      },
+      {
+        id: "set-support",
+        title: "Support / Tickets",
+        blocks: [
+          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın — Messages menüsünde gördüğünüz ticketların aynısı." }
+        ]
+      }
     ]
   },
   {
@@ -885,13 +1050,6 @@ const TREE_TR: GuideNode[] = [
     title: "Insights",
     blocks: [
       { kind: "para", text: "Çalışma alanınızın nasıl gittiğine dair üst düzey bir görünüm — siparişler, ciro ve etkinlik hakkında trendleri yakalamanıza yardımcı özet istatistikler." }
-    ]
-  },
-  {
-    id: "plan",
-    title: "Plan ve Faturalandırma",
-    blocks: [
-      { kind: "para", text: "Mevcut planınızı ve her planın içeriğini görün. Free/Demo, Lite, Pro ve Team seçeneklerini buradan inceleyebilirsiniz." }
     ]
   },
   {
