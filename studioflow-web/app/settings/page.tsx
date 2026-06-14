@@ -507,7 +507,7 @@ function renderSettingsSection({
     case "financial":
       return <FinancialSettingsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "woocommerce":
-      return <WooCommerceIntegrationSection workspace={workspace} />;
+      return <WooCommerceIntegrationSection workspace={workspace} language={language} />;
     case "safety-uploads":
       return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
@@ -3079,7 +3079,8 @@ function FinancialSettingsSection({
   );
 }
 
-function WooCommerceIntegrationSection({ workspace }: { workspace: WorkspaceContext }) {
+function WooCommerceIntegrationSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
   const [copyStatus, setCopyStatus] = useState("");
   const companyId = workspace.id.trim();
   // The signed Delivery URL (with this workspace's webhook token) is loaded from the backend
@@ -3110,9 +3111,9 @@ function WooCommerceIntegrationSection({ workspace }: { workspace: WorkspaceCont
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      setCopyStatus(`${label} copied.`);
+      setCopyStatus(`${label} ${t("copied.")}`);
     } catch {
-      setCopyStatus("Copy failed. Select the value and copy it manually.");
+      setCopyStatus(t("Copy failed. Select the value and copy it manually."));
     }
     window.setTimeout(() => setCopyStatus(""), 1600);
   }
@@ -3120,48 +3121,48 @@ function WooCommerceIntegrationSection({ workspace }: { workspace: WorkspaceCont
   return (
     <div className="settings-card-stack">
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="orders" eyebrow="WooCommerce Integration" title="Connect WooCommerce" />
+        <CardTitle icon="orders" eyebrow={t("WooCommerce Integration")} title={t("Connect WooCommerce")} />
         <div className="quick-reply-settings-info">
-          <strong>Website orders can flow into this workspace.</strong>
-          <p>To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders appear in Orders and Schedule automatically.</p>
+          <strong>{t("Website orders can flow into this workspace.")}</strong>
+          <p>{t("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders appear in Orders and Schedule automatically.")}</p>
         </div>
         {!companyId ? (
-          <p className="layout-error">Company ID is not available yet. Sign in or reconnect your workspace first.</p>
+          <p className="layout-error">{t("Company ID is not available yet. Sign in or reconnect your workspace first.")}</p>
         ) : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="docText" eyebrow="Copy Setup Details" title="Webhook values" />
+        <CardTitle icon="docText" eyebrow={t("Copy Setup Details")} title={t("Webhook values")} />
         <CopyableIntegrationValue
-          title="Your Company ID"
-          value={companyId || "Unavailable"}
-          buttonTitle="Copy Company ID"
+          title={t("Your Company ID")}
+          value={companyId || t("Unavailable")}
+          buttonTitle={t("Copy Company ID")}
           canCopy={Boolean(companyId)}
-          onCopy={() => copyText(companyId, "Company ID")}
+          onCopy={() => copyText(companyId, t("Company ID"))}
         />
         <CopyableIntegrationValue
-          title="Delivery URL with Company ID"
-          value={deliveryUrl || (deliveryUrlLoading ? "Loading…" : "Unavailable")}
-          buttonTitle="Copy Delivery URL"
+          title={t("Delivery URL with Company ID")}
+          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
+          buttonTitle={t("Copy Delivery URL")}
           canCopy={Boolean(deliveryUrl)}
-          onCopy={() => copyText(deliveryUrl, "Delivery URL")}
+          onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
         />
         {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow="What you need to do" title="WooCommerce webhook steps" />
+        <CardTitle icon="checklist" eyebrow={t("What you need to do")} title={t("WooCommerce webhook steps")} />
         <div className="settings-rule-list">
-          <IntegrationInfoRow number="1" title="Open WooCommerce webhooks" detail="In WordPress, open WooCommerce > Settings > Advanced > Webhooks." />
-          <IntegrationInfoRow number="2" title="Create a new webhook" detail="Create a new webhook for NivaDesk orders." />
-          <IntegrationInfoRow number="3" title="Set it active" detail="Set Status to Active and Topic to Order created." />
-          <IntegrationInfoRow number="4" title="Paste the Delivery URL" detail="Paste the copied Delivery URL, save the webhook, then place a test order." />
+          <IntegrationInfoRow number="1" title={t("Open WooCommerce webhooks")} detail={t("In WordPress, open WooCommerce > Settings > Advanced > Webhooks.")} />
+          <IntegrationInfoRow number="2" title={t("Create a new webhook")} detail={t("Create a new webhook for NivaDesk orders.")} />
+          <IntegrationInfoRow number="3" title={t("Set it active")} detail={t("Set Status to Active and Topic to Order created.")} />
+          <IntegrationInfoRow number="4" title={t("Paste the Delivery URL")} detail={t("Paste the copied Delivery URL, save the webhook, then place a test order.")} />
         </div>
       </section>
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="dashboard" eyebrow="What happens when it is active" title="Incoming website orders" />
-        <p className="muted-copy">New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.</p>
+        <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
+        <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
       </section>
     </div>
   );
