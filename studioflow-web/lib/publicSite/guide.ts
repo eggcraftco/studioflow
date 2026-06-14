@@ -40,7 +40,14 @@ const TREE_EN: GuideNode[] = [
     id: "getting-started",
     title: "Getting started",
     blocks: [
-      { kind: "para", text: "On first launch you pick your industry so NivaDesk can tailor the workflow to your craft. A Free Demo workspace lets you explore everything with sample data before you add your own." }
+      { kind: "para", text: "When you first open NivaDesk, a short setup gets your workspace ready for your kind of work." },
+      { kind: "steps", items: [
+        "Pick your industry — NivaDesk tailors the workflow steps, order fields and labels to your craft.",
+        "Review the business description — it auto-fills to fit your trade and shapes how orders are set up. You can edit it any time in Settings ▸ Workflow Steps.",
+        "Explore the Free Demo workspace — sample orders and customers let you try everything before adding real data.",
+        "Add your first real order with Add Project when you are ready."
+      ] },
+      { kind: "para", text: "You can change your industry, workflow steps and labels later in Settings, so nothing here is permanent." }
     ]
   },
   {
@@ -565,17 +572,15 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
-    id: "insights",
-    title: "Insights",
-    blocks: [
-      { kind: "para", text: "A high-level view of how your workspace is doing — overview stats about orders, revenue and activity to help you spot trends." }
-    ]
-  },
-  {
     id: "language-theme",
     title: "Language & appearance",
     blocks: [
-      { kind: "para", text: "Switch between 12 languages and choose light or dark mode from Settings. Your choice syncs across the apps." }
+      { kind: "para", text: "Make NivaDesk look and read the way you prefer. Both live in Settings ▸ General and sync across your devices." },
+      { kind: "bullets", items: [
+        "Language — choose any of 12 languages; the whole app, including menus and labels, switches instantly.",
+        "Appearance — switch between light and dark mode.",
+        "Your choices are saved to your account, so they follow you on Mac, iPhone, iPad, Android and web."
+      ] }
     ]
   }
 ];
@@ -587,7 +592,14 @@ const TREE_TR: GuideNode[] = [
     id: "getting-started",
     title: "Başlarken",
     blocks: [
-      { kind: "para", text: "İlk açılışta iş kolunuzu seçersiniz; böylece NivaDesk iş akışını mesleğinize göre ayarlar. Ücretsiz Demo çalışma alanı, kendi verilerinizi eklemeden önce her şeyi örnek verilerle keşfetmenizi sağlar." }
+      { kind: "para", text: "NivaDesk'i ilk açtığınızda kısa bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar." },
+      { kind: "steps", items: [
+        "İş kolunuzu seçin — NivaDesk iş akışı adımlarını, sipariş alanlarını ve etiketleri mesleğinize göre ayarlar.",
+        "İş açıklamasını gözden geçirin — mesleğinize uyacak şekilde otomatik dolar ve siparişlerin nasıl kurulacağını belirler. İstediğiniz zaman Settings ▸ Workflow Steps'ten düzenleyebilirsiniz.",
+        "Free Demo çalışma alanını keşfedin — örnek siparişler ve müşteriler, gerçek veri eklemeden her şeyi denemenizi sağlar.",
+        "Hazır olduğunuzda Add Project ile ilk gerçek siparişinizi ekleyin."
+      ] },
+      { kind: "para", text: "İş kolunuzu, iş akışı adımlarınızı ve etiketleri sonradan Settings'ten değiştirebilirsiniz; burada hiçbir şey kalıcı değildir." }
     ]
   },
   {
@@ -1112,17 +1124,15 @@ const TREE_TR: GuideNode[] = [
     ]
   },
   {
-    id: "insights",
-    title: "Insights",
-    blocks: [
-      { kind: "para", text: "Çalışma alanınızın nasıl gittiğine dair üst düzey bir görünüm — siparişler, ciro ve etkinlik hakkında trendleri yakalamanıza yardımcı özet istatistikler." }
-    ]
-  },
-  {
     id: "language-theme",
     title: "Dil ve Görünüm",
     blocks: [
-      { kind: "para", text: "Ayarlar'dan 12 dil arasında geçiş yapın ve açık/koyu temayı seçin. Tercihiniz uygulamalar arasında senkronlanır." }
+      { kind: "para", text: "NivaDesk'in görünüşünü ve dilini istediğiniz gibi yapın. İkisi de Settings ▸ General altındadır ve cihazlarınız arasında senkronlanır." },
+      { kind: "bullets", items: [
+        "Dil — 12 dilden birini seçin; menüler ve etiketler dahil tüm uygulama anında değişir.",
+        "Görünüm — açık ve koyu mod arasında geçiş yapın.",
+        "Tercihleriniz hesabınıza kaydedilir; Mac, iPhone, iPad, Android ve web'de sizi takip eder."
+      ] }
     ]
   }
 ];
