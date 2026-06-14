@@ -2595,6 +2595,20 @@ function GuideBlocks({ node }: { node: GuideNode }) {
   );
 }
 
+const GUIDE_NO_RESULTS: Record<string, string> = {
+  "Türkçe": "Sonuç yok",
+  "Deutsch": "Keine Treffer",
+  "Français": "Aucun résultat",
+  "Italiano": "Nessun risultato",
+  "Español (Spanish)": "Sin resultados",
+  "Português": "Sem resultados",
+  "Русский (Russian)": "Ничего не найдено",
+  "日本語 (Japanese)": "該当なし",
+  "中文 (Chinese)": "无结果",
+  "العربية (Arabic)": "لا نتائج",
+  "हिन्दी (Hindi)": "कोई परिणाम नहीं"
+};
+
 export function PublicGuidePage() {
   const Page = () => {
     const { language } = usePublicSiteLanguage();
@@ -2620,6 +2634,7 @@ export function PublicGuidePage() {
     }, [flat]);
 
     const selected = flat.find(node => node.id === selectedId) ?? tree[0];
+    const [query, setQuery] = useState("");
 
     function select(id: string) {
       setSelectedId(id);
@@ -2627,6 +2642,27 @@ export function PublicGuidePage() {
         window.history.replaceState(null, "", `#${id}`);
       }
     }
+
+    const nodeText = (node: GuideNode) => {
+      const parts: string[] = [node.title];
+      node.blocks.forEach(block => {
+        if (block.kind === "para" || block.kind === "sub") parts.push(block.text);
+        else parts.push(block.items.join(" "));
+      });
+      return parts.join(" ").toLowerCase();
+    };
+
+    const q = query.trim().toLowerCase();
+    const groups = tree
+      .map(node => {
+        const kids = node.children ?? [];
+        const parentMatch = !q || nodeText(node).includes(q);
+        const childMatches = q ? kids.filter(child => nodeText(child).includes(q)) : kids;
+        const visibleKids = !q ? kids : parentMatch ? kids : childMatches;
+        const show = !q || parentMatch || childMatches.length > 0;
+        return { node, visibleKids, show };
+      })
+      .filter(group => group.show);
 
     return (
       <>
@@ -2644,8 +2680,16 @@ export function PublicGuidePage() {
         <section className="public-section">
           <div className="public-shell guide-layout">
             <nav className="guide-nav" aria-label={chrome.menuLabel}>
+              <input
+                className="guide-search"
+                type="search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder={chrome.searchPlaceholder}
+                aria-label={chrome.searchPlaceholder}
+              />
               <span className="guide-nav-title">{chrome.menuLabel}</span>
-              {tree.map(node => (
+              {groups.map(({ node, visibleKids }) => (
                 <div key={node.id} className="guide-nav-group">
                   <button
                     type="button"
@@ -2655,9 +2699,9 @@ export function PublicGuidePage() {
                   >
                     {node.title}
                   </button>
-                  {node.children && node.children.length > 0 ? (
+                  {visibleKids.length > 0 ? (
                     <div className="guide-nav-children">
-                      {node.children.map(child => (
+                      {visibleKids.map(child => (
                         <button
                           key={child.id}
                           type="button"
@@ -2672,6 +2716,9 @@ export function PublicGuidePage() {
                   ) : null}
                 </div>
               ))}
+              {groups.length === 0 ? (
+                <p className="guide-nav-empty">{GUIDE_NO_RESULTS[language as string] ?? "No matches"}</p>
+              ) : null}
             </nav>
 
             <article className="guide-detail" key={selected.id}>

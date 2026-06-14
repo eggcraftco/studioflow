@@ -15392,6 +15392,36 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   align-content: start;
 }
 
+.guide-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--public-border);
+  border-radius: 10px;
+  background: var(--public-surface);
+  color: var(--public-text);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.guide-search::placeholder {
+  color: var(--public-muted);
+}
+
+.guide-search:focus {
+  outline: none;
+  border-color: var(--public-accent);
+  box-shadow: 0 0 0 3px var(--public-accent-soft);
+}
+
+.guide-nav-empty {
+  margin: 6px 4px;
+  color: var(--public-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .guide-nav-title {
   font-size: 12px;
   font-weight: 900;
