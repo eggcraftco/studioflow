@@ -515,7 +515,7 @@ function renderSettingsSection({
     case "account":
       return <AccountSection workspace={workspace} settings={settings} userEmail={userEmail} onSaved={onWorkspaceSettingsChange} />;
     case "plan-access":
-      return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} />;
+      return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} language={language} />;
     case "team-access":
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} />;
     case "support-tickets":
@@ -3371,12 +3371,15 @@ function DataManagementSection({
 function PlanAccessSection({
   workspace,
   counts,
-  storagePercent
+  storagePercent,
+  language = "English"
 }: {
   workspace: WorkspaceContext;
   counts: DashboardCounts | null;
   storagePercent: number;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   const currentPlan = workspace.entitlements;
   // Effective storage for the current workspace = base plan + active add-on.
   const effectiveStorageLabel = workspace.billingStorageLimitMB >= 1024
@@ -3386,22 +3389,22 @@ function PlanAccessSection({
   const featurePills = [
     { title: planOrderLimitText(currentPlan), enabled: true },
     { title: planCustomerLimitText(currentPlan), enabled: true },
-    { title: `Storage: ${effectiveStorageLabel}`, enabled: currentPlan.features.client_files },
+    { title: `${t("Storage")}: ${effectiveStorageLabel}`, enabled: currentPlan.features.client_files },
     { title: planTeamLimitText(currentPlan), enabled: currentPlan.features.team_access },
-    { title: "Client Files", enabled: currentPlan.features.client_files },
-    { title: "Export Data", enabled: currentPlan.features.export_data },
-    { title: "Card Customise", enabled: currentPlan.features.card_customization },
-    { title: "Financial Cards", enabled: currentPlan.features.financial_basic },
-    { title: "Advanced Finance", enabled: currentPlan.features.financial_advanced },
-    { title: "Workspace Logo", enabled: currentPlan.features.workspace_logo_upload },
-    { title: "Team Access", enabled: currentPlan.features.team_access },
-    { title: "Storage Add-ons", enabled: currentPlan.features.storage_addons }
+    { title: t("Client Files"), enabled: currentPlan.features.client_files },
+    { title: t("Export Data"), enabled: currentPlan.features.export_data },
+    { title: t("Card Customise"), enabled: currentPlan.features.card_customization },
+    { title: t("Financial Cards"), enabled: currentPlan.features.financial_basic },
+    { title: t("Advanced Finance"), enabled: currentPlan.features.financial_advanced },
+    { title: t("Workspace Logo"), enabled: currentPlan.features.workspace_logo_upload },
+    { title: t("Team Access"), enabled: currentPlan.features.team_access },
+    { title: t("Storage Add-ons"), enabled: currentPlan.features.storage_addons }
   ];
 
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="plan" eyebrow="Plan & Access" title={workspace.billingPlanName} />
+        <CardTitle icon="plan" eyebrow={t("Plan & Access")} title={workspace.billingPlanName} />
         <div className="plan-access-hero">
           <div className="plan-access-hero-icon" aria-hidden="true">◆</div>
           <div>
@@ -3418,24 +3421,24 @@ function PlanAccessSection({
           </div>
         </div>
         <div className="settings-mini-grid">
-          <InfoTile label="Orders" value={`${counts?.orderCount ?? 0}`} />
-          <InfoTile label="Customers" value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile label="Current seat allowance" value={`${workspace.billingTeamMemberLimit}`} />
-          <InfoTile label="Storage" value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
+          <InfoTile label={t("Orders")} value={`${counts?.orderCount ?? 0}`} />
+          <InfoTile label={t("Customers")} value={`${counts?.customerCount ?? 0}`} />
+          <InfoTile label={t("Current seat allowance")} value={`${workspace.billingTeamMemberLimit}`} />
+          <InfoTile label={t("Storage")} value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
         </div>
         <div className="progress-track settings-progress">
           <div className="progress-fill" style={{ width: `${storagePercent}%` }} />
         </div>
-        <p className="muted-copy">{counts?.estimatedFileUsageMB ?? 0} MB used of {formatStorageFromMB(workspace.billingStorageLimitMB)}.</p>
+        <p className="muted-copy">{counts?.estimatedFileUsageMB ?? 0} {t("MB used of")} {formatStorageFromMB(workspace.billingStorageLimitMB)}.</p>
         {isActiveWorkspaceOwner ? (
-          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>Open full Plan &amp; Billing page</Link>
+          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>{t("Open full Plan & Billing page")}</Link>
         ) : (
-          <p className="muted-copy">This workspace plan is managed by its owner.</p>
+          <p className="muted-copy">{t("This workspace plan is managed by its owner.")}</p>
         )}
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="check" eyebrow="Available now" title="Current plan access" />
+        <CardTitle icon="check" eyebrow={t("Available now")} title={t("Current plan access")} />
         <div className="plan-feature-pill-grid">
           {featurePills.map(feature => (
             <span className={feature.enabled ? "plan-feature-pill enabled" : "plan-feature-pill"} key={feature.title}>
@@ -3447,28 +3450,28 @@ function PlanAccessSection({
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="check" eyebrow="Plan Matrix" title="Shared app and web plan keys" />
+        <CardTitle icon="check" eyebrow={t("Plan Matrix")} title={t("Shared app and web plan keys")} />
         <div className="plan-compare-grid">
           {Object.values(PLAN_ENTITLEMENTS).map(plan => (
             <PlanComparisonCard
               key={plan.plan}
               plan={plan}
               currentPlanKey={workspace.billingPlan}
-              footer={plan.plan === workspace.billingPlan ? <span>Your workspace is using this plan.</span> : null}
+              footer={plan.plan === workspace.billingPlan ? <span>{t("Your workspace is using this plan.")}</span> : null}
             />
           ))}
         </div>
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="lock" eyebrow="Billing security" title="Plan changes are protected" />
+        <CardTitle icon="lock" eyebrow={t("Billing security")} title={t("Plan changes are protected")} />
         <p className="muted-copy">
-          Subscription access is managed through secure billing and updates automatically when a payment status changes.
+          {t("Subscription access is managed through secure billing and updates automatically when a payment status changes.")}
         </p>
         {isActiveWorkspaceOwner ? (
-          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>Open Plan &amp; Billing</Link>
+          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>{t("Open Plan & Billing")}</Link>
         ) : (
-          <p className="muted-copy">Only the workspace owner can change or manage this plan.</p>
+          <p className="muted-copy">{t("Only the workspace owner can change or manage this plan.")}</p>
         )}
       </section>
     </div>
