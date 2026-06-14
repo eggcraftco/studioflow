@@ -322,6 +322,23 @@ const TREE_EN: GuideNode[] = [
             "Use Edit headings to customize the Quick Reminder shortcuts and their default timing so they match how you follow up."
           ] }
         ]
+      },
+      {
+        id: "card-history",
+        title: "History / Log card",
+        blocks: [
+          { kind: "para", text: "An automatic audit trail of the order — what changed and when — so you can always see how it reached its current state." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "A list of recent important changes, newest first.",
+            "Each entry shows what changed, the date and time, and the old value → the new value."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "The log is read-only; it fills in automatically as people edit the order.",
+            "History cards are available from NivaDesk Lite."
+          ] }
+        ]
       }
     ]
   },
@@ -701,6 +718,23 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Neleri değiştirebilirsiniz" },
           { kind: "bullets", items: [
             "Başlıkları Düzenle ile Quick Reminder kısayollarını ve varsayılan zamanlamalarını, takip etme şeklinize uyacak biçimde özelleştirin."
+          ] }
+        ]
+      },
+      {
+        id: "card-history",
+        title: "History / Log kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin otomatik bir değişiklik kaydı — neyin ne zaman değiştiği — böylece mevcut duruma nasıl geldiğini her zaman görebilirsiniz." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Son önemli değişikliklerin listesi, en yeni en üstte.",
+            "Her kayıt; neyin değiştiğini, tarih ve saati, ve eski değer → yeni değeri gösterir."
+          ] },
+          { kind: "sub", text: "Bilmekte fayda var" },
+          { kind: "bullets", items: [
+            "Kayıt salt-okunurdur; insanlar siparişi düzenledikçe otomatik dolar.",
+            "History kartları NivaDesk Lite'tan itibaren kullanılabilir."
           ] }
         ]
       }
