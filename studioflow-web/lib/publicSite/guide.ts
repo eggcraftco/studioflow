@@ -47,7 +47,12 @@ const TREE_EN: GuideNode[] = [
     id: "dashboard",
     title: "Dashboard",
     blocks: [
-      { kind: "para", text: "Your home overview. It shows active orders, what is due soon and quick stats. Start your day here to see what needs attention." }
+      { kind: "para", text: "Your home overview. Start your day here to see what needs attention before you dive into individual orders." },
+      { kind: "bullets", items: [
+        "Quick stats on active orders, what is due soon and recent activity.",
+        "Spot overdue or at-risk jobs early so they don't slip.",
+        "Jump straight to an order that needs you."
+      ] }
     ]
   },
   {
@@ -343,63 +348,85 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
-    id: "client-files",
-    title: "Client Files",
-    blocks: [
-      { kind: "para", text: "Attach PDFs and photos that belong to an order. It works offline — files are saved on the device and upload automatically when you are back online." }
-    ]
-  },
-  {
-    id: "tasks",
-    title: "To Do / Tasks",
-    blocks: [
-      { kind: "para", text: "A checklist on each order with due dates, priorities and assignments, so nothing gets forgotten and everyone knows who does what." }
-    ]
-  },
-  {
     id: "schedule",
-    title: "Schedule & Alerts",
+    title: "Schedule",
     blocks: [
-      { kind: "para", text: "Set reminders with one-tap shortcuts (for example ‘ask for approval’ or ‘send invoice’). NivaDesk notifies you before something is due." }
+      { kind: "para", text: "A calendar-style view of everything that is due across the workspace — delivery dates and reminders from all your orders in one place." },
+      { kind: "bullets", items: [
+        "See upcoming deliveries and alerts together, so you can plan the week at a glance.",
+        "Open any item to jump straight to its order.",
+        "Reminders you set on an order's Schedule & Alerts card appear here too."
+      ] }
     ]
   },
   {
-    id: "tracking",
-    title: "Shipment tracking",
+    id: "notes",
+    title: "Notes",
     blocks: [
-      { kind: "para", text: "Add a tracking number to an order for live delivery status, so you always know where a shipment is without leaving the app." }
-    ]
-  },
-  {
-    id: "quick-reply",
-    title: "Quick Reply",
-    blocks: [
-      { kind: "para", text: "Saved message templates and channel buttons (such as WhatsApp or email) to contact clients quickly. Optional AI replies help you draft messages." }
+      { kind: "para", text: "A single place to browse the notes attached to your orders, so you can find an instruction or decision without opening each order." },
+      { kind: "bullets", items: [
+        "Review customer notes and special notes across orders.",
+        "Use it as a quick reference while you work."
+      ] }
     ]
   },
   {
     id: "customers",
     title: "Customers",
     blocks: [
-      { kind: "para", text: "Your client list and their details, linked to their orders so you can find history and contact information in one place." }
+      { kind: "para", text: "Your client directory — every customer with their contact details and the orders linked to them." },
+      { kind: "bullets", items: [
+        "Add and edit customers, and keep their contact channels in one record.",
+        "Open a customer to see their order history.",
+        "Customer notes stay with the customer and show on each of their orders."
+      ] }
+    ]
+  },
+  {
+    id: "files",
+    title: "Files",
+    blocks: [
+      { kind: "para", text: "A library of every client file across all your orders — proofs, designs, PDFs and photos — in one searchable place." },
+      { kind: "bullets", items: [
+        "Browse, preview and download files without opening each order.",
+        "Uploads follow the same size limit and upload policy set in Settings ▸ Safety & Uploads.",
+        "Each order also has its own Client Files card for files that belong only to it."
+      ] }
     ]
   },
   {
     id: "messages",
-    title: "Messages & Support",
+    title: "Messages",
     blocks: [
-      { kind: "para", text: "Send an internal request to your workspace owner or admins, or open a support ticket to the NivaDesk team for app questions." }
+      { kind: "para", text: "Where you raise and track requests — both inside your workspace and to NivaDesk support." },
+      { kind: "bullets", items: [
+        "Workspace tickets — send a request to your workspace owner or admins (project questions, approvals, missing details).",
+        "NivaDesk support tickets — report app bugs, billing or account questions to the NivaDesk team.",
+        "Track replies and status on your own tickets in one list."
+      ] }
+    ]
+  },
+  {
+    id: "quick-reply",
+    title: "AI Replies / Quick Reply",
+    blocks: [
+      { kind: "para", text: "Build a library of ready-made messages so you can answer clients quickly and consistently." },
+      { kind: "bullets", items: [
+        "Save message templates for the things you send most often.",
+        "Optional AI replies help you draft a message in your tone.",
+        "Channel buttons (such as WhatsApp or email) let you reach a client straight from an order."
+      ] }
     ]
   },
   {
     id: "team",
     title: "Team Access",
     blocks: [
-      { kind: "para", text: "Invite your team and give each person a role." },
+      { kind: "para", text: "Invite your team and control exactly what each person can see and do. Reached from Settings ▸ Team Access." },
       { kind: "bullets", items: [
-        "Roles: Member, View Only, Workflow Only, or your own custom role.",
-        "Control exactly which menus, cards and settings each role can see.",
-        "Assign specific projects to specific people."
+        "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
+        "Control which menus, order cards and settings each role can see.",
+        "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
       ] }
     ]
   },
@@ -407,19 +434,29 @@ const TREE_EN: GuideNode[] = [
     id: "settings",
     title: "Settings",
     blocks: [
-      { kind: "para", text: "Where you tailor NivaDesk to your business." },
+      { kind: "para", text: "Where you tailor NivaDesk to your business. The main sections:" },
       { kind: "bullets", items: [
-        "Workflow Steps — edit stages and the industry description that shapes your workflow.",
-        "Financial & tax rules, platform fee and currency.",
-        "Safety & Uploads limits, WooCommerce sync, Data Management, Plan & Access and About."
-      ] }
+        "Workflow Steps — your industry, its workflow description and the production stages.",
+        "Financial — currency, platform fee, tax rules, rate and the VAT transition date.",
+        "Safety & Uploads — maximum upload size, allowed file types and the upload policy.",
+        "AI Replies, PDF Export and WooCommerce sync options.",
+        "Data Management, Plan & Access, Team Access, Account and About."
+      ] },
+      { kind: "para", text: "Some settings are protected and only the owner or admins can change them." }
+    ]
+  },
+  {
+    id: "insights",
+    title: "Insights",
+    blocks: [
+      { kind: "para", text: "A high-level view of how your workspace is doing — overview stats about orders, revenue and activity to help you spot trends." }
     ]
   },
   {
     id: "plan",
     title: "Plan & Billing",
     blocks: [
-      { kind: "para", text: "See your current plan and what each plan includes. You can review Free/Demo, Lite, Pro and Team options here." }
+      { kind: "para", text: "See your current plan and what each plan includes. You can review the Free/Demo, Lite, Pro and Team options here." }
     ]
   },
   {
@@ -445,7 +482,12 @@ const TREE_TR: GuideNode[] = [
     id: "dashboard",
     title: "Panel (Dashboard)",
     blocks: [
-      { kind: "para", text: "Ana özet ekranınız. Aktif siparişleri, yakında teslim edilecekleri ve hızlı istatistikleri gösterir. Güne buradan başlayıp neyin ilgi istediğini görün." }
+      { kind: "para", text: "Ana özet ekranınız. Tek tek siparişlere dalmadan önce neyin ilgi istediğini görmek için güne buradan başlayın." },
+      { kind: "bullets", items: [
+        "Aktif siparişler, yakında teslim edilecekler ve son etkinlik hakkında hızlı istatistikler.",
+        "Geciken veya riskli işleri erkenden fark edin; kaçmasınlar.",
+        "Sizi bekleyen bir siparişe doğrudan gidin."
+      ] }
     ]
   },
   {
@@ -741,76 +783,108 @@ const TREE_TR: GuideNode[] = [
     ]
   },
   {
-    id: "client-files",
-    title: "Müşteri Dosyaları",
-    blocks: [
-      { kind: "para", text: "Bir siparişe ait PDF ve fotoğrafları ekleyin. Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir." }
-    ]
-  },
-  {
-    id: "tasks",
-    title: "Yapılacaklar / Görevler",
-    blocks: [
-      { kind: "para", text: "Her siparişte tarihli, öncelikli ve atanabilir bir kontrol listesi; böylece hiçbir şey unutulmaz ve kimin ne yapacağı bellidir." }
-    ]
-  },
-  {
     id: "schedule",
-    title: "Plan ve Uyarılar",
+    title: "Schedule (Takvim)",
     blocks: [
-      { kind: "para", text: "Tek dokunuşla kısayollarla hatırlatıcı kurun (örneğin ‘onay iste’ veya ‘fatura gönder’). NivaDesk zamanı gelmeden sizi uyarır." }
+      { kind: "para", text: "Çalışma alanındaki tüm teslimleri ve hatırlatıcıları tek yerde gösteren takvim tarzı bir görünüm." },
+      { kind: "bullets", items: [
+        "Yaklaşan teslimatları ve uyarıları birlikte görün; haftayı bir bakışta planlayın.",
+        "Herhangi bir öğeyi açıp doğrudan siparişine gidin.",
+        "Bir siparişin Schedule & Alerts kartında kurduğunuz hatırlatıcılar burada da görünür."
+      ] }
     ]
   },
   {
-    id: "tracking",
-    title: "Kargo Takibi",
+    id: "notes",
+    title: "Notes (Notlar)",
     blocks: [
-      { kind: "para", text: "Bir siparişe takip numarası ekleyerek canlı teslimat durumunu görün; uygulamadan çıkmadan kargonun nerede olduğunu bilin." }
-    ]
-  },
-  {
-    id: "quick-reply",
-    title: "Hızlı Yanıt (Quick Reply)",
-    blocks: [
-      { kind: "para", text: "Müşterilere hızlı ulaşmak için kayıtlı mesaj şablonları ve kanal butonları (WhatsApp, e-posta gibi). İsteğe bağlı AI yanıtları mesaj taslağı hazırlamaya yardım eder." }
+      { kind: "para", text: "Siparişlerinize ekli notları tek yerden gözden geçirin; bir talimatı veya kararı her siparişi açmadan bulun." },
+      { kind: "bullets", items: [
+        "Siparişler genelinde müşteri notlarını ve özel notları inceleyin.",
+        "Çalışırken hızlı bir başvuru olarak kullanın."
+      ] }
     ]
   },
   {
     id: "customers",
-    title: "Müşteriler",
+    title: "Customers (Müşteriler)",
     blocks: [
-      { kind: "para", text: "Müşteri listeniz ve bilgileri; siparişlerine bağlı olduğu için geçmiş ve iletişim bilgilerini tek yerde bulursunuz." }
+      { kind: "para", text: "Müşteri rehberiniz — her müşteri, iletişim bilgileri ve ona bağlı siparişlerle birlikte." },
+      { kind: "bullets", items: [
+        "Müşteri ekleyip düzenleyin ve iletişim kanallarını tek kayıtta tutun.",
+        "Bir müşteriyi açıp sipariş geçmişini görün.",
+        "Müşteri notları müşteriyle kalır ve onun her siparişinde görünür."
+      ] }
+    ]
+  },
+  {
+    id: "files",
+    title: "Files (Dosyalar)",
+    blocks: [
+      { kind: "para", text: "Tüm siparişlerinizdeki müşteri dosyalarının kütüphanesi — provalar, tasarımlar, PDF'ler ve fotoğraflar — tek aranabilir yerde." },
+      { kind: "bullets", items: [
+        "Dosyaları her siparişi açmadan tarayın, önizleyin ve indirin.",
+        "Yüklemeler Settings ▸ Safety & Uploads'taki boyut limiti ve upload politikasını izler.",
+        "Her siparişin ayrıca yalnızca kendisine ait dosyalar için kendi Client Files kartı vardır."
+      ] }
     ]
   },
   {
     id: "messages",
-    title: "Mesajlar ve Destek",
+    title: "Messages (Mesajlar)",
     blocks: [
-      { kind: "para", text: "Çalışma alanı sahibinize veya adminlere şirket içi istek gönderin ya da uygulama soruları için NivaDesk ekibine destek talebi açın." }
+      { kind: "para", text: "İstekleri açıp takip ettiğiniz yer — hem çalışma alanı içinde hem de NivaDesk desteğine." },
+      { kind: "bullets", items: [
+        "Workspace ticket — çalışma alanı sahibinize veya adminlere istek gönderin (proje soruları, onaylar, eksik bilgiler).",
+        "NivaDesk support ticket — uygulama hataları, ödeme veya hesap sorularını NivaDesk ekibine bildirin.",
+        "Kendi ticketlarınızdaki yanıtları ve durumu tek listede takip edin."
+      ] }
+    ]
+  },
+  {
+    id: "quick-reply",
+    title: "AI Replies / Quick Reply",
+    blocks: [
+      { kind: "para", text: "Müşterilere hızlı ve tutarlı yanıt vermek için hazır mesaj kütüphanesi oluşturun." },
+      { kind: "bullets", items: [
+        "En sık gönderdiğiniz şeyler için mesaj şablonları kaydedin.",
+        "İsteğe bağlı AI yanıtları, kendi üslubunuzda mesaj taslağı hazırlamaya yardım eder.",
+        "Kanal butonları (WhatsApp veya e-posta gibi) müşteriye doğrudan siparişten ulaşmanızı sağlar."
+      ] }
     ]
   },
   {
     id: "team",
-    title: "Ekip Erişimi (Team Access)",
+    title: "Team Access (Ekip Erişimi)",
     blocks: [
-      { kind: "para", text: "Ekibinizi davet edin ve herkese bir rol verin." },
+      { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin. Settings ▸ Team Access'ten erişilir." },
       { kind: "bullets", items: [
-        "Roller: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
-        "Her rolün hangi menü, kart ve ayarları göreceğini tam olarak kontrol edin.",
-        "Belirli projeleri belirli kişilere atayın."
+        "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
+        "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
+        "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
       ] }
     ]
   },
   {
     id: "settings",
-    title: "Ayarlar (Settings)",
+    title: "Settings (Ayarlar)",
     blocks: [
-      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer." },
+      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer. Ana bölümler:" },
       { kind: "bullets", items: [
-        "İş Akışı Adımları — aşamaları ve iş akışınızı şekillendiren iş kolu açıklamasını düzenleyin.",
-        "Finans ve vergi kuralları, platform ücreti ve para birimi.",
-        "Güvenlik ve Yüklemeler limitleri, WooCommerce senkronu, Veri Yönetimi, Plan ve Erişim, Hakkında."
-      ] }
+        "Workflow Steps — iş kolunuz, iş akışı açıklaması ve üretim aşamaları.",
+        "Financial — para birimi, platform ücreti, vergi kuralları, oran ve KDV geçiş tarihi.",
+        "Safety & Uploads — maksimum yükleme boyutu, izin verilen dosya türleri ve upload politikası.",
+        "AI Replies, PDF Export ve WooCommerce senkron seçenekleri.",
+        "Data Management, Plan & Access, Team Access, Account ve About."
+      ] },
+      { kind: "para", text: "Bazı ayarlar korumalıdır ve yalnızca owner veya adminler değiştirebilir." }
+    ]
+  },
+  {
+    id: "insights",
+    title: "Insights",
+    blocks: [
+      { kind: "para", text: "Çalışma alanınızın nasıl gittiğine dair üst düzey bir görünüm — siparişler, ciro ve etkinlik hakkında trendleri yakalamanıza yardımcı özet istatistikler." }
     ]
   },
   {
