@@ -1,226 +1,349 @@
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
 // ---------------------------------------------------------------------------
-// NivaDesk user guide (single-page overview)
+// NivaDesk user guide (interactive, menu-by-menu)
 //
-// A short "what is it / where is it / how to use it" summary of every main
-// menu. Written generally so it also fits the Mac, iPhone, iPad and Android
-// apps — they share the same structure as the web app.
+// The guide is a docs-style tree: the left column lists every menu (and, for
+// Orders, every detail card). Selecting an entry shows its detailed content on
+// the right. We build it out menu by menu.
 //
-// Content is provided in English and Turkish. Other languages fall back to
-// English. Page chrome (title, intro, "On this page") is localized to all 12.
+// Content is provided in English and Turkish; other languages fall back to
+// English. Page chrome is localized to all 12 languages.
 //
-// To extend: add an item to GUIDE_EN and the matching item to GUIDE_TR.
+// Each node's `blocks` render in order. Block kinds:
+//   { kind: "para",    text }        a paragraph
+//   { kind: "sub",     text }        a small sub-heading
+//   { kind: "bullets", items: [] }   a bullet list
+//   { kind: "steps",   items: [] }   a numbered list
+// A node may have `children` (e.g. Orders → its cards), shown nested in the nav.
 // ---------------------------------------------------------------------------
 
-export type GuideItem = {
+export type GuideBlock =
+  | { kind: "para"; text: string }
+  | { kind: "sub"; text: string }
+  | { kind: "bullets"; items: string[] }
+  | { kind: "steps"; items: string[] };
+
+export type GuideNode = {
   id: string;
   title: string;
-  body: string;
-  points?: string[];
+  blocks: GuideBlock[];
+  children?: GuideNode[];
 };
 
 export const GUIDE_LAST_UPDATED = "June 2026";
 
-const GUIDE_EN: GuideItem[] = [
+// --- English tree ----------------------------------------------------------
+
+const TREE_EN: GuideNode[] = [
   {
     id: "getting-started",
     title: "Getting started",
-    body: "On first launch you pick your industry so NivaDesk can tailor the workflow to your craft. A Free Demo workspace lets you explore everything with sample data before you add your own."
+    blocks: [
+      { kind: "para", text: "On first launch you pick your industry so NivaDesk can tailor the workflow to your craft. A Free Demo workspace lets you explore everything with sample data before you add your own." }
+    ]
   },
   {
     id: "dashboard",
     title: "Dashboard",
-    body: "Your home overview. It shows active orders, what is due soon and quick stats. Start your day here to see what needs attention."
+    blocks: [
+      { kind: "para", text: "Your home overview. It shows active orders, what is due soon and quick stats. Start your day here to see what needs attention." }
+    ]
   },
   {
     id: "orders",
     title: "Orders",
-    body: "The core list of every job. Use Add Project to create an order, then open it to manage the details. Move each order through its workflow stages as the work progresses."
-  },
-  {
-    id: "order-detail",
-    title: "Order detail",
-    body: "Opening an order shows a set of cards you can show, hide and rearrange to suit how you work.",
-    points: [
-      "Workflow steps — stages tuned to your trade, with checkpoints like deposit cleared or client approved.",
-      "Financials — see your real profit after platform fees and tax, not just the price.",
-      "Client Files, Tasks, Notes and live Tracking, each in its own card."
+    blocks: [
+      { kind: "para", text: "Orders is the heart of NivaDesk — the list of every job you are working on. From here you create orders, find them quickly and open one to manage all of its details." },
+      { kind: "sub", text: "The orders list" },
+      { kind: "bullets", items: [
+        "Add Project — create a new order. You give it a customer, a title and the basics; you can fill in the rest inside the order.",
+        "Search — type a customer name, order number or keyword to jump straight to an order.",
+        "Quick filters — narrow the list (for example only your assigned orders, or by stage) without losing the others.",
+        "Sort — order the list by smart priority, newest, due date and more.",
+        "Status badges — small colored tags on each card show production status at a glance; you can turn them off in settings.",
+        "Open an order — tap a card to open its detail workspace."
+      ] },
+      { kind: "sub", text: "The order detail workspace" },
+      { kind: "para", text: "Opening an order shows a set of cards — Preview, Order Summary, Financial Info, Client Files and more. Each card covers one part of the job. You decide which cards you see and how they are arranged." },
+      { kind: "bullets", items: [
+        "Show or hide any card so you only see what matters to you.",
+        "Drag a card to reorder it; drag its edge to resize the height.",
+        "Give a card a color (8 options) to make it stand out.",
+        "Your layout is saved to your own user as a card profile — your teammates keep their own layouts, while the order content stays shared.",
+        "Some cards let you Edit headings to rename, add or remove their sections and fields (covered on each card below)."
+      ] },
+      { kind: "para", text: "Select a card on the left to see exactly what it does and what you can change in it." }
+    ],
+    children: [
+      {
+        id: "card-preview",
+        title: "Preview card",
+        blocks: [
+          { kind: "para", text: "The Preview card is the visual header of the order. It shows the order image and your business logo, giving you and your client an instant sense of the job." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Add or replace the order preview image (for example a photo of the product, design or repair).",
+            "The image also appears next to the order in the Orders list and on the exported PDF, so it is worth adding a clear photo.",
+            "Preview images accept standard image files (JPG, PNG, HEIC and similar)."
+          ] },
+          { kind: "para", text: "Tip: a good preview photo makes orders far easier to recognize at a glance in a busy list." }
+        ]
+      }
     ]
   },
   {
     id: "client-files",
     title: "Client Files",
-    body: "Attach PDFs and photos that belong to an order. It works offline — files are saved on the device and upload automatically when you are back online."
+    blocks: [
+      { kind: "para", text: "Attach PDFs and photos that belong to an order. It works offline — files are saved on the device and upload automatically when you are back online." }
+    ]
   },
   {
     id: "tasks",
     title: "To Do / Tasks",
-    body: "A checklist on each order with due dates, priorities and assignments, so nothing gets forgotten and everyone knows who does what."
+    blocks: [
+      { kind: "para", text: "A checklist on each order with due dates, priorities and assignments, so nothing gets forgotten and everyone knows who does what." }
+    ]
   },
   {
     id: "schedule",
     title: "Schedule & Alerts",
-    body: "Set reminders with one-tap shortcuts (for example ‘ask for approval’ or ‘send invoice’). NivaDesk notifies you before something is due."
+    blocks: [
+      { kind: "para", text: "Set reminders with one-tap shortcuts (for example ‘ask for approval’ or ‘send invoice’). NivaDesk notifies you before something is due." }
+    ]
   },
   {
     id: "tracking",
     title: "Shipment tracking",
-    body: "Add a tracking number to an order for live delivery status, so you always know where a shipment is without leaving the app."
+    blocks: [
+      { kind: "para", text: "Add a tracking number to an order for live delivery status, so you always know where a shipment is without leaving the app." }
+    ]
   },
   {
     id: "quick-reply",
     title: "Quick Reply",
-    body: "Saved message templates and channel buttons (such as WhatsApp or email) to contact clients quickly. Optional AI replies help you draft messages."
+    blocks: [
+      { kind: "para", text: "Saved message templates and channel buttons (such as WhatsApp or email) to contact clients quickly. Optional AI replies help you draft messages." }
+    ]
   },
   {
     id: "customers",
     title: "Customers",
-    body: "Your client list and their details, linked to their orders so you can find history and contact information in one place."
+    blocks: [
+      { kind: "para", text: "Your client list and their details, linked to their orders so you can find history and contact information in one place." }
+    ]
   },
   {
     id: "messages",
     title: "Messages & Support",
-    body: "Send an internal request to your workspace owner or admins, or open a support ticket to the NivaDesk team for app questions."
+    blocks: [
+      { kind: "para", text: "Send an internal request to your workspace owner or admins, or open a support ticket to the NivaDesk team for app questions." }
+    ]
   },
   {
     id: "team",
     title: "Team Access",
-    body: "Invite your team and give each person a role.",
-    points: [
-      "Roles: Member, View Only, Workflow Only, or your own custom role.",
-      "Control exactly which menus, cards and settings each role can see.",
-      "Assign specific projects to specific people."
+    blocks: [
+      { kind: "para", text: "Invite your team and give each person a role." },
+      { kind: "bullets", items: [
+        "Roles: Member, View Only, Workflow Only, or your own custom role.",
+        "Control exactly which menus, cards and settings each role can see.",
+        "Assign specific projects to specific people."
+      ] }
     ]
   },
   {
     id: "settings",
     title: "Settings",
-    body: "Where you tailor NivaDesk to your business.",
-    points: [
-      "Workflow Steps — edit stages and the industry description that shapes your workflow.",
-      "Financial & tax rules, platform fee and currency.",
-      "Safety & Uploads limits, WooCommerce sync, Data Management, Plan & Access and About."
+    blocks: [
+      { kind: "para", text: "Where you tailor NivaDesk to your business." },
+      { kind: "bullets", items: [
+        "Workflow Steps — edit stages and the industry description that shapes your workflow.",
+        "Financial & tax rules, platform fee and currency.",
+        "Safety & Uploads limits, WooCommerce sync, Data Management, Plan & Access and About."
+      ] }
     ]
   },
   {
     id: "plan",
     title: "Plan & Billing",
-    body: "See your current plan and what each plan includes. You can review Free/Demo, Lite, Pro and Team options here."
+    blocks: [
+      { kind: "para", text: "See your current plan and what each plan includes. You can review Free/Demo, Lite, Pro and Team options here." }
+    ]
   },
   {
     id: "language-theme",
     title: "Language & appearance",
-    body: "Switch between 12 languages and choose light or dark mode from Settings. Your choice syncs across the apps."
+    blocks: [
+      { kind: "para", text: "Switch between 12 languages and choose light or dark mode from Settings. Your choice syncs across the apps." }
+    ]
   }
 ];
 
-const GUIDE_TR: GuideItem[] = [
+// --- Turkish tree -----------------------------------------------------------
+
+const TREE_TR: GuideNode[] = [
   {
     id: "getting-started",
     title: "Başlarken",
-    body: "İlk açılışta iş kolunuzu seçersiniz; böylece NivaDesk iş akışını mesleğinize göre ayarlar. Ücretsiz Demo çalışma alanı, kendi verilerinizi eklemeden önce her şeyi örnek verilerle keşfetmenizi sağlar."
+    blocks: [
+      { kind: "para", text: "İlk açılışta iş kolunuzu seçersiniz; böylece NivaDesk iş akışını mesleğinize göre ayarlar. Ücretsiz Demo çalışma alanı, kendi verilerinizi eklemeden önce her şeyi örnek verilerle keşfetmenizi sağlar." }
+    ]
   },
   {
     id: "dashboard",
     title: "Panel (Dashboard)",
-    body: "Ana özet ekranınız. Aktif siparişleri, yakında teslim edilecekleri ve hızlı istatistikleri gösterir. Güne buradan başlayıp neyin ilgi istediğini görün."
+    blocks: [
+      { kind: "para", text: "Ana özet ekranınız. Aktif siparişleri, yakında teslim edilecekleri ve hızlı istatistikleri gösterir. Güne buradan başlayıp neyin ilgi istediğini görün." }
+    ]
   },
   {
     id: "orders",
     title: "Siparişler (Orders)",
-    body: "Tüm işlerinizin ana listesi. Add Project ile sipariş oluşturun, sonra açıp detayları yönetin. İş ilerledikçe her siparişi iş akışı aşamalarından geçirin."
-  },
-  {
-    id: "order-detail",
-    title: "Sipariş Detayı",
-    body: "Bir siparişi açtığınızda, çalışma şeklinize göre gösterip gizleyebileceğiniz ve yeniden düzenleyebileceğiniz kartlar gelir.",
-    points: [
-      "İş akışı adımları — mesleğinize göre aşamalar; kapora alındı, müşteri onayladı gibi kontrol noktaları.",
-      "Finans — sadece fiyatı değil, platform ücreti ve vergi sonrası gerçek kârınızı gösterir.",
-      "Müşteri Dosyaları, Görevler, Notlar ve canlı Takip; her biri kendi kartında."
+    blocks: [
+      { kind: "para", text: "Siparişler, NivaDesk'in kalbidir — üzerinde çalıştığınız tüm işlerin listesi. Buradan sipariş oluşturur, hızlıca bulur ve birini açıp tüm detaylarını yönetirsiniz." },
+      { kind: "sub", text: "Sipariş listesi" },
+      { kind: "bullets", items: [
+        "Add Project — yeni sipariş oluşturur. Müşteri, başlık ve temel bilgileri verirsiniz; gerisini siparişin içinde doldurabilirsiniz.",
+        "Arama — müşteri adı, sipariş numarası veya anahtar kelime yazarak doğrudan siparişe gidin.",
+        "Hızlı filtreler — listeyi daraltın (örneğin yalnızca size atanan siparişler ya da aşamaya göre), diğerlerini kaybetmeden.",
+        "Sıralama — listeyi akıllı önceliğe, en yeniye, teslim tarihine ve daha fazlasına göre sıralayın.",
+        "Durum etiketleri — her kartta üretim durumunu bir bakışta gösteren küçük renkli etiketler; ayarlardan kapatabilirsiniz.",
+        "Siparişi aç — bir karta dokunarak detay çalışma alanını açın."
+      ] },
+      { kind: "sub", text: "Sipariş detay çalışma alanı" },
+      { kind: "para", text: "Bir siparişi açtığınızda Preview, Order Summary, Financial Info, Client Files ve daha fazlası gibi kartlar gelir. Her kart işin bir bölümünü kapsar. Hangi kartları göreceğinize ve nasıl dizileceğine siz karar verirsiniz." },
+      { kind: "bullets", items: [
+        "Herhangi bir kartı gösterin veya gizleyin; yalnızca size gerekenleri görün.",
+        "Bir kartı sürükleyerek yerini değiştirin; kenarından sürükleyerek yüksekliğini ayarlayın.",
+        "Bir karta renk verin (8 seçenek) ki öne çıksın.",
+        "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir — ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
+        "Bazı kartlarda Başlıkları Düzenle ile bölümleri ve alanları yeniden adlandırabilir, ekleyebilir veya kaldırabilirsiniz (aşağıda her kartta anlatılıyor)."
+      ] },
+      { kind: "para", text: "Soldan bir kart seçin; tam olarak ne işe yaradığını ve içinde neleri değiştirebileceğinizi görün." }
+    ],
+    children: [
+      {
+        id: "card-preview",
+        title: "Preview kartı",
+        blocks: [
+          { kind: "para", text: "Preview kartı, siparişin görsel başlığıdır. Sipariş görselini ve işletme logonuzu gösterir; hem size hem müşterinize işe dair anında bir fikir verir." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Sipariş önizleme görselini ekleyin veya değiştirin (örneğin ürünün, tasarımın ya da tamirin fotoğrafı).",
+            "Görsel ayrıca Siparişler listesinde siparişin yanında ve dışa aktarılan PDF'te görünür; bu yüzden net bir fotoğraf eklemekte fayda var.",
+            "Önizleme görselleri standart görsel dosyalarını kabul eder (JPG, PNG, HEIC ve benzeri)."
+          ] },
+          { kind: "para", text: "İpucu: iyi bir önizleme fotoğrafı, kalabalık bir listede siparişleri bir bakışta tanımayı çok kolaylaştırır." }
+        ]
+      }
     ]
   },
   {
     id: "client-files",
     title: "Müşteri Dosyaları",
-    body: "Bir siparişe ait PDF ve fotoğrafları ekleyin. Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir."
+    blocks: [
+      { kind: "para", text: "Bir siparişe ait PDF ve fotoğrafları ekleyin. Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir." }
+    ]
   },
   {
     id: "tasks",
     title: "Yapılacaklar / Görevler",
-    body: "Her siparişte tarihli, öncelikli ve atanabilir bir kontrol listesi; böylece hiçbir şey unutulmaz ve kimin ne yapacağı bellidir."
+    blocks: [
+      { kind: "para", text: "Her siparişte tarihli, öncelikli ve atanabilir bir kontrol listesi; böylece hiçbir şey unutulmaz ve kimin ne yapacağı bellidir." }
+    ]
   },
   {
     id: "schedule",
     title: "Plan ve Uyarılar",
-    body: "Tek dokunuşla kısayollarla hatırlatıcı kurun (örneğin ‘onay iste’ veya ‘fatura gönder’). NivaDesk zamanı gelmeden sizi uyarır."
+    blocks: [
+      { kind: "para", text: "Tek dokunuşla kısayollarla hatırlatıcı kurun (örneğin ‘onay iste’ veya ‘fatura gönder’). NivaDesk zamanı gelmeden sizi uyarır." }
+    ]
   },
   {
     id: "tracking",
     title: "Kargo Takibi",
-    body: "Bir siparişe takip numarası ekleyerek canlı teslimat durumunu görün; uygulamadan çıkmadan kargonun nerede olduğunu bilin."
+    blocks: [
+      { kind: "para", text: "Bir siparişe takip numarası ekleyerek canlı teslimat durumunu görün; uygulamadan çıkmadan kargonun nerede olduğunu bilin." }
+    ]
   },
   {
     id: "quick-reply",
     title: "Hızlı Yanıt (Quick Reply)",
-    body: "Müşterilere hızlı ulaşmak için kayıtlı mesaj şablonları ve kanal butonları (WhatsApp, e-posta gibi). İsteğe bağlı AI yanıtları mesaj taslağı hazırlamaya yardım eder."
+    blocks: [
+      { kind: "para", text: "Müşterilere hızlı ulaşmak için kayıtlı mesaj şablonları ve kanal butonları (WhatsApp, e-posta gibi). İsteğe bağlı AI yanıtları mesaj taslağı hazırlamaya yardım eder." }
+    ]
   },
   {
     id: "customers",
     title: "Müşteriler",
-    body: "Müşteri listeniz ve bilgileri; siparişlerine bağlı olduğu için geçmiş ve iletişim bilgilerini tek yerde bulursunuz."
+    blocks: [
+      { kind: "para", text: "Müşteri listeniz ve bilgileri; siparişlerine bağlı olduğu için geçmiş ve iletişim bilgilerini tek yerde bulursunuz." }
+    ]
   },
   {
     id: "messages",
     title: "Mesajlar ve Destek",
-    body: "Çalışma alanı sahibinize veya adminlere şirket içi istek gönderin ya da uygulama soruları için NivaDesk ekibine destek talebi açın."
+    blocks: [
+      { kind: "para", text: "Çalışma alanı sahibinize veya adminlere şirket içi istek gönderin ya da uygulama soruları için NivaDesk ekibine destek talebi açın." }
+    ]
   },
   {
     id: "team",
     title: "Ekip Erişimi (Team Access)",
-    body: "Ekibinizi davet edin ve herkese bir rol verin.",
-    points: [
-      "Roller: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
-      "Her rolün hangi menü, kart ve ayarları göreceğini tam olarak kontrol edin.",
-      "Belirli projeleri belirli kişilere atayın."
+    blocks: [
+      { kind: "para", text: "Ekibinizi davet edin ve herkese bir rol verin." },
+      { kind: "bullets", items: [
+        "Roller: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
+        "Her rolün hangi menü, kart ve ayarları göreceğini tam olarak kontrol edin.",
+        "Belirli projeleri belirli kişilere atayın."
+      ] }
     ]
   },
   {
     id: "settings",
     title: "Ayarlar (Settings)",
-    body: "NivaDesk'i işinize göre özelleştirdiğiniz yer.",
-    points: [
-      "İş Akışı Adımları — aşamaları ve iş akışınızı şekillendiren iş kolu açıklamasını düzenleyin.",
-      "Finans ve vergi kuralları, platform ücreti ve para birimi.",
-      "Güvenlik ve Yüklemeler limitleri, WooCommerce senkronu, Veri Yönetimi, Plan ve Erişim, Hakkında."
+    blocks: [
+      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer." },
+      { kind: "bullets", items: [
+        "İş Akışı Adımları — aşamaları ve iş akışınızı şekillendiren iş kolu açıklamasını düzenleyin.",
+        "Finans ve vergi kuralları, platform ücreti ve para birimi.",
+        "Güvenlik ve Yüklemeler limitleri, WooCommerce senkronu, Veri Yönetimi, Plan ve Erişim, Hakkında."
+      ] }
     ]
   },
   {
     id: "plan",
     title: "Plan ve Faturalandırma",
-    body: "Mevcut planınızı ve her planın içeriğini görün. Free/Demo, Lite, Pro ve Team seçeneklerini buradan inceleyebilirsiniz."
+    blocks: [
+      { kind: "para", text: "Mevcut planınızı ve her planın içeriğini görün. Free/Demo, Lite, Pro ve Team seçeneklerini buradan inceleyebilirsiniz." }
+    ]
   },
   {
     id: "language-theme",
     title: "Dil ve Görünüm",
-    body: "Ayarlar'dan 12 dil arasında geçiş yapın ve açık/koyu temayı seçin. Tercihiniz uygulamalar arasında senkronlanır."
+    blocks: [
+      { kind: "para", text: "Ayarlar'dan 12 dil arasında geçiş yapın ve açık/koyu temayı seçin. Tercihiniz uygulamalar arasında senkronlanır." }
+    ]
   }
 ];
+
+// --- Localized page chrome --------------------------------------------------
 
 type GuideChrome = {
   eyebrow: string;
   title: string;
   intro: string;
-  onThisPage: string;
+  menuLabel: string;
   lastUpdated: string;
 };
 
 const CHROME_FALLBACK: GuideChrome = {
   eyebrow: "User guide",
   title: "How to use NivaDesk",
-  intro: "A short tour of every menu — where it is, what it does and how to use it. The apps share the same layout, so this works for Mac, iPhone, iPad, Android and web.",
-  onThisPage: "On this page",
+  intro: "Pick a menu on the left to see what it does and how to use it, step by step. The apps share the same layout, so this works for Mac, iPhone, iPad, Android and web.",
+  menuLabel: "Menus",
   lastUpdated: "Last updated"
 };
 
@@ -228,84 +351,84 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   Türkçe: {
     eyebrow: "Kullanım kılavuzu",
     title: "NivaDesk nasıl kullanılır",
-    intro: "Her menünün kısa turu — nerede, ne işe yarar ve nasıl kullanılır. Uygulamalar aynı düzeni paylaşır; bu kılavuz Mac, iPhone, iPad, Android ve web için geçerlidir.",
-    onThisPage: "Bu sayfada",
+    intro: "Soldan bir menü seçin; ne işe yaradığını ve nasıl kullanılacağını adım adım görün. Uygulamalar aynı düzeni paylaşır; bu kılavuz Mac, iPhone, iPad, Android ve web için geçerlidir.",
+    menuLabel: "Menüler",
     lastUpdated: "Son güncelleme"
   },
   Deutsch: {
     eyebrow: "Benutzerhandbuch",
     title: "So nutzen Sie NivaDesk",
-    intro: "Eine kurze Tour durch jedes Menü — wo es ist, was es tut und wie man es nutzt. Die Apps teilen sich dasselbe Layout, daher gilt dies für Mac, iPhone, iPad, Android und Web.",
-    onThisPage: "Auf dieser Seite",
+    intro: "Wählen Sie links ein Menü, um zu sehen, was es tut und wie man es Schritt für Schritt nutzt. Die Apps teilen sich dasselbe Layout — für Mac, iPhone, iPad, Android und Web.",
+    menuLabel: "Menüs",
     lastUpdated: "Zuletzt aktualisiert"
   },
   Français: {
     eyebrow: "Guide d'utilisation",
     title: "Comment utiliser NivaDesk",
-    intro: "Un tour rapide de chaque menu — où il se trouve, à quoi il sert et comment l'utiliser. Les apps partagent la même structure, donc cela vaut pour Mac, iPhone, iPad, Android et web.",
-    onThisPage: "Sur cette page",
+    intro: "Choisissez un menu à gauche pour voir à quoi il sert et comment l'utiliser, étape par étape. Les apps partagent la même structure — pour Mac, iPhone, iPad, Android et web.",
+    menuLabel: "Menus",
     lastUpdated: "Dernière mise à jour"
   },
   Italiano: {
     eyebrow: "Guida utente",
     title: "Come usare NivaDesk",
-    intro: "Un breve tour di ogni menu — dov'è, cosa fa e come si usa. Le app condividono lo stesso layout, quindi vale per Mac, iPhone, iPad, Android e web.",
-    onThisPage: "In questa pagina",
+    intro: "Scegli un menu a sinistra per vedere cosa fa e come si usa, passo dopo passo. Le app condividono lo stesso layout — per Mac, iPhone, iPad, Android e web.",
+    menuLabel: "Menu",
     lastUpdated: "Ultimo aggiornamento"
   },
   "Español (Spanish)": {
     eyebrow: "Guía de uso",
     title: "Cómo usar NivaDesk",
-    intro: "Un recorrido breve por cada menú: dónde está, qué hace y cómo usarlo. Las apps comparten el mismo diseño, así que sirve para Mac, iPhone, iPad, Android y web.",
-    onThisPage: "En esta página",
+    intro: "Elige un menú a la izquierda para ver qué hace y cómo usarlo, paso a paso. Las apps comparten el mismo diseño — para Mac, iPhone, iPad, Android y web.",
+    menuLabel: "Menús",
     lastUpdated: "Última actualización"
   },
   Português: {
     eyebrow: "Guia do utilizador",
     title: "Como usar o NivaDesk",
-    intro: "Um breve tour por cada menu — onde está, o que faz e como usar. As apps partilham o mesmo layout, por isso serve para Mac, iPhone, iPad, Android e web.",
-    onThisPage: "Nesta página",
+    intro: "Escolha um menu à esquerda para ver o que faz e como usar, passo a passo. As apps partilham o mesmo layout — para Mac, iPhone, iPad, Android e web.",
+    menuLabel: "Menus",
     lastUpdated: "Última atualização"
   },
   "Русский (Russian)": {
     eyebrow: "Руководство пользователя",
     title: "Как пользоваться NivaDesk",
-    intro: "Краткий обзор каждого меню — где оно, что делает и как им пользоваться. Приложения имеют одинаковую структуру, поэтому это подходит для Mac, iPhone, iPad, Android и веба.",
-    onThisPage: "На этой странице",
+    intro: "Выберите меню слева, чтобы увидеть, что оно делает и как им пользоваться, шаг за шагом. Приложения имеют одинаковую структуру — для Mac, iPhone, iPad, Android и веба.",
+    menuLabel: "Меню",
     lastUpdated: "Последнее обновление"
   },
   "日本語 (Japanese)": {
     eyebrow: "ユーザーガイド",
     title: "NivaDesk の使い方",
-    intro: "各メニューの簡単なツアー — どこにあり、何をして、どう使うか。アプリは同じレイアウトなので、Mac、iPhone、iPad、Android、ウェブで共通です。",
-    onThisPage: "このページの内容",
+    intro: "左のメニューを選ぶと、その機能と使い方を順を追って確認できます。アプリは同じレイアウトなので、Mac、iPhone、iPad、Android、ウェブで共通です。",
+    menuLabel: "メニュー",
     lastUpdated: "最終更新日"
   },
   "中文 (Chinese)": {
     eyebrow: "用户指南",
     title: "如何使用 NivaDesk",
-    intro: "每个菜单的简要导览——在哪里、有什么用、怎么用。各应用布局一致，因此适用于 Mac、iPhone、iPad、Android 和网页。",
-    onThisPage: "本页内容",
+    intro: "在左侧选择一个菜单，逐步了解它的用途和用法。各应用布局一致，因此适用于 Mac、iPhone、iPad、Android 和网页。",
+    menuLabel: "菜单",
     lastUpdated: "最后更新"
   },
   "العربية (Arabic)": {
     eyebrow: "دليل المستخدم",
     title: "كيفية استخدام NivaDesk",
-    intro: "جولة قصيرة في كل قائمة — أين هي وما وظيفتها وكيفية استخدامها. تشترك التطبيقات في التخطيط نفسه، لذا ينطبق هذا على Mac وiPhone وiPad وAndroid والويب.",
-    onThisPage: "في هذه الصفحة",
+    intro: "اختر قائمة من اليسار لترى وظيفتها وكيفية استخدامها خطوة بخطوة. تشترك التطبيقات في التخطيط نفسه — لنظام Mac وiPhone وiPad وAndroid والويب.",
+    menuLabel: "القوائم",
     lastUpdated: "آخر تحديث"
   },
   "हिन्दी (Hindi)": {
     eyebrow: "उपयोगकर्ता गाइड",
     title: "NivaDesk का उपयोग कैसे करें",
-    intro: "हर मेन्यू का संक्षिप्त दौरा — कहाँ है, क्या करता है और कैसे उपयोग करें। ऐप्स एक ही लेआउट साझा करते हैं, इसलिए यह Mac, iPhone, iPad, Android और वेब पर लागू होता है।",
-    onThisPage: "इस पेज पर",
+    intro: "बाईं ओर एक मेन्यू चुनें और देखें कि वह क्या करता है और चरण-दर-चरण कैसे उपयोग करें। ऐप्स एक ही लेआउट साझा करते हैं — Mac, iPhone, iPad, Android और वेब के लिए।",
+    menuLabel: "मेन्यू",
     lastUpdated: "अंतिम अपडेट"
   }
 };
 
-export function getGuideItems(language: StudioLanguage | string | null | undefined): GuideItem[] {
-  return (language as StudioLanguage) === "Türkçe" ? GUIDE_TR : GUIDE_EN;
+export function getGuideTree(language: StudioLanguage | string | null | undefined): GuideNode[] {
+  return (language as StudioLanguage) === "Türkçe" ? TREE_TR : TREE_EN;
 }
 
 export function getGuideChrome(language: StudioLanguage | string | null | undefined): GuideChrome {
