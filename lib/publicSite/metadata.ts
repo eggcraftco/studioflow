@@ -15,6 +15,7 @@ type PublicMetadataKey =
   | "subprocessors"
   | "dataProcessingAgreement"
   | "acceptableUse"
+  | "changelog"
   | "contact"
   | "login";
 
@@ -105,6 +106,12 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
     description:
       "The NivaDesk Acceptable Use Policy covering lawful use, prohibited content, file uploads, third-party data, security, communications, integrations, fair usage and abuse reporting.",
     path: "/acceptable-use"
+  },
+  changelog: {
+    title: "What's New in NivaDesk | Release Notes",
+    description:
+      "The NivaDesk changelog: every release with new features, improvements and fixes, newest first, across Mac, iPhone, iPad, Android and web.",
+    path: "/changelog"
   },
   contact: {
     title: "NivaDesk Support and Contact",

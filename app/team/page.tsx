@@ -30,6 +30,7 @@ import {
   updateTeamMemberRole,
   WEB_TEAM_ROLES
 } from "@/lib/studioflow/teamActions";
+import { studioT } from "@/lib/studioflow/language";
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -57,7 +58,8 @@ function roleOptionsWithCustom(customRoles: WorkspaceCustomRole[]) {
 
 export default function TeamPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [members, setMembers] = useState<TeamMemberDetail[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequestDetail[]>([]);
@@ -111,7 +113,7 @@ export default function TeamPage() {
         return next;
       });
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Could not load team access.");
+      setError(loadError instanceof Error ? loadError.message : t("Could not load team access."));
     } finally {
       setLoadingTeam(false);
     }
@@ -156,7 +158,7 @@ export default function TeamPage() {
           setRequestRoles(() => Object.fromEntries(teamData.joinRequests.map(request => [request.id, "member"])));
         }
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load team access.");
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : t("Could not load team access."));
       } finally {
         if (!cancelled) setLoadingTeam(false);
       }
@@ -174,7 +176,7 @@ export default function TeamPage() {
   const canManageTeam = Boolean(isOwner && canViewTeamManagement && workspace);
   const teamLimit = workspace?.billingTeamMemberLimit ?? workspace?.entitlements.teamMemberLimit ?? 1;
   const currentMemberCount = members.length;
-  const limitText = teamLimit > 9999 ? "Unlimited" : `${currentMemberCount} / ${teamLimit}`;
+  const limitText = teamLimit > 9999 ? t("Unlimited") : `${currentMemberCount} / ${teamLimit}`;
   const roleOptions = useMemo(() => roleOptionsWithCustom(customRoles), [customRoles]);
 
   const roleCounts = useMemo(() => {
@@ -200,7 +202,7 @@ export default function TeamPage() {
       setMessage(success);
       await refreshTeam();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Team action failed.");
+      setError(actionError instanceof Error ? actionError.message : t("Team action failed."));
     } finally {
       setActioning("");
     }
@@ -215,16 +217,16 @@ export default function TeamPage() {
       await switchActiveWorkspace(user.uid, option.id);
       window.location.reload();
     } catch (switchError) {
-      setError(switchError instanceof Error ? switchError.message : "Could not switch workspace.");
+      setError(switchError instanceof Error ? switchError.message : t("Could not switch workspace."));
       setSwitchingWorkspaceId("");
     }
   }
 
   const workspaceSwitchPanel = (
     <section className="card" style={{ padding: 22, maxWidth: 760, marginBottom: 18 }}>
-      <div className="pill">Workspaces</div>
-      <h2 style={{ margin: "12px 0 8px" }}>Connected workspaces</h2>
-      <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>Switch into the Team workspace you joined to view its orders and permitted tools.</p>
+      <div className="pill">{t("Workspaces")}</div>
+      <h2 style={{ margin: "12px 0 8px" }}>{t("Connected workspaces")}</h2>
+      <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>{t("Switch into the Team workspace you joined to view its orders and permitted tools.")}</p>
       {joinedWorkspaces.map(option => (
         <div className="team-access-workspace-option" key={option.id}>
           <div>
@@ -232,10 +234,10 @@ export default function TeamPage() {
             <small>{option.roleLabel}</small>
           </div>
           {option.isCurrent ? (
-            <span className="pill">Current</span>
+            <span className="pill">{t("Current")}</span>
           ) : (
             <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
-              {switchingWorkspaceId === option.id ? "Switching..." : "Switch"}
+              {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
             </button>
           )}
         </div>
@@ -249,7 +251,7 @@ export default function TeamPage() {
     await runTeamAction(
       "request-access",
       () => requestWorkspaceAccess(cleanIdentifier),
-      "Access request sent. The workspace owner can approve it from Team Access."
+      t("Access request sent. The workspace owner can approve it from Team Access.")
     );
     setRequestOwnerIdentifier("");
   }
@@ -261,12 +263,12 @@ export default function TeamPage() {
       <AppShell>
         {workspaceSwitchPanel}
         <section className="card" style={{ padding: 28, maxWidth: 760, marginBottom: 18 }}>
-          <div className="pill">Join a Team workspace</div>
+          <div className="pill">{t("Join a Team workspace")}</div>
           <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 10px" }}>
-            Request access to an existing Team workspace
+            {t("Request access to an existing Team workspace")}
           </h1>
           <p style={{ color: "var(--muted)", margin: "0 0 18px" }}>
-            Requesting access is available on every plan. Enter the Company ID or owner email shared by a Team workspace owner.
+            {t("Requesting access is available on every plan. Enter the Company ID or owner email shared by a Team workspace owner.")}
           </p>
           <form onSubmit={event => {
             event.preventDefault();
@@ -277,11 +279,11 @@ export default function TeamPage() {
                 className="input"
                 value={requestOwnerIdentifier}
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
-                placeholder="Owner email or Company ID"
+                placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
               />
               <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
-                {actioning === "request-access" ? "Sending..." : "Send request"}
+                {actioning === "request-access" ? t("Sending...") : t("Send request")}
               </button>
             </div>
           </form>
@@ -290,11 +292,11 @@ export default function TeamPage() {
         </section>
         {!hasTeamPlan ? (
           <section className="card" style={{ padding: 22, maxWidth: 760 }}>
-            <strong>Team management is not included in {workspace.billingPlanName}.</strong>
+            <strong>{t("Team management is not included in")} {workspace.billingPlanName}.</strong>
             <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
-              Once a Team workspace owner approves your request, you can access that shared workspace according to your assigned role.
+              {t("Once a Team workspace owner approves your request, you can access that shared workspace according to your assigned role.")}
             </p>
-            <Link className="button secondary" href="/plan" style={{ marginTop: 16 }}>View Team plan</Link>
+            <Link className="button secondary" href="/plan" style={{ marginTop: 16 }}>{t("View Team plan")}</Link>
           </section>
         ) : null}
       </AppShell>
@@ -307,23 +309,23 @@ export default function TeamPage() {
         {workspaceSwitchPanel}
 
         <section className="card" style={{ padding: 24, marginBottom: 18, maxWidth: 820 }}>
-          <div className="pill">Team workspace membership</div>
+          <div className="pill">{t("Team workspace membership")}</div>
           <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "12px 0 8px" }}>
-            {workspace.name || "Shared workspace"}
+            {workspace.name || t("Shared workspace")}
           </h1>
           <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>
-            You have joined this workspace as <strong>{workspace.roleLabel}</strong>. You can access the areas permitted by your assigned role.
+            {t("You have joined this workspace as")} <strong>{workspace.roleLabel}</strong>. {t("You can access the areas permitted by your assigned role.")}
           </p>
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            Members, roles, join requests and billing are managed by the workspace owner.
+            {t("Members, roles, join requests and billing are managed by the workspace owner.")}
           </p>
         </section>
 
         <section className="card" style={{ padding: 22, maxWidth: 820 }}>
-          <div className="pill">Request Access</div>
-          <h2 style={{ margin: "12px 0 8px" }}>Join another Team workspace</h2>
+          <div className="pill">{t("Request Access")}</div>
+          <h2 style={{ margin: "12px 0 8px" }}>{t("Join another Team workspace")}</h2>
           <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>
-            Enter another owner’s email address or Company ID to request access.
+            {t("Enter another owner’s email address or Company ID to request access.")}
           </p>
           <form onSubmit={event => {
             event.preventDefault();
@@ -334,11 +336,11 @@ export default function TeamPage() {
                 className="input"
                 value={requestOwnerIdentifier}
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
-                placeholder="Owner email or Company ID"
+                placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
               />
               <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
-                {actioning === "request-access" ? "Sending..." : "Send request"}
+                {actioning === "request-access" ? t("Sending...") : t("Send request")}
               </button>
             </div>
           </form>
@@ -358,27 +360,27 @@ export default function TeamPage() {
       <section className="card" style={{ padding: 24, marginBottom: 18 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 18, alignItems: "center" }}>
           <div>
-            <div className="pill">Team Access</div>
+            <div className="pill">{t("Team Access")}</div>
             <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "12px 0 8px" }}>
-              {workspace?.name ?? "Workspace team"}
+              {workspace?.name ?? t("Workspace team")}
             </h1>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Manage workspace members, roles and join requests from the web portal. Owner actions are protected by the Team plan and Firebase Functions checks.
+              {t("Manage workspace members, roles and join requests from the web portal. Owner actions are protected by the Team plan and Firebase Functions checks.")}
             </p>
           </div>
           <div className="card" style={{ padding: 16, background: "var(--panel)", boxShadow: "none" }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              <span className="pill">{workspace?.billingPlanName ?? "Plan"}</span>
-              <span className="pill">{workspace?.roleLabel ?? "Role"}</span>
-              <span className="pill">Members: {limitText}</span>
+              <span className="pill">{workspace?.billingPlanName ?? t("Plan")}</span>
+              <span className="pill">{workspace?.roleLabel ?? t("Role")}</span>
+              <span className="pill">{t("Members")}: {limitText}</span>
             </div>
             <button
               className="button secondary"
-              onClick={() => copyText(workspace?.id ?? "", "Workspace ID copied")}
+              onClick={() => copyText(workspace?.id ?? "", t("Workspace ID copied"))}
               disabled={!workspace?.id}
               style={{ width: "100%" }}
             >
-              Copy Workspace ID
+              {t("Copy Workspace ID")}
             </button>
             {copied ? <p style={{ color: "var(--muted)", margin: "10px 0 0" }}>{copied}</p> : null}
           </div>
@@ -386,25 +388,25 @@ export default function TeamPage() {
       </section>
 
       <section className="card team-access-entry-card" style={{ padding: 22, marginBottom: 18 }}>
-        <div className="pill">Access</div>
-        <h2 style={{ margin: "12px 0 12px" }}>Invite and request access</h2>
+        <div className="pill">{t("Access")}</div>
+        <h2 style={{ margin: "12px 0 12px" }}>{t("Invite and request access")}</h2>
         <div className="team-access-entry-grid">
           <div className="team-access-entry-panel">
             <div className="team-access-entry-heading">
-              <strong>Invite People</strong>
-              <span>{isOwner ? hasTeamPlan ? "Share email or Company ID" : "Team plan required" : "Owner only"}</span>
+              <strong>{t("Invite People")}</strong>
+              <span>{isOwner ? hasTeamPlan ? t("Share email or Company ID") : t("Team plan required") : t("Owner only")}</span>
             </div>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Share your account email or Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.
+              {t("Share your account email or Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.")}
             </p>
             {isOwner && hasTeamPlan ? (
               <div className="team-access-id-box">
                 <code>{workspace?.id ?? ""}</code>
-                <button className="button secondary" type="button" onClick={() => copyText(workspace?.id ?? "", "Company ID copied")} disabled={!workspace?.id}>Copy</button>
+                <button className="button secondary" type="button" onClick={() => copyText(workspace?.id ?? "", t("Company ID copied"))} disabled={!workspace?.id}>{t("Copy")}</button>
               </div>
             ) : (
               <p style={{ color: "var(--muted)", margin: 0 }}>
-                {isOwner ? "Upgrade to NivaDesk Team to approve new members." : "Only the workspace owner can invite and approve new members."}
+                {isOwner ? t("Upgrade to NivaDesk Team to approve new members.") : t("Only the workspace owner can invite and approve new members.")}
               </p>
             )}
           </div>
@@ -414,22 +416,22 @@ export default function TeamPage() {
             void submitAccessRequest();
           }}>
             <div className="team-access-entry-heading">
-              <strong>Request Access</strong>
-              <span>Every role and plan</span>
+              <strong>{t("Request Access")}</strong>
+              <span>{t("Every role and plan")}</span>
             </div>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Enter another owner’s email address or Company ID to ask for access to their workspace.
+              {t("Enter another owner’s email address or Company ID to ask for access to their workspace.")}
             </p>
             <div className="team-access-request-row">
               <input
                 className="input"
                 value={requestOwnerIdentifier}
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
-                placeholder="Owner email or Company ID"
+                placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
               />
               <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
-                {actioning === "request-access" ? "Sending..." : "Send"}
+                {actioning === "request-access" ? t("Sending...") : t("Send")}
               </button>
             </div>
           </form>
@@ -444,63 +446,64 @@ export default function TeamPage() {
 
       {error ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-          <div className="pill">Team error</div>
-          <h2 style={{ margin: "12px 0 6px" }}>Could not complete Team Access action</h2>
+          <div className="pill">{t("Team error")}</div>
+          <h2 style={{ margin: "12px 0 6px" }}>{t("Could not complete Team Access action")}</h2>
           <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
         </section>
       ) : null}
 
       {!hasTeamPlan ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-          <div className="pill">Available in NivaDesk Team</div>
-          <h2 style={{ margin: "12px 0 8px" }}>Team management is locked on this plan</h2>
+          <div className="pill">{t("Available in NivaDesk Team")}</div>
+          <h2 style={{ margin: "12px 0 8px" }}>{t("Team management is locked on this plan")}</h2>
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            You can still see your current workspace membership, but accepting join requests and changing team roles require NivaDesk Team.
+            {t("You can still see your current workspace membership, but accepting join requests and changing team roles require NivaDesk Team.")}
           </p>
         </section>
       ) : null}
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", marginBottom: 18 }}>
-        <StatCard label="Members" value={`${currentMemberCount}`} note={`Limit: ${teamLimit > 9999 ? "Unlimited" : teamLimit}`} />
-        <StatCard label="Pending join requests" value={`${joinRequests.length}`} note={isOwner ? "Owner only" : "Only owners can review requests"} />
-        <StatCard label="Roles" value={`${Object.keys(roleCounts).length}`} note={Object.entries(roleCounts).map(([role, count]) => `${role}: ${count}`).join(" · ") || "No members"} />
+        <StatCard label={t("Members")} value={`${currentMemberCount}`} note={`${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit}`} />
+        <StatCard label={t("Pending join requests")} value={`${joinRequests.length}`} note={isOwner ? t("Owner only") : t("Only owners can review requests")} />
+        <StatCard label={t("Roles")} value={`${Object.keys(roleCounts).length}`} note={Object.entries(roleCounts).map(([role, count]) => `${role}: ${count}`).join(" · ") || t("No members")} />
       </div>
 
       <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-        <div className="pill">Role Profiles</div>
-        <h2 style={{ margin: "12px 0 8px" }}>Custom access roles</h2>
+        <div className="pill">{t("Role Profiles")}</div>
+        <h2 style={{ margin: "12px 0 8px" }}>{t("Custom access roles")}</h2>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Create role choices beside Member, View Only and Workflow Only. Each role profile carries its own visible areas and permissions.
+          {t("Create role choices beside Member, View Only and Workflow Only. Each role profile carries its own visible areas and permissions.")}
         </p>
         {canManageTeam ? (
           <CustomRoleManager
             roles={customRoles}
             disabled={Boolean(actioning)}
             savingKey={actioning}
+            language={language}
             onSave={role => runTeamAction(
               role.id ? `custom-role-${role.id}` : "custom-role-new",
               () => saveWorkspaceCustomRole(workspace!, role),
-              "Role profile saved."
+              t("Role profile saved.")
             )}
             onDelete={role => runTeamAction(
               `delete-custom-role-${role.id}`,
               () => deleteWorkspaceCustomRole(workspace!, role),
-              "Role profile deleted."
+              t("Role profile deleted.")
             )}
           />
         ) : (
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            Only the workspace owner on NivaDesk Team can create custom role profiles.
+            {t("Only the workspace owner on NivaDesk Team can create custom role profiles.")}
           </p>
         )}
       </section>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", alignItems: "start" }}>
         <section className="card" style={{ padding: 22 }}>
-          <div className="pill">Members</div>
-          <h2 style={{ margin: "12px 0 14px" }}>Workspace members</h2>
+          <div className="pill">{t("Members")}</div>
+          <h2 style={{ margin: "12px 0 14px" }}>{t("Workspace members")}</h2>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            Assign existing members to standard or custom role profiles.
+            {t("Assign existing members to standard or custom role profiles.")}
           </p>
           <div className="grid" style={{ gap: 10 }}>
             {members.map(member => {
@@ -515,13 +518,13 @@ export default function TeamPage() {
                       <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>{member.email || member.id}</p>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "start", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      {member.isOwner ? <span className="pill">Owner</span> : null}
+                      {member.isOwner ? <span className="pill">{t("Owner")}</span> : null}
                       <span className="pill">{member.roleLabel}</span>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
-                    <button className="button secondary" onClick={() => copyText(member.id, "User ID copied")}>Copy User ID</button>
-                    {member.email ? <button className="button secondary" onClick={() => copyText(member.email, "Email copied")}>Copy Email</button> : null}
+                    <button className="button secondary" onClick={() => copyText(member.id, t("User ID copied"))}>{t("Copy User ID")}</button>
+                    {member.email ? <button className="button secondary" onClick={() => copyText(member.email, t("Email copied"))}>{t("Copy Email")}</button> : null}
                     {canChangeRole ? (
                       <>
                         <select
@@ -533,7 +536,7 @@ export default function TeamPage() {
                             runTeamAction(
                               changingKey,
                               () => updateTeamMemberRole(workspace!, member, nextRole),
-                              `Role updated to ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
+                              `${t("Role updated to")} ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
                             );
                           }}
                           disabled={Boolean(actioning)}
@@ -543,40 +546,40 @@ export default function TeamPage() {
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
-                        {actioning === changingKey ? <span className="pill">Updating...</span> : null}
+                        {actioning === changingKey ? <span className="pill">{t("Updating...")}</span> : null}
                         <button
                           className="button secondary"
                           onClick={() => {
-                            if (!window.confirm(`Remove ${memberLabel(member)} from this workspace?`)) return;
+                            if (!window.confirm(`${t("Remove")} ${memberLabel(member)} ${t("from this workspace?")}`)) return;
                             runTeamAction(
                               removeKey,
                               () => removeTeamMember(workspace!, member),
-                              "Team member removed."
+                              t("Team member removed.")
                             );
                           }}
                           disabled={Boolean(actioning)}
                         >
-                          Remove
+                          {t("Remove")}
                         </button>
-                        {actioning === removeKey ? <span className="pill">Removing...</span> : null}
+                        {actioning === removeKey ? <span className="pill">{t("Removing...")}</span> : null}
                       </>
                     ) : null}
                   </div>
                 </article>
               );
             })}
-            {members.length === 0 ? <p style={{ color: "var(--muted)" }}>No members found.</p> : null}
+            {members.length === 0 ? <p style={{ color: "var(--muted)" }}>{t("No members found.")}</p> : null}
           </div>
         </section>
 
         <section className="card" style={{ padding: 22 }}>
-          <div className="pill">Join Requests</div>
-          <h2 style={{ margin: "12px 0 14px" }}>Pending requests</h2>
+          <div className="pill">{t("Join Requests")}</div>
+          <h2 style={{ margin: "12px 0 14px" }}>{t("Pending requests")}</h2>
           {!isOwner ? (
-            <p style={{ color: "var(--muted)", marginTop: 0 }}>Only workspace owners can see join requests.</p>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>{t("Only workspace owners can see join requests.")}</p>
           ) : null}
           {isOwner && joinRequests.length === 0 ? (
-            <p style={{ color: "var(--muted)", marginTop: 0 }}>No pending join requests.</p>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>{t("No pending join requests.")}</p>
           ) : null}
           {isOwner ? (
             <div className="grid" style={{ gap: 10 }}>
@@ -589,7 +592,7 @@ export default function TeamPage() {
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                       <div>
                         <strong>{requestLabel(request)}</strong>
-                        <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>Requested {formatDate(request.createdAt)}</p>
+                        <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>{t("Requested")} {formatDate(request.createdAt)}</p>
                       </div>
                       <span className="pill">{request.status}</span>
                     </div>
@@ -611,10 +614,10 @@ export default function TeamPage() {
                         onClick={() => runTeamAction(
                           approveKey,
                           () => approveJoinRequest(workspace!, request, selectedRole),
-                          "Access request approved."
+                          t("Access request approved.")
                         )}
                       >
-                        {actioning === approveKey ? "Approving..." : "Approve"}
+                        {actioning === approveKey ? t("Approving...") : t("Approve")}
                       </button>
                       <button
                         className="button secondary"
@@ -622,15 +625,15 @@ export default function TeamPage() {
                         onClick={() => runTeamAction(
                           declineKey,
                           () => declineJoinRequest(workspace!, request),
-                          "Access request declined."
+                          t("Access request declined.")
                         )}
                       >
-                        {actioning === declineKey ? "Declining..." : "Decline"}
+                        {actioning === declineKey ? t("Declining...") : t("Decline")}
                       </button>
                     </div>
                     {!hasTeamPlan ? (
                       <p style={{ color: "var(--muted)", margin: "12px 0 0" }}>
-                        Approving new team members requires NivaDesk Team. Decline remains available for cleanup.
+                        {t("Approving new team members requires NivaDesk Team. Decline remains available for cleanup.")}
                       </p>
                     ) : null}
                   </article>

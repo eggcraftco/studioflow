@@ -11,6 +11,7 @@ import {
   type WorkspaceMemberAccess
 } from "@/lib/studioflow/firestore";
 import { WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
+import { studioT } from "@/lib/studioflow/language";
 
 type EditableRole = {
   id?: string;
@@ -23,6 +24,7 @@ type CustomRoleManagerProps = {
   roles: WorkspaceCustomRole[];
   disabled?: boolean;
   savingKey?: string;
+  language?: string;
   onSave: (role: EditableRole) => Promise<unknown>;
   onDelete: (role: WorkspaceCustomRole) => Promise<unknown>;
 };
@@ -46,30 +48,31 @@ function defaultRole(): EditableRole {
   };
 }
 
-function roleDescription(role: WorkspaceCustomRole) {
+function roleDescription(role: WorkspaceCustomRole, t: (text: string) => string) {
   const access = normalizeAccess(role.access);
   const hiddenMenus = WORKSPACE_NAVIGATION_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const hiddenCards = WORKSPACE_CARD_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
   const hiddenSettings = WORKSPACE_SETTINGS_ACCESS_OPTIONS.filter(option => access[option.key] === false).length;
-  const assignedScope = access.assignedProjectsOnly === true ? " · assigned projects only" : "";
-  const assignmentControl = access.manageProjectAssignments === true ? " · can assign projects" : "";
+  const assignedScope = access.assignedProjectsOnly === true ? ` · ${t("assigned projects only")}` : "";
+  const assignmentControl = access.manageProjectAssignments === true ? ` · ${t("can assign projects")}` : "";
   const base = WEB_TEAM_ROLES.find(option => option.value === role.baseRole)?.label ?? "Member";
   const baseDetail = role.baseRole === "viewer"
-    ? "read-only behavior"
+    ? t("read-only behavior")
     : role.baseRole === "workflow"
-      ? "non-finance workflow behavior"
-      : "member edit behavior";
+      ? t("non-finance workflow behavior")
+      : t("member edit behavior");
   const hiddenParts = [
-    hiddenMenus > 0 ? `${hiddenMenus} menu${hiddenMenus === 1 ? "" : "s"} hidden` : "",
-    hiddenCards > 0 ? `${hiddenCards} card${hiddenCards === 1 ? "" : "s"} hidden` : "",
-    hiddenSettings > 0 ? `${hiddenSettings} setting menu${hiddenSettings === 1 ? "" : "s"} hidden` : ""
+    hiddenMenus > 0 ? `${hiddenMenus} ${hiddenMenus === 1 ? t("menu hidden") : t("menus hidden")}` : "",
+    hiddenCards > 0 ? `${hiddenCards} ${hiddenCards === 1 ? t("card hidden") : t("cards hidden")}` : "",
+    hiddenSettings > 0 ? `${hiddenSettings} ${hiddenSettings === 1 ? t("setting menu hidden") : t("setting menus hidden")}` : ""
   ].filter(Boolean);
   return hiddenParts.length === 0
-    ? `${base} with ${baseDetail}${assignedScope}${assignmentControl}`
-    : `${base} with ${hiddenParts.join(" · ")}${assignedScope}${assignmentControl}`;
+    ? `${t(base)} ${t("with")} ${baseDetail}${assignedScope}${assignmentControl}`
+    : `${t(base)} ${t("with")} ${hiddenParts.join(" · ")}${assignedScope}${assignmentControl}`;
 }
 
-export function CustomRoleManager({ roles, disabled = false, savingKey = "", onSave, onDelete }: CustomRoleManagerProps) {
+export function CustomRoleManager({ roles, disabled = false, savingKey = "", language = "English", onSave, onDelete }: CustomRoleManagerProps) {
+  const t = (text: string) => studioT(text, language);
   const [newRole, setNewRole] = useState<EditableRole>(() => defaultRole());
   const [drafts, setDrafts] = useState<Record<string, EditableRole>>({});
   const [newRoleExpanded, setNewRoleExpanded] = useState(false);
@@ -141,22 +144,22 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
     <div className="custom-role-manager">
       <form className="custom-role-card custom-role-card-new" onSubmit={submitNewRole}>
         <div className="member-access-panel-heading">
-          <strong>Create role profile</strong>
-          <span>Add a role beside Member, View Only and Workflow Only.</span>
+          <strong>{t("Create role profile")}</strong>
+          <span>{t("Add a role beside Member, View Only and Workflow Only.")}</span>
         </div>
         <div className="custom-role-form-row">
           <label>
-            <span>Role name</span>
+            <span>{t("Role name")}</span>
             <input
               className="input"
               value={newRole.name}
               onChange={event => setNewRole(previous => ({ ...previous, name: event.target.value }))}
-              placeholder="Workshop Assistant"
+              placeholder={t("Workshop Assistant")}
               disabled={disabled || Boolean(savingKey)}
             />
           </label>
           <label>
-            <span>Base behavior</span>
+            <span>{t("Base behavior")}</span>
             <select
               className="input"
               value={newRole.baseRole}
@@ -174,24 +177,25 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
           disabled={disabled || Boolean(savingKey)}
           aria-expanded={newRoleExpanded}
         >
-          <span>Role permissions</span>
-          <strong>{newRoleExpanded ? "Hide" : "Show"}</strong>
+          <span>{t("Role permissions")}</span>
+          <strong>{newRoleExpanded ? t("Hide") : t("Show")}</strong>
         </button>
         {newRoleExpanded ? (
           <MemberAccessEditor
             access={newRole.access}
             disabled={disabled || Boolean(savingKey)}
             saving={savingKey === "custom-role-new"}
-            heading="Role permissions"
-            note="Choose which areas this role can see and use."
+            heading={t("Role permissions")}
+            note={t("Choose which areas this role can see and use.")}
+            language={language}
             onChange={access => setNewRole(previous => ({ ...previous, access }))}
           />
         ) : null}
         <div className="settings-button-row">
           <button className="button" type="submit" disabled={!canCreate}>
-            {savingKey === "custom-role-new" ? "Saving..." : "Create role"}
+            {savingKey === "custom-role-new" ? t("Saving...") : t("Create role")}
           </button>
-          <span className="muted-inline">{roleNameExists(newRole.name) ? "A role with this name already exists." : "Assign this role to members after creating it."}</span>
+          <span className="muted-inline">{roleNameExists(newRole.name) ? t("A role with this name already exists.") : t("Assign this role to members after creating it.")}</span>
         </div>
       </form>
 
@@ -219,7 +223,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
               >
                 <div>
                   <strong>{role.name}</strong>
-                  <small>{roleDescription(role)}</small>
+                  <small>{roleDescription(role, t)}</small>
                 </div>
                 <span className="custom-role-summary-meta">
                   <span className="studio-pill">{role.id}</span>
@@ -230,7 +234,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
                 <>
                   <div className="custom-role-form-row">
                     <label>
-                      <span>Role name</span>
+                      <span>{t("Role name")}</span>
                       <input
                         className="input"
                         value={draft.name}
@@ -239,7 +243,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
                       />
                     </label>
                     <label>
-                      <span>Base behavior</span>
+                      <span>{t("Base behavior")}</span>
                       <select
                         className="input"
                         value={draft.baseRole}
@@ -254,8 +258,9 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
                     access={draft.access}
                     disabled={disabled || Boolean(savingKey)}
                     saving={savingKey === saveKey}
-                    heading="Role permissions"
-                    note="Changes apply to every member using this role."
+                    heading={t("Role permissions")}
+                    note={t("Changes apply to every member using this role.")}
+                    language={language}
                     onChange={access => updateDraft(role.id, { access })}
                   />
                   <div className="settings-button-row">
@@ -265,19 +270,19 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
                       disabled={!dirty || !cleanDraftName || hasNameConflict || disabled || Boolean(savingKey)}
                       onClick={() => onSave({ ...draft, id: role.id, name: cleanDraftName, access: normalizeAccess(draft.access) })}
                     >
-                      {savingKey === saveKey ? "Saving..." : "Save role"}
+                      {savingKey === saveKey ? t("Saving...") : t("Save role")}
                     </button>
-                    {hasNameConflict ? <span className="muted-inline">Name already used.</span> : null}
+                    {hasNameConflict ? <span className="muted-inline">{t("Name already used.")}</span> : null}
                     <button
                       className="button secondary"
                       type="button"
                       disabled={disabled || Boolean(savingKey)}
                       onClick={() => {
-                        if (!window.confirm(`Delete the ${role.name} role profile? Members must be moved away from it first.`)) return;
+                        if (!window.confirm(`${t("Delete the")} ${role.name} ${t("role profile? Members must be moved away from it first.")}`)) return;
                         void onDelete(role);
                       }}
                     >
-                      {savingKey === deleteKey ? "Deleting..." : "Delete"}
+                      {savingKey === deleteKey ? t("Deleting...") : t("Delete")}
                     </button>
                   </div>
                 </>
@@ -285,7 +290,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", onS
             </article>
           );
         })}
-        {roles.length === 0 ? <p className="muted-inline">No custom role profiles yet.</p> : null}
+        {roles.length === 0 ? <p className="muted-inline">{t("No custom role profiles yet.")}</p> : null}
       </div>
     </div>
   );
