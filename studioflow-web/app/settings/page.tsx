@@ -501,7 +501,7 @@ function renderSettingsSection({
     case "workflow":
       return <WorkflowSettingsSection workspace={workspace} language={language} />;
     case "pdf":
-      return <PdfExportSettingsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
+      return <PdfExportSettingsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "quick-reply":
       return <QuickReplySettingsSection workspace={workspace} settings={quickReplySettings} onSaved={onQuickReplySettingsChange} />;
     case "financial":
@@ -1388,12 +1388,15 @@ const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
 function PdfExportSettingsSection({
   workspace,
   settings,
-  onSaved
+  onSaved,
+  language = "English"
 }: {
   workspace: WorkspaceContext;
   settings: WorkspaceSettingsOverview | null;
   onSaved: (settings: WorkspaceSettingsOverview) => void;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   const [draft, setDraft] = useState<WorkspaceSettingsOverview | null>(settings);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
@@ -1416,7 +1419,7 @@ function PdfExportSettingsSection({
   }, [settings, isWorkflowOnly, workspace]);
 
   if (!draft) {
-    return <PlaceholderSection title="PDF Export Settings" detail="PDF settings could not be loaded yet." action={<Link className="button secondary" href="/export">Open Export</Link>} />;
+    return <PlaceholderSection title={t("PDF Export Settings")} detail={t("PDF settings could not be loaded yet.")} action={<Link className="button secondary" href="/export">{t("Open Export")}</Link>} />;
   }
 
   function updateBoolean(key: keyof WorkspaceSettingsOverview, value: boolean) {
@@ -1482,7 +1485,7 @@ function PdfExportSettingsSection({
       onSaved(savedSettings);
       setStatus(result.message || "PDF Export settings saved.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "PDF Export settings could not be saved.");
+      setError(saveError instanceof Error ? saveError.message : t("PDF Export settings could not be saved."));
     } finally {
       setSaving(false);
     }
@@ -1492,21 +1495,21 @@ function PdfExportSettingsSection({
     <div className="settings-card-stack">
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="Safe access" title="Finance-free PDF preferences" />
+          <CardTitle icon="lock" eyebrow={t("Safe access")} title={t("Finance-free PDF preferences")} />
           <p className="muted-copy">
             {isWorkflowOnly
-              ? "Payment and financial PDF fields remain hidden. You can edit your own non-financial export sections below."
-              : "Your current workspace role cannot edit PDF Export settings."}
+              ? t("Payment and financial PDF fields remain hidden. You can edit your own non-financial export sections below.")
+              : t("Your current workspace role cannot edit PDF Export settings.")}
           </p>
         </section>
       ) : null}
 
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="docText" eyebrow="PDF Export Settings" title="Visible PDF sections" />
+        <CardTitle icon="docText" eyebrow={t("PDF Export Settings")} title={t("Visible PDF sections")} />
         <div className="pdf-settings-grid">
           {visiblePdfToggles.map(([key, label]) => (
             <label className="pdf-settings-toggle" key={key}>
-              <span>{label}</span>
+              <span>{t(label)}</span>
               <input
                 type="checkbox"
                 checked={Boolean(draft[key])}
@@ -1519,10 +1522,10 @@ function PdfExportSettingsSection({
       </section>
 
       {!isWorkflowOnly ? <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="notes" eyebrow="Invoice Numbers" title="Company invoice numbers" />
+        <CardTitle icon="notes" eyebrow={t("Invoice Numbers")} title={t("Company invoice numbers")} />
         <div className="quick-reply-template-heading">
-          <p className="muted-copy" style={{ margin: 0 }}>VAT, EORI, company number or any reference you want to show on PDF invoices.</p>
-          <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={addCompanyNumber}>Add</button>
+          <p className="muted-copy" style={{ margin: 0 }}>{t("VAT, EORI, company number or any reference you want to show on PDF invoices.")}</p>
+          <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={addCompanyNumber}>{t("Add")}</button>
         </div>
         <div className="company-number-list">
           {draft.companyNumbers.map(item => (
@@ -1532,16 +1535,16 @@ function PdfExportSettingsSection({
                 value={item.title}
                 disabled={!canEdit || saving}
                 onChange={event => updateCompanyNumber(item.id, { title: event.target.value })}
-                placeholder="Label"
+                placeholder={t("Label")}
               />
               <input
                 className="input"
                 value={item.value}
                 disabled={!canEdit || saving}
                 onChange={event => updateCompanyNumber(item.id, { value: event.target.value })}
-                placeholder="Number / value"
+                placeholder={t("Number / value")}
               />
-              <button className="icon-action danger" type="button" disabled={!canEdit || saving} onClick={() => removeCompanyNumber(item.id)} aria-label="Remove">
+              <button className="icon-action danger" type="button" disabled={!canEdit || saving} onClick={() => removeCompanyNumber(item.id)} aria-label={t("Remove")}>
                 ×
               </button>
             </div>
@@ -1551,16 +1554,16 @@ function PdfExportSettingsSection({
 
       <section className="card app-card quick-reply-settings-actions">
         <div>
-          <strong>{isWorkflowOnly ? "Safe PDF access" : "Shared PDF settings"}</strong>
-          <p className="muted-copy">Your finance-free PDF section preferences are personal. Shared financial and invoice PDF settings remain owner-managed.</p>
+          <strong>{isWorkflowOnly ? t("Safe PDF access") : t("Shared PDF settings")}</strong>
+          <p className="muted-copy">{t("Your finance-free PDF section preferences are personal. Shared financial and invoice PDF settings remain owner-managed.")}</p>
         </div>
         <div className="settings-action-row">
-          <Link className="button secondary" href="/export">Open Export</Link>
+          <Link className="button secondary" href="/export">{t("Open Export")}</Link>
           <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
-            {saving ? "Saving..." : "Save PDF Settings"}
+            {saving ? t("Saving...") : t("Save PDF Settings")}
           </button>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
     </div>
