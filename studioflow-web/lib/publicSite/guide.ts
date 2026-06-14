@@ -199,6 +199,25 @@ const TREE_EN: GuideNode[] = [
             "Use Edit headings to add, rename or remove the Special Notes sections that appear on every order across the workspace."
           ] }
         ]
+      },
+      {
+        id: "card-clientfiles",
+        title: "Client Files card",
+        blocks: [
+          { kind: "para", text: "Attach the documents and images that belong to this order — proofs, designs, receipts, reference photos — so everything for the job lives with it." },
+          { kind: "sub", text: "What you can do" },
+          { kind: "bullets", items: [
+            "Upload File — pick PDF, image, PSD or PSB files. You can also drag and drop files straight onto the card.",
+            "Tap a file to preview it, or use Download all to grab everything at once.",
+            "Delete a file if your role is allowed to.",
+            "Works offline — files are saved on the device and upload automatically when you are back online."
+          ] },
+          { kind: "sub", text: "Safety" },
+          { kind: "bullets", items: [
+            "The maximum file size and the upload policy come from Settings ▸ Safety & Uploads.",
+            "Where required, you tick to accept the upload policy on this browser before uploading."
+          ] }
+        ]
       }
     ]
   },
@@ -455,6 +474,25 @@ const TREE_TR: GuideNode[] = [
             "Herhangi bir bölüme yazın — otomatik kaydedilir.",
             "+ butonuyla yalnızca bu siparişe özel bir not alanı ekleyin, başlık verin ve gerek kalmayınca kaldırın.",
             "Başlıkları Düzenle ile çalışma alanındaki her siparişte görünen Special Notes bölümlerini ekleyin, yeniden adlandırın veya kaldırın."
+          ] }
+        ]
+      },
+      {
+        id: "card-clientfiles",
+        title: "Client Files kartı",
+        blocks: [
+          { kind: "para", text: "Bu siparişe ait belge ve görselleri — provalar, tasarımlar, fişler, referans fotoğraflar — ekleyin; böylece işe dair her şey onunla birlikte durur." },
+          { kind: "sub", text: "Neler yapabilirsiniz" },
+          { kind: "bullets", items: [
+            "Upload File — PDF, görsel, PSD veya PSB dosyaları seçin. Dosyaları doğrudan kartın üzerine sürükleyip bırakabilirsiniz.",
+            "Önizlemek için bir dosyaya dokunun veya Download all ile hepsini tek seferde indirin.",
+            "Rolünüz izin veriyorsa bir dosyayı silin.",
+            "Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir."
+          ] },
+          { kind: "sub", text: "Güvenlik" },
+          { kind: "bullets", items: [
+            "Maksimum dosya boyutu ve upload politikası Settings ▸ Safety & Uploads'tan gelir.",
+            "Gerektiğinde, yüklemeden önce bu tarayıcıda upload politikasını kabul etmek için işaretlersiniz."
           ] }
         ]
       }
