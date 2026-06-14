@@ -163,6 +163,24 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "para", text: "Pick a value from each dropdown and it saves instantly. Priority and risk also feed the smart sort and the status badges in the Orders list, so flagged jobs rise to the top." }
         ]
+      },
+      {
+        id: "card-delivery",
+        title: "Timeline & Delivery card",
+        blocks: [
+          { kind: "para", text: "See the order's timeline at a glance and keep the delivery date front and center, so nothing is delivered late." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "Created Date and Delivery Due, shown as two clear date cards.",
+            "Time Remaining — the days left until delivery, color-coded so a tight or overdue deadline stands out.",
+            "Add to Calendar — downloads an all-day calendar file spanning the created date to the delivery date, so the order appears in your calendar app (available from NivaDesk Lite)."
+          ] },
+          { kind: "sub", text: "What you can edit" },
+          { kind: "bullets", items: [
+            "Delivery Time (in days), the Delivery Due date and the Created Date — tap to change any of them.",
+            "Time Remaining and all the colors recalculate automatically as soon as you change a date."
+          ] }
+        ]
       }
     ]
   },
@@ -384,6 +402,24 @@ const TREE_TR: GuideNode[] = [
             "Risk reason (Risk nedeni) — Risk, None dışında bir şeye ayarlanınca görünür. Nedenini seçin; örneğin Waiting for customer, Waiting for payment veya Waiting for material."
           ] },
           { kind: "para", text: "Her açılır menüden bir değer seçin, anında kaydedilir. Öncelik ve risk ayrıca akıllı sıralamayı ve Siparişler listesindeki durum rozetlerini besler; işaretlenen işler en üste çıkar." }
+        ]
+      },
+      {
+        id: "card-delivery",
+        title: "Timeline & Delivery kartı",
+        blocks: [
+          { kind: "para", text: "Siparişin zaman çizelgesini bir bakışta görün ve teslim tarihini hep ön planda tutun; böylece hiçbir şey geç teslim edilmez." },
+          { kind: "sub", text: "Neler gösterir" },
+          { kind: "bullets", items: [
+            "Created Date (Oluşturulma) ve Delivery Due (Teslim Tarihi); iki net tarih kartı olarak.",
+            "Time Remaining (Kalan Süre) — teslime kalan gün sayısı; sıkışık veya geçmiş bir son tarih öne çıksın diye renk kodlu.",
+            "Add to Calendar — oluşturulma tarihinden teslim tarihine kadar uzanan tüm-gün bir takvim dosyası indirir; böylece sipariş takvim uygulamanızda görünür (NivaDesk Lite'tan itibaren)."
+          ] },
+          { kind: "sub", text: "Neleri düzenleyebilirsiniz" },
+          { kind: "bullets", items: [
+            "Delivery Time (gün olarak), Delivery Due tarihi ve Created Date — herhangi birine dokunup değiştirin.",
+            "Bir tarihi değiştirir değiştirmez Kalan Süre ve tüm renkler otomatik yeniden hesaplanır."
+          ] }
         ]
       }
     ]
