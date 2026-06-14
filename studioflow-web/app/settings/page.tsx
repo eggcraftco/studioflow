@@ -509,7 +509,7 @@ function renderSettingsSection({
     case "woocommerce":
       return <WooCommerceIntegrationSection workspace={workspace} />;
     case "safety-uploads":
-      return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
+      return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
       return <DataManagementSection workspace={workspace} counts={counts} userEmail={userEmail} onImported={onDataImported} />;
     case "account":
@@ -2015,12 +2015,15 @@ function QuickReplyTemplateEditor({
 function SafetyUploadsSection({
   workspace,
   settings,
-  onSaved
+  onSaved,
+  language = "English"
 }: {
   workspace: WorkspaceContext;
   settings: WorkspaceSettingsOverview | null;
   onSaved: (settings: WorkspaceSettingsOverview) => void;
+  language?: string;
 }) {
+  const t = (text: string) => studioT(text, language);
   const [requirePolicy, setRequirePolicy] = useState(true);
   const [maxFileSizeMB, setMaxFileSizeMB] = useState(10);
   const [browserAccepted, setBrowserAccepted] = useState(false);
@@ -2073,15 +2076,15 @@ function SafetyUploadsSection({
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="lock" eyebrow="Safety & Uploads" title="Upload safety policy" />
+        <CardTitle icon="lock" eyebrow={t("Safety & Uploads")} title={t("Upload safety policy")} />
         <p className="muted-copy">
-          Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in this workspace.
+          {t("Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in this workspace.")}
         </p>
         <div className="settings-toggle-stack">
           <label className="settings-toggle-row">
             <span>
-              <strong>Require upload policy acceptance before upload</strong>
-              <small>When enabled, this browser asks the user to accept the upload policy before Client Files upload.</small>
+              <strong>{t("Require upload policy acceptance before upload")}</strong>
+              <small>{t("When enabled, this browser asks the user to accept the upload policy before Client Files upload.")}</small>
             </span>
             <input
               type="checkbox"
@@ -2093,8 +2096,8 @@ function SafetyUploadsSection({
 
           <label className="settings-toggle-row">
             <span>
-              <strong>This browser has accepted the upload policy</strong>
-              <small>This remains local to this browser, matching the app’s device-level acceptance behavior.</small>
+              <strong>{t("This browser has accepted the upload policy")}</strong>
+              <small>{t("This remains local to this browser, matching the app’s device-level acceptance behavior.")}</small>
             </span>
             <input
               type="checkbox"
@@ -2105,8 +2108,8 @@ function SafetyUploadsSection({
 
           <label className="settings-range-row">
             <span>
-              <strong>Maximum upload size</strong>
-              <small>Files larger than this are blocked before upload.</small>
+              <strong>{t("Maximum upload size")}</strong>
+              <small>{t("Files larger than this are blocked before upload.")}</small>
             </span>
             <input
               className="input"
@@ -2123,48 +2126,48 @@ function SafetyUploadsSection({
         </div>
 
         <div className="settings-mini-grid">
-          <InfoTile label="Policy prompt" value={requirePolicy ? "Required" : "Not required"} />
-          <InfoTile label="Accepted in browser" value={browserAccepted ? "Accepted" : "Not accepted"} />
-          <InfoTile label="Max file size" value={`${Math.round(maxFileSizeMB)} MB`} />
+          <InfoTile label={t("Policy prompt")} value={requirePolicy ? t("Required") : t("Not required")} />
+          <InfoTile label={t("Accepted in browser")} value={browserAccepted ? t("Accepted") : t("Not accepted")} />
+          <InfoTile label={t("Max file size")} value={`${Math.round(maxFileSizeMB)} MB`} />
         </div>
         <div className="quick-reply-settings-info">
-          <strong>{browserAccepted ? "Upload policy is accepted on this browser." : "The first upload will ask this browser to accept the upload policy."}</strong>
-          <p>Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.</p>
+          <strong>{browserAccepted ? t("Upload policy is accepted on this browser.") : t("The first upload will ask this browser to accept the upload policy.")}</strong>
+          <p>{t("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.")}</p>
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
-            {saving ? "Saving..." : "Save Upload Safety"}
+            {saving ? t("Saving...") : t("Save Upload Safety")}
           </button>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy">Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. Plan guards still keep cloud file upload on Pro and Team.</p>
+        <p className="muted-copy">{t("Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. Plan guards still keep cloud file upload on Pro and Team.")}</p>
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="check" eyebrow="What users must understand" title="Upload rules" />
+        <CardTitle icon="check" eyebrow={t("What users must understand")} title={t("Upload rules")} />
         <div className="settings-rule-list">
-          <IntegrationInfoRow number="1" title="Only upload suitable files" detail="Users must only upload legal, safe and work-related files that belong in this workspace." />
-          <IntegrationInfoRow number="2" title="No illegal or harmful content" detail="Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded." />
-          <IntegrationInfoRow number="3" title="Client approval and rights" detail="If a file belongs to a client or third party, the user should have permission to use it for the order." />
-          <IntegrationInfoRow number="4" title="Owner can remove files" detail="Workspace owners should remove unsuitable files and can remove users from the workspace if needed." />
+          <IntegrationInfoRow number="1" title={t("Only upload suitable files")} detail={t("Users must only upload legal, safe and work-related files that belong in this workspace.")} />
+          <IntegrationInfoRow number="2" title={t("No illegal or harmful content")} detail={t("Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded.")} />
+          <IntegrationInfoRow number="3" title={t("Client approval and rights")} detail={t("If a file belongs to a client or third party, the user should have permission to use it for the order.")} />
+          <IntegrationInfoRow number="4" title={t("Owner can remove files")} detail={t("Workspace owners should remove unsuitable files and can remove users from the workspace if needed.")} />
         </div>
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="lock" eyebrow="What the app does" title="Workspace upload protection" />
+        <CardTitle icon="lock" eyebrow={t("What the app does")} title={t("Workspace upload protection")} />
         <div className="settings-rule-list">
-          <IntegrationInfoRow number="1" title="Company workspace only" detail="Uploads are saved under the active Company ID so they stay connected to this workspace." />
-          <IntegrationInfoRow number="2" title="Allowed file types only" detail="Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB, while previews, logos and avatars stay image-only." />
-          <IntegrationInfoRow number="3" title="File size limit" detail="Files larger than the selected limit are blocked before upload." />
-          <IntegrationInfoRow number="4" title="Upload audit log" detail="Each upload records the company, user, file type, file size, upload date, source and related order when available." />
+          <IntegrationInfoRow number="1" title={t("Company workspace only")} detail={t("Uploads are saved under the active Company ID so they stay connected to this workspace.")} />
+          <IntegrationInfoRow number="2" title={t("Allowed file types only")} detail={t("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB, while previews, logos and avatars stay image-only.")} />
+          <IntegrationInfoRow number="3" title={t("File size limit")} detail={t("Files larger than the selected limit are blocked before upload.")} />
+          <IntegrationInfoRow number="4" title={t("Upload audit log")} detail={t("Each upload records the company, user, file type, file size, upload date, source and related order when available.")} />
         </div>
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="lock" eyebrow="Important limitation" title="Human review still matters" />
+        <CardTitle icon="lock" eyebrow={t("Important limitation")} title={t("Human review still matters")} />
         <p className="muted-copy">
-          This does not automatically judge the content of a file. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything unsuitable.
+          {t("This does not automatically judge the content of a file. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything unsuitable.")}
         </p>
       </section>
     </div>
