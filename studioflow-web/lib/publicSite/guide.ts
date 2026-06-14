@@ -364,10 +364,38 @@ const TREE_EN: GuideNode[] = [
     id: "notes",
     title: "Notes",
     blocks: [
-      { kind: "para", text: "A single place to browse the notes attached to your orders, so you can find an instruction or decision without opening each order." },
+      { kind: "para", text: "A full notes board for your workspace — capture ideas, lists and reminders, share them with your team, and keep the important ones pinned to the top." },
+      { kind: "sub", text: "Create & format" },
       { kind: "bullets", items: [
-        "Review customer notes and special notes across orders.",
-        "Use it as a quick reference while you work."
+        "New Note — give it a title and body, and add an image if you need one.",
+        "Duplicate or copy a note to reuse it.",
+        "Search notes to find anything fast, and switch to a grid view."
+      ] },
+      { kind: "sub", text: "Organize" },
+      { kind: "bullets", items: [
+        "Pin a note to keep it at the top of the board; Unpin when it is no longer urgent.",
+        "Give a note a color to group related ones visually.",
+        "Add labels and filter the board by label."
+      ] },
+      { kind: "sub", text: "Share with your team" },
+      { kind: "bullets", items: [
+        "Add collaborators by email so a note is shared and worked on together.",
+        "Everyone with access sees the latest version, so the team stays on the same page."
+      ] },
+      { kind: "sub", text: "Reminders" },
+      { kind: "bullets", items: [
+        "Set a reminder on a note (Tomorrow, Next week or a custom time) and get notified.",
+        "See all your note reminders in one place, and remove a reminder when it is done."
+      ] },
+      { kind: "sub", text: "Project notes" },
+      { kind: "bullets", items: [
+        "Notes can be linked to a project and appear under Project Notes for that order.",
+        "Restore a project note back to your main Notes board at any time."
+      ] },
+      { kind: "sub", text: "Archive & Trash" },
+      { kind: "bullets", items: [
+        "Archive a note to clear it from the board without deleting it; Unarchive to bring it back.",
+        "Move a note to Trash, Restore it later, or Delete forever to remove it permanently."
       ] }
     ]
   },
@@ -883,10 +911,38 @@ const TREE_TR: GuideNode[] = [
     id: "notes",
     title: "Notes (Notlar)",
     blocks: [
-      { kind: "para", text: "Siparişlerinize ekli notları tek yerden gözden geçirin; bir talimatı veya kararı her siparişi açmadan bulun." },
+      { kind: "para", text: "Çalışma alanınız için tam bir not panosu — fikirleri, listeleri ve hatırlatmaları yakalayın, ekibinizle paylaşın ve önemlileri en üste sabitleyin." },
+      { kind: "sub", text: "Oluştur & biçimlendir" },
       { kind: "bullets", items: [
-        "Siparişler genelinde müşteri notlarını ve özel notları inceleyin.",
-        "Çalışırken hızlı bir başvuru olarak kullanın."
+        "New Note — başlık ve metin verin, gerekiyorsa bir görsel ekleyin.",
+        "Bir notu yeniden kullanmak için çoğaltın (Duplicate) veya kopyalayın.",
+        "Her şeyi hızla bulmak için notlarda arayın ve ızgara (grid) görünümüne geçin."
+      ] },
+      { kind: "sub", text: "Düzenle" },
+      { kind: "bullets", items: [
+        "Bir notu panonun en üstünde tutmak için sabitleyin (Pin); aciliyeti geçince Unpin yapın.",
+        "İlgili notları görsel olarak gruplamak için bir nota renk verin.",
+        "Etiket ekleyin ve panoyu etikete göre filtreleyin."
+      ] },
+      { kind: "sub", text: "Ekibinizle paylaşın" },
+      { kind: "bullets", items: [
+        "E-posta ile ortak çalışanlar (collaborators) ekleyin; not paylaşılır ve birlikte üzerinde çalışılır.",
+        "Erişimi olan herkes en güncel sürümü görür; böylece ekip aynı sayfada kalır."
+      ] },
+      { kind: "sub", text: "Hatırlatıcılar" },
+      { kind: "bullets", items: [
+        "Bir nota hatırlatıcı kurun (Tomorrow, Next week veya özel bir zaman) ve bildirim alın.",
+        "Tüm not hatırlatıcılarınızı tek yerde görün ve işi bitince hatırlatıcıyı kaldırın."
+      ] },
+      { kind: "sub", text: "Proje notları" },
+      { kind: "bullets", items: [
+        "Notlar bir projeye bağlanabilir ve o siparişin Project Notes bölümünde görünür.",
+        "Bir proje notunu istediğiniz zaman ana Notes panonuza geri taşıyın (Restore)."
+      ] },
+      { kind: "sub", text: "Arşiv & Çöp" },
+      { kind: "bullets", items: [
+        "Bir notu silmeden panodan kaldırmak için arşivleyin (Archive); geri getirmek için Unarchive.",
+        "Bir notu Çöp'e taşıyın, sonra geri alın (Restore) veya kalıcı silmek için Delete forever."
       ] }
     ]
   },
