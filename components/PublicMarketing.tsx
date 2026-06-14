@@ -31,7 +31,8 @@ import {
 import {
   GUIDE_LAST_UPDATED,
   getGuideChrome,
-  getGuideItems
+  getGuideTree,
+  type GuideNode
 } from "@/lib/publicSite/guide";
 import {
   getPrivacyPolicyLastUpdatedLabel,
@@ -2571,11 +2572,62 @@ export function PublicRefundCancellationPage() {
   );
 }
 
+function GuideBlocks({ node }: { node: GuideNode }) {
+  return (
+    <>
+      {node.blocks.map((block, i) => {
+        if (block.kind === "para") return <p key={i} className="guide-para">{block.text}</p>;
+        if (block.kind === "sub") return <h3 key={i} className="guide-subheading">{block.text}</h3>;
+        if (block.kind === "steps") {
+          return (
+            <ol key={i} className="guide-steps">
+              {block.items.map((item, j) => <li key={j}>{item}</li>)}
+            </ol>
+          );
+        }
+        return (
+          <ul key={i} className="guide-points">
+            {block.items.map((item, j) => <li key={j}>{item}</li>)}
+          </ul>
+        );
+      })}
+    </>
+  );
+}
+
 export function PublicGuidePage() {
   const Page = () => {
     const { language } = usePublicSiteLanguage();
     const chrome = getGuideChrome(language);
-    const items = getGuideItems(language);
+    const tree = getGuideTree(language);
+
+    const flat = useState(() => {
+      const list: GuideNode[] = [];
+      tree.forEach(node => {
+        list.push(node);
+        node.children?.forEach(child => list.push(child));
+      });
+      return list;
+    })[0];
+
+    const [selectedId, setSelectedId] = useState(tree[0]?.id ?? "");
+
+    useEffect(() => {
+      const fromHash = decodeURIComponent(window.location.hash.replace("#", ""));
+      if (fromHash && flat.some(node => node.id === fromHash)) {
+        setSelectedId(fromHash);
+      }
+    }, [flat]);
+
+    const selected = flat.find(node => node.id === selectedId) ?? tree[0];
+
+    function select(id: string) {
+      setSelectedId(id);
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `#${id}`);
+      }
+    }
+
     return (
       <>
         <section className="public-page-hero public-info-hero">
@@ -2591,25 +2643,41 @@ export function PublicGuidePage() {
 
         <section className="public-section">
           <div className="public-shell guide-layout">
-            <nav className="guide-toc" aria-label={chrome.onThisPage}>
-              <span className="guide-toc-title">{chrome.onThisPage}</span>
-              {items.map(item => (
-                <a key={item.id} href={`#${item.id}`}>{item.title}</a>
+            <nav className="guide-nav" aria-label={chrome.menuLabel}>
+              <span className="guide-nav-title">{chrome.menuLabel}</span>
+              {tree.map(node => (
+                <div key={node.id} className="guide-nav-group">
+                  <button
+                    type="button"
+                    className={node.id === selectedId ? "guide-nav-item is-active" : "guide-nav-item"}
+                    aria-current={node.id === selectedId ? "true" : undefined}
+                    onClick={() => select(node.id)}
+                  >
+                    {node.title}
+                  </button>
+                  {node.children && node.children.length > 0 ? (
+                    <div className="guide-nav-children">
+                      {node.children.map(child => (
+                        <button
+                          key={child.id}
+                          type="button"
+                          className={child.id === selectedId ? "guide-nav-subitem is-active" : "guide-nav-subitem"}
+                          aria-current={child.id === selectedId ? "true" : undefined}
+                          onClick={() => select(child.id)}
+                        >
+                          {child.title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </nav>
-            <div className="guide-content">
-              {items.map(item => (
-                <article key={item.id} id={item.id} className="guide-item">
-                  <h2>{item.title}</h2>
-                  <p>{item.body}</p>
-                  {item.points ? (
-                    <ul className="guide-points">
-                      {item.points.map((point, i) => <li key={i}>{point}</li>)}
-                    </ul>
-                  ) : null}
-                </article>
-              ))}
-            </div>
+
+            <article className="guide-detail" key={selected.id}>
+              <h2>{selected.title}</h2>
+              <GuideBlocks node={selected} />
+            </article>
           </div>
         </section>
       </>
