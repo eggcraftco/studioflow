@@ -1524,25 +1524,24 @@ const REGION_CURRENCY: Record<string, string> = {
 
 // Detects the visitor's currency from their browser locale (client-side only).
 // Returns a localized symbol and a formatter for the demo amount. Defaults to GBP.
-function useLocaleCurrency() {
-  const [currency, setCurrency] = useState<string>("GBP");
-  useEffect(() => {
-    try {
-      const lang = navigator.language || "en-GB";
-      let region: string | undefined;
-      try {
-        region = new Intl.Locale(lang).maximize().region ?? undefined;
-      } catch {
-        region = lang.split("-")[1];
-      }
-      const code = (region && REGION_CURRENCY[region.toUpperCase()]) || "GBP";
-      setCurrency(code);
-    } catch {
-      /* keep GBP */
-    }
-  }, []);
+const LANGUAGE_CURRENCY: Record<StudioLanguage, { currency: string; locale: string }> = {
+  "English": { currency: "GBP", locale: "en-GB" },
+  "Türkçe": { currency: "TRY", locale: "tr-TR" },
+  "Deutsch": { currency: "EUR", locale: "de-DE" },
+  "Français": { currency: "EUR", locale: "fr-FR" },
+  "Italiano": { currency: "EUR", locale: "it-IT" },
+  "Español (Spanish)": { currency: "EUR", locale: "es-ES" },
+  "Português": { currency: "EUR", locale: "pt-PT" },
+  "Русский (Russian)": { currency: "RUB", locale: "ru-RU" },
+  "日本語 (Japanese)": { currency: "JPY", locale: "ja-JP" },
+  "中文 (Chinese)": { currency: "CNY", locale: "zh-CN" },
+  "العربية (Arabic)": { currency: "USD", locale: "ar" },
+  "हिन्दी (Hindi)": { currency: "INR", locale: "hi-IN" }
+};
 
-  const locale = (typeof navigator !== "undefined" && navigator.language) || "en-GB";
+function useLocaleCurrency() {
+  const { language } = usePublicSiteLanguage();
+  const { currency, locale } = LANGUAGE_CURRENCY[language as StudioLanguage] ?? LANGUAGE_CURRENCY["English"];
   let symbol = "£";
   try {
     const parts = new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).formatToParts(0);
