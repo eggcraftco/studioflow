@@ -16124,6 +16124,19 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     padding: 0;
   }
 
+  /* Softer, clearly staggered reveal for the platform cards on phones. */
+  .public-platform-grid.public-scroll-stagger > * {
+    transform: translateY(40px) scale(0.97);
+    transition:
+      opacity 820ms ease,
+      transform 900ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    transition-delay: calc(var(--reveal-index, 0) * 90ms);
+  }
+
+  .public-platform-grid.public-scroll-stagger > *.is-visible {
+    transform: translateY(0) scale(1);
+  }
+
   .public-custom-card-row span {
     min-height: 48px;
   }
