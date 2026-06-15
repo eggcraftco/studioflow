@@ -22,6 +22,44 @@ type Phase =
   | "recovered"
   | "error";
 
+type ActionResult = { phase: Phase; message?: string; resetEmail?: string };
+
+// A Firebase action code (oobCode) is single-use. React 18 Strict Mode and
+// re-renders can invoke the effect more than once; without this cache the
+// second applyActionCode call runs on an already-consumed code and surfaces a
+// spurious "The operation is not valid." error even though verification already
+// succeeded. Caching the in-flight promise per code makes the network action
+// run exactly once and lets every effect invocation share its result.
+const actionResultCache = new Map<string, Promise<ActionResult>>();
+
+async function performAuthAction(mode: string, oobCode: string): Promise<ActionResult> {
+  try {
+    if (mode === "verifyEmail") {
+      await applyActionCode(auth, oobCode);
+      return { phase: "verified" };
+    }
+    if (mode === "resetPassword") {
+      const email = await verifyPasswordResetCode(auth, oobCode);
+      return { phase: "resetForm", resetEmail: email };
+    }
+    if (mode === "recoverEmail") {
+      await applyActionCode(auth, oobCode);
+      return { phase: "recovered" };
+    }
+    return { phase: "error", message: "Unknown action. Open the link from the email again." };
+  } catch (error) {
+    return {
+      phase: "error",
+      message:
+        error instanceof Error && /expired|invalid/i.test(error.message)
+          ? "This link has expired or was already used. Request a new email from the app."
+          : error instanceof Error
+            ? error.message
+            : "Something went wrong. Request a new email from the app."
+    };
+  }
+}
+
 function AuthActionContent() {
   const params = useSearchParams();
   const mode = params.get("mode") ?? "";
@@ -36,45 +74,24 @@ function AuthActionContent() {
 
   useEffect(() => {
     let cancelled = false;
-    async function run() {
-      if (!oobCode) {
-        setPhase("error");
-        setMessage("This link is missing its security code. Open the link from the email again.");
-        return;
-      }
-      try {
-        if (mode === "verifyEmail") {
-          await applyActionCode(auth, oobCode);
-          if (!cancelled) setPhase("verified");
-        } else if (mode === "resetPassword") {
-          const email = await verifyPasswordResetCode(auth, oobCode);
-          if (!cancelled) {
-            setResetEmail(email);
-            setPhase("resetForm");
-          }
-        } else if (mode === "recoverEmail") {
-          await applyActionCode(auth, oobCode);
-          if (!cancelled) setPhase("recovered");
-        } else {
-          if (!cancelled) {
-            setPhase("error");
-            setMessage("Unknown action. Open the link from the email again.");
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setPhase("error");
-          setMessage(
-            error instanceof Error && /expired|invalid/i.test(error.message)
-              ? "This link has expired or was already used. Request a new email from the app."
-              : error instanceof Error
-                ? error.message
-                : "Something went wrong. Request a new email from the app."
-          );
-        }
-      }
+    if (!oobCode) {
+      setPhase("error");
+      setMessage("This link is missing its security code. Open the link from the email again.");
+      return;
     }
-    void run();
+    // Run the single-use action exactly once per code, sharing the result
+    // across any duplicate effect invocations.
+    let pending = actionResultCache.get(oobCode);
+    if (!pending) {
+      pending = performAuthAction(mode, oobCode);
+      actionResultCache.set(oobCode, pending);
+    }
+    void pending.then(result => {
+      if (cancelled) return;
+      if (result.resetEmail) setResetEmail(result.resetEmail);
+      if (result.message) setMessage(result.message);
+      setPhase(result.phase);
+    });
     return () => {
       cancelled = true;
     };
