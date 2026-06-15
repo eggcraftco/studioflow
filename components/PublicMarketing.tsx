@@ -1501,6 +1501,35 @@ function FeatureDeepDiveSection() {
   );
 }
 
+// Per-feature icon + colour tone for the compact mobile matrix, kept parallel
+// to PLAN_FEATURE_BRIDGE (same order/length). Desktop hides these via CSS, so
+// the computer view is untouched; only the phone layout renders the chips.
+const FI = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
+const PLAN_FEATURE_ICONS: { icon: React.ReactNode; tone: string }[] = [
+  { tone: "sage", icon: FI("M9 5h6M9 5a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a2 2 0 0 0-2-2M9 11h6M9 15h4") },
+  { tone: "blue", icon: FI("M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.85M16.5 4.15a4 4 0 0 1 0 7.7") },
+  { tone: "violet", icon: FI("M8 4h6l4 4v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM13 4v5h5") },
+  { tone: "amber", icon: FI("M12 3l1.8 4.6L18.5 9l-3.7 3 1.3 4.8L12 14.5 7.9 16.8 9.2 12 5.5 9l4.7-1.4Z") },
+  { tone: "teal", icon: FI("M5 20V10M12 20V4M19 20v-7") },
+  { tone: "rose", icon: FI("M12 3v10m0 0l4-4m-4 4l-4-4M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2") },
+  { tone: "blue", icon: FI("M4 6a1 1 0 0 1 1-1h6l2 2h6a1 1 0 0 1 1 1v3H4ZM4 11h17v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z") },
+  { tone: "sage", icon: FI("M4 18l5-5 3 3 7-8M16 8h3v3") },
+  { tone: "violet", icon: FI("M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.6 0-.8-.7-1.4-.7-2.2 0-.6.5-1.2 1.2-1.2H16a4 4 0 0 0 4-4c0-4.4-3.6-7-8-7ZM7.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM11 8.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM15.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z") },
+  { tone: "amber", icon: FI("M4 7a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z") },
+  { tone: "teal", icon: FI("M5 7c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3ZM5 7v10c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3") },
+  { tone: "rose", icon: FI("M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1H4Z") },
+  { tone: "amber", icon: FI("M13 3L5 13h6l-1 8 8-10h-6l1-8Z") },
+  { tone: "sage", icon: FI("M9 12l2 2 4-4M12 3l7 3v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3Z") },
+  { tone: "blue", icon: FI("M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.85") },
+  { tone: "violet", icon: FI("M14 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M18 8v6M21 11h-6") },
+  { tone: "teal", icon: FI("M4 20V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v14M14 20v-9a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v9M3 20h18M7 9h3M7 13h3M17 14h0") },
+  { tone: "rose", icon: FI("M5 11l5 5L20 6M3 13l1 1") }
+];
+
 function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
   const { t } = usePublicSiteLanguage();
   return (
@@ -1519,19 +1548,30 @@ function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
               </div>
               {PLAN_ORDER.map(planKey => {
                 const copy = PUBLIC_PLAN_COPY[planKey];
+                const popular = planKey === "pro_monthly";
                 return (
-                  <div className="public-plan-matrix-plan-head" role="columnheader" key={planKey}>
+                  <div
+                    className={popular ? "public-plan-matrix-plan-head popular" : "public-plan-matrix-plan-head"}
+                    role="columnheader"
+                    key={planKey}
+                  >
+                    {popular ? <span className="public-plan-matrix-pop" aria-hidden="true">{t("planBridge.popular")}</span> : null}
                     <strong>{t(copy.shortNameKey)}</strong>
                     <small>{t(copy.priceLabelKey)}</small>
                   </div>
                 );
               })}
             </div>
-            {PLAN_FEATURE_BRIDGE.map(item => (
+            {PLAN_FEATURE_BRIDGE.map((item, index) => (
               <div className="public-plan-matrix-row" role="row" key={item.titleKey}>
                 <div className="public-plan-matrix-feature" role="cell">
-                  <strong>{t(item.titleKey)}</strong>
-                  <span>{t(item.bodyKey)}</span>
+                  <span className={`public-plan-matrix-ficon tone-${PLAN_FEATURE_ICONS[index]?.tone ?? "sage"}`} aria-hidden="true">
+                    {PLAN_FEATURE_ICONS[index]?.icon}
+                  </span>
+                  <span className="public-plan-matrix-ftext">
+                    <strong>{t(item.titleKey)}</strong>
+                    <span>{t(item.bodyKey)}</span>
+                  </span>
                 </div>
                 {PLAN_ORDER.map(planKey => {
                   const included = item.planKeys.includes(planKey);
@@ -1543,8 +1583,7 @@ function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
                       key={planKey}
                       aria-label={`${t(copy.shortNameKey)}: ${included ? t("planBridge.included") : t("planBridge.notIncluded")}`}
                     >
-                      <span className="public-plan-matrix-cell-plan" aria-hidden="true">{t(copy.shortNameKey)}</span>
-                      {included ? <span className="public-plan-matrix-mark" aria-hidden="true">✓</span> : <span className="public-plan-matrix-mark" aria-hidden="true">–</span>}
+                      {included ? <span aria-hidden="true">✓</span> : <span aria-hidden="true">–</span>}
                     </div>
                   );
                 })}
