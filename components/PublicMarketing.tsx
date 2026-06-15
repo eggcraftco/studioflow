@@ -1273,16 +1273,37 @@ function StudioAccentBand() {
   const { t } = usePublicSiteLanguage();
   return (
     <section className="public-section public-accent-band public-scroll-reveal">
-      <div className="public-shell public-accent-grid">
-        <div>
-          <span className="public-eyebrow">{t("accent.eyebrow")}</span>
+      <div className="public-shell public-accent-grid2">
+        <div className="public-accent-text">
+          <span className="public-eyebrow">
+            <svg className="public-eyebrow-spark" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.4 3.7L13 6.6 9.4 8 8 11.7 6.6 8 3 6.6l3.6-1.4z" /></svg>
+            {t("accent.eyebrow")}
+          </span>
           <h2>{t("accent.title")}</h2>
           <p>{t("accent.body")}</p>
+          <div className="public-accent-actions">
+            <Link href="/features" className="public-button dark large">
+              {t("accent.cta.explore")}<span className="public-button-arrow" aria-hidden="true">→</span>
+            </Link>
+            <Link href="/features" className="public-button secondary large">{t("accent.cta.customise")}</Link>
+          </div>
+          <ul className="public-accent-trust">
+            <li>
+              <span className="pa-ico pa-ico-a"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.4 3.7L13 6.6 9.4 8 8 11.7 6.6 8 3 6.6l3.6-1.4z" /></svg></span>
+              <span>{t("accent.trust1")}</span>
+            </li>
+            <li>
+              <span className="pa-ico pa-ico-b"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 018.5-3.5M13 8a5 5 0 01-8.5 3.5M11 3.5v2.5h-2.5M5 12.5v-2.5h2.5" /></svg></span>
+              <span>{t("accent.trust2")}</span>
+            </li>
+            <li>
+              <span className="pa-ico pa-ico-c"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.4 3.7L13 6.6 9.4 8 8 11.7 6.6 8 3 6.6l3.6-1.4z" /></svg></span>
+              <span>{t("accent.trust3")}</span>
+            </li>
+          </ul>
         </div>
-        <div className="public-custom-card-row public-scroll-stagger" aria-hidden="true">
-          {ACCENT_CARD_KEYS.map((cardKey, index) => (
-            <span key={cardKey} data-index={index}>{t(cardKey)}</span>
-          ))}
+        <div className="public-accent-visual" aria-hidden="true">
+          <img src="/colorcards.png" alt="" loading="lazy" />
         </div>
       </div>
     </section>

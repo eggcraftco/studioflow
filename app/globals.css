@@ -14096,6 +14096,114 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   line-height: 1.62;
 }
 
+/* Accent band — two-column with workspace mockup image */
+.public-accent-grid2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: 48px;
+  align-items: center;
+}
+
+.public-accent-text h2 {
+  margin: 16px 0 0;
+  font-size: clamp(30px, 3.4vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+.public-accent-text > p {
+  margin: 16px 0 0;
+  max-width: 32em;
+  color: var(--public-muted);
+  line-height: 1.6;
+}
+
+.public-eyebrow-spark {
+  width: 13px;
+  height: 13px;
+  margin-inline-end: 6px;
+  fill: var(--public-accent);
+  vertical-align: -1px;
+}
+
+.public-accent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.public-button.dark {
+  background: var(--public-text);
+  border-color: var(--public-text);
+  color: #fff;
+}
+
+.public-button.dark:hover {
+  background: #000;
+  border-color: #000;
+}
+
+.public-accent-trust {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+}
+
+.public-accent-trust li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--public-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pa-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+}
+
+.pa-ico svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pa-ico-a { background: var(--public-accent-soft); color: var(--public-accent); }
+.pa-ico-a svg { fill: var(--public-accent); stroke: none; }
+.pa-ico-b { background: rgba(70, 120, 200, 0.14); color: #3a63a8; }
+.pa-ico-c { background: rgba(166, 106, 63, 0.14); color: var(--public-warm); }
+.pa-ico-c svg { fill: var(--public-warm); stroke: none; }
+
+.public-accent-visual img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+}
+
+@media (max-width: 920px) {
+  .public-accent-grid2 {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+
 .public-custom-card-row {
   display: grid;
   gap: 10px;
