@@ -872,7 +872,6 @@ function PublicFooter() {
           <img className="public-footer-logo" src="/brand/nivadesk-logo.png" alt={t("brand.full")} />
           <p>{t("brand.footerDescription")}</p>
           <div className="public-footer-contact">
-            <span>{t("footer.company")}</span>
             <a href="mailto:contact@nivadesk.co.uk">contact@nivadesk.co.uk</a>
           </div>
         </div>

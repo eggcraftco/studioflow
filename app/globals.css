@@ -13792,6 +13792,13 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     min-height: 0;
   }
 
+  /* Trim the oversized gap above the page heroes (Features / Pricing / FAQ)
+     on phones — the sticky header already provides separation. The home hero
+     is handled after its base rule below (source order). */
+  .public-page-hero {
+    padding-top: 28px;
+  }
+
   .public-hero h1,
   .public-page-hero h1 {
     font-size: 32px;
@@ -13996,6 +14003,14 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   z-index: 3;
   min-height: min(760px, calc(100vh - 84px));
   padding: 92px 0 96px;
+}
+
+/* Phone: shrink the home hero's top gap. Placed after the base rule above so
+   it wins on source order (media queries add no specificity). */
+@media (max-width: 700px) {
+  .public-hero-content {
+    padding-top: 28px;
+  }
 }
 
 .public-hero-copy {
