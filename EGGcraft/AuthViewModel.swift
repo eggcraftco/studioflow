@@ -1415,6 +1415,13 @@ class AuthViewModel: ObservableObject {
                         Task { @MainActor in
                             guard let self else { return }
                             self.accountEmail = Auth.auth().currentUser?.email ?? self.accountEmail
+                            // Send a verification email to the new address so the user
+                            // confirms ownership and clears the unverified flag (best-effort).
+                            if let user = Auth.auth().currentUser, !user.isEmailVerified {
+                                let actionSettings = ActionCodeSettings()
+                                actionSettings.url = URL(string: "https://nivadesk.app/login")
+                                user.sendEmailVerification(with: actionSettings, completion: nil)
+                            }
                             self.isProfileLoading = false
                             self.loadAccountProfile()
                         }

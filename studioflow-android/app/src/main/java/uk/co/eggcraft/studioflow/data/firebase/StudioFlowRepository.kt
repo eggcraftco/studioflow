@@ -1038,7 +1038,19 @@ class StudioFlowRepository(
             .call(mapOf("companyId" to workspace.id, "email" to email.trim().lowercase()))
             .await()
         val data = result.data as? Map<*, *>
-        return data?.get("message") as? String ?: "Email updated. You can change it again after 10 days."
+        // Send a verification email to the new address so the user confirms ownership
+        // and clears the unverified flag set by the email change (best-effort).
+        runCatching {
+            auth.currentUser?.reload()?.await()
+            val user = auth.currentUser
+            if (user != null && !user.isEmailVerified) {
+                val settings = com.google.firebase.auth.ActionCodeSettings.newBuilder()
+                    .setUrl("https://nivadesk.app/login")
+                    .build()
+                user.sendEmailVerification(settings).await()
+            }
+        }
+        return data?.get("message") as? String ?: "Email updated. Check your new inbox to verify it. You can change it again after 10 days."
     }
 
     suspend fun sendPasswordResetEmail(email: String) {

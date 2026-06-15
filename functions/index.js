@@ -6135,7 +6135,7 @@ exports.changeAccountEmail = onCall({ region: "europe-west2" }, async (request) 
       photoURL,
       emailNextChangeAt: nowMs + ACCOUNT_EMAIL_CHANGE_COOLDOWN_MS
     },
-    message: "Email updated. You can change it again after 10 days."
+    message: "Email updated. Check your new inbox to verify it. You can change it again after 10 days."
   };
 });
 
@@ -7141,9 +7141,24 @@ async function evaluateStaleUnverifiedUser(userRecord, accessIndex) {
 
   const createdMs = Date.parse(userRecord.metadata?.creationTime || "");
   if (!Number.isFinite(createdMs)) return { deletable: false, reason: "no creation time" };
-  const ageDays = (Date.now() - createdMs) / 86400000;
+
+  // Anchor the grace window on the most recent sign of life, not just account
+  // creation. A real user who recently signed in OR changed their email (which
+  // sets emailVerified=false but is NOT an abandoned signup) must never be
+  // swept up by this job. accountEmailLastChangedAt lives in the Firestore user
+  // doc; lastSignInTime is on the Auth record.
+  const lastSignInMs = Date.parse(userRecord.metadata?.lastSignInTime || "") || 0;
+  let emailChangedMs = 0;
+  try {
+    const uSnap = await admin.firestore().collection("users").doc(uid).get();
+    emailChangedMs = timestampMillis(uSnap.data()?.accountEmailLastChangedAt) || 0;
+  } catch (_) {
+    // best-effort: if the lookup fails, fall back to creation time only
+  }
+  const anchorMs = Math.max(createdMs, lastSignInMs, emailChangedMs);
+  const ageDays = (Date.now() - anchorMs) / 86400000;
   if (ageDays <= UNVERIFIED_ACCOUNT_DELETE_DAYS) {
-    return { deletable: false, reason: `within grace (${ageDays.toFixed(1)}d of ${UNVERIFIED_ACCOUNT_DELETE_DAYS}d)` };
+    return { deletable: false, reason: `active within grace (${ageDays.toFixed(1)}d of ${UNVERIFIED_ACCOUNT_DELETE_DAYS}d)` };
   }
 
   const access = accessIndex.get(uid) || [];
