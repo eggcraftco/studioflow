@@ -8,7 +8,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
 
-export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com"]);
+export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
 
 export function isNivaDeskAdminEmail(email: string | null | undefined) {
   return Boolean(email && NIVADESK_ADMIN_EMAILS.has(email.trim().toLowerCase()));
