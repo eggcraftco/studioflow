@@ -720,7 +720,7 @@ function useOrderCardAssembly() {
     const applyProgress = () => {
       frame = 0;
 
-      if (prefersReducedMotion || window.innerWidth <= 700) {
+      if (prefersReducedMotion) {
         root.dataset.assembled = "true";
         cards.forEach(card => {
           card.style.opacity = "1";
@@ -729,6 +729,9 @@ function useOrderCardAssembly() {
         return;
       }
 
+      // On narrow screens the cards reveal with a simple vertical rise + fade
+      // (the desktop scatter/rotate would overflow a single-column phone layout).
+      const narrow = window.innerWidth <= 760;
       const section = root.closest<HTMLElement>(".public-order-flow-section") ?? root;
       const sectionRect = section.getBoundingClientRect();
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -751,9 +754,13 @@ function useOrderCardAssembly() {
         const scale = 0.88 + eased * 0.12;
         const opacity = localProgress <= 0.001 ? 0 : Math.min(1, eased * 1.08);
         card.style.opacity = opacity.toFixed(3);
-        card.style.transform = localProgress >= 0.995
-          ? ""
-          : `translate3d(${Math.round(x * distance)}px, ${Math.round(y * distance)}px, 0) rotate(${(rotation * distance).toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+        if (localProgress >= 0.995) {
+          card.style.transform = "";
+        } else if (narrow) {
+          card.style.transform = `translate3d(0, ${Math.round(distance * 26)}px, 0)`;
+        } else {
+          card.style.transform = `translate3d(${Math.round(x * distance)}px, ${Math.round(y * distance)}px, 0) rotate(${(rotation * distance).toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+        }
       });
     };
 
