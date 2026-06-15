@@ -17782,34 +17782,34 @@ html[dir="rtl"] .login-public-shell {
   .schedule-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Phone: screenshot full-width, the two floating callouts and the four grid
-   cards merge into one continuous 2-up card grid (icon-left), and the left
-   side-feature cards are dropped — matching the mobile design. Scoped away
-   from the dashboard variant so only the Schedule section changes. */
+/* Phone: screenshot full-width, the floating callouts and the grid cards merge
+   into one continuous 2-up card grid (icon-left), and the left side-feature
+   cards are dropped — matching the mobile design. Applies to both the Schedule
+   and Dashboard variants of this section. */
 @media (max-width: 680px) {
-  .schedule-section:not(.dashboard-section) .schedule-copy { text-align: left; }
+  .schedule-section .schedule-copy { text-align: left; }
 
-  .schedule-section:not(.dashboard-section) .schedule-eyebrow {
+  .schedule-section .schedule-eyebrow {
     display: flex;
     width: fit-content;
     margin-left: auto;
     margin-right: auto;
   }
 
-  .schedule-section:not(.dashboard-section) .schedule-side-features { display: none; }
+  .schedule-section .schedule-side-features { display: none; }
 
-  .schedule-section:not(.dashboard-section) .schedule-stage {
+  .schedule-section .schedule-stage {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     align-items: stretch;
   }
-  .schedule-section:not(.dashboard-section) .schedule-shot {
+  .schedule-section .schedule-shot {
     grid-column: 1 / -1;
     margin: 0;
   }
 
-  .schedule-section:not(.dashboard-section) .schedule-float {
+  .schedule-section .schedule-float {
     position: static;
     width: auto;
     margin: 0;
@@ -17820,33 +17820,37 @@ html[dir="rtl"] .login-public-shell {
     align-items: center;
     padding: 14px 14px;
   }
-  .schedule-section:not(.dashboard-section) .schedule-float-icon {
+  .schedule-section .schedule-float-icon {
     width: 40px;
     height: 40px;
     border-radius: 12px;
     grid-row: 1;
     grid-column: 1;
   }
-  .schedule-section:not(.dashboard-section) .schedule-float-icon svg { width: 20px; height: 20px; }
-  .schedule-section:not(.dashboard-section) .schedule-float strong {
+  .schedule-section .schedule-float-icon svg { width: 20px; height: 20px; }
+  .schedule-section .schedule-float strong {
     grid-column: 2;
     align-self: center;
     margin: 0;
     font-size: 15px;
   }
-  .schedule-section:not(.dashboard-section) .schedule-float span {
+  .schedule-section .schedule-float span {
     grid-column: 1 / -1;
     margin: 0;
     font-size: 13px;
     line-height: 1.45;
   }
 
-  .schedule-section:not(.dashboard-section) .schedule-grid {
+  /* Dashboard has 3 callouts: let the last span both columns so the 2-up grid
+     stays full with no empty cell. */
+  .dashboard-section .schedule-float-dash-bottom { grid-column: 1 / -1; }
+
+  .schedule-section .schedule-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
     margin-top: 12px;
   }
-  .schedule-section:not(.dashboard-section) .schedule-grid-card {
+  .schedule-section .schedule-grid-card {
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: 12px;
@@ -17854,26 +17858,26 @@ html[dir="rtl"] .login-public-shell {
     align-items: center;
     padding: 14px 14px;
   }
-  .schedule-section:not(.dashboard-section) .schedule-grid-icon {
+  .schedule-section .schedule-grid-icon {
     width: 40px;
     height: 40px;
     margin: 0;
     grid-row: 1;
     grid-column: 1;
   }
-  .schedule-section:not(.dashboard-section) .schedule-grid-card strong {
+  .schedule-section .schedule-grid-card strong {
     grid-column: 2;
     align-self: center;
     font-size: 15px;
   }
-  .schedule-section:not(.dashboard-section) .schedule-grid-card span {
+  .schedule-section .schedule-grid-card span {
     grid-column: 1 / -1;
     margin: 0;
     font-size: 13px;
     line-height: 1.45;
   }
 
-  .schedule-section:not(.dashboard-section) .schedule-tagline {
+  .schedule-section .schedule-tagline {
     margin-top: 22px;
     font-size: 17px;
     text-align: center;
