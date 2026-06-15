@@ -345,6 +345,13 @@ export const PUBLIC_SITE_EN = {
   "featuresDeep.titleB": "Detailed enough for real",
   "featuresDeep.titleAccent2": "studio work.",
   "featuresDeep.body": "NivaDesk explains exactly how a custom-order studio runs: how orders are structured, where files live, what teams can control, and which data stays exportable.",
+  "featuresDeep.tourTitleA": "Everything from order to delivery, kept in",
+  "featuresDeep.tourTitleAccent": "one place.",
+  "featuresDeep.tourBody": "NivaDesk keeps orders, files, team access and exports together, so your studio work stays clear and easy to manage.",
+  "featuresDeep.chip.orders": "Orders",
+  "featuresDeep.chip.files": "Files",
+  "featuresDeep.chip.team": "Team access",
+  "featuresDeep.chip.export": "Export",
   "featuresDeep.nav.orders": "Structured orders",
   "featuresDeep.nav.files": "Client Files",
   "featuresDeep.nav.team": "Role-aware access",
@@ -1114,6 +1121,13 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "featuresDeep.titleB": "Gerçek stüdyo işi için",
   "featuresDeep.titleAccent2": "yeterince detaylı.",
   "featuresDeep.body": "NivaDesk, özel sipariş üreten bir stüdyonun tam olarak nasıl işlediğini anlatır: siparişler nasıl kurulur, dosyalar nerede durur, ekip neyi kontrol eder ve hangi veri dışa aktarılabilir kalır.",
+  "featuresDeep.tourTitleA": "Siparişten teslimata kadar her şey",
+  "featuresDeep.tourTitleAccent": "tek yerde.",
+  "featuresDeep.tourBody": "NivaDesk siparişleri, dosyaları, ekip erişimini ve dışa aktarmaları bir arada tutar; böylece stüdyo işin net ve yönetimi kolay kalır.",
+  "featuresDeep.chip.orders": "Siparişler",
+  "featuresDeep.chip.files": "Dosyalar",
+  "featuresDeep.chip.team": "Ekip erişimi",
+  "featuresDeep.chip.export": "Dışa aktarma",
   "featuresDeep.nav.orders": "Yapılandırılmış siparişler",
   "featuresDeep.nav.files": "Client Files",
   "featuresDeep.nav.team": "Role göre erişim",
@@ -7148,6 +7162,99 @@ const FILL_TRANSLATIONS_9: Partial<Record<StudioLanguage, Partial<Record<PublicS
   }
 };
 
+const FILL_TRANSLATIONS_10: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Deutsch": {
+    "featuresDeep.tourTitleA": "Alles von der Bestellung bis zur Lieferung, an",
+    "featuresDeep.tourTitleAccent": "einem Ort.",
+    "featuresDeep.tourBody": "NivaDesk hält Bestellungen, Dateien, Teamzugriff und Exporte zusammen, damit deine Studioarbeit klar und einfach zu verwalten bleibt.",
+    "featuresDeep.chip.orders": "Bestellungen",
+    "featuresDeep.chip.files": "Dateien",
+    "featuresDeep.chip.team": "Teamzugriff",
+    "featuresDeep.chip.export": "Export"
+  },
+  "Français": {
+    "featuresDeep.tourTitleA": "De la commande à la livraison, tout au",
+    "featuresDeep.tourTitleAccent": "même endroit.",
+    "featuresDeep.tourBody": "NivaDesk réunit commandes, fichiers, accès d’équipe et exports, pour que le travail de votre studio reste clair et facile à gérer.",
+    "featuresDeep.chip.orders": "Commandes",
+    "featuresDeep.chip.files": "Fichiers",
+    "featuresDeep.chip.team": "Accès équipe",
+    "featuresDeep.chip.export": "Export"
+  },
+  "Italiano": {
+    "featuresDeep.tourTitleA": "Dall’ordine alla consegna, tutto in",
+    "featuresDeep.tourTitleAccent": "un unico posto.",
+    "featuresDeep.tourBody": "NivaDesk tiene insieme ordini, file, accesso del team ed esportazioni, così il lavoro del tuo studio resta chiaro e facile da gestire.",
+    "featuresDeep.chip.orders": "Ordini",
+    "featuresDeep.chip.files": "File",
+    "featuresDeep.chip.team": "Accesso team",
+    "featuresDeep.chip.export": "Esporta"
+  },
+  "Español (Spanish)": {
+    "featuresDeep.tourTitleA": "De pedido a entrega, todo en",
+    "featuresDeep.tourTitleAccent": "un solo lugar.",
+    "featuresDeep.tourBody": "NivaDesk mantiene juntos pedidos, archivos, acceso del equipo y exportaciones, para que el trabajo de tu estudio siga claro y fácil de gestionar.",
+    "featuresDeep.chip.orders": "Pedidos",
+    "featuresDeep.chip.files": "Archivos",
+    "featuresDeep.chip.team": "Acceso de equipo",
+    "featuresDeep.chip.export": "Exportar"
+  },
+  "Português": {
+    "featuresDeep.tourTitleA": "Da encomenda à entrega, tudo num",
+    "featuresDeep.tourTitleAccent": "só lugar.",
+    "featuresDeep.tourBody": "O NivaDesk mantém juntos encomendas, ficheiros, acesso da equipa e exportações, para que o trabalho do teu estúdio fique claro e fácil de gerir.",
+    "featuresDeep.chip.orders": "Encomendas",
+    "featuresDeep.chip.files": "Ficheiros",
+    "featuresDeep.chip.team": "Acesso da equipa",
+    "featuresDeep.chip.export": "Exportar"
+  },
+  "Русский (Russian)": {
+    "featuresDeep.tourTitleA": "Всё от заказа до доставки — в",
+    "featuresDeep.tourTitleAccent": "одном месте.",
+    "featuresDeep.tourBody": "NivaDesk хранит вместе заказы, файлы, доступ команды и экспорт, чтобы работа вашей студии оставалась ясной и удобной в управлении.",
+    "featuresDeep.chip.orders": "Заказы",
+    "featuresDeep.chip.files": "Файлы",
+    "featuresDeep.chip.team": "Доступ команды",
+    "featuresDeep.chip.export": "Экспорт"
+  },
+  "日本語 (Japanese)": {
+    "featuresDeep.tourTitleA": "注文から納品まで、すべてを",
+    "featuresDeep.tourTitleAccent": "ひとつに。",
+    "featuresDeep.tourBody": "NivaDesk は注文・ファイル・チームアクセス・エクスポートをまとめて管理し、スタジオの仕事を明確で管理しやすく保ちます。",
+    "featuresDeep.chip.orders": "注文",
+    "featuresDeep.chip.files": "ファイル",
+    "featuresDeep.chip.team": "チームアクセス",
+    "featuresDeep.chip.export": "エクスポート"
+  },
+  "中文 (Chinese)": {
+    "featuresDeep.tourTitleA": "从下单到交付，全部集中在",
+    "featuresDeep.tourTitleAccent": "一处。",
+    "featuresDeep.tourBody": "NivaDesk 将订单、文件、团队访问和导出集中在一起，让你的工作室工作保持清晰、易于管理。",
+    "featuresDeep.chip.orders": "订单",
+    "featuresDeep.chip.files": "文件",
+    "featuresDeep.chip.team": "团队访问",
+    "featuresDeep.chip.export": "导出"
+  },
+  "العربية (Arabic)": {
+    "featuresDeep.tourTitleA": "كل شيء من الطلب إلى التسليم في",
+    "featuresDeep.tourTitleAccent": "مكان واحد.",
+    "featuresDeep.tourBody": "يجمع NivaDesk الطلبات والملفات ووصول الفريق والتصدير معًا، حتى يبقى عمل الاستوديو واضحًا وسهل الإدارة.",
+    "featuresDeep.chip.orders": "الطلبات",
+    "featuresDeep.chip.files": "الملفات",
+    "featuresDeep.chip.team": "وصول الفريق",
+    "featuresDeep.chip.export": "تصدير"
+  },
+  "हिन्दी (Hindi)": {
+    "featuresDeep.tourTitleA": "ऑर्डर से डिलीवरी तक सब कुछ,",
+    "featuresDeep.tourTitleAccent": "एक ही जगह।",
+    "featuresDeep.tourBody": "NivaDesk ऑर्डर, फ़ाइलें, टीम एक्सेस और एक्सपोर्ट को एक साथ रखता है, ताकि आपके स्टूडियो का काम स्पष्ट और प्रबंधित करने में आसान रहे।",
+    "featuresDeep.chip.orders": "ऑर्डर",
+    "featuresDeep.chip.files": "फ़ाइलें",
+    "featuresDeep.chip.team": "टीम एक्सेस",
+    "featuresDeep.chip.export": "एक्सपोर्ट"
+  }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -7157,7 +7264,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_6,
   FILL_TRANSLATIONS_7,
   FILL_TRANSLATIONS_8,
-  FILL_TRANSLATIONS_9
+  FILL_TRANSLATIONS_9,
+  FILL_TRANSLATIONS_10
 ];
 
 function mergeFill(

@@ -1450,6 +1450,13 @@ function FeatureWorkflowPanel() {
   );
 }
 
+const FEATURE_DEEP_CHIP_KEYS: PublicSiteTranslationKey[] = [
+  "featuresDeep.chip.orders",
+  "featuresDeep.chip.files",
+  "featuresDeep.chip.team",
+  "featuresDeep.chip.export"
+];
+
 function FeatureDeepDiveSection() {
   const { t } = usePublicSiteLanguage();
   return (
@@ -1461,37 +1468,30 @@ function FeatureDeepDiveSection() {
             {t("featuresDeep.eyebrow")}
           </span>
           <h2>
-            {t("featuresDeep.titleA")} <span className="hero-accent">{t("featuresDeep.titleAccent1")}</span> {t("featuresDeep.titleB")} <span className="hero-accent">{t("featuresDeep.titleAccent2")}</span>
+            {t("featuresDeep.tourTitleA")} <span className="hero-accent">{t("featuresDeep.tourTitleAccent")}</span>
           </h2>
-          <p>{t("featuresDeep.body")}</p>
-          <nav className="public-features-nav" aria-label={t("featuresDeep.eyebrow")}>
-            {FEATURE_DEEP_DIVES.map(item => (
-              <a className="public-features-nav-pill" href={`#feature-${item.id}`} key={item.id}>
-                <span className="public-features-nav-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{item.navIcon}</svg>
-                </span>
-                <span className="public-features-nav-label">{t(item.navKey)}</span>
-                <span className="public-features-nav-chevron" aria-hidden="true">›</span>
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="public-features-deep-list">
-          {FEATURE_DEEP_DIVES.map((item, index) => (
-            <article id={`feature-${item.id}`} data-tone={item.tone} key={item.titleKey}>
-              <div className="public-features-deep-head">
-                <span className="public-features-deep-index">{String(index + 1).padStart(2, "0")}</span>
-                <span className="public-features-deep-icon">
+          <p>{t("featuresDeep.tourBody")}</p>
+          <div className="public-features-chips">
+            {FEATURE_DEEP_DIVES.map((item, index) => (
+              <a className="public-features-chip" data-tone={item.tone} href={`#feature-${item.id}`} key={item.id}>
+                <span className="public-features-chip-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
                 </span>
-                <div className="public-features-deep-titles">
-                  <h3>{t(item.titleKey)}</h3>
-                  <p>{t(item.bodyKey)}</p>
-                </div>
+                <span className="public-features-chip-label">{t(FEATURE_DEEP_CHIP_KEYS[index])}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+        <div className="public-features-deep-list">
+          {FEATURE_DEEP_DIVES.map(item => (
+            <article id={`feature-${item.id}`} data-tone={item.tone} key={item.titleKey}>
+              <span className="public-features-deep-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+              </span>
+              <div className="public-features-deep-titles">
+                <h3>{t(item.titleKey)}</h3>
+                <p>{t(item.bodyKey)}</p>
               </div>
-              <ul>
-                {item.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
-              </ul>
             </article>
           ))}
         </div>
