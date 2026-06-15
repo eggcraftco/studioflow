@@ -720,7 +720,7 @@ function useOrderCardAssembly() {
     const applyProgress = () => {
       frame = 0;
 
-      if (prefersReducedMotion || window.innerWidth <= 700) {
+      if (prefersReducedMotion) {
         root.dataset.assembled = "true";
         cards.forEach(card => {
           card.style.opacity = "1";
@@ -729,6 +729,9 @@ function useOrderCardAssembly() {
         return;
       }
 
+      // On narrow screens the cards reveal with a simple vertical rise + fade
+      // (the desktop scatter/rotate would overflow a single-column phone layout).
+      const narrow = window.innerWidth <= 760;
       const section = root.closest<HTMLElement>(".public-order-flow-section") ?? root;
       const sectionRect = section.getBoundingClientRect();
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -751,9 +754,13 @@ function useOrderCardAssembly() {
         const scale = 0.88 + eased * 0.12;
         const opacity = localProgress <= 0.001 ? 0 : Math.min(1, eased * 1.08);
         card.style.opacity = opacity.toFixed(3);
-        card.style.transform = localProgress >= 0.995
-          ? ""
-          : `translate3d(${Math.round(x * distance)}px, ${Math.round(y * distance)}px, 0) rotate(${(rotation * distance).toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+        if (localProgress >= 0.995) {
+          card.style.transform = "";
+        } else if (narrow) {
+          card.style.transform = `translate3d(0, ${Math.round(distance * 26)}px, 0)`;
+        } else {
+          card.style.transform = `translate3d(${Math.round(x * distance)}px, ${Math.round(y * distance)}px, 0) rotate(${(rotation * distance).toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+        }
       });
     };
 
@@ -1333,20 +1340,38 @@ function ScrollStoryShowcase() {
       return;
     }
 
-    const observer = new IntersectionObserver(entries => {
-      const visibleEntry = entries
-        .filter(entry => entry.isIntersecting)
-        .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
+    // Pick the last step whose top has crossed a reference line. This is
+    // monotonic with scroll position, so the active step advances cleanly
+    // 0 → 1 → 2 → 3 instead of flickering between neighbours the way the
+    // intersection-ratio approach did near the band edges.
+    let raf = 0;
+    let current = -1;
+    const compute = () => {
+      raf = 0;
+      const refY = window.innerHeight * 0.5;
+      let idx = 0;
+      for (let i = 0; i < steps.length; i++) {
+        if (steps[i].getBoundingClientRect().top <= refY) idx = i;
+        else break;
+      }
+      if (idx !== current) {
+        current = idx;
+        setActiveStep(idx);
+      }
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(compute);
+    };
 
-      if (!visibleEntry) return;
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    compute();
 
-      const nextIndex = Number((visibleEntry.target as HTMLElement).dataset.storyIndex ?? 0);
-      if (!Number.isNaN(nextIndex)) setActiveStep(nextIndex);
-    }, { rootMargin: "-30% 0px -36% 0px", threshold: [0.24, 0.42, 0.6, 0.78] });
-
-    steps.forEach(step => observer.observe(step));
-
-    return () => observer.disconnect();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
   return (
