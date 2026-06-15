@@ -14827,6 +14827,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-pricing-trust svg {
+  display: block;
   width: 18px;
   height: 18px;
   flex: none;
@@ -14888,9 +14889,11 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   flex: none;
   border-radius: 10px;
   border: 1px solid var(--public-border);
+  line-height: 0;
 }
 
 .pc-ico svg {
+  display: block;
   width: 18px;
   height: 18px;
   fill: none;
@@ -14953,6 +14956,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .pc-mini .pc-ico {
+  display: inline-flex;
   margin: 0 auto 8px;
   border-radius: 50%;
 }
