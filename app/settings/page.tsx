@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
+import { signOut, sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
@@ -2270,7 +2270,12 @@ function AccountSection({
       setEmailDraft(nextEmail);
       await auth.currentUser?.reload();
       await auth.currentUser?.getIdToken(true);
-      setProfileStatus(result.message || t("Email updated. You can change it again after 10 days."));
+      // Send a verification email to the new address so the user confirms ownership
+      // and clears the unverified flag set by the email change (best-effort).
+      if (auth.currentUser && !auth.currentUser.emailVerified) {
+        await sendEmailVerification(auth.currentUser, { url: "https://nivadesk.app/login" }).catch(() => undefined);
+      }
+      setProfileStatus(result.message || t("Email updated. Check your new inbox to verify it. You can change it again after 10 days."));
     } catch (emailError) {
       setProfileError(emailError instanceof Error ? emailError.message : t("Email could not be changed."));
     } finally {
