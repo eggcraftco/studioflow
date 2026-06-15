@@ -14005,11 +14005,14 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   padding: 92px 0 96px;
 }
 
-/* Phone: shrink the home hero's top gap. Placed after the base rule above so
-   it wins on source order (media queries add no specificity). */
+/* Phone: shrink the home hero's top and bottom gaps. Placed after the base
+   rule above so it wins on source order (media queries add no specificity).
+   The base 96px bottom padding left a large empty gap between the chip panel
+   and the app screenshot on phones. */
 @media (max-width: 700px) {
   .public-hero-content {
     padding-top: 28px;
+    padding-bottom: 8px;
   }
 }
 
