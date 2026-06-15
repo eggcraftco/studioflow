@@ -16070,10 +16070,16 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     padding: 34px 0 22px;
   }
 
+  /* Phone: keep the three link groups side by side (Product / Legal / Support)
+     instead of stacking them down the page. */
   .public-footer-groups {
-    grid-template-columns: 1fr;
-    gap: 22px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
   }
+
+  .public-footer-group h3 { font-size: 11px; }
+
+  .public-footer .public-footer-group nav a { font-size: 12px; }
 
   .public-footer-contact {
     display: grid;
