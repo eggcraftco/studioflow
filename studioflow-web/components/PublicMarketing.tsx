@@ -1986,20 +1986,71 @@ export function PublicPricingPage() {
     return (
       <>
         <section className="public-page-hero public-pricing-page-hero">
-          <div className="public-shell public-pricing-hero">
-            <div>
+          <div className="public-shell public-pricing-hero2">
+            <div className="public-pricing-hero2-text">
               <span className="public-eyebrow">{t("pricingPage.eyebrow")}</span>
               <h1>{t("pricingPage.title")}</h1>
               <p>{t("pricingPage.body")}</p>
+              <div className="public-pricing-hero2-actions">
+                <Link href="/signup" className="public-button large">
+                  {t("cta.startFree")}<span className="public-button-arrow" aria-hidden="true">→</span>
+                </Link>
+                <Link href="#pricing-plans" className="public-button secondary large">{t("pricingHero.compare")}</Link>
+              </div>
+              <ul className="public-pricing-trust">
+                <li>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg>
+                  {t("pricingHero.trust.checkout")}
+                </li>
+                <li>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>
+                  {t("pricingHero.trust.cancel")}
+                </li>
+                <li>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></svg>
+                  {t("pricingHero.trust.billing")}
+                </li>
+              </ul>
             </div>
-            <div className="public-pricing-actions">
-              <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
-              <span className="public-billing-note">{t("pricingPage.safeCheckout")}</span>
+
+            <div className="public-pricing-cluster" aria-hidden="true">
+              <div className="public-pricing-orb" />
+              <div className="pc-card pc-card-demo">
+                <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5" /><path d="M4 13h16M12 9v11M9 9a2 2 0 110-4c2 0 3 4 3 4M15 9a2 2 0 100-4c-2 0-3 4-3 4" /></svg></span>
+                <div><strong>{t("pricingHero.card.demo.title")}</strong><span>{t("pricingHero.card.demo.body")}</span></div>
+              </div>
+              <div className="pc-card pc-card-team">
+                <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><circle cx="17" cy="8.5" r="2.3" /><path d="M16 14c2.4.2 4.5 2 4.5 5" /></svg></span>
+                <div><strong>{t("pricingHero.card.team.title")}</strong><span>{t("pricingHero.card.team.body")}</span></div>
+              </div>
+              <div className="pc-card pc-card-upgrade">
+                <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M4 16l5-5 3 3 7-7M16 6h4v4" /></svg></span>
+                <strong>{t("pricingHero.card.upgrade")}</strong>
+              </div>
+              <div className="pc-card pc-card-billing">
+                <span className="pc-ico"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></svg></span>
+                <div><strong>{t("pricingHero.card.billing.title")}</strong><span>{t("pricingHero.card.billing.body")}</span></div>
+                <span className="pc-toggle" />
+              </div>
+              <div className="pc-mini-row">
+                <div className="pc-mini">
+                  <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg></span>
+                  <strong>{t("pricingHero.mini.fees.title")}</strong><span>{t("pricingHero.mini.fees.body")}</span>
+                </div>
+                <div className="pc-mini">
+                  <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5M20 12a8 8 0 01-14 5M17 4v3h-3M7 20v-3h3" /></svg></span>
+                  <strong>{t("pricingHero.mini.change.title")}</strong><span>{t("pricingHero.mini.change.body")}</span>
+                </div>
+                <div className="pc-mini">
+                  <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M5 13v-1a7 7 0 0114 0v1M5 13h2v5H6a2 2 0 01-2-2zM19 13h-2v5h1a2 2 0 002-2z" /></svg></span>
+                  <strong>{t("pricingHero.mini.support.title")}</strong><span>{t("pricingHero.mini.support.body")}</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="public-section">
+        <section className="public-section" id="pricing-plans">
           <div className="public-shell">
             <PublicPlanGrid />
           </div>
