@@ -14786,6 +14786,10 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .public-pricing-hero2-text h1 {
   margin: 14px 0 0;
+  font-size: clamp(32px, 3.4vw, 48px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  font-weight: 800;
 }
 
 .public-pricing-hero2-text > p {
