@@ -17542,7 +17542,18 @@ html[dir="rtl"] .login-public-shell {
   border-radius: 12px;
 }
 .schedule-side-icon { width: 40px; height: 40px; }
-.schedule-side-icon svg, .schedule-float-icon svg, .schedule-grid-icon svg { width: 19px; height: 19px; }
+/* Force these icon chips to flex-center their glyph — a sibling `span` rule was
+   collapsing them to display:block, leaving the SVG stuck in the top-left. */
+.public-section .schedule-side-icon,
+.public-section .schedule-grid-icon,
+.public-section .schedule-float-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.schedule-side-icon svg, .schedule-grid-icon svg { display: block; width: 21px; height: 21px; }
+.schedule-float-icon svg { display: block; }
 
 .schedule-side-icon[data-tone="calendar"],
 .schedule-float-icon[data-tone="drag"],
