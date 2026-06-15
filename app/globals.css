@@ -13657,6 +13657,34 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   align-self: center;
 }
 
+/* App-style centred sign-in card: logo, gradient feature word, subtitle,
+   provider buttons, then a simple "create account" text link. */
+.login-card-logo {
+  display: block;
+  width: 168px;
+  margin: 2px auto 8px;
+}
+.login-card-subtitle {
+  margin: 0 0 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 750;
+}
+.login-card-create {
+  margin: 20px 0 2px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 750;
+}
+.login-card-create a {
+  color: var(--accent);
+  font-weight: 900;
+  text-decoration: none;
+}
+.login-card-create a:hover { text-decoration: underline; }
+
 .login-footnote {
   margin: 18px 0 0;
   color: var(--muted);
@@ -14908,24 +14936,28 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .public-workflow-grid article {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 0 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0 16px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 16px;
-  padding: 16px;
+  padding: 18px;
   background: rgba(255, 255, 255, 0.07);
 }
 
-.public-workflow-grid article > span {
-  grid-row: span 2;
-  width: 12px;
-  min-height: 100%;
-  border-radius: 999px;
-  background: var(--public-sage);
+.public-workflow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  flex-shrink: 0;
 }
-
-.public-workflow-grid article:nth-child(2) > span { background: var(--public-sky); }
-.public-workflow-grid article:nth-child(3) > span { background: var(--public-gold); }
+.public-workflow-icon svg { width: 23px; height: 23px; }
+.public-workflow-icon[data-tone="sage"] { background: rgba(124, 188, 150, 0.18); color: #a7e0bd; }
+.public-workflow-icon[data-tone="sky"] { background: rgba(120, 170, 230, 0.18); color: #aacdf3; }
+.public-workflow-icon[data-tone="gold"] { background: rgba(224, 178, 96, 0.18); color: #f0cd8c; }
 
 .public-workflow-grid h3 {
   margin: 0 0 6px;
@@ -16264,13 +16296,11 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
   .public-workflow-grid article {
     grid-template-columns: 1fr;
+    gap: 12px 0;
   }
 
-  .public-workflow-grid article > span {
-    grid-row: auto;
-    width: 54px;
-    min-height: 8px;
-    margin-bottom: 12px;
+  .public-workflow-icon {
+    margin-bottom: 2px;
   }
 
   .public-features-deep-list article {

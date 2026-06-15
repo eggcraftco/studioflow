@@ -1427,6 +1427,12 @@ function ScrollStoryShowcase() {
   );
 }
 
+const WORKFLOW_VISUALS: { tone: string; icon: ReactNode }[] = [
+  { tone: "sage", icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7h5M7.5 10h5M7.5 13h3" /></> },
+  { tone: "sky", icon: <path d="M3 7l1.8-2.2h5l1.5 2H21v11H3z" /> },
+  { tone: "gold", icon: <path d="M4 16V9M9 16V4M14 16v-5M3.5 18.5h13" /> }
+];
+
 function FeatureWorkflowPanel() {
   const { t } = usePublicSiteLanguage();
   return (
@@ -1437,11 +1443,15 @@ function FeatureWorkflowPanel() {
           <h2>{t("workflow.title")}</h2>
         </div>
         <div className="public-workflow-grid">
-          {FEATURE_GROUPS.map(group => (
+          {FEATURE_GROUPS.map((group, index) => (
             <article key={group.titleKey}>
-              <span />
-              <h3>{t(group.titleKey)}</h3>
-              <p>{t(group.bodyKey)}</p>
+              <span className="public-workflow-icon" data-tone={WORKFLOW_VISUALS[index]?.tone ?? "sage"}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{WORKFLOW_VISUALS[index]?.icon}</svg>
+              </span>
+              <div className="public-workflow-text">
+                <h3>{t(group.titleKey)}</h3>
+                <p>{t(group.bodyKey)}</p>
+              </div>
             </article>
           ))}
         </div>

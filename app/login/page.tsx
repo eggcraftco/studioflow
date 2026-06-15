@@ -100,32 +100,27 @@ function LoginPageContent() {
         </div>
       ) : null}
 
-      <AuthFeatureRotator
-        style={{ paddingTop: 44, paddingBottom: 40 }}
-        prefix={t("auth.rotator.prefix")}
-        words={[
-          t("auth.rotator.w1"),
-          t("auth.rotator.w2"),
-          t("auth.rotator.w3"),
-          t("auth.rotator.w4"),
-          t("auth.rotator.w5"),
-          t("auth.rotator.w6"),
-          t("auth.rotator.w7"),
-          t("auth.rotator.w8"),
-          t("auth.rotator.w9"),
-          t("auth.rotator.w10"),
-          t("auth.rotator.w11")
-        ]}
-      />
+      <section className="card login-card-frame login-card-app">
+        <img className="login-card-logo" src="/brand/nivadesk-logo.png" alt={t("brand.name")} />
 
-      <section className="card login-card-frame">
-        <div className="pill">{t("login.portalPill")}</div>
-        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "18px 0 8px" }}>
-          {t("login.title")}
-        </h1>
-        <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          {t("login.body")}
-        </p>
+        <AuthFeatureRotator
+          prefix={t("auth.rotator.prefix")}
+          words={[
+            t("auth.rotator.w1"),
+            t("auth.rotator.w2"),
+            t("auth.rotator.w3"),
+            t("auth.rotator.w4"),
+            t("auth.rotator.w5"),
+            t("auth.rotator.w6"),
+            t("auth.rotator.w7"),
+            t("auth.rotator.w8"),
+            t("auth.rotator.w9"),
+            t("auth.rotator.w10"),
+            t("auth.rotator.w11")
+          ]}
+        />
+
+        <p className="login-card-subtitle">{t("login.title")}</p>
 
         <AuthProviderButtons
           appleLabel={t("auth.apple")}
@@ -203,23 +198,10 @@ function LoginPageContent() {
             </form>
           </>
         ) : null}
-        {!showEmailForm && error ? <p style={{ color: "var(--danger)", margin: "12px 0 0" }}>{error}</p> : null}
+        {!showEmailForm && error ? <p style={{ color: "var(--danger)", margin: "12px 0 0", textAlign: "center" }}>{error}</p> : null}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px" }}>
-          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
-          <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>{t("auth.newHere")}</span>
-          <div style={{ height: 1, background: "var(--border)", flex: 1 }} />
-        </div>
-        <Link
-          href="/signup"
-          className="button secondary"
-          style={{ width: "100%", display: "flex", justifyContent: "center", textDecoration: "none" }}
-        >
-          {t("auth.createAccount")}
-        </Link>
-
-        <p className="login-footnote">
-          {t("login.footnotePrefix")} <Link href="/signup">{t("cta.startFree")}</Link> {t("login.footnoteOr")} <Link href="/pricing">{t("login.footnotePricing")}</Link>.
+        <p className="login-card-create">
+          {t("auth.newHere")} <Link href="/signup">{t("auth.createAccount")}</Link>
         </p>
       </section>
     </main>

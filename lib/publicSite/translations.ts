@@ -330,14 +330,14 @@ export const PUBLIC_SITE_EN = {
   "featuresPage.body": "NivaDesk keeps production context, customer details, delivery timing, files, tasks and export paths together in one polished studio workspace.",
   "featuresPage.glance.body": "Status, team and deliveries on one screen.",
   "featuresPage.glance.title": "Clarity at a glance",
-  "workflow.eyebrow": "Feature rhythm",
+  "workflow.eyebrow": "One connected workflow",
   "workflow.title": "From order intake to export, every stage has a home.",
   "workflow.group1.title": "Order workspace",
-  "workflow.group1.body": "Orders, customer context, production state and delivery timing stay together instead of scattering across notes.",
-  "workflow.group2.title": "Creative evidence",
-  "workflow.group2.body": "Client Files and previews keep the visual side of the project close to the practical order record.",
+  "workflow.group1.body": "Every order keeps its customer, status, schedule and delivery in one record — never scattered across notes.",
+  "workflow.group2.title": "Files & previews",
+  "workflow.group2.body": "Production files and previews stay attached to the order, so the creative work sits right beside the practical record.",
   "workflow.group3.title": "Studio control",
-  "workflow.group3.body": "Dashboard, export, plan access and Team roles give owners a calmer way to run the business.",
+  "workflow.group3.body": "Dashboard, finance, exports and Team roles give owners one calm place to run the business.",
 
   "featuresDeep.eyebrow": "Full feature tour",
   "featuresDeep.titleA": "Clear enough for",
@@ -7255,6 +7255,86 @@ const FILL_TRANSLATIONS_10: Partial<Record<StudioLanguage, Partial<Record<Public
   }
 };
 
+const FILL_TRANSLATIONS_11: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": {
+    "workflow.eyebrow": "Tek bağlantılı akış",
+    "workflow.group1.body": "Her sipariş; müşterisini, durumunu, programını ve teslimatını tek bir kayıtta tutar — notlara dağılmaz.",
+    "workflow.group2.title": "Dosyalar ve önizlemeler",
+    "workflow.group2.body": "Üretim dosyaları ve önizlemeler siparişe bağlı kalır; böylece yaratıcı taraf pratik kaydın hemen yanında durur.",
+    "workflow.group3.body": "Dashboard, finans, dışa aktarma ve Team rolleri sahiplere işi yönetmek için tek ve sakin bir yer sunar."
+  },
+  "Deutsch": {
+    "workflow.eyebrow": "Ein verbundener Workflow",
+    "workflow.group1.body": "Jede Bestellung hält Kunde, Status, Zeitplan und Lieferung in einem Datensatz zusammen — nie über Notizen verstreut.",
+    "workflow.group2.title": "Dateien & Vorschauen",
+    "workflow.group2.body": "Produktionsdateien und Vorschauen bleiben an der Bestellung, sodass die kreative Seite direkt neben dem praktischen Datensatz liegt.",
+    "workflow.group3.body": "Dashboard, Finanzen, Exporte und Team-Rollen geben Inhabern einen ruhigen, zentralen Ort, um das Geschäft zu führen."
+  },
+  "Français": {
+    "workflow.eyebrow": "Un flux connecté",
+    "workflow.group1.body": "Chaque commande garde son client, son statut, son planning et sa livraison dans une seule fiche — jamais éparpillés dans des notes.",
+    "workflow.group2.title": "Fichiers & aperçus",
+    "workflow.group2.body": "Les fichiers de production et les aperçus restent attachés à la commande, pour que le côté créatif soit juste à côté de la fiche pratique.",
+    "workflow.group3.body": "Tableau de bord, finances, exports et rôles d’équipe offrent aux propriétaires un seul endroit serein pour gérer l’activité."
+  },
+  "Italiano": {
+    "workflow.eyebrow": "Un flusso connesso",
+    "workflow.group1.body": "Ogni ordine tiene insieme cliente, stato, programma e consegna in un’unica scheda — mai sparsi tra le note.",
+    "workflow.group2.title": "File e anteprime",
+    "workflow.group2.body": "I file di produzione e le anteprime restano legati all’ordine, così il lato creativo sta accanto alla scheda pratica.",
+    "workflow.group3.body": "Dashboard, finanze, esportazioni e ruoli del team danno ai titolari un unico posto tranquillo per gestire l’attività."
+  },
+  "Español (Spanish)": {
+    "workflow.eyebrow": "Un flujo conectado",
+    "workflow.group1.body": "Cada pedido mantiene su cliente, estado, calendario y entrega en un solo registro, nunca disperso en notas.",
+    "workflow.group2.title": "Archivos y vistas previas",
+    "workflow.group2.body": "Los archivos de producción y las vistas previas siguen unidos al pedido, así el lado creativo queda junto al registro práctico.",
+    "workflow.group3.body": "Panel, finanzas, exportaciones y roles de equipo dan a los propietarios un único lugar tranquilo para llevar el negocio."
+  },
+  "Português": {
+    "workflow.eyebrow": "Um fluxo conectado",
+    "workflow.group1.body": "Cada encomenda mantém o cliente, o estado, o calendário e a entrega num só registo — nunca espalhados por notas.",
+    "workflow.group2.title": "Ficheiros e pré-visualizações",
+    "workflow.group2.body": "Os ficheiros de produção e as pré-visualizações ficam ligados à encomenda, para que o lado criativo fique ao lado do registo prático.",
+    "workflow.group3.body": "Dashboard, finanças, exportações e papéis de equipa dão aos proprietários um único lugar tranquilo para gerir o negócio."
+  },
+  "Русский (Russian)": {
+    "workflow.eyebrow": "Единый связанный поток",
+    "workflow.group1.body": "Каждый заказ хранит клиента, статус, график и доставку в одной записи — ничего не теряется в заметках.",
+    "workflow.group2.title": "Файлы и превью",
+    "workflow.group2.body": "Производственные файлы и превью остаются привязанными к заказу, поэтому творческая часть рядом с практической записью.",
+    "workflow.group3.body": "Дашборд, финансы, экспорт и роли команды дают владельцам единое спокойное место для управления бизнесом."
+  },
+  "日本語 (Japanese)": {
+    "workflow.eyebrow": "ひとつにつながるワークフロー",
+    "workflow.group1.body": "各注文は顧客・ステータス・スケジュール・納品を1つのレコードにまとめ、メモに散らばりません。",
+    "workflow.group2.title": "ファイルとプレビュー",
+    "workflow.group2.body": "制作ファイルとプレビューは注文に紐づいたままなので、クリエイティブ面が実務レコードのすぐ隣にあります。",
+    "workflow.group3.body": "ダッシュボード・財務・エクスポート・チームの役割で、オーナーは落ち着いて事業を運営できる一つの場所を得られます。"
+  },
+  "中文 (Chinese)": {
+    "workflow.eyebrow": "一条贯通的工作流",
+    "workflow.group1.body": "每个订单都将客户、状态、排期和交付保存在同一条记录中，不再散落在各处笔记。",
+    "workflow.group2.title": "文件与预览",
+    "workflow.group2.body": "生产文件和预览始终附在订单上，让创意一面紧挨着实用的订单记录。",
+    "workflow.group3.body": "仪表盘、财务、导出和团队角色，让店主在一个从容的地方经营业务。"
+  },
+  "العربية (Arabic)": {
+    "workflow.eyebrow": "سير عمل واحد مترابط",
+    "workflow.group1.body": "يحتفظ كل طلب بالعميل والحالة والجدول والتسليم في سجل واحد، دون تشتّت في الملاحظات.",
+    "workflow.group2.title": "الملفات والمعاينات",
+    "workflow.group2.body": "تبقى ملفات الإنتاج والمعاينات مرتبطة بالطلب، فيظل الجانب الإبداعي بجوار السجل العملي مباشرة.",
+    "workflow.group3.body": "تمنح لوحة المعلومات والتمويل والتصدير وأدوار الفريق المالكين مكانًا واحدًا هادئًا لإدارة العمل."
+  },
+  "हिन्दी (Hindi)": {
+    "workflow.eyebrow": "एक जुड़ा हुआ वर्कफ़्लो",
+    "workflow.group1.body": "हर ऑर्डर अपने ग्राहक, स्थिति, शेड्यूल और डिलीवरी को एक ही रिकॉर्ड में रखता है — नोट्स में बिखरा नहीं।",
+    "workflow.group2.title": "फ़ाइलें और प्रीव्यू",
+    "workflow.group2.body": "प्रोडक्शन फ़ाइलें और प्रीव्यू ऑर्डर से जुड़े रहते हैं, ताकि रचनात्मक पक्ष व्यावहारिक रिकॉर्ड के ठीक बगल में रहे।",
+    "workflow.group3.body": "डैशबोर्ड, फ़ाइनेंस, एक्सपोर्ट और टीम भूमिकाएँ मालिकों को कारोबार चलाने के लिए एक शांत जगह देती हैं।"
+  }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -7265,7 +7345,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_7,
   FILL_TRANSLATIONS_8,
   FILL_TRANSLATIONS_9,
-  FILL_TRANSLATIONS_10
+  FILL_TRANSLATIONS_10,
+  FILL_TRANSLATIONS_11
 ];
 
 function mergeFill(
