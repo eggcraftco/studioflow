@@ -1,4 +1,5 @@
 import type { StudioLanguage } from "@/lib/studioflow/language";
+import { GUIDE_T } from "@/lib/publicSite/guideTranslations";
 
 // ---------------------------------------------------------------------------
 // NivaDesk user guide (interactive, menu-by-menu)
@@ -1292,8 +1293,26 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   }
 };
 
+function localizeTree(nodes: GuideNode[], dict: Record<string, string>): GuideNode[] {
+  const tr = (value: string) => dict[value] ?? value;
+  return nodes.map(node => ({
+    id: node.id,
+    title: tr(node.title),
+    blocks: node.blocks.map(block =>
+      block.kind === "bullets" || block.kind === "steps"
+        ? { kind: block.kind, items: block.items.map(tr) }
+        : { kind: block.kind, text: tr(block.text) }
+    ),
+    children: node.children ? localizeTree(node.children, dict) : undefined
+  }));
+}
+
 export function getGuideTree(language: StudioLanguage | string | null | undefined): GuideNode[] {
-  return (language as StudioLanguage) === "Türkçe" ? TREE_TR : TREE_EN;
+  const lang = language as StudioLanguage;
+  if (lang === "Türkçe") return TREE_TR;
+  if (!lang || lang === "English") return TREE_EN;
+  const dict = GUIDE_T[lang];
+  return dict ? localizeTree(TREE_EN, dict) : TREE_EN;
 }
 
 export function getGuideChrome(language: StudioLanguage | string | null | undefined): GuideChrome {
