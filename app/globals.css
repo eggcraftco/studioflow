@@ -12906,8 +12906,35 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 @media (max-width: 1180px) {
+  /* Stack the hero on tablets/phones: copy first, then the app visual below,
+     in normal flow (the desktop version is absolutely positioned to the right). */
+  .public-hero {
+    min-height: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+  }
+  .public-hero::after { display: none; }
+  .public-hero-content {
+    order: 1;
+    min-height: 0;
+    padding: 60px 0 4px;
+  }
+  .public-hero-visual {
+    order: 2;
+    position: static;
+    inset: auto;
+  }
+  .hero-float { display: none; }
   .hero-app-shot {
-    display: none;
+    display: block;
+    position: static;
+    right: auto;
+    top: auto;
+    width: calc(100% - 40px);
+    max-width: 560px;
+    margin: 22px auto 40px;
+    transform: none;
   }
 }
 
@@ -13661,7 +13688,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
   .public-hero,
   .public-hero-content {
-    min-height: min(620px, calc(100vh - 104px));
+    min-height: 0;
   }
 
   .public-hero h1,
