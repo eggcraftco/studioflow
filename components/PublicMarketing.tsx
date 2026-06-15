@@ -2005,11 +2005,38 @@ export function PublicFeaturesPage() {
     const { t } = usePublicSiteLanguage();
     return (
       <>
-        <section className="public-page-hero">
+        <section className="public-page-hero public-features-hero">
           <div className="public-shell">
-            <span className="public-eyebrow">{t("featuresPage.eyebrow")}</span>
-            <h1>{t("featuresPage.title")}</h1>
-            <p>{t("featuresPage.body")}</p>
+            <div className="public-features-hero-top">
+              <div className="public-features-hero-copy">
+                <span className="public-eyebrow public-features-hero-eyebrow">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5l1.4 4 4 1.4-4 1.4L10 13.3 8.6 9.3l-4-1.4 4-1.4zM15.5 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg>
+                  {t("featuresPage.eyebrow")}
+                </span>
+                <h1>{t("featuresPage.title")}</h1>
+                <p>{t("featuresPage.body")}</p>
+              </div>
+              <div className="public-features-hero-shot">
+                <img src="/schedule.webp" alt={t("schedule.imageAlt")} loading="lazy" />
+              </div>
+            </div>
+            <div className="public-features-hero-strip">
+              {[
+                { key: "s1", tone: "trend", title: "schedule.f1.title" as PublicSiteTranslationKey, body: "schedule.f1.body" as PublicSiteTranslationKey, icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
+                { key: "s2", tone: "calendar", title: "schedule.f2.title" as PublicSiteTranslationKey, body: "schedule.f2.body" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="8" height="11" rx="2" /><rect x="8" y="6.5" width="8" height="11" rx="2" /></> },
+                { key: "s3", tone: "team", title: "featuresPage.glance.title" as PublicSiteTranslationKey, body: "featuresPage.glance.body" as PublicSiteTranslationKey, icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> }
+              ].map(item => (
+                <div className="public-features-hero-strip-item" key={item.key}>
+                  <span className="public-features-hero-strip-icon" data-tone={item.tone}>
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                  </span>
+                  <div>
+                    <strong>{t(item.title)}</strong>
+                    <span>{t(item.body)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 

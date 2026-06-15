@@ -13410,6 +13410,107 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   font-size: clamp(40px, 6.5vw, 74px);
 }
 
+/* Features hero — two-column copy + screenshot, then a 3-up highlight strip. */
+.public-features-hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr);
+  gap: 52px;
+  align-items: center;
+}
+
+.public-features-hero-copy { max-width: 540px; }
+
+.public-features-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.public-features-hero-eyebrow svg { width: 15px; height: 15px; }
+
+.public-features-hero .public-features-hero-copy h1 {
+  font-size: clamp(34px, 3.6vw, 50px);
+  line-height: 1.07;
+  letter-spacing: -0.02em;
+  margin: 18px 0 18px;
+}
+.public-features-hero .public-features-hero-copy p {
+  color: var(--public-muted);
+  font-size: 17px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.public-features-hero-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid var(--public-border);
+  box-shadow: 0 30px 70px rgba(23, 25, 35, 0.16);
+}
+
+.public-features-hero-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 48px;
+  padding: 26px 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--public-border);
+  border-radius: 22px;
+}
+
+.public-features-hero-strip-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 4px 30px;
+}
+.public-features-hero-strip-item + .public-features-hero-strip-item {
+  border-left: 1px solid var(--public-border);
+}
+.public-features-hero-strip-item strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 740;
+  color: var(--public-text);
+}
+.public-features-hero-strip-item > div > span {
+  display: block;
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--public-muted);
+  line-height: 1.5;
+}
+
+.public-features-hero-strip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+}
+.public-features-hero-strip-icon svg { display: block; width: 22px; height: 22px; }
+.public-features-hero-strip-icon[data-tone="trend"] { background: rgba(47, 111, 109, 0.13); color: #2f6f6d; }
+.public-features-hero-strip-icon[data-tone="calendar"] { background: rgba(70, 120, 220, 0.12); color: #3f6fd6; }
+.public-features-hero-strip-icon[data-tone="team"] { background: rgba(124, 92, 214, 0.12); color: #7c5cd6; }
+
+@media (max-width: 980px) {
+  .public-features-hero-top { grid-template-columns: 1fr; gap: 30px; }
+  .public-features-hero-copy { max-width: none; }
+  .public-features-hero-strip { grid-template-columns: 1fr; padding: 8px; margin-top: 30px; }
+  .public-features-hero-strip-item { padding: 16px 16px; }
+  .public-features-hero-strip-item + .public-features-hero-strip-item {
+    border-left: 0;
+    border-top: 1px solid var(--public-border);
+  }
+}
+
+@media (max-width: 560px) {
+  .public-features-hero .public-features-hero-copy h1 { font-size: 30px; }
+}
+
 .public-pricing-hero,
 .public-signup-layout {
   display: grid;

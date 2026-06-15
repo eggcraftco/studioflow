@@ -328,6 +328,8 @@ export const PUBLIC_SITE_EN = {
   "featuresPage.eyebrow": "Features",
   "featuresPage.title": "A calmer operating workspace for custom studio work.",
   "featuresPage.body": "NivaDesk keeps production context, customer details, delivery timing, files, tasks and export paths together in one polished studio workspace.",
+  "featuresPage.glance.body": "Status, team and deliveries on one screen.",
+  "featuresPage.glance.title": "Clarity at a glance",
   "workflow.eyebrow": "Feature rhythm",
   "workflow.title": "From order intake to export, every stage has a home.",
   "workflow.group1.title": "Order workspace",
@@ -1096,6 +1098,8 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "featuresPage.eyebrow": "Özellikler",
   "featuresPage.title": "Özel stüdyo işi için daha sakin bir operasyon workspace'i.",
   "featuresPage.body": "NivaDesk üretim bağlamını, müşteri detaylarını, teslim zamanlamasını, dosyaları, görevleri ve dışa aktarma yollarını tek düzenli stüdyo workspace'inde birlikte tutar.",
+  "featuresPage.glance.body": "Durum, ekip ve teslimatlar tek ekranda.",
+  "featuresPage.glance.title": "Tek bakışta netlik",
   "workflow.eyebrow": "Özellik ritmi",
   "workflow.title": "Sipariş girişinden dışa aktarmaya kadar her aşamanın bir yeri var.",
   "workflow.group1.title": "Sipariş workspace'i",
@@ -2733,6 +2737,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "Funktionen",
     "featuresPage.title": "Ein ruhigerer Arbeitsbereich für individuelle Studioarbeit.",
     "featuresPage.body": "NivaDesk hält Produktionskontext, Kundendetails, Lieferzeitpunkt, Dateien, Aufgaben und Exportpfade in einem stimmigen Studio-Workspace zusammen.",
+    "featuresPage.glance.body": "Status, Team und Lieferungen auf einem Bildschirm.",
+    "featuresPage.glance.title": "Klarheit auf einen Blick",
   },
   "Français": {
     "feature.orders.title": "Commandes",
@@ -2802,6 +2808,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "Fonctionnalités",
     "featuresPage.title": "Un espace de travail plus serein pour le travail de studio sur mesure.",
     "featuresPage.body": "NivaDesk réunit contexte de production, détails clients, délais de livraison, fichiers, tâches et chemins d'export dans un espace de studio soigné.",
+    "featuresPage.glance.body": "Statut, équipe et livraisons sur un seul écran.",
+    "featuresPage.glance.title": "Clarté en un coup d’œil",
   },
   "Italiano": {
     "feature.orders.title": "Ordini",
@@ -2871,6 +2879,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "Funzionalità",
     "featuresPage.title": "Uno spazio di lavoro più tranquillo per il lavoro di studio su misura.",
     "featuresPage.body": "NivaDesk tiene insieme contesto di produzione, dettagli dei clienti, tempi di consegna, file, attività e percorsi di esportazione in un unico spazio di studio curato.",
+    "featuresPage.glance.body": "Stato, team e consegne in un’unica schermata.",
+    "featuresPage.glance.title": "Chiarezza a colpo d’occhio",
   },
   "Español (Spanish)": {
     "feature.orders.title": "Pedidos",
@@ -2940,6 +2950,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "Funciones",
     "featuresPage.title": "Un espacio de trabajo más tranquilo para el trabajo de estudio a medida.",
     "featuresPage.body": "NivaDesk mantiene juntos el contexto de producción, los detalles de clientes, los tiempos de entrega, los archivos, las tareas y las rutas de exportación en un espacio de estudio cuidado.",
+    "featuresPage.glance.body": "Estado, equipo y entregas en una sola pantalla.",
+    "featuresPage.glance.title": "Claridad de un vistazo",
   },
   "Português": {
     "feature.orders.title": "Encomendas",
@@ -3009,6 +3021,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "Funcionalidades",
     "featuresPage.title": "Um espaço de trabalho mais tranquilo para o trabalho de estúdio personalizado.",
     "featuresPage.body": "O NivaDesk mantém juntos o contexto de produção, os detalhes dos clientes, os prazos de entrega, os ficheiros, as tarefas e os caminhos de exportação num espaço de estúdio cuidado.",
+    "featuresPage.glance.body": "Status, equipa e entregas num só ecrã.",
+    "featuresPage.glance.title": "Clareza num relance",
   },
   "Русский (Russian)": {
     "feature.orders.title": "Заказы",
@@ -3078,6 +3092,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "Возможности",
     "featuresPage.title": "Более спокойное рабочее пространство для индивидуальной студийной работы.",
     "featuresPage.body": "NivaDesk держит вместе контекст производства, данные клиентов, сроки доставки, файлы, задачи и пути экспорта в одном аккуратном студийном пространстве.",
+    "featuresPage.glance.body": "Статус, команда и поставки на одном экране.",
+    "featuresPage.glance.title": "Ясность с первого взгляда",
   },
   "日本語 (Japanese)": {
     "feature.orders.title": "注文",
@@ -3147,6 +3163,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "機能",
     "featuresPage.title": "カスタムスタジオ作業のための、より落ち着いた運用ワークスペース。",
     "featuresPage.body": "NivaDesk は、制作コンテキスト、顧客の詳細、納品タイミング、ファイル、タスク、エクスポート経路を、洗練された1つのスタジオワークスペースにまとめます。",
+    "featuresPage.glance.body": "ステータス・チーム・納品を一画面で。",
+    "featuresPage.glance.title": "ひと目で明確に",
   },
   "中文 (Chinese)": {
     "feature.orders.title": "订单",
@@ -3216,6 +3234,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "功能",
     "featuresPage.title": "为定制工作室工作打造的更平静的运营工作空间。",
     "featuresPage.body": "NivaDesk 将生产背景、客户细节、交付时间、文件、任务和导出路径汇集在一个精致的工作室工作空间中。",
+    "featuresPage.glance.body": "状态、团队和交付尽在一屏。",
+    "featuresPage.glance.title": "一目了然",
   },
   "العربية (Arabic)": {
     "feature.orders.title": "الطلبات",
@@ -3285,6 +3305,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "الميزات",
     "featuresPage.title": "مساحة عمل أكثر هدوءًا لعمل الاستوديو المخصص.",
     "featuresPage.body": "يجمع NivaDesk سياق الإنتاج وتفاصيل العملاء وتوقيت التسليم والملفات والمهام ومسارات التصدير في مساحة استوديو واحدة أنيقة.",
+    "featuresPage.glance.body": "الحالة والفريق والتسليمات في شاشة واحدة.",
+    "featuresPage.glance.title": "وضوح بنظرة واحدة",
   },
   "हिन्दी (Hindi)": {
     "feature.orders.title": "ऑर्डर",
@@ -3354,6 +3376,8 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.eyebrow": "सुविधाएँ",
     "featuresPage.title": "कस्टम स्टूडियो काम के लिए एक अधिक शांत संचालन वर्कस्पेस।",
     "featuresPage.body": "NivaDesk उत्पादन संदर्भ, ग्राहक विवरण, डिलीवरी समय, फ़ाइलें, कार्य और निर्यात पथ को एक परिष्कृत स्टूडियो वर्कस्पेस में एक साथ रखता है।",
+    "featuresPage.glance.body": "स्थिति, टीम और डिलीवरी एक ही स्क्रीन पर।",
+    "featuresPage.glance.title": "एक नज़र में स्पष्टता",
   }
 };
 
