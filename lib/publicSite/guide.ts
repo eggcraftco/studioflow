@@ -85,6 +85,13 @@ const TREE_EN: GuideNode[] = [
         "Your layout is saved to your own user as a card profile — your teammates keep their own layouts, while the order content stays shared.",
         "Some cards let you Edit headings to rename, add or remove their sections and fields (covered on each card below)."
       ] },
+      { kind: "sub", text: "Export & invoice" },
+      { kind: "bullets", items: [
+        "Export the order as a PDF — a clean summary built from your PDF Export Settings.",
+        "Generate an Invoice — NivaDesk assigns an invoice number automatically (if the order has none) and uses your business details and footer note from Settings.",
+        "You can also print the To Do list and the History log as PDFs.",
+        "Customize how all of these look in Settings ▸ PDF Export Settings."
+      ] },
       { kind: "para", text: "Select a card on the left to see exactly what it does and what you can change in it." }
     ],
     children: [
@@ -455,7 +462,8 @@ const TREE_EN: GuideNode[] = [
         "Set your reply style — the greeting and sign-off (for example ‘Hi there,’ and ‘Kind regards,’) — and it is reused every time.",
         "Reference your saved products and prices so replies include the right details.",
         "Reach clients through the channel buttons on an order."
-      ] }
+      ] },
+      { kind: "para", text: "Choose the engine and add your OpenAI API key, company knowledge base, products and rules in Settings ▸ Quick Reply Settings." }
     ]
   },
   {
@@ -501,7 +509,21 @@ const TREE_EN: GuideNode[] = [
         id: "set-quickreply",
         title: "Quick Reply Settings",
         blocks: [
-          { kind: "para", text: "Manage your saved quick-reply templates and the channel buttons used to contact clients from an order." }
+          { kind: "para", text: "Set up how NivaDesk drafts replies to customers and what it knows about your business." },
+          { kind: "sub", text: "Choose how replies are generated" },
+          { kind: "bullets", items: [
+            "OpenAI Online — uses OpenAI with your own OpenAI API key. Paste your key here, and replace or clear it any time.",
+            "On-Device (Apple) — uses Apple's on-device AI on supported Apple Intelligence devices, with no API key needed.",
+            "Offline Template — builds replies from your saved products and rules, without any AI model."
+          ] },
+          { kind: "sub", text: "Teach it about your business" },
+          { kind: "bullets", items: [
+            "Company Knowledge Base — extra facts, rules and FAQs you give the AI so replies stay accurate and on-brand.",
+            "Products — your services or products with prices, so quotes include the right figures.",
+            "Rules / FAQs — common answers such as delivery times or deposit policy.",
+            "Reply style — your greeting and sign-off, reused on every reply."
+          ] },
+          { kind: "para", text: "Your OpenAI key belongs to you and is stored securely for your workspace; remove it whenever you like." }
         ]
       },
       {
@@ -636,6 +658,13 @@ const TREE_TR: GuideNode[] = [
         "Bir karta renk verin (8 seçenek) ki öne çıksın.",
         "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir — ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
         "Bazı kartlarda Başlıkları Düzenle ile bölümleri ve alanları yeniden adlandırabilir, ekleyebilir veya kaldırabilirsiniz (aşağıda her kartta anlatılıyor)."
+      ] },
+      { kind: "sub", text: "Dışa aktarma & fatura" },
+      { kind: "bullets", items: [
+        "Siparişi PDF olarak dışa aktarın — PDF Export Settings'inizden oluşturulan derli toplu bir özet.",
+        "Invoice (Fatura) oluşturun — NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
+        "Ayrıca To Do listesini ve History kaydını da PDF olarak yazdırabilirsiniz.",
+        "Bunların tümünün görünümünü Settings ▸ PDF Export Settings'ten özelleştirin."
       ] },
       { kind: "para", text: "Soldan bir kart seçin; tam olarak ne işe yaradığını ve içinde neleri değiştirebileceğinizi görün." }
     ],
@@ -1007,7 +1036,8 @@ const TREE_TR: GuideNode[] = [
         "Yanıt stilinizi — selamlama ve kapanışı (örneğin ‘Hi there,’ ve ‘Kind regards,’) — belirleyin; her seferinde yeniden kullanılır.",
         "Kayıtlı ürünlerinize ve fiyatlarınıza atıfta bulunun; yanıtlar doğru ayrıntıları içersin.",
         "Müşterilere bir siparişteki kanal butonlarıyla ulaşın."
-      ] }
+      ] },
+      { kind: "para", text: "Motoru seçin ve OpenAI API anahtarınızı, şirket bilgi tabanınızı, ürünlerinizi ve kurallarınızı Settings ▸ Quick Reply Settings altından ekleyin." }
     ]
   },
   {
@@ -1053,7 +1083,21 @@ const TREE_TR: GuideNode[] = [
         id: "set-quickreply",
         title: "Quick Reply Settings",
         blocks: [
-          { kind: "para", text: "Kayıtlı hızlı yanıt şablonlarınızı ve siparişlerden müşteriye ulaşmak için kullanılan kanal butonlarını yönetin." }
+          { kind: "para", text: "NivaDesk'in müşterilere yanıtları nasıl hazırlayacağını ve işiniz hakkında neleri bildiğini ayarlayın." },
+          { kind: "sub", text: "Yanıtların nasıl üretileceğini seçin" },
+          { kind: "bullets", items: [
+            "OpenAI Online — kendi OpenAI API anahtarınızla OpenAI'ı kullanır. Anahtarınızı buraya yapıştırın; istediğiniz zaman değiştirin veya silin.",
+            "On-Device (Apple) — desteklenen Apple Intelligence cihazlarında Apple'ın cihaz üstü yapay zekâsını kullanır; API anahtarı gerekmez.",
+            "Offline Template — kayıtlı ürün ve kurallarınızdan, herhangi bir yapay zekâ modeli olmadan yanıt oluşturur."
+          ] },
+          { kind: "sub", text: "İşinizi ona öğretin" },
+          { kind: "bullets", items: [
+            "Company Knowledge Base — yapay zekâya verdiğiniz ek bilgiler, kurallar ve SSS; böylece yanıtlar doğru ve markanıza uygun kalır.",
+            "Products — fiyatlarıyla birlikte hizmet veya ürünleriniz; teklifler doğru rakamları içersin.",
+            "Rules / FAQs — teslim süreleri veya kapora politikası gibi sık yanıtlar.",
+            "Reply style — her yanıtta yeniden kullanılan selamlama ve kapanışınız."
+          ] },
+          { kind: "para", text: "OpenAI anahtarınız size aittir ve çalışma alanınız için güvenli biçimde saklanır; istediğiniz zaman kaldırabilirsiniz." }
         ]
       },
       {
@@ -1144,6 +1188,7 @@ type GuideChrome = {
   title: string;
   intro: string;
   menuLabel: string;
+  searchPlaceholder: string;
   lastUpdated: string;
 };
 
@@ -1152,6 +1197,7 @@ const CHROME_FALLBACK: GuideChrome = {
   title: "How to use NivaDesk",
   intro: "Pick a menu on the left to see what it does and how to use it, step by step. The apps share the same layout, so this works for Mac, iPhone, iPad, Android and web.",
   menuLabel: "Menus",
+  searchPlaceholder: "Search the guide…",
   lastUpdated: "Last updated"
 };
 
@@ -1161,6 +1207,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "NivaDesk nasıl kullanılır",
     intro: "Soldan bir menü seçin; ne işe yaradığını ve nasıl kullanılacağını adım adım görün. Uygulamalar aynı düzeni paylaşır; bu kılavuz Mac, iPhone, iPad, Android ve web için geçerlidir.",
     menuLabel: "Menüler",
+    searchPlaceholder: "Kılavuzda ara…",
     lastUpdated: "Son güncelleme"
   },
   Deutsch: {
@@ -1168,6 +1215,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "So nutzen Sie NivaDesk",
     intro: "Wählen Sie links ein Menü, um zu sehen, was es tut und wie man es Schritt für Schritt nutzt. Die Apps teilen sich dasselbe Layout — für Mac, iPhone, iPad, Android und Web.",
     menuLabel: "Menüs",
+    searchPlaceholder: "Im Handbuch suchen…",
     lastUpdated: "Zuletzt aktualisiert"
   },
   Français: {
@@ -1175,6 +1223,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "Comment utiliser NivaDesk",
     intro: "Choisissez un menu à gauche pour voir à quoi il sert et comment l'utiliser, étape par étape. Les apps partagent la même structure — pour Mac, iPhone, iPad, Android et web.",
     menuLabel: "Menus",
+    searchPlaceholder: "Rechercher dans le guide…",
     lastUpdated: "Dernière mise à jour"
   },
   Italiano: {
@@ -1182,6 +1231,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "Come usare NivaDesk",
     intro: "Scegli un menu a sinistra per vedere cosa fa e come si usa, passo dopo passo. Le app condividono lo stesso layout — per Mac, iPhone, iPad, Android e web.",
     menuLabel: "Menu",
+    searchPlaceholder: "Cerca nella guida…",
     lastUpdated: "Ultimo aggiornamento"
   },
   "Español (Spanish)": {
@@ -1189,6 +1239,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "Cómo usar NivaDesk",
     intro: "Elige un menú a la izquierda para ver qué hace y cómo usarlo, paso a paso. Las apps comparten el mismo diseño — para Mac, iPhone, iPad, Android y web.",
     menuLabel: "Menús",
+    searchPlaceholder: "Buscar en la guía…",
     lastUpdated: "Última actualización"
   },
   Português: {
@@ -1196,6 +1247,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "Como usar o NivaDesk",
     intro: "Escolha um menu à esquerda para ver o que faz e como usar, passo a passo. As apps partilham o mesmo layout — para Mac, iPhone, iPad, Android e web.",
     menuLabel: "Menus",
+    searchPlaceholder: "Pesquisar no guia…",
     lastUpdated: "Última atualização"
   },
   "Русский (Russian)": {
@@ -1203,6 +1255,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "Как пользоваться NivaDesk",
     intro: "Выберите меню слева, чтобы увидеть, что оно делает и как им пользоваться, шаг за шагом. Приложения имеют одинаковую структуру — для Mac, iPhone, iPad, Android и веба.",
     menuLabel: "Меню",
+    searchPlaceholder: "Поиск по руководству…",
     lastUpdated: "Последнее обновление"
   },
   "日本語 (Japanese)": {
@@ -1210,6 +1263,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "NivaDesk の使い方",
     intro: "左のメニューを選ぶと、その機能と使い方を順を追って確認できます。アプリは同じレイアウトなので、Mac、iPhone、iPad、Android、ウェブで共通です。",
     menuLabel: "メニュー",
+    searchPlaceholder: "ガイドを検索…",
     lastUpdated: "最終更新日"
   },
   "中文 (Chinese)": {
@@ -1217,6 +1271,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "如何使用 NivaDesk",
     intro: "在左侧选择一个菜单，逐步了解它的用途和用法。各应用布局一致，因此适用于 Mac、iPhone、iPad、Android 和网页。",
     menuLabel: "菜单",
+    searchPlaceholder: "搜索指南…",
     lastUpdated: "最后更新"
   },
   "العربية (Arabic)": {
@@ -1224,6 +1279,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "كيفية استخدام NivaDesk",
     intro: "اختر قائمة من اليسار لترى وظيفتها وكيفية استخدامها خطوة بخطوة. تشترك التطبيقات في التخطيط نفسه — لنظام Mac وiPhone وiPad وAndroid والويب.",
     menuLabel: "القوائم",
+    searchPlaceholder: "ابحث في الدليل…",
     lastUpdated: "آخر تحديث"
   },
   "हिन्दी (Hindi)": {
@@ -1231,6 +1287,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
     title: "NivaDesk का उपयोग कैसे करें",
     intro: "बाईं ओर एक मेन्यू चुनें और देखें कि वह क्या करता है और चरण-दर-चरण कैसे उपयोग करें। ऐप्स एक ही लेआउट साझा करते हैं — Mac, iPhone, iPad, Android और वेब के लिए।",
     menuLabel: "मेन्यू",
+    searchPlaceholder: "गाइड में खोजें…",
     lastUpdated: "अंतिम अपडेट"
   }
 };
