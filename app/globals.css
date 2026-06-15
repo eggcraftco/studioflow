@@ -17127,6 +17127,11 @@ html[dir="rtl"] .login-public-shell {
   box-shadow: inset 0 0 0 1px rgba(48, 112, 98, 0.16);
 }
 
+/* Per-cell plan label is only shown in the stacked mobile layout. */
+.public-plan-matrix-cell-plan {
+  display: none;
+}
+
 .public-plan-matrix-row:nth-child(odd) {
   background: rgba(248, 248, 246, 0.42);
 }
@@ -17153,27 +17158,59 @@ html[dir="rtl"] .login-public-shell {
     margin-right: 0;
   }
 
+  /* Stack the comparison into per-feature cards — no horizontal scrolling. */
   .public-plan-matrix-wrap {
-    margin-left: -16px;
-    margin-right: -16px;
-    padding-left: 16px;
-    padding-right: 16px;
+    margin: 0;
+    padding: 0;
+    overflow-x: visible;
   }
 
   .public-plan-matrix {
-    min-width: 760px;
-    border-radius: 24px;
+    min-width: 0;
+    border-radius: 20px;
   }
 
-  .public-plan-matrix-head,
-  .public-plan-matrix-row {
-    grid-template-columns: minmax(280px, 1.5fr) repeat(4, minmax(96px, 0.5fr));
+  .public-plan-matrix-head {
+    display: none;
   }
 
-  .public-plan-matrix-feature-head,
+  .public-plan-matrix-row,
+  .public-plan-matrix-row:nth-child(odd) {
+    display: block;
+    background: transparent;
+    padding: 16px 16px 8px;
+  }
+
   .public-plan-matrix-feature {
-    padding-left: 18px;
-    padding-right: 18px;
+    padding: 0 0 10px;
+    border: 0;
+  }
+
+  .public-plan-matrix-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    border-top: 1px solid rgba(24, 28, 32, 0.07);
+    padding: 9px 2px;
+  }
+
+  .public-plan-matrix-cell .public-plan-matrix-cell-plan {
+    display: inline;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: rgba(24, 28, 32, 0.62);
+    font-size: 13.5px;
+    font-weight: 850;
+    place-items: start;
+  }
+
+  .public-plan-matrix-mark {
+    flex: none;
   }
 }
 
@@ -17542,7 +17579,18 @@ html[dir="rtl"] .login-public-shell {
   border-radius: 12px;
 }
 .schedule-side-icon { width: 40px; height: 40px; }
-.schedule-side-icon svg, .schedule-float-icon svg, .schedule-grid-icon svg { width: 19px; height: 19px; }
+/* Force these icon chips to flex-center their glyph — a sibling `span` rule was
+   collapsing them to display:block, leaving the SVG stuck in the top-left. */
+.public-section .schedule-side-icon,
+.public-section .schedule-grid-icon,
+.public-section .schedule-float-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.schedule-side-icon svg, .schedule-grid-icon svg { display: block; width: 21px; height: 21px; }
+.schedule-float-icon svg { display: block; }
 
 .schedule-side-icon[data-tone="calendar"],
 .schedule-float-icon[data-tone="drag"],

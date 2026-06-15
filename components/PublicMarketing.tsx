@@ -1543,7 +1543,8 @@ function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
                       key={planKey}
                       aria-label={`${t(copy.shortNameKey)}: ${included ? t("planBridge.included") : t("planBridge.notIncluded")}`}
                     >
-                      {included ? <span aria-hidden="true">✓</span> : <span aria-hidden="true">–</span>}
+                      <span className="public-plan-matrix-cell-plan" aria-hidden="true">{t(copy.shortNameKey)}</span>
+                      {included ? <span className="public-plan-matrix-mark" aria-hidden="true">✓</span> : <span className="public-plan-matrix-mark" aria-hidden="true">–</span>}
                     </div>
                   );
                 })}
