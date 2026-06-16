@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -14,6 +15,28 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+
+// App Check (monitor mode): attaches a reCAPTCHA v3 attestation token to
+// Firebase requests so bots hitting the API directly can later be rejected
+// once enforcement is turned on in the console. Browser-only and best-effort —
+// it must never block the app if it fails to initialise.
+const APP_CHECK_SITE_KEY =
+  process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6Lf5SyItAAAAAED4Ok_Vp-J8njasXEauxtBg8clT";
+
+if (typeof window !== "undefined" && APP_CHECK_SITE_KEY) {
+  try {
+    // Dev: emit a debug token so localhost works without a registered domain.
+    if (process.env.NODE_ENV !== "production") {
+      (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch {
+    // Already initialised (Fast Refresh) or unavailable — ignore in monitor mode.
+  }
+}
 
 export const auth = getAuth(app);
 
