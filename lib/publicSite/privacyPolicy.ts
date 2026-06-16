@@ -21,6 +21,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "NivaDesk is operated by:",
       "EGGCRAFT LIMITED\nRegistered in England and Wales, company number 16566512\nVAT number GB 514512621\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+      "EGGCRAFT LIMITED is registered with the UK Information Commissioner's Office (ICO), registration reference ZC019612.",
       "Email: contact@nivadesk.co.uk",
       "For privacy-related questions, data requests, or account deletion requests, please contact us by email."
     ]
