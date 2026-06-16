@@ -2267,10 +2267,21 @@ export function PublicSignupPage() {
     const [accepted, setAccepted] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Silent bot traps: an invisible field real users never see/fill, and the
+    // moment the form first mounted (to reject instant automated submissions).
+    const [honeypot, setHoneypot] = useState("");
+    const [formStartedAt] = useState(() => Date.now());
 
     async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
       event.preventDefault();
       setError(null);
+
+      // Bot traps — either tripping means an automated submission; reject quietly.
+      if (honeypot.trim() !== "" || Date.now() - formStartedAt < 1500) {
+        setError(t("signup.error.generic"));
+        return;
+      }
+
       const cleanFullName = fullName.trim();
       const cleanWorkspaceName = workspaceName.trim();
       const cleanEmail = email.trim();
@@ -2356,6 +2367,20 @@ export function PublicSignupPage() {
           </div>
 
           <form className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
+            {/* Honeypot: off-screen field hidden from real users. Bots that
+                auto-fill every input trip it and are rejected. */}
+            <div className="public-signup-hp" aria-hidden="true">
+              <label htmlFor="nd-company-url">Company website</label>
+              <input
+                id="nd-company-url"
+                name="company_url"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={honeypot}
+                onChange={event => setHoneypot(event.target.value)}
+              />
+            </div>
             <span className="public-eyebrow">{t("signup.form.eyebrow")}</span>
             <h2>{t("signup.form.title")}</h2>
             <p>{t("signup.form.body")}</p>

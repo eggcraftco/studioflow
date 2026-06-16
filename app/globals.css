@@ -15341,6 +15341,17 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   font-weight: 760;
 }
 
+/* Honeypot: kept in the DOM (so bots fill it) but moved off-screen and out of
+   the tab order so real users never see or reach it. Not display:none — some
+   bots skip those. */
+.public-signup-hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 .public-signup-form {
   display: grid;
   gap: 16px;
