@@ -13627,6 +13627,23 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   font-weight: 800;
 }
 
+.public-footer-recaptcha {
+  max-width: 560px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--public-muted);
+  text-align: right;
+}
+.public-footer-recaptcha a {
+  color: var(--public-text);
+  font-weight: 800;
+  text-decoration: underline;
+}
+@media (max-width: 700px) {
+  .public-footer-recaptcha { text-align: left; }
+}
+
 .login-public-shell {
   min-height: 100vh;
   display: grid;

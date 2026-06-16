@@ -910,6 +910,20 @@ function PublicFooter() {
         </div>
         <div className="public-footer-meta">
           <span>{t("footer.rights")}</span>
+          <span className="public-footer-recaptcha">
+            {(() => {
+              const parts = t("footer.recaptcha.text").split(/\{privacy\}|\{terms\}/);
+              return (
+                <>
+                  {parts[0]}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">{t("footer.recaptcha.privacy")}</a>
+                  {parts[1] ?? " "}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">{t("footer.recaptcha.terms")}</a>
+                  {parts[2] ?? ""}
+                </>
+              );
+            })()}
+          </span>
         </div>
       </div>
     </footer>

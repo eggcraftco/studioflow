@@ -13,7 +13,7 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-export const PRIVACY_POLICY_LAST_UPDATED = "1 June 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "16 June 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -302,6 +302,13 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
         paragraphs: [
           "Some cookies are necessary for the service to work. Others, such as analytics or marketing cookies, may depend on your consent where required by law.",
           "You can manage cookies through your browser settings. Disabling some cookies may affect the functionality of our website or app."
+        ]
+      },
+      {
+        title: "Bot protection (reCAPTCHA and App Check)",
+        paragraphs: [
+          "To protect sign-up, sign-in and our APIs from automated abuse, our website and apps use Google reCAPTCHA and Firebase App Check. These services may set cookies and collect device, browser and usage information, which is sent to Google to tell genuine users apart from bots and other automated traffic.",
+          "Your use of reCAPTCHA is subject to the Google Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms). We rely on our legitimate interest in keeping the service secure and preventing fraud and abuse."
         ]
       }
     ]

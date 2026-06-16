@@ -36,6 +36,9 @@ export const PUBLIC_SITE_EN = {
   "footer.support": "Support",
   "footer.address": "141 Randolph Avenue, London, W9 1DN, United Kingdom",
   "footer.rights": "© NivaDesk. All rights reserved.",
+  "footer.recaptcha.text": "This site is protected by reCAPTCHA and the Google {privacy} and {terms} apply.",
+  "footer.recaptcha.privacy": "Privacy Policy",
+  "footer.recaptcha.terms": "Terms of Service",
 
   "cta.startFree": "Start Free",
   "cta.chooseLite": "Choose Lite",
@@ -7347,6 +7350,64 @@ const FILL_TRANSLATIONS_11: Partial<Record<StudioLanguage, Partial<Record<Public
   }
 };
 
+const FILL_TRANSLATIONS_12: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": {
+    "footer.recaptcha.text": "Bu site reCAPTCHA ile korunmaktadır; Google {privacy} ve {terms} geçerlidir.",
+    "footer.recaptcha.privacy": "Gizlilik Politikası",
+    "footer.recaptcha.terms": "Hizmet Şartları"
+  },
+  "Deutsch": {
+    "footer.recaptcha.text": "Diese Website ist durch reCAPTCHA geschützt; es gelten die Google {privacy} und {terms}.",
+    "footer.recaptcha.privacy": "Datenschutzerklärung",
+    "footer.recaptcha.terms": "Nutzungsbedingungen"
+  },
+  "Français": {
+    "footer.recaptcha.text": "Ce site est protégé par reCAPTCHA et la {privacy} et les {terms} de Google s’appliquent.",
+    "footer.recaptcha.privacy": "Politique de confidentialité",
+    "footer.recaptcha.terms": "Conditions d’utilisation"
+  },
+  "Italiano": {
+    "footer.recaptcha.text": "Questo sito è protetto da reCAPTCHA e si applicano la {privacy} e i {terms} di Google.",
+    "footer.recaptcha.privacy": "Informativa sulla privacy",
+    "footer.recaptcha.terms": "Termini di servizio"
+  },
+  "Español (Spanish)": {
+    "footer.recaptcha.text": "Este sitio está protegido por reCAPTCHA y se aplican la {privacy} y los {terms} de Google.",
+    "footer.recaptcha.privacy": "Política de Privacidad",
+    "footer.recaptcha.terms": "Términos de Servicio"
+  },
+  "Português": {
+    "footer.recaptcha.text": "Este site é protegido por reCAPTCHA e aplicam-se a {privacy} e os {terms} da Google.",
+    "footer.recaptcha.privacy": "Política de Privacidade",
+    "footer.recaptcha.terms": "Termos de Serviço"
+  },
+  "Русский (Russian)": {
+    "footer.recaptcha.text": "Этот сайт защищён reCAPTCHA; применяются {privacy} и {terms} Google.",
+    "footer.recaptcha.privacy": "Политика конфиденциальности",
+    "footer.recaptcha.terms": "Условия использования"
+  },
+  "日本語 (Japanese)": {
+    "footer.recaptcha.text": "このサイトは reCAPTCHA によって保護されており、Google の{privacy}と{terms}が適用されます。",
+    "footer.recaptcha.privacy": "プライバシーポリシー",
+    "footer.recaptcha.terms": "利用規約"
+  },
+  "中文 (Chinese)": {
+    "footer.recaptcha.text": "本网站受 reCAPTCHA 保护，适用 Google 的{privacy}和{terms}。",
+    "footer.recaptcha.privacy": "隐私政策",
+    "footer.recaptcha.terms": "服务条款"
+  },
+  "العربية (Arabic)": {
+    "footer.recaptcha.text": "هذا الموقع محمي بواسطة reCAPTCHA، وتُطبَّق {privacy} و{terms} من Google.",
+    "footer.recaptcha.privacy": "سياسة الخصوصية",
+    "footer.recaptcha.terms": "شروط الخدمة"
+  },
+  "हिन्दी (Hindi)": {
+    "footer.recaptcha.text": "यह साइट reCAPTCHA द्वारा सुरक्षित है और Google की {privacy} और {terms} लागू होती हैं।",
+    "footer.recaptcha.privacy": "गोपनीयता नीति",
+    "footer.recaptcha.terms": "सेवा की शर्तें"
+  }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -7358,7 +7419,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_8,
   FILL_TRANSLATIONS_9,
   FILL_TRANSLATIONS_10,
-  FILL_TRANSLATIONS_11
+  FILL_TRANSLATIONS_11,
+  FILL_TRANSLATIONS_12
 ];
 
 function mergeFill(
