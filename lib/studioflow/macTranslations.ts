@@ -729,6 +729,19 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "اعرف من يفعل ماذا ومتى.",
     "हिन्दी (Hindi)": "देखें कौन क्या और कब कर रहा है।"
   },
+  "This is a quick agenda view. For the full drag-and-drop timeline, open NivaDesk on the web or Mac app.": {
+    "Türkçe": "Bu hızlı bir ajanda görünümüdür. Sürükle-bırak tam zaman çizelgesi için NivaDesk'i web veya Mac uygulamasında açın.",
+    "Deutsch": "Dies ist eine schnelle Agenda-Ansicht. Für die vollständige Drag-and-Drop-Zeitachse öffnen Sie NivaDesk im Web oder in der Mac-App.",
+    "Français": "Ceci est un aperçu agenda rapide. Pour la chronologie complète en glisser-déposer, ouvrez NivaDesk sur le web ou l'app Mac.",
+    "Italiano": "Questa è una vista agenda rapida. Per la timeline completa con trascinamento, apri NivaDesk sul web o nell'app Mac.",
+    "Español (Spanish)": "Esta es una vista de agenda rápida. Para la cronología completa de arrastrar y soltar, abre NivaDesk en la web o la app de Mac.",
+    "Português": "Esta é uma vista de agenda rápida. Para a linha do tempo completa de arrastar e soltar, abra o NivaDesk na web ou na app Mac.",
+    "Русский (Russian)": "Это быстрый просмотр повестки. Для полной шкалы времени с перетаскиванием откройте NivaDesk в вебе или в приложении Mac.",
+    "日本語 (Japanese)": "これは簡易アジェンダ表示です。ドラッグ＆ドロップの完全なタイムラインは、NivaDesk を Web または Mac アプリで開いてください。",
+    "中文 (Chinese)": "这是快速日程视图。要使用完整的拖放时间线，请在网页版或 Mac 应用中打开 NivaDesk。",
+    "العربية (Arabic)": "هذا عرض جدول سريع. للمخطط الزمني الكامل بالسحب والإفلات، افتح NivaDesk على الويب أو تطبيق Mac.",
+    "हिन्दी (Hindi)": "यह एक त्वरित एजेंडा दृश्य है। पूर्ण ड्रैग-एंड-ड्रॉप टाइमलाइन के लिए, NivaDesk को वेब या Mac ऐप में खोलें।"
+  },
   "Drag blocks to move dates. Pull the edges to resize.": {
     "Türkçe": "Tarihleri taşımak için blokları sürükleyin. Süreyi değiştirmek için kenarları çekin.",
     "Deutsch": "Blöcke ziehen, um Daten zu verschieben. Kanten ziehen, um die Dauer zu ändern.",

@@ -4280,6 +4280,115 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   line-height: 1.35;
 }
 
+/* Phone agenda: hidden on desktop, shown instead of the wide Gantt on narrow screens. */
+.schedule-agenda-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.schedule-agenda-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(74, 124, 255, 0.18);
+}
+
+.schedule-agenda-hint span {
+  font-size: 18px;
+}
+
+.schedule-agenda-hint p {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.schedule-agenda-card {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+}
+
+.schedule-agenda-accent {
+  flex: 0 0 5px;
+  border-radius: 3px;
+  background: var(--muted);
+}
+
+.schedule-agenda-accent.green { background: var(--success); }
+.schedule-agenda-accent.yellow { background: var(--warning); }
+.schedule-agenda-accent.red { background: var(--danger); }
+.schedule-agenda-accent.blue { background: var(--accent); }
+.schedule-agenda-accent.gray { background: var(--muted); }
+
+.schedule-agenda-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.schedule-agenda-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-agenda-top strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.schedule-agenda-design {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-agenda-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.schedule-agenda-meta .is-late {
+  color: var(--danger);
+  font-weight: 850;
+}
+
+.schedule-agenda-chevron {
+  align-self: center;
+  color: var(--muted);
+  opacity: 0.55;
+  font-size: 18px;
+  font-weight: 800;
+}
+
 .schedule-timeline-scroll {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -11291,11 +11400,15 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
     font-weight: 650;
   }
 
-  .schedule-timeline-scroll {
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    box-shadow: none;
+  /* On phones the wide drag-and-drop Gantt is hard to use: show the agenda list
+     and the zoom control becomes irrelevant. */
+  .schedule-timeline-scroll,
+  .schedule-zoom-control {
+    display: none;
+  }
+
+  .schedule-agenda-mobile {
+    display: flex;
   }
 
   .schedule-timeline-canvas {

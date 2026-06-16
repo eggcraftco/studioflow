@@ -983,6 +983,41 @@ export default function SchedulePage() {
               <p className="muted-copy">{t("Use the arrows, filters or search to find scheduled work.")}</p>
             </section>
           ) : (
+            <>
+            <div className="schedule-agenda-mobile">
+              <div className="schedule-agenda-hint">
+                <span aria-hidden="true">🖥️</span>
+                <p>{t("This is a quick agenda view. For the full drag-and-drop timeline, open NivaDesk on the web or Mac app.")}</p>
+              </div>
+              {visibleOrders.map(order => {
+                const tone = scheduleTone(order);
+                const countdown = countdownText(order);
+                const late = orderIsLate(order);
+                const design = designForOrder(order);
+                return (
+                  <button
+                    key={order.id}
+                    type="button"
+                    className="schedule-agenda-card"
+                    onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}
+                  >
+                    <span className={`schedule-agenda-accent ${tone}`} aria-hidden="true" />
+                    <span className="schedule-agenda-body">
+                      <span className="schedule-agenda-top">
+                        <strong>{titleForOrder(order)}</strong>
+                        <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
+                      </span>
+                      {design ? <span className="schedule-agenda-design">{design}</span> : null}
+                      <span className="schedule-agenda-meta">
+                        <span>{scheduleRangeText(order)}</span>
+                        {countdown ? <span className={late ? "is-late" : ""}>{countdown}</span> : null}
+                      </span>
+                    </span>
+                    <span className="schedule-agenda-chevron" aria-hidden="true">›</span>
+                  </button>
+                );
+              })}
+            </div>
             <div
               className={`schedule-timeline-scroll${scheduleTimelinePanning ? " is-panning" : ""}`}
               onPointerDown={startScheduleTimelinePan}
@@ -1029,6 +1064,7 @@ export default function SchedulePage() {
                 </div>
               </div>
             </div>
+            </>
           )}
 
           <footer className="schedule-summary-footer">
