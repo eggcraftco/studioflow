@@ -2229,6 +2229,13 @@ function signupErrorMessage(error: unknown, t: (key: PublicSiteTranslationKey) =
   if (/weak-password/i.test(raw)) return t("signup.error.weakPassword");
   if (/invalid-email/i.test(raw)) return t("signup.error.invalidEmail");
   if (/network|offline/i.test(raw)) return t("signup.error.network");
+  // Disposable/blocked email domain (Auth blocking function).
+  if (/disposable|permanent email/i.test(raw)) return t("signup.error.disposableEmail");
+  // Blocking/Cloud Function errors arrive wrapped as a JSON envelope
+  // ("...returned an error: {\"error\":{\"message\":\"...\"}} (auth/internal-error)").
+  // Surface the inner human message instead of the raw Firebase string.
+  const inner = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  if (inner && inner[1]) return inner[1];
   return raw || t("signup.error.generic");
 }
 
