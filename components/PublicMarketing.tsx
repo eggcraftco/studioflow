@@ -924,6 +924,9 @@ function PublicFooter() {
               );
             })()}
           </span>
+          <span className="public-footer-legal">
+            EGGCRAFT LIMITED · Registered in England and Wales No. 16566512 · VAT GB 514512621 · 141 Randolph Avenue, London W9 1DN, United Kingdom
+          </span>
         </div>
       </div>
     </footer>

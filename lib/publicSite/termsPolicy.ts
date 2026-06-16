@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const TERMS_POLICY_LAST_UPDATED = "1 June 2026";
+export const TERMS_POLICY_LAST_UPDATED = "16 June 2026";
 
 export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -15,7 +15,8 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "1. Who we are",
     paragraphs: [
-      "NivaDesk is operated by EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom.",
+      "NivaDesk is operated by EGGCRAFT LIMITED, a company registered in England and Wales under company number 16566512, with its registered office at 141 Randolph Avenue, London, W9 1DN, United Kingdom.",
+      "VAT number: GB 514512621.",
       "Email: contact@nivadesk.co.uk"
     ]
   },
@@ -133,7 +134,8 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "10. Refunds",
     paragraphs: [
       "Refund eligibility depends on how and where you purchased your subscription. Unless required by law or stated otherwise, fees are generally non-refundable once a paid subscription period has started.",
-      "We may choose to provide a refund at our discretion, but doing so does not create a general right to future refunds. More details may be provided in our separate Refund & Cancellation Policy."
+      "We may choose to provide a refund at our discretion, but doing so does not create a general right to future refunds. More details may be provided in our separate Refund & Cancellation Policy.",
+      "Consumer right to cancel (UK/EU): If you are a consumer, you may have a statutory right to cancel a purchase of digital services within 14 days. Because NivaDesk provides access immediately, by purchasing and starting to use a paid plan you expressly request that we begin providing the service straight away and you acknowledge that you will lose this 14-day cancellation right once the service has been fully performed, or, for ongoing subscriptions, to the extent the service has already been provided. This does not affect your other statutory rights or any mandatory app-store refund rights."
     ],
     bullets: [
       "Apple App Store purchases are usually handled by Apple",
