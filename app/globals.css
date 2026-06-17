@@ -4400,6 +4400,17 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   font-weight: 800;
 }
 
+.orders-trash-banner {
+  margin: 0 14px 10px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(180, 130, 20, 0.2);
+}
+
 /* ===== Team Schedule ===== */
 .team-schedule-body {
   display: grid;

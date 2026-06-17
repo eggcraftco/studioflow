@@ -294,6 +294,20 @@ export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: s
   }
 }
 
+export async function restoreOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot restore orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "restoreWebOrder");
+    const response = await callable({ companyId: workspace.id, orderId });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not restore the order.");
+    }
+    return response.data;
+  }, "Restoring order from cloud.");
+}
+
 export async function uploadOrderPreviewImage({
   workspace,
   orderId,

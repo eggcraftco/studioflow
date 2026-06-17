@@ -33,6 +33,7 @@ import {
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
   deleteOrderFromWeb,
+  restoreOrderFromWeb,
   requestWorkflowOrderDeletionFromWeb,
   updateOrderFromWeb
 } from "@/lib/studioflow/orders";
@@ -118,6 +119,7 @@ export default function OrdersPage() {
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [deletedOrders, setDeletedOrders] = useState<OrderListItem[]>([]);
   const ordersCountRef = useRef(0);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -245,9 +247,13 @@ export default function OrdersPage() {
       : orders,
     [orders, user, workspace]
   );
+  useEffect(() => {
+    if (orderFilter !== "trash" || !workspace) return;
+    loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
+  }, [orderFilter, workspace, user]);
   const filteredOrders = useMemo(
-    () => filterAndSortOrders(visibleOrders, orderSearch, orderFilter, orderSortMode),
-    [orderFilter, orderSearch, orderSortMode, visibleOrders]
+    () => filterAndSortOrders(orderFilter === "trash" ? deletedOrders : visibleOrders, orderSearch, orderFilter, orderSortMode),
+    [orderFilter, orderSearch, orderSortMode, visibleOrders, deletedOrders]
   );
   useEffect(() => {
     ordersCountRef.current = orders.length;
@@ -403,12 +409,12 @@ export default function OrdersPage() {
       setOrderActionError("Your workspace role cannot delete orders.");
       return;
     }
-    const confirmed = window.confirm(`Delete "${order.customerName.trim() || "New Project"}"? This cannot be undone.`);
+    const confirmed = window.confirm(`Move "${order.customerName.trim() || "New Project"}" to Trash? You can restore it for 30 days.`);
     if (!confirmed) return;
 
     setOrderContextMenu(null);
     setOrderActionError(null);
-    setOrderActionStatus("Deleting order...");
+    setOrderActionStatus("Moving order to Trash...");
     const nextOrders = orders.filter(item => item.id !== order.id);
     setOrders(nextOrders);
     if (selectedOrderId === order.id) {
@@ -418,11 +424,27 @@ export default function OrdersPage() {
 
     try {
       await deleteOrderFromWeb(workspace, order.id);
-      setOrderActionStatus("Order deleted.");
+      setOrderActionStatus("Order moved to Trash.");
     } catch (deleteError) {
       setOrderActionStatus(null);
       setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete this order.");
       loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+    }
+  }
+
+  async function handleRestoreOrder(order: OrderListItem) {
+    if (!workspace) return;
+    setOrderActionError(null);
+    setOrderActionStatus("Restoring order...");
+    setDeletedOrders(current => current.filter(item => item.id !== order.id));
+    try {
+      await restoreOrderFromWeb(workspace, order.id);
+      setOrderActionStatus("Order restored.");
+      loadRecentOrders(workspace.id, workspace, user?.uid ?? "").then(setOrders).catch(() => undefined);
+    } catch (restoreError) {
+      setOrderActionStatus(null);
+      setOrderActionError(restoreError instanceof Error ? restoreError.message : "Could not restore this order.");
+      loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
     }
   }
 
@@ -568,6 +590,9 @@ export default function OrdersPage() {
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
           ) : null}
 
+          {orderFilter === "trash" ? (
+            <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
+          ) : null}
           <div className="orders-list">
             {filteredOrders.map(order => (
               <div
@@ -589,6 +614,11 @@ export default function OrdersPage() {
                   onFirstProjectGuideProjectNext={() => setFirstProjectGuideState({ step: 3, orderId: order.id, completed: false })}
                   onSelect={() => setSelectedOrderId(order.id)}
                 />
+                {orderFilter === "trash" ? (
+                  <button type="button" className="button secondary" style={{ margin: "4px 14px 10px", fontSize: 12 }} onClick={() => handleRestoreOrder(order)}>
+                    ↩ {t("Restore")}
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -758,6 +788,9 @@ export default function OrdersPage() {
             </label>
           ) : null}
 
+          {orderFilter === "trash" ? (
+            <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
+          ) : null}
           <div className="orders-list">
             {filteredOrders.map(order => (
               <OrderListCard

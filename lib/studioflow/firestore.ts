@@ -896,7 +896,7 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
 
 export async function loadDashboardFinanceOrders(companyId: string): Promise<DashboardFinanceOrder[]> {
   const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
-  return snapshot.docs.map(orderDocument => {
+  return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
       id: orderDocument.id,
@@ -1104,12 +1104,12 @@ function workspaceOrderDoc(companyId: string, orderId: string, workspace?: Works
     : doc(db, "siparisler", orderId);
 }
 
-export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderListItem[]> {
+export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = "", trashedOnly = false): Promise<OrderListItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   // No limit: load every order in the workspace scope so the web list matches
   // the Mac and Android apps (which load the full set).
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.map(orderDocument => {
+  const orders = snapshot.docs.filter(orderDocument => booleanValue(orderDocument.data().isDeleted, false) === trashedOnly).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1166,7 +1166,7 @@ export async function loadRecentOrders(companyId: string, workspace?: WorkspaceC
 export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.map(orderDocument => {
+  const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1221,7 +1221,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
 export async function loadWorkspaceOrderOptions(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderOptionItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.map(orderDocument => {
+  const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
       id: orderDocument.id,
@@ -1245,7 +1245,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
     getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)))
   ]);
 
-  const orders = ordersSnapshot.docs.map(orderDocument => {
+  const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1352,7 +1352,7 @@ export async function loadWorkspaceExportData(workspace: WorkspaceContext): Prom
     getDoc(doc(db, "companySettings", workspace.id))
   ]);
 
-  const orders = ordersSnapshot.docs.map(orderDocument => serializableDocument(orderDocument.id, orderDocument.data()));
+  const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => serializableDocument(orderDocument.id, orderDocument.data()));
   const customers = customersSnapshot.docs.map(customerDocument => serializableDocument(customerDocument.id, customerDocument.data()));
 
   return {
