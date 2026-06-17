@@ -845,6 +845,20 @@ th {
   gap: 8px;
 }
 
+.settings-section-group {
+  margin: 14px 0 2px;
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-section-group:first-child {
+  margin-top: 2px;
+}
+
 .settings-section-button {
   width: 100%;
   display: flex;
