@@ -423,6 +423,7 @@ export default function SchedulePage() {
   const [teamCalendarMonth, setTeamCalendarMonth] = useState(() => new Date());
   const [hiddenMemberIds, setHiddenMemberIds] = useState<Set<string>>(new Set());
   const [teamMembersLimit, setTeamMembersLimit] = useState(8);
+  const [mobileControlsCollapsed, setMobileControlsCollapsed] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -950,7 +951,7 @@ export default function SchedulePage() {
         />
         </>)}
 
-        <main className="schedule-main-pane">
+        <main className={mobileControlsCollapsed ? "schedule-main-pane controls-collapsed" : "schedule-main-pane"}>
           <div className="schedule-header-card">
             <div className="schedule-title-block">
               <h1>{t(teamMode ? "Team Schedule" : "Schedule")}</h1>
@@ -984,7 +985,17 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          <div className="schedule-control-card">
+          <div className={mobileControlsCollapsed ? "schedule-control-card is-collapsed" : "schedule-control-card"}>
+            <button
+              type="button"
+              className={search.trim() || filter !== "all" || sortMode !== "smart" ? "schedule-controls-toggle active" : "schedule-controls-toggle"}
+              onClick={() => setMobileControlsCollapsed(value => !value)}
+              aria-expanded={!mobileControlsCollapsed}
+            >
+              <span>⚙︎ {t("Filters")}</span>
+              <span aria-hidden="true">{mobileControlsCollapsed ? "▾" : "▴"}</span>
+            </button>
+
             <div className="schedule-mobile-filter-card">
               <OrderQuickFilterBar
                 orders={orders}

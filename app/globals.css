@@ -4160,6 +4160,9 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   padding: 12px;
 }
 
+/* The collapse toggle only exists on phones (see the mobile media query). */
+.schedule-controls-toggle { display: none; }
+
 .schedule-mobile-span-row {
   display: contents;
 }
@@ -11368,6 +11371,42 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
     border-radius: 0;
     background: #fff;
     box-shadow: none;
+  }
+
+  /* Phone collapse toggle for the schedule/team-schedule controls. */
+  .schedule-controls-toggle {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 46px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: rgba(239, 242, 246, 0.85);
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .schedule-controls-toggle.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(74, 124, 255, 0.24);
+  }
+
+  /* When collapsed, keep only the toggle + the range navigation visible. */
+  .schedule-control-card.is-collapsed > .schedule-control,
+  .schedule-control-card.is-collapsed > .schedule-mobile-filter-card,
+  .schedule-control-card.is-collapsed > .schedule-mobile-span-row,
+  .schedule-control-card.is-collapsed > .schedule-zoom-control,
+  .schedule-control-card.is-collapsed > .schedule-search-mobile {
+    display: none;
+  }
+  .schedule-main-pane.controls-collapsed .schedule-plan-notice,
+  .schedule-main-pane.controls-collapsed .schedule-agenda-hint {
+    display: none;
   }
 
   .schedule-mobile-filter-card {
