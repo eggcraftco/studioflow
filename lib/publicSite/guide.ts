@@ -376,6 +376,19 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
+    id: "team-schedule",
+    title: "Team Schedule",
+    blocks: [
+      { kind: "para", text: "A team view of the schedule: every member in a row, with the jobs assigned to them laid out across the days. See who is doing what and when, balance the workload and keep delivery dates on track." },
+      { kind: "bullets", items: [
+        "Each team member has a row showing the orders assigned to them; an Unassigned row collects anything without an owner.",
+        "A workload panel shows how busy each member is overall, and an upcoming list highlights the next deadlines.",
+        "Tap a day in the calendar to jump the schedule there, and filter by status or member.",
+        "Open any job to work on it. Team Schedule is part of the Team plan."
+      ] }
+    ]
+  },
+  {
     id: "notes",
     title: "Notes",
     blocks: [

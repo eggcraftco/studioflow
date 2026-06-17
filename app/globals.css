@@ -13753,7 +13753,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .public-features-hero-strip {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   margin-top: 48px;
   padding: 26px 8px;
   background: rgba(255, 255, 255, 0.6);

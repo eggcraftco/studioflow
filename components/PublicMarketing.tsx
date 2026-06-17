@@ -2050,7 +2050,8 @@ export function PublicFeaturesPage() {
               {[
                 { key: "s1", tone: "trend", title: "schedule.f1.title" as PublicSiteTranslationKey, body: "schedule.f1.body" as PublicSiteTranslationKey, icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
                 { key: "s2", tone: "calendar", title: "schedule.f2.title" as PublicSiteTranslationKey, body: "schedule.f2.body" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="8" height="11" rx="2" /><rect x="8" y="6.5" width="8" height="11" rx="2" /></> },
-                { key: "s3", tone: "team", title: "featuresPage.glance.title" as PublicSiteTranslationKey, body: "featuresPage.glance.body" as PublicSiteTranslationKey, icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> }
+                { key: "s3", tone: "team", title: "featuresPage.glance.title" as PublicSiteTranslationKey, body: "featuresPage.glance.body" as PublicSiteTranslationKey, icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> },
+                { key: "s4", tone: "team", title: "schedule.team.title" as PublicSiteTranslationKey, body: "schedule.team.body" as PublicSiteTranslationKey, icon: <><rect x="3.5" y="4.5" width="13" height="11" rx="2" /><path d="M3.5 8.5h13M8 8.5v7M12 8.5v7" /></> }
               ].map(item => (
                 <div className="public-features-hero-strip-item" key={item.key}>
                   <span className="public-features-hero-strip-icon" data-tone={item.tone}>
