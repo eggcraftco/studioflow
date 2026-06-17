@@ -879,8 +879,8 @@ export default function SchedulePage() {
       {loadingSchedule ? <LoadingScreen /> : null}
 
       <section
-        className={sidebar.collapsed ? "schedule-workspace resizable-workspace is-sidebar-collapsed" : "schedule-workspace resizable-workspace"}
-        style={sidebar.workspaceStyle}
+        className={teamMode ? "schedule-workspace team-mode" : (sidebar.collapsed ? "schedule-workspace resizable-workspace is-sidebar-collapsed" : "schedule-workspace resizable-workspace")}
+        style={teamMode ? undefined : sidebar.workspaceStyle}
       >
         {!teamMode && (<>
         <aside className="orders-sidebar schedule-order-sidebar">

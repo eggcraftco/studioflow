@@ -4082,6 +4082,14 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   gap: 12px;
 }
 
+/* Team Schedule uses the full pane width (no resizable order sidebar). */
+.schedule-workspace.team-mode {
+  display: block;
+}
+.schedule-workspace.team-mode .schedule-main-pane {
+  width: 100%;
+}
+
 .schedule-order-sidebar {
   max-height: calc(100vh - 104px);
 }
