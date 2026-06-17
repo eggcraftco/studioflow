@@ -15065,6 +15065,40 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   contain: paint;
 }
 
+/* Inline detail under a tapped card — phone only (see media query below). */
+.public-order-card-inline-detail {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .public-order-card-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  .public-order-card-slot {
+    overflow: visible;
+    contain: none;
+  }
+  .public-order-card-slot:has(.public-order-card-inline-detail) {
+    grid-column: 1 / -1;
+  }
+  .public-order-card-inline-detail {
+    display: block;
+    margin: 6px 2px 0;
+    padding: 11px 13px;
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 600;
+    color: var(--public-muted);
+    background: var(--public-surface-soft);
+    border: 1px solid var(--public-border);
+    border-radius: 11px;
+  }
+  .public-order-card-system .public-order-card-panel {
+    display: none;
+  }
+}
+
 .public-order-card-chip {
   display: grid;
   gap: 8px;
@@ -18349,7 +18383,7 @@ html[dir="rtl"] .login-public-shell {
   display: grid;
   grid-template-columns: 0.86fr 1.14fr;
   gap: 26px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .gpt-copy-card {

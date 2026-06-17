@@ -1118,6 +1118,9 @@ function OrderCardTitleGrid() {
                   <h3>{t(card.titleKey)}</h3>
                 </button>
               </article>
+              {isSelected ? (
+                <p className="public-order-card-inline-detail">{t(card.detailKey)}</p>
+              ) : null}
             </div>
           );
         })}
