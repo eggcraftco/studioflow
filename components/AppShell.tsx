@@ -85,6 +85,7 @@ const NAV_ITEMS: Array<
   { href: "/orders", label: "Orders", icon: "orders" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
+  { href: "/team-schedule", label: "Team Schedule", icon: "customers" },
   { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/customers", label: "Customers", icon: "customers" },
   { href: "/files", label: "Files", icon: "files" },
@@ -98,6 +99,7 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/orders": "orders",
   "/dashboard": "dashboard",
   "/schedule": "schedule",
+  "/team-schedule": "schedule",
   "/customers": "customers",
   "/messages": "messages",
   "/notes": "notes",
@@ -568,6 +570,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     pathname.startsWith("/orders/") ||
     pathname === "/customers" ||
     pathname === "/schedule" ||
+    pathname === "/team-schedule" ||
     pathname === "/dashboard" ||
     pathname === "/quick-reply" ||
     pathname === "/notes" ||

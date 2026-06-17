@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -17,10 +17,12 @@ import {
   loadScheduleOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  loadTeamAccessData,
   orderIsAssignedToCurrentUser,
   workspaceAssignedProjectsOnly,
   workspaceAccessAllows,
   type ScheduleOrderItem,
+  type TeamMemberDetail,
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
@@ -286,6 +288,28 @@ function designForOrder(order: ScheduleOrderItem) {
   return order.designName.trim() || order.watchRef.trim() || "Untitled design";
 }
 
+function teamMemberName(member: TeamMemberDetail) {
+  const name = member.displayName.trim();
+  if (name) return name;
+  const emailName = member.email.split("@")[0] || member.email;
+  return emailName.replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function teamInitials(member: TeamMemberDetail) {
+  const parts = teamMemberName(member).split(" ").filter(Boolean).slice(0, 2);
+  const letters = parts.map(p => p[0]).join("");
+  return (letters || "?").toUpperCase();
+}
+
+function assigneeLabelForOrder(order: ScheduleOrderItem, members: TeamMemberDetail[]) {
+  const email = order.assignedToEmail.trim();
+  if (!email && !order.assignedToUid.trim()) return "";
+  const member = members.find(m => m.id === order.assignedToUid || m.email.toLowerCase() === email.toLowerCase());
+  if (member) return teamMemberName(member);
+  const name = email.split("@")[0] || email;
+  return name.replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function scheduleCalendarTitle(order: ScheduleOrderItem) {
   const parts = [order.customerName, order.designName]
     .map(part => part.trim())
@@ -393,6 +417,12 @@ export default function SchedulePage() {
   } | null>(null);
   const [scheduleTimelinePanning, setScheduleTimelinePanning] = useState(false);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-schedule-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
+  const pathname = usePathname();
+  const teamMode = pathname === "/team-schedule";
+  const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
+  const [teamCalendarMonth, setTeamCalendarMonth] = useState(() => new Date());
+  const [hiddenMemberIds, setHiddenMemberIds] = useState<Set<string>>(new Set());
+  const [teamMembersLimit, setTeamMembersLimit] = useState(8);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -438,6 +468,10 @@ export default function SchedulePage() {
         setOrders(loadedOrders);
         setBlockHeadingSettings(loadedBlockHeadings);
         setMoneySettings(loadedMoneySettings);
+
+        loadTeamAccessData(loadedWorkspace)
+          .then(data => { if (!cancelled) setTeamMembers(data.members); })
+          .catch(() => { /* team roster is best-effort */ });
 
         const firstActive = loadedOrders.filter(order => !orderIsClosed(order)).sort((lhs, rhs) => orderStartDate(lhs).getTime() - orderStartDate(rhs).getTime())[0];
         const anchorOrder = firstActive ?? loadedOrders[0];
@@ -779,6 +813,65 @@ export default function SchedulePage() {
       ? new Intl.DateTimeFormat(locale, { year: "numeric" }).format(visibleStart)
       : `${shortDate(visibleStart, locale)} - ${shortDate(addDays(visibleEnd, -1), locale)}`;
 
+  // ----- Team Schedule computed values -----
+  const teamPlanActive = workspace?.billingPlan === "team_monthly";
+  const visibleTeamMembers = teamMembers.filter(member => !hiddenMemberIds.has(member.id));
+  const ordersForMember = (memberId: string) => visibleOrders.filter(order => (order.assignedToUid || "").trim() === memberId);
+  const teamUnassignedOrders = visibleOrders.filter(order => !(order.assignedToUid || "").trim());
+  const teamUpcomingOrders = orders
+    .filter(order => !orderIsClosed(order))
+    .slice()
+    .sort((lhs, rhs) => orderDueDate(lhs).getTime() - orderDueDate(rhs).getTime())
+    .slice(0, 7);
+  const memberActiveCount = (memberId: string) => orders.filter(order => (order.assignedToUid || "").trim() === memberId && !orderIsClosed(order)).length;
+  const memberLateCount = (memberId: string) => orders.filter(order => (order.assignedToUid || "").trim() === memberId && orderIsLate(order)).length;
+  const teamMaxActive = Math.max(1, ...teamMembers.map(member => memberActiveCount(member.id)));
+  const teamTotalActive = teamMembers.reduce((sum, member) => sum + memberActiveCount(member.id), 0);
+
+  const teamBarMetrics = (order: ScheduleOrderItem) => {
+    const start = orderStartDate(order);
+    const end = addDays(start, Math.max(order.deliveryTime, 1));
+    const clippedStart = start.getTime() < visibleStart.getTime() ? visibleStart : start;
+    const clippedEnd = end.getTime() > visibleEnd.getTime() ? visibleEnd : end;
+    if (clippedEnd.getTime() <= clippedStart.getTime()) return null;
+    const offsetDays = daysBetween(visibleStart, clippedStart);
+    const durationDays = Math.max(1, daysBetween(clippedStart, clippedEnd));
+    const x = offsetDays * dayWidth + 7;
+    const width = Math.min(Math.max(132, durationDays * dayWidth - 14), timelineWidth - x - 7);
+    return { x, width };
+  };
+
+  const teamCalendarMonthStart = startOfMonth(teamCalendarMonth);
+  const teamCalendarCells: (Date | null)[] = (() => {
+    const firstWeekday = (teamCalendarMonthStart.getDay() + 6) % 7; // Monday-first
+    const daysInMonth = new Date(teamCalendarMonthStart.getFullYear(), teamCalendarMonthStart.getMonth() + 1, 0).getDate();
+    const cells: (Date | null)[] = [];
+    for (let i = 0; i < firstWeekday; i += 1) cells.push(null);
+    for (let d = 0; d < daysInMonth; d += 1) cells.push(addDays(teamCalendarMonthStart, d));
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  })();
+  const teamCalendarWorkDays = (() => {
+    const set = new Set<number>();
+    const monthEnd = new Date(teamCalendarMonthStart.getFullYear(), teamCalendarMonthStart.getMonth() + 1, 1);
+    for (const order of orders) {
+      if (orderIsClosed(order)) continue;
+      const start = startOfDay(orderStartDate(order));
+      const end = orderDueDate(order);
+      let day = start.getTime() < teamCalendarMonthStart.getTime() ? new Date(teamCalendarMonthStart) : start;
+      while (day < end && day < monthEnd) {
+        set.add(startOfDay(day).getTime());
+        day = addDays(day, 1);
+      }
+    }
+    return set;
+  })();
+  const teamWeekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dayInVisibleRange = (day: Date) => {
+    const t0 = startOfDay(day).getTime();
+    return t0 >= startOfDay(visibleStart).getTime() && t0 < visibleEnd.getTime();
+  };
+
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -789,6 +882,7 @@ export default function SchedulePage() {
         className={sidebar.collapsed ? "schedule-workspace resizable-workspace is-sidebar-collapsed" : "schedule-workspace resizable-workspace"}
         style={sidebar.workspaceStyle}
       >
+        {!teamMode && (<>
         <aside className="orders-sidebar schedule-order-sidebar">
           <div className="orders-sidebar-toolbar">
             <div>
@@ -854,12 +948,13 @@ export default function SchedulePage() {
           title={t("Resize schedule order list")}
           onPointerDown={sidebar.startResize}
         />
+        </>)}
 
         <main className="schedule-main-pane">
           <div className="schedule-header-card">
             <div className="schedule-title-block">
-              <h1>{t("Schedule")}</h1>
-              <p>{t("See who is doing what and when.")}</p>
+              <h1>{t(teamMode ? "Team Schedule" : "Schedule")}</h1>
+              <p>{t(teamMode ? "See each team member's assigned work." : "See who is doing what and when.")}</p>
             </div>
             <div className="schedule-header-actions">
               {workspace ? <span className="studio-pill">{workspace.name} - {workspace.roleLabel}</span> : null}
@@ -972,7 +1067,262 @@ export default function SchedulePage() {
           {scheduleStatus ? <p className="layout-status schedule-action-message">{scheduleStatus}</p> : null}
           {scheduleError ? <p className="layout-error schedule-action-message">{scheduleError}</p> : null}
 
-          {error ? (
+          {teamMode ? (
+            !teamPlanActive ? (
+              <section className="card app-card team-upsell-card">
+                <CardTitle icon="lock" eyebrow={t("Team Schedule")} title={t("Team Schedule")} />
+                <p className="muted-copy">{t("Team Schedule is part of the Team plan. Upgrade to see assigned work across your whole team.")}</p>
+              </section>
+            ) : (
+              <div className="team-schedule-body">
+                <aside className="team-side team-side-left">
+                  <div className="team-card">
+                    <div className="team-cal-head">
+                      <button type="button" onClick={() => setTeamCalendarMonth(addMonths(teamCalendarMonth, -1))} aria-label={t("Previous range")}>{"<"}</button>
+                      <strong>{new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(teamCalendarMonth)}</strong>
+                      <button type="button" onClick={() => setTeamCalendarMonth(addMonths(teamCalendarMonth, 1))} aria-label={t("Next range")}>{">"}</button>
+                    </div>
+                    <div className="team-cal-weekdays">
+                      {teamWeekdayLabels.map(d => <span key={d}>{d}</span>)}
+                    </div>
+                    <div className="team-cal-grid">
+                      {teamCalendarCells.map((cell, idx) => {
+                        if (!cell) return <span key={`empty-${idx}`} className="team-cal-empty" />;
+                        const isToday = startOfDay(cell).getTime() === startOfDay(new Date()).getTime();
+                        const inRange = dayInVisibleRange(cell);
+                        const hasWork = teamCalendarWorkDays.has(startOfDay(cell).getTime());
+                        return (
+                          <button
+                            key={cell.toISOString()}
+                            type="button"
+                            className={`team-cal-day${inRange ? " in-range" : ""}${isToday ? " today" : ""}`}
+                            onClick={() => setAnchorDate(cell)}
+                          >
+                            <span>{cell.getDate()}</span>
+                            <i className={hasWork ? (inRange ? "dot in" : "dot") : ""} aria-hidden="true" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="team-card-hint">{t("Tap a day to jump the schedule there.")}</p>
+                  </div>
+
+                  <div className="team-card">
+                    <div className="team-card-head">
+                      <strong>{t("Members")}</strong>
+                      {hiddenMemberIds.size > 0 ? (
+                        <button type="button" className="team-link" onClick={() => setHiddenMemberIds(new Set())}>{t("All")}</button>
+                      ) : null}
+                    </div>
+                    {teamMembers.slice(0, teamMembersLimit).map(member => {
+                      const on = !hiddenMemberIds.has(member.id);
+                      return (
+                        <button
+                          key={member.id}
+                          type="button"
+                          className="team-member-toggle"
+                          onClick={() => setHiddenMemberIds(prev => {
+                            const next = new Set(prev);
+                            if (on) next.add(member.id); else next.delete(member.id);
+                            return next;
+                          })}
+                        >
+                          <span className={`team-check${on ? " on" : ""}`} aria-hidden="true">{on ? "✓" : ""}</span>
+                          <span className="team-avatar sm">{member.photoURL ? <img src={member.photoURL} alt="" /> : teamInitials(member)}</span>
+                          <span className="team-member-name">{teamMemberName(member)}</span>
+                        </button>
+                      );
+                    })}
+                    {teamMembers.length > teamMembersLimit ? (
+                      <button type="button" className="team-loadmore" onClick={() => setTeamMembersLimit(value => value + 8)}>
+                        {t("Load more")} ({teamMembers.length - teamMembersLimit})
+                      </button>
+                    ) : null}
+                  </div>
+                </aside>
+
+                <div className="team-grid-area">
+                  {/* Mobile member-grouped agenda */}
+                  <div className="team-agenda-mobile">
+                    {visibleTeamMembers.map(member => {
+                      const memberOrders = ordersForMember(member.id);
+                      return (
+                        <div key={member.id} className="team-agenda-section">
+                          <div className="team-agenda-memberhead">
+                            <span className="team-avatar">{member.photoURL ? <img src={member.photoURL} alt="" /> : teamInitials(member)}</span>
+                            <div>
+                              <strong>{teamMemberName(member)}</strong>
+                              <small>{member.roleLabel}</small>
+                            </div>
+                            <span className="team-badge">{memberOrders.length} {t("jobs")}{memberLateCount(member.id) > 0 ? ` · ${memberLateCount(member.id)} ${t("Late")}` : ""}</span>
+                          </div>
+                          {memberOrders.length === 0 ? (
+                            <p className="team-agenda-empty">{t("No assigned work in this range.")}</p>
+                          ) : memberOrders.map(order => (
+                            <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}>
+                              <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
+                              <span className="schedule-agenda-body">
+                                <span className="schedule-agenda-top">
+                                  <strong>{titleForOrder(order)}</strong>
+                                  <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
+                                </span>
+                                <span className="schedule-agenda-meta">
+                                  <span>{scheduleRangeText(order)}</span>
+                                  {countdownText(order) ? <span className={orderIsLate(order) ? "is-late" : ""}>{countdownText(order)}</span> : null}
+                                </span>
+                              </span>
+                              <span className="schedule-agenda-chevron" aria-hidden="true">›</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                    {teamUnassignedOrders.length > 0 ? (
+                      <div className="team-agenda-section">
+                        <div className="team-agenda-memberhead">
+                          <span className="team-avatar muted">?</span>
+                          <div><strong>{t("Unassigned")}</strong></div>
+                          <span className="team-badge">{teamUnassignedOrders.length} {t("jobs")}</span>
+                        </div>
+                        {teamUnassignedOrders.map(order => (
+                          <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}>
+                            <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
+                            <span className="schedule-agenda-body">
+                              <span className="schedule-agenda-top">
+                                <strong>{titleForOrder(order)}</strong>
+                                <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
+                              </span>
+                              <span className="schedule-agenda-meta"><span>{scheduleRangeText(order)}</span></span>
+                            </span>
+                            <span className="schedule-agenda-chevron" aria-hidden="true">›</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Desktop member × day grid */}
+                  <div className="team-grid-scroll">
+                    <div className="team-grid-row team-grid-headerrow">
+                      <div className="team-grid-label team-grid-corner">{rangeText}</div>
+                      <div className="team-grid-dayheader" style={{ width: timelineWidth }}>
+                        {visibleDays.map(day => (
+                          <div key={day.toISOString()} className={startOfDay(day).getTime() === startOfDay(new Date()).getTime() ? "today" : ""} style={{ width: dayWidth }}>
+                            <span>{dayName(day, locale)}</span>
+                            <strong>{new Intl.DateTimeFormat(locale, { day: "numeric" }).format(day)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {[...visibleTeamMembers.map(m => ({ member: m, list: ordersForMember(m.id) })),
+                      ...(teamUnassignedOrders.length > 0 ? [{ member: null, list: teamUnassignedOrders }] : [])
+                    ].map((row, rowIdx) => {
+                      const rowH = Math.max(1, row.list.length) * 64;
+                      return (
+                        <div key={row.member ? row.member.id : `unassigned-${rowIdx}`} className="team-grid-row" style={{ height: rowH }}>
+                          <div className="team-grid-label">
+                            {row.member ? (
+                              <>
+                                <span className="team-avatar">{row.member.photoURL ? <img src={row.member.photoURL} alt="" /> : teamInitials(row.member)}</span>
+                                <div className="team-grid-labeltext">
+                                  <strong>{teamMemberName(row.member)}</strong>
+                                  <small>{row.member.roleLabel}</small>
+                                  <span className="team-badge sm">{memberActiveCount(row.member.id)} {t("jobs")}{memberLateCount(row.member.id) > 0 ? ` · ${memberLateCount(row.member.id)} ${t("Late")}` : ""}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <span className="team-avatar muted">?</span>
+                                <div className="team-grid-labeltext"><strong>{t("Unassigned")}</strong></div>
+                              </>
+                            )}
+                          </div>
+                          <div className="team-grid-track" style={{ width: timelineWidth }}>
+                            {row.list.map((order, i) => {
+                              const metrics = teamBarMetrics(order);
+                              if (!metrics) return null;
+                              return (
+                                <button
+                                  key={order.id}
+                                  type="button"
+                                  className={`team-grid-bar ${scheduleTone(order)}${order.id === selectedOrderId ? " selected" : ""}`}
+                                  style={{ left: metrics.x, width: metrics.width, top: i * 64 + 6 }}
+                                  onClick={() => selectScheduleOrder(order)}
+                                  onDoubleClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}
+                                >
+                                  <strong>{titleForOrder(order)}</strong>
+                                  <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <aside className="team-side team-side-right">
+                  <div className="team-card">
+                    <strong className="team-card-title">{t("Upcoming")}</strong>
+                    {teamUpcomingOrders.length === 0 ? (
+                      <p className="team-card-hint">{t("No upcoming work.")}</p>
+                    ) : teamUpcomingOrders.map(order => (
+                      <button key={order.id} type="button" className="team-upcoming-row" onClick={() => selectScheduleOrder(order)}>
+                        <i className={`team-dot ${scheduleTone(order)}`} aria-hidden="true" />
+                        <span className="team-upcoming-text">
+                          <strong>{titleForOrder(order)}</strong>
+                          <small>{assigneeLabelForOrder(order, teamMembers) || t("Unassigned")}</small>
+                        </span>
+                        {countdownText(order) ? <span className={orderIsLate(order) ? "team-count late" : "team-count"}>{countdownText(order)}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="team-card">
+                    <strong className="team-card-title">{t("Selected Item")}</strong>
+                    {selectedOrder ? (
+                      <>
+                        <div className="team-selected-head">
+                          <i className={`team-bar-accent ${scheduleTone(selectedOrder)}`} aria-hidden="true" />
+                          <div>
+                            <strong>{titleForOrder(selectedOrder)}</strong>
+                            {designForOrder(selectedOrder) ? <small>{designForOrder(selectedOrder)}</small> : null}
+                          </div>
+                        </div>
+                        <div className="team-detail-row"><span>{t("Status")}</span><strong className={`schedule-status-badge ${statusTone(selectedOrder)}`}>{scheduleStatusLabel(selectedOrder)}</strong></div>
+                        <div className="team-detail-row"><span>{t("Schedule")}</span><strong>{scheduleRangeText(selectedOrder)}</strong></div>
+                        {countdownText(selectedOrder) ? <div className="team-detail-row"><span>{t("Due")}</span><strong className={orderIsLate(selectedOrder) ? "late" : ""}>{countdownText(selectedOrder)}</strong></div> : null}
+                        <div className="team-detail-row"><span>{t("Assigned to")}</span><strong>{assigneeLabelForOrder(selectedOrder, teamMembers) || t("Unassigned")}</strong></div>
+                        <button type="button" className="button team-open-btn" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(selectedOrder.id)}`)}>{t("Open Order")}</button>
+                      </>
+                    ) : (
+                      <p className="team-card-hint">{t("Select a job to see its details.")}</p>
+                    )}
+                  </div>
+
+                  <div className="team-card">
+                    <strong className="team-card-title">{t("Workload")}</strong>
+                    {teamMembers.map(member => {
+                      const count = memberActiveCount(member.id);
+                      const late = memberLateCount(member.id);
+                      return (
+                        <div key={member.id} className="team-workload-row">
+                          <div className="team-workload-top">
+                            <span className="team-avatar sm">{member.photoURL ? <img src={member.photoURL} alt="" /> : teamInitials(member)}</span>
+                            <span className="team-workload-name">{teamMemberName(member)}</span>
+                            <span className="team-workload-count">{count}</span>
+                          </div>
+                          <div className="team-workload-bar"><i className={late > 0 ? "late" : ""} style={{ width: `${Math.max(6, (count / teamMaxActive) * 100)}%` }} /></div>
+                        </div>
+                      );
+                    })}
+                    <div className="team-detail-row total"><span>{t("Total active work")}</span><strong>{teamTotalActive}</strong></div>
+                  </div>
+                </aside>
+              </div>
+            )
+          ) : error ? (
             <section className="card app-card schedule-empty-card">
               <CardTitle icon="lock" eyebrow={t("Schedule error")} title={t("Could not load schedule")} />
               <p className="layout-error">{error}</p>
