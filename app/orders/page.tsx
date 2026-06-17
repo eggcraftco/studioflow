@@ -248,7 +248,7 @@ export default function OrdersPage() {
     [orders, user, workspace]
   );
   useEffect(() => {
-    if (orderFilter !== "trash" || !workspace) return;
+    if (!workspace) return;
     loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
   }, [orderFilter, workspace, user]);
   const filteredOrders = useMemo(
@@ -573,6 +573,7 @@ export default function OrdersPage() {
               onFilterChange={setOrderFilter}
               onSortModeChange={setOrderSortMode}
               language={language}
+              deletedCount={deletedOrders.length}
             />
           </div>
 
@@ -765,6 +766,7 @@ export default function OrdersPage() {
               onFilterChange={setOrderFilter}
               onSortModeChange={setOrderSortMode}
               language={language}
+              deletedCount={deletedOrders.length}
             />
             <button
               className={mobileSearchOpen ? "orders-mobile-search-toggle is-active" : "orders-mobile-search-toggle"}
