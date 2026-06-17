@@ -15075,16 +15075,10 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     grid-template-columns: 1fr 1fr;
     align-items: start;
   }
-  .public-order-card-slot {
-    overflow: visible;
-    contain: none;
-  }
-  .public-order-card-slot:has(.public-order-card-inline-detail) {
-    grid-column: 1 / -1;
-  }
   .public-order-card-inline-detail {
     display: block;
-    margin: 6px 2px 0;
+    grid-column: 1 / -1;
+    margin: 2px 0 4px;
     padding: 11px 13px;
     font-size: 13px;
     line-height: 1.5;

@@ -1095,9 +1095,9 @@ function OrderCardTitleGrid() {
   return (
     <div className="public-order-card-system" ref={assembleRef}>
       <div className="public-order-card-grid" aria-label={t("orderCards.aria")}>
-        {ORDER_CARDS.map((card, index) => {
+        {ORDER_CARDS.flatMap((card, index) => {
           const isSelected = selectedCardIndex === index;
-          return (
+          const nodes: ReactNode[] = [
             <div className="public-order-card-slot" key={card.titleKey}>
               <article
                 className="public-order-card-chip"
@@ -1118,11 +1118,21 @@ function OrderCardTitleGrid() {
                   <h3>{t(card.titleKey)}</h3>
                 </button>
               </article>
-              {isSelected ? (
-                <p className="public-order-card-inline-detail">{t(card.detailKey)}</p>
-              ) : null}
             </div>
-          );
+          ];
+          // Phone only (CSS-controlled): show the tapped card's description as a
+          // full-width strip right after the row it belongs to, so the two
+          // side-by-side cards stay in place and never reflow.
+          const isRowEnd = index % 2 === 1 || index === ORDER_CARDS.length - 1;
+          const selectedRow = Math.floor(selectedCardIndex / 2);
+          if (isRowEnd && Math.floor(index / 2) === selectedRow) {
+            nodes.push(
+              <p className="public-order-card-inline-detail" key="inline-detail">
+                {t(selectedCard.detailKey)}
+              </p>
+            );
+          }
+          return nodes;
         })}
       </div>
       <aside className="public-order-card-panel" id="public-order-card-detail-panel">
