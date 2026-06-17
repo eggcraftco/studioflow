@@ -8198,6 +8198,19 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "الحساب",
     "हिन्दी (Hindi)": "खाता"
   },
+  "Visit website": {
+    "Türkçe": "Web sitesini ziyaret et",
+    "Deutsch": "Website besuchen",
+    "Français": "Visiter le site web",
+    "Italiano": "Visita il sito web",
+    "Español (Spanish)": "Visitar el sitio web",
+    "Português": "Visitar o site",
+    "Русский (Russian)": "Перейти на сайт",
+    "日本語 (Japanese)": "ウェブサイトを見る",
+    "中文 (Chinese)": "访问网站",
+    "العربية (Arabic)": "زيارة الموقع",
+    "हिन्दी (Hindi)": "वेबसाइट देखें"
+  },
   "Studio": {
     "Türkçe": "Stüdyo",
     "Deutsch": "Studio",

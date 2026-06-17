@@ -1629,6 +1629,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                     >
                       {t("Account")}
                     </button>
+                    <a
+                      role="menuitem"
+                      href="/"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setAvatarMenuOpen(false)}
+                    >
+                      {t("Visit website")}
+                    </a>
                     <button
                       type="button"
                       role="menuitem"

@@ -2850,7 +2850,8 @@ th {
   backdrop-filter: blur(18px);
 }
 
-.toolbar-avatar-menu button {
+.toolbar-avatar-menu button,
+.toolbar-avatar-menu a {
   width: 100%;
   border: 0;
   border-radius: 10px;
@@ -2861,9 +2862,13 @@ th {
   font-size: 13px;
   font-weight: 850;
   cursor: pointer;
+  display: block;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
-.toolbar-avatar-menu button:hover {
+.toolbar-avatar-menu button:hover,
+.toolbar-avatar-menu a:hover {
   background: rgba(37, 99, 235, 0.10);
 }
 
@@ -2877,11 +2882,13 @@ body[data-studio-theme="dark"] .toolbar-avatar-menu {
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
 }
 
-body[data-studio-theme="dark"] .toolbar-avatar-menu button {
+body[data-studio-theme="dark"] .toolbar-avatar-menu button,
+body[data-studio-theme="dark"] .toolbar-avatar-menu a {
   color: #f4f5f7;
 }
 
-body[data-studio-theme="dark"] .toolbar-avatar-menu button:hover {
+body[data-studio-theme="dark"] .toolbar-avatar-menu button:hover,
+body[data-studio-theme="dark"] .toolbar-avatar-menu a:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
