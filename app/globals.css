@@ -13723,6 +13723,26 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   color: #fff;
 }
 
+/* CTA band actions: a stable 2-up grid — [Start Free] [Login] on top, then
+   View Pricing full-width underneath. The base .public-hero-actions uses
+   flex-wrap, which reshuffled the three buttons (2+1, 1+2, …) whenever the
+   text length changed across languages. A fixed grid keeps every button in
+   the same place regardless of label length, on both phone and desktop. */
+.public-cta-band .public-hero-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: 10px;
+  width: min(100%, 360px);
+}
+.public-cta-band .public-hero-actions > .public-button {
+  width: 100%;
+  margin: 0;
+}
+.public-cta-band .public-hero-actions > .public-button.ghost {
+  grid-column: 1 / -1;
+}
+
 .public-page-hero {
   padding: 88px 0 56px;
   background: #eef0ed;
@@ -18296,6 +18316,14 @@ html[dir="rtl"] .login-public-shell {
    cards are dropped — matching the mobile design. Applies to both the Schedule
    and Dashboard variants of this section. */
 @media (max-width: 680px) {
+  /* Tighten the vertical rhythm on phones: the 58px top+bottom section padding
+     stacked to a ~116px empty band between the previous section's tagline and
+     this section's eyebrow, and the paragraph's own 26px bottom margin plus the
+     grid gap left ~59px before the screenshot. Both read as dead space. */
+  .schedule-section { padding: 34px 0; }
+  .schedule-section .schedule-top { gap: 20px; }
+  .schedule-section .schedule-copy > p { margin-bottom: 0; }
+
   .schedule-section .schedule-copy { text-align: left; }
 
   .schedule-section .schedule-eyebrow {

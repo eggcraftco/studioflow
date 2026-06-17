@@ -8393,6 +8393,32 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "إصدار التطبيق ومعلومات المنتج.",
     "हिन्दी (Hindi)": "ऐप संस्करण और उत्पाद जानकारी।"
   },
+  "Preferences": {
+    "Türkçe": "Tercihler",
+    "Deutsch": "Präferenzen",
+    "Français": "Préférences",
+    "Italiano": "Preferenze",
+    "Español (Spanish)": "Preferencias",
+    "Português": "Preferências",
+    "Русский (Russian)": "Параметры",
+    "日本語 (Japanese)": "環境設定",
+    "中文 (Chinese)": "偏好设置",
+    "العربية (Arabic)": "التفضيلات",
+    "हिन्दी (Hindi)": "प्राथमिकताएँ"
+  },
+  "Your personal theme and language.": {
+    "Türkçe": "Kişisel temanız ve diliniz.",
+    "Deutsch": "Ihr persönliches Theme und Ihre Sprache.",
+    "Français": "Votre thème et votre langue personnels.",
+    "Italiano": "Il tuo tema e la tua lingua personali.",
+    "Español (Spanish)": "Tu tema e idioma personales.",
+    "Português": "O seu tema e idioma pessoais.",
+    "Русский (Russian)": "Ваша личная тема и язык.",
+    "日本語 (Japanese)": "あなた個人のテーマと言語。",
+    "中文 (Chinese)": "您个人的主题和语言。",
+    "العربية (Arabic)": "سمتك ولغتك الشخصية.",
+    "हिन्दी (Hindi)": "आपकी व्यक्तिगत थीम और भाषा।"
+  },
   "Studio": {
     "Türkçe": "Stüdyo",
     "Deutsch": "Studio",

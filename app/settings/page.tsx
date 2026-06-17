@@ -76,8 +76,7 @@ import {
 
 type SettingsSectionId =
   | "profile-security"
-  | "appearance"
-  | "language"
+  | "preferences"
   | "about"
   | "branding"
   | "workflow"
@@ -108,8 +107,10 @@ type SettingsSection = {
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   general: "profile-security",
   account: "profile-security",
-  "theme-branding": "appearance",
-  "language-labels": "language"
+  appearance: "preferences",
+  language: "preferences",
+  "theme-branding": "preferences",
+  "language-labels": "preferences"
 };
 
 const SETTINGS_ICON_PATHS = {
@@ -126,14 +127,14 @@ const SETTINGS_ICON_PATHS = {
   plan: ["M4 5h16v14H4V5Z", "M4 10h16", "M8 15h3"],
   team: ["M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z", "M3 21a6 6 0 0 1 12 0M14 20a5 5 0 0 1 7-4.5"],
   about: ["M12 17v-5", "M12 8h.01", "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"],
-  brand: ["M3 11.5 11.5 3H19a2 2 0 0 1 2 2v6.5L12.5 20a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8Z", "M16 8h.01"]
+  brand: ["M3 11.5 11.5 3H19a2 2 0 0 1 2 2v6.5L12.5 20a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8Z", "M16 8h.01"],
+  sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"]
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
   // Account — personal settings that follow the signed-in user across workspaces.
   { id: "profile-security", title: "Profile & Security", appKey: "Account", description: "Your name, photo, sign-in email and password.", icon: "account", group: "account" },
-  { id: "appearance", title: "Appearance", appKey: "Appearance", description: "Your personal light or dark theme.", icon: "theme", group: "account" },
-  { id: "language", title: "Language & Region", appKey: "Language", description: "Your personal language preference.", icon: "language", group: "account" },
+  { id: "preferences", title: "Preferences", appKey: "Preferences", description: "Your personal theme and language.", icon: "sliders", group: "account" },
   { id: "about", title: "About", appKey: "About", description: "App version and product information.", icon: "about", group: "account" },
   // Workspace — settings shared by every member of the current workspace.
   { id: "branding", title: "Branding", appKey: "Branding", description: "Workspace name, logo and subtitle.", icon: "brand", group: "workspace" },
@@ -227,8 +228,7 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // that has the General settings flag, because they edit their own account.
   if (
     sectionId === "profile-security" ||
-    sectionId === "appearance" ||
-    sectionId === "language" ||
+    sectionId === "preferences" ||
     sectionId === "about"
   ) {
     return allowed("settingsGeneral");
@@ -538,10 +538,8 @@ function renderSettingsSection({
           hideWorkspaceIdentity
         />
       );
-    case "appearance":
-      return <AppearanceSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
-    case "language":
-      return <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
+    case "preferences":
+      return <PreferencesSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "branding":
       return <WorkspaceBrandingSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
     case "workflow":
@@ -576,6 +574,27 @@ function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS 
         {SETTINGS_ICON_PATHS[icon].map(path => <path key={path} d={path} />)}
       </svg>
     </span>
+  );
+}
+
+function PreferencesSection({
+  workspace,
+  settings,
+  language,
+  onSaved
+}: {
+  workspace: WorkspaceContext;
+  settings: WorkspaceSettingsOverview | null;
+  language: string;
+  onSaved: (settings: WorkspaceSettingsOverview) => void;
+}) {
+  // Personal preferences — theme and language live together on one page so the
+  // Account group stays tidy and each isn't a single-control screen of its own.
+  return (
+    <div className="settings-card-stack">
+      <AppearanceSection workspace={workspace} settings={settings} onSaved={onSaved} />
+      <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onSaved} />
+    </div>
   );
 }
 
