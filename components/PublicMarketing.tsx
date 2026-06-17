@@ -650,7 +650,8 @@ const FAQ_GROUPS: FaqGroup[] = [
       { titleKey: "faq.q19.title", bodyKey: "faq.q19.body" },
       { titleKey: "faq.q20.title", bodyKey: "faq.q20.body" },
       { titleKey: "faq.q21.title", bodyKey: "faq.q21.body" },
-      { titleKey: "faq.q22.title", bodyKey: "faq.q22.body" }
+      { titleKey: "faq.q22.title", bodyKey: "faq.q22.body" },
+      { titleKey: "faq.q23.title", bodyKey: "faq.q23.body" }
     ]
   }
 ];

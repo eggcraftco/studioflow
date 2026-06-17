@@ -710,6 +710,8 @@ export const PUBLIC_SITE_EN = {
   "faq.q21.body": "The website and app default to English and automatically follow your device language where supported (including Turkish, German, French and more). Financial figures are shown in your local currency.",
   "faq.q22.title": "How do I get support?",
   "faq.q22.body": "Visit nivadesk.app/support or use the Support & Contact link in the app. We're happy to help with setup, billing and anything else.",
+  "faq.q23.title": "What happens to my data if something goes wrong?",
+  "faq.q23.body": "Two separate things keep your data safe. First, automatic backups that we run: deleted orders go to a Trash you can restore from for 30 days, and your whole database has point-in-time recovery (any moment in the last 7 days), daily backups kept for two weeks, and a daily account backup. Second, your own export: any time, you can download your own copy of your data from Settings → Data Management — a self-service export you control, separate from our backups.",
 
   "privacy.eyebrow": "Privacy",
   "privacy.title": "Privacy Policy",
@@ -1471,6 +1473,8 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "faq.q21.body": "Web sitesi ve uygulama varsayılan olarak İngilizce'dir ve desteklenen yerlerde cihaz dilini otomatik takip eder (Türkçe, Almanca, Fransızca ve daha fazlası dahil). Finansal rakamlar yerel para biriminde gösterilir.",
   "faq.q22.title": "Nasıl destek alırım?",
   "faq.q22.body": "nivadesk.app/support adresini ziyaret et veya uygulamadaki Destek & İletişim bağlantısını kullan. Kurulum, faturalama ve diğer her konuda yardımcı olmaktan memnuniyet duyarız.",
+  "faq.q23.title": "Bir şey ters giderse verilerime ne olur?",
+  "faq.q23.body": "Verini iki ayrı şey korur. Birincisi, BİZİM çalıştırdığımız otomatik yedekler: silinen siparişler 30 gün geri getirebileceğin bir Çöp Kutusu'na gider; tüm veritabanın için zaman-noktası kurtarma (son 7 gün içinde herhangi bir an), iki hafta saklanan günlük yedekler ve günlük bir hesap yedeği vardır. İkincisi, SENİN kendi export'un: istediğin zaman Ayarlar → Veri Yönetimi'nden kendi verinin kopyasını indirebilirsin — bu senin kontrolündeki self-servis bir export'tur, yedeklerimizden ayrıdır.",
   "privacy.eyebrow": "Gizlilik",
   "privacy.title": "Gizlilik Politikası",
   "privacy.body": "NivaDesk'in hesap, workspace, faturalama, yüklenen dosyalar, destek ve teknik verileri nasıl işlediği.",

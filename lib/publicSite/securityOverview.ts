@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const SECURITY_OVERVIEW_LAST_UPDATED = "13 May 2026";
+export const SECURITY_OVERVIEW_LAST_UPDATED = "17 June 2026";
 
 export const SECURITY_OVERVIEW_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -152,13 +152,17 @@ export const SECURITY_OVERVIEW_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "12. Backups, retention, and recovery",
     paragraphs: [
-      "We may use backups or operational retention systems to help protect against accidental loss, service disruption, or technical failure."
+      "We protect your workspace against accidental loss and technical failure on several layers, combining in-product recovery with automated infrastructure backups."
     ],
     bullets: [
-      "Backups may retain data for a limited time after deletion before being overwritten or removed.",
-      "Retention periods may vary depending on the type of data, provider, plan, legal obligations, and technical requirements.",
-      "Users should keep their own backup copies of critical business files and records.",
-      "NivaDesk should not be used as the only backup location for important or irreplaceable business files."
+      "Trash: deleted orders are kept for 30 days and can be restored before they are permanently removed.",
+      "Point-in-time recovery: the workspace database can be restored to any moment within the last 7 days.",
+      "Automatic daily database backups, retained for two weeks.",
+      "A daily backup of account records, retained for 30 days.",
+      "The above are automatic backups that we run and use to recover the service; you do not access them directly.",
+      "Separately, your own export: you can download your own copy of your data at any time from Settings → Data Management. This is a self-service export you control — not part of, and not a substitute for, our automatic backups.",
+      "Retention periods may vary by data type, provider, plan, and legal requirements; these measures are best-effort and not a guarantee.",
+      "Users should still keep their own copies of critical business files — NivaDesk should not be your only backup."
     ]
   },
   {
@@ -296,7 +300,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Order history, workflow logs, file audit metadata ve technical logs şeffaflık, troubleshooting, security ve team accountability için kullanılabilir. Log saklama süreleri yasal, teknik ve ürün gerekliliklerine göre değişebilir.",
       "Ödemeler Stripe, Apple App Store, Google Play veya diğer payment providers tarafından işlenebilir. NivaDesk full card details saklamaz; sınırlı billing information alabilir.",
       "NivaDesk müşteri workspace içeriğini rutin olarak incelemez. Troubleshooting, support, legal compliance, security investigation, abuse prevention veya maintenance gerektiğinde minimum gerekli bilgiye erişim olabilir.",
-      "Backups ve operational retention sistemleri accidental loss, service disruption veya technical failure riskini azaltmak için kullanılabilir. Kullanıcılar kritik business files için kendi yedeklerini de tutmalıdır.",
+      "İki ayrı şey var. (1) BİZİM otomatik yedeklerimiz: silinen siparişler 30 gün geri getirilebilen bir Çöp Kutusu'na gider; veritabanı için son 7 günü kapsayan zaman-noktası kurtarma, iki hafta saklanan günlük yedekler ve günlük bir hesap yedeği tutarız — bunları biz çalıştırır ve kurtarma için kullanırız, sen doğrudan erişemezsin. (2) SENİN kendi export'un: istediğin zaman Ayarlar → Veri Yönetimi'nden kendi verinin bir kopyasını indirebilirsin; bu senin kontrolündeki self-servis bir export'tur, otomatik yedeklerimizin parçası ya da yerine geçen bir şey değildir. Bu önlemler best-effort esasıyla sağlanır, garanti değildir; kritik dosyalar için kendi yedeklerini de tutmalısın.",
       "Bir vulnerability veya security incident fark edilirse severity ve impact'e göre değerlendirme yaparız. Gerektiğinde erişimi sınırlayabilir, fixes uygulayabilir, credentials rotate edebilir ve yasal bildirim yapabiliriz.",
       "Güvenlik NivaDesk ve kullanıcılar arasında paylaşılır. Güçlü şifre kullanmak, cihazları korumak, yalnızca güvenilir kişileri davet etmek, eski üyeleri kaldırmak, rolleri dikkatle atamak ve kritik dosyaları yedeklemek kullanıcı sorumluluğudur.",
       "Uygun olduğunda kullanıcılar business data export veya account deletion talep edebilir. Paid plan bittiğinde veya iptal edildiğinde mevcut verilerin export'u teknik ve yasal olarak mümkün olduğu ölçüde desteklenir.",
