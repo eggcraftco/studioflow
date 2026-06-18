@@ -8419,6 +8419,19 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "سمتك ولغتك الشخصية.",
     "हिन्दी (Hindi)": "आपकी व्यक्तिगत थीम और भाषा।"
   },
+  "Your sign-in email is managed by Google or Apple and can't be changed here.": {
+    "Türkçe": "Giriş e-postanız Google veya Apple tarafından yönetiliyor ve buradan değiştirilemez.",
+    "Deutsch": "Ihre Anmelde-E-Mail wird von Google oder Apple verwaltet und kann hier nicht geändert werden.",
+    "Français": "Votre e-mail de connexion est géré par Google ou Apple et ne peut pas être modifié ici.",
+    "Italiano": "La tua email di accesso è gestita da Google o Apple e non può essere modificata qui.",
+    "Español (Spanish)": "Tu correo de inicio de sesión lo gestiona Google o Apple y no se puede cambiar aquí.",
+    "Português": "O seu email de início de sessão é gerido pela Google ou Apple e não pode ser alterado aqui.",
+    "Русский (Russian)": "Ваша эл. почта для входа управляется Google или Apple и не может быть изменена здесь.",
+    "日本語 (Japanese)": "ログイン用メールは Google または Apple が管理しているため、ここでは変更できません。",
+    "中文 (Chinese)": "您的登录邮箱由 Google 或 Apple 管理，无法在此更改。",
+    "العربية (Arabic)": "يدير Google أو Apple بريد تسجيل الدخول الخاص بك ولا يمكن تغييره من هنا.",
+    "हिन्दी (Hindi)": "आपका साइन-इन ईमेल Google या Apple द्वारा प्रबंधित है और इसे यहाँ नहीं बदला जा सकता।"
+  },
   "Studio": {
     "Türkçe": "Stüdyo",
     "Deutsch": "Studio",

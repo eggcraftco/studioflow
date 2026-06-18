@@ -2417,6 +2417,10 @@ function AccountSection({
   const t = (text: string) => studioT(text, accountLanguage);
   const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
   const googlePhotoUrl = user?.providerData.find(provider => provider.providerId === "google.com")?.photoURL?.trim() ?? "";
+  // OAuth-only accounts (Google / Apple, no password provider) can't change their
+  // sign-in email — it's owned by the provider. Lock the field for them.
+  const accountProviderIds = user?.providerData.map(provider => provider.providerId) ?? [];
+  const isOAuthOnlyAccount = accountProviderIds.length > 0 && !accountProviderIds.includes("password");
   const accountInitials = (displayName || accountEmail || userEmail || "NivaDesk")
     .split(/[\s@._-]+/)
     .filter(Boolean)
@@ -2710,28 +2714,43 @@ function AccountSection({
         <div className="account-profile-fields">
           <label className="quick-reply-settings-label">
             {t("Email")}
-            <div className="settings-inline-row">
-              <input
-                className="input"
-                value={emailDraft}
-                disabled={savingEmail}
-                placeholder="name@example.com"
-                type="email"
-                onChange={event => setEmailDraft(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === "Enter") void handleChangeEmail();
-                }}
-              />
-              <button
-                className="button secondary"
-                type="button"
-                disabled={savingEmail || emailDraft.trim().toLowerCase() === accountEmail.trim().toLowerCase()}
-                onClick={() => void handleChangeEmail()}
-              >
-                {savingEmail ? t("Changing...") : t("Change Email")}
-              </button>
-            </div>
-            <span className="muted-copy">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
+            {isOAuthOnlyAccount ? (
+              <>
+                <input
+                  className="input"
+                  value={accountEmail}
+                  disabled
+                  readOnly
+                  type="email"
+                />
+                <span className="muted-copy">{t("Your sign-in email is managed by Google or Apple and can't be changed here.")}</span>
+              </>
+            ) : (
+              <>
+                <div className="settings-inline-row">
+                  <input
+                    className="input"
+                    value={emailDraft}
+                    disabled={savingEmail}
+                    placeholder="name@example.com"
+                    type="email"
+                    onChange={event => setEmailDraft(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === "Enter") void handleChangeEmail();
+                    }}
+                  />
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={savingEmail || emailDraft.trim().toLowerCase() === accountEmail.trim().toLowerCase()}
+                    onClick={() => void handleChangeEmail()}
+                  >
+                    {savingEmail ? t("Changing...") : t("Change Email")}
+                  </button>
+                </div>
+                <span className="muted-copy">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
+              </>
+            )}
           </label>
           <label className="quick-reply-settings-label">
             {t("Your Name")}
