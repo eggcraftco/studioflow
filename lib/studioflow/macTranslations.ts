@@ -744,18 +744,18 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   "Status": { "Türkçe": "Durum", "Deutsch": "Status", "Français": "Statut", "Italiano": "Stato", "Español (Spanish)": "Estado", "Português": "Estado", "Русский (Russian)": "Статус", "日本語 (Japanese)": "ステータス", "中文 (Chinese)": "状态", "العربية (Arabic)": "الحالة", "हिन्दी (Hindi)": "स्थिति" },
   "Open Order": { "Türkçe": "Siparişi Aç", "Deutsch": "Auftrag öffnen", "Français": "Ouvrir la commande", "Italiano": "Apri ordine", "Español (Spanish)": "Abrir pedido", "Português": "Abrir encomenda", "Русский (Russian)": "Открыть заказ", "日本語 (Japanese)": "注文を開く", "中文 (Chinese)": "打开订单", "العربية (Arabic)": "فتح الطلب", "हिन्दी (Hindi)": "ऑर्डर खोलें" },
   "jobs": { "Türkçe": "iş", "Deutsch": "Aufgaben", "Français": "tâches", "Italiano": "lavori", "Español (Spanish)": "trabajos", "Português": "trabalhos", "Русский (Russian)": "задач", "日本語 (Japanese)": "件", "中文 (Chinese)": "项", "العربية (Arabic)": "مهام", "हिन्दी (Hindi)": "कार्य" },
-  "This is a quick agenda view. For the full drag-and-drop timeline, open NivaDesk on the web or Mac app.": {
-    "Türkçe": "Bu hızlı bir ajanda görünümüdür. Sürükle-bırak tam zaman çizelgesi için NivaDesk'i web veya Mac uygulamasında açın.",
-    "Deutsch": "Dies ist eine schnelle Agenda-Ansicht. Für die vollständige Drag-and-Drop-Zeitachse öffnen Sie NivaDesk im Web oder in der Mac-App.",
-    "Français": "Ceci est un aperçu agenda rapide. Pour la chronologie complète en glisser-déposer, ouvrez NivaDesk sur le web ou l'app Mac.",
-    "Italiano": "Questa è una vista agenda rapida. Per la timeline completa con trascinamento, apri NivaDesk sul web o nell'app Mac.",
-    "Español (Spanish)": "Esta es una vista de agenda rápida. Para la cronología completa de arrastrar y soltar, abre NivaDesk en la web o la app de Mac.",
-    "Português": "Esta é uma vista de agenda rápida. Para a linha do tempo completa de arrastar e soltar, abra o NivaDesk na web ou na app Mac.",
-    "Русский (Russian)": "Это быстрый просмотр повестки. Для полной шкалы времени с перетаскиванием откройте NivaDesk в вебе или в приложении Mac.",
-    "日本語 (Japanese)": "これは簡易アジェンダ表示です。ドラッグ＆ドロップの完全なタイムラインは、NivaDesk を Web または Mac アプリで開いてください。",
-    "中文 (Chinese)": "这是快速日程视图。要使用完整的拖放时间线，请在网页版或 Mac 应用中打开 NivaDesk。",
-    "العربية (Arabic)": "هذا عرض جدول سريع. للمخطط الزمني الكامل بالسحب والإفلات، افتح NivaDesk على الويب أو تطبيق Mac.",
-    "हिन्दी (Hindi)": "यह एक त्वरित एजेंडा दृश्य है। पूर्ण ड्रैग-एंड-ड्रॉप टाइमलाइन के लिए, NivaDesk को वेब या Mac ऐप में खोलें।"
+  "This is a quick agenda view. Open NivaDesk on a bigger screen for the full drag-and-drop timeline.": {
+    "Türkçe": "Bu hızlı bir ajanda görünümüdür. Tam sürükle-bırak zaman çizelgesi için NivaDesk'i daha büyük bir ekranda açın.",
+    "Deutsch": "Dies ist eine schnelle Agenda-Ansicht. Öffnen Sie NivaDesk auf einem größeren Bildschirm für die vollständige Drag-and-Drop-Zeitachse.",
+    "Français": "Ceci est un aperçu agenda rapide. Ouvrez NivaDesk sur un écran plus grand pour la chronologie complète en glisser-déposer.",
+    "Italiano": "Questa è una vista agenda rapida. Apri NivaDesk su uno schermo più grande per la timeline completa con trascinamento.",
+    "Español (Spanish)": "Esta es una vista de agenda rápida. Abre NivaDesk en una pantalla más grande para la cronología completa de arrastrar y soltar.",
+    "Português": "Esta é uma vista de agenda rápida. Abra o NivaDesk num ecrã maior para a linha do tempo completa de arrastar e soltar.",
+    "Русский (Russian)": "Это быстрый просмотр повестки. Откройте NivaDesk на большом экране для полной шкалы времени с перетаскиванием.",
+    "日本語 (Japanese)": "これは簡易アジェンダ表示です。ドラッグ＆ドロップの完全なタイムラインは、より大きな画面で NivaDesk を開いてください。",
+    "中文 (Chinese)": "这是快速日程视图。在更大的屏幕上打开 NivaDesk 以使用完整的拖放时间线。",
+    "العربية (Arabic)": "هذا عرض جدول سريع. افتح NivaDesk على شاشة أكبر للمخطط الزمني الكامل بالسحب والإفلات.",
+    "हिन्दी (Hindi)": "यह एक त्वरित एजेंडा दृश्य है। पूर्ण ड्रैग-एंड-ड्रॉप टाइमलाइन के लिए NivaDesk को बड़ी स्क्रीन पर खोलें।"
   },
   "Drag blocks to move dates. Pull the edges to resize.": {
     "Türkçe": "Tarihleri taşımak için blokları sürükleyin. Süreyi değiştirmek için kenarları çekin.",
@@ -13007,6 +13007,45 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "中文 (Chinese)": "订单历史",
     "العربية (Arabic)": "سجل الطلبات",
     "हिन्दी (Hindi)": "ऑर्डर इतिहास"
+  },
+  "Change customer photo": {
+    "Türkçe": "Müşteri fotoğrafını değiştir",
+    "Deutsch": "Kundenfoto ändern",
+    "Français": "Modifier la photo du client",
+    "Italiano": "Cambia foto cliente",
+    "Español (Spanish)": "Cambiar foto del cliente",
+    "Português": "Alterar foto do cliente",
+    "Русский (Russian)": "Изменить фото клиента",
+    "日本語 (Japanese)": "顧客の写真を変更",
+    "中文 (Chinese)": "更换客户照片",
+    "العربية (Arabic)": "تغيير صورة العميل",
+    "हिन्दी (Hindi)": "ग्राहक फ़ोटो बदलें"
+  },
+  "Workspace messaging permissions": {
+    "Türkçe": "Çalışma alanı mesajlaşma izinleri",
+    "Deutsch": "Messaging-Berechtigungen des Arbeitsbereichs",
+    "Français": "Autorisations de messagerie de l'espace de travail",
+    "Italiano": "Autorizzazioni di messaggistica dello spazio di lavoro",
+    "Español (Spanish)": "Permisos de mensajería del espacio de trabajo",
+    "Português": "Permissões de mensagens do espaço de trabalho",
+    "Русский (Russian)": "Разрешения на обмен сообщениями в рабочей области",
+    "日本語 (Japanese)": "ワークスペースのメッセージ権限",
+    "中文 (Chinese)": "工作区消息权限",
+    "العربية (Arabic)": "أذونات المراسلة في مساحة العمل",
+    "हिन्दी (Hindi)": "वर्कस्पेस संदेश अनुमतियाँ"
+  },
+  "Message settings saved.": {
+    "Türkçe": "Mesaj ayarları kaydedildi.",
+    "Deutsch": "Nachrichteneinstellungen gespeichert.",
+    "Français": "Paramètres de messagerie enregistrés.",
+    "Italiano": "Impostazioni dei messaggi salvate.",
+    "Español (Spanish)": "Configuración de mensajes guardada.",
+    "Português": "Configurações de mensagens salvas.",
+    "Русский (Russian)": "Настройки сообщений сохранены.",
+    "日本語 (Japanese)": "メッセージ設定を保存しました。",
+    "中文 (Chinese)": "消息设置已保存。",
+    "العربية (Arabic)": "تم حفظ إعدادات الرسائل.",
+    "हिन्दी (Hindi)": "संदेश सेटिंग्स सहेजी गईं।"
   },
   "Total Spent": {
     "Türkçe": "Toplam Harcanan",

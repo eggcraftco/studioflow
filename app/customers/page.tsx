@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -25,6 +25,8 @@ import {
   createCustomerFromWeb,
   deleteCustomerFromWeb,
   updateCustomerFromWeb,
+  uploadCustomerPhoto,
+  CUSTOMER_PHOTO_ACCEPT,
   type CustomerFormInput
 } from "@/lib/studioflow/customers";
 import { studioT } from "@/lib/studioflow/language";
@@ -69,7 +71,7 @@ function customerDisplayName(value: string) {
 }
 
 function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
-  return {
+  const cleaned: CustomerFormInput = {
     name: customerDisplayName(input.name),
     email: input.email.trim(),
     phone: input.phone.trim(),
@@ -81,6 +83,12 @@ function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
     country: input.country.trim(),
     notes: input.notes.trim()
   };
+  // Pass the photo through only when a patch explicitly sets it; otherwise the
+  // backend keeps the existing avatar.
+  if (typeof input.profileImageUrl === "string") {
+    cleaned.profileImageUrl = input.profileImageUrl;
+  }
+  return cleaned;
 }
 
 function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
@@ -372,6 +380,26 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleCustomerPhotoUpload(customer: CustomerDirectoryItem, file: File) {
+    if (!workspace) return;
+    if (!canManageCustomers) {
+      setActionError("Your workspace role cannot edit customers.");
+      return;
+    }
+    setSavingInlineField("Customer photo");
+    setActionStatus("Uploading customer photo...");
+    setActionError("");
+    try {
+      const photoURL = await uploadCustomerPhoto(workspace, file);
+      await handleInlineCustomerUpdate(customer, { profileImageUrl: photoURL }, "Customer photo");
+    } catch (uploadError) {
+      setActionStatus("");
+      setActionError(uploadError instanceof Error ? uploadError.message : "Could not upload customer photo.");
+    } finally {
+      setSavingInlineField("");
+    }
+  }
+
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -471,6 +499,7 @@ export default function CustomersPage() {
               savingInlineField={savingInlineField}
               language={language}
               onSaveDetails={(patch, fieldLabel) => handleInlineCustomerUpdate(selectedCustomer, patch, fieldLabel)}
+              onUploadPhoto={file => handleCustomerPhotoUpload(selectedCustomer, file)}
             />
           ) : (
             <section className="orders-empty-detail">
@@ -578,7 +607,8 @@ function CustomerDetail({
   moneySettings,
   savingInlineField,
   language,
-  onSaveDetails
+  onSaveDetails,
+  onUploadPhoto
 }: {
   customer: CustomerDirectoryItem;
   canSeeFinance: boolean;
@@ -587,13 +617,47 @@ function CustomerDetail({
   savingInlineField: string;
   language: string;
   onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
+  onUploadPhoto: (file: File) => Promise<void>;
 }) {
   const { hideNumbers } = usePricePrivacy();
   const t = (text: string) => studioT(text, language);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadingPhoto = savingInlineField === "Customer photo";
+
+  function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void onUploadPhoto(file);
+  }
+
   return (
     <div className="customer-detail-scroll">
       <section className="customer-profile-header">
-        <CustomerAvatar customer={customer} size="large" />
+        {canManageCustomers ? (
+          <button
+            type="button"
+            className="customer-avatar-upload"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            aria-label={t("Change customer photo")}
+            title={t("Change customer photo")}
+          >
+            <CustomerAvatar customer={customer} size="large" />
+            <span className="customer-avatar-upload-overlay" aria-hidden="true">
+              {uploadingPhoto ? "…" : "📷"}
+            </span>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept={CUSTOMER_PHOTO_ACCEPT}
+              className="visually-hidden-input"
+              onChange={handlePhotoChange}
+              disabled={uploadingPhoto}
+            />
+          </button>
+        ) : (
+          <CustomerAvatar customer={customer} size="large" />
+        )}
         <div>
           <p className="orders-kicker">{t("Customer Profile")}</p>
           <CustomerInlineTitle

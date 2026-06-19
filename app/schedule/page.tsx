@@ -1348,7 +1348,7 @@ export default function SchedulePage() {
             <div className="schedule-agenda-mobile">
               <div className="schedule-agenda-hint">
                 <span aria-hidden="true">🖥️</span>
-                <p>{t("This is a quick agenda view. For the full drag-and-drop timeline, open NivaDesk on the web or Mac app.")}</p>
+                <p>{t("This is a quick agenda view. Open NivaDesk on a bigger screen for the full drag-and-drop timeline.")}</p>
               </div>
               {visibleOrders.map(order => {
                 const tone = scheduleTone(order);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
@@ -48,6 +48,7 @@ import {
 import { workspaceOnboardingPromptSeed, isWorkspaceOnboardingPromptSeed } from "@/lib/studioflow/workspaceOnboarding";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
+import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
@@ -88,6 +89,7 @@ type SettingsSectionId =
   | "data"
   | "plan-access"
   | "team-access"
+  | "message-settings"
   | "support-tickets";
 
 type SettingsGroup = "account" | "workspace";
@@ -147,6 +149,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "workspace" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "workspace" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "workspace" },
+  { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "workspace" },
   { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "workspace" }
 ];
 
@@ -213,6 +216,9 @@ function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
+  // Message Settings only exists on plans with the Messages feature — hidden from
+  // everyone (owners included) otherwise, matching the Messages nav gate and Mac/Android.
+  if (sectionId === "message-settings" && workspace.entitlements.features.messages !== true) return false;
   if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
 
   const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
@@ -235,6 +241,11 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   }
   if (sectionId === "support-tickets") return allowed("settingsSupport");
   if (sectionId === "team-access") return allowed("settingsTeamAccess");
+  // Message Settings — workspace messaging toggles, only meaningful on a plan with
+  // the Messages feature (mirrors the Mac/Android team-access gate).
+  if (sectionId === "message-settings") {
+    return workspace.entitlements.features.messages === true && allowed("settingsMessageSettings");
+  }
 
   if (isWorkflowOnly) {
     if (sectionId === "quick-reply") return allowed("settingsQuickReply");
@@ -560,11 +571,124 @@ function renderSettingsSection({
       return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} language={language} />;
     case "team-access":
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} language={language} />;
+    case "message-settings":
+      return <MessageSettingsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
       return <AboutSection workspace={workspace} language={language} />;
   }
+}
+
+function MessageSettingsSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [directMessages, setDirectMessages] = useState(true);
+  const [groupConversations, setGroupConversations] = useState(true);
+  const [attachments, setAttachments] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const current = await getMessageWorkspaceSettings(workspace);
+      setDirectMessages(current.directMessagesEnabled);
+      setGroupConversations(current.groupConversationsEnabled);
+      setAttachments(current.attachmentsEnabled);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load message settings.");
+    } finally {
+      setLoading(false);
+    }
+  }, [workspace]);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
+  async function handleSave() {
+    setSaving(true);
+    setStatus("");
+    setError("");
+    try {
+      const next: StudioMessageWorkspaceSettings = {
+        directMessagesEnabled: directMessages,
+        groupConversationsEnabled: groupConversations,
+        attachmentsEnabled: attachments
+      };
+      await setMessageWorkspaceSettings(workspace, next);
+      setStatus("Message settings saved.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Message settings could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="reply" eyebrow={t("Message Settings")} title={t("Workspace messaging permissions")} />
+        <p className="muted-copy">{t("Control workspace-wide messaging permissions for the team.")}</p>
+        <div className="settings-toggle-stack">
+          <label className="settings-toggle-row">
+            <span>
+              <strong>{t("Allow Direct Messages")}</strong>
+              <small>{t("Team members can start one-to-one conversations.")}</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={directMessages}
+              disabled={!canEdit || saving || loading}
+              onChange={event => setDirectMessages(event.target.checked)}
+            />
+          </label>
+
+          <label className="settings-toggle-row">
+            <span>
+              <strong>{t("Allow Group Conversations")}</strong>
+              <small>{t("Team members can add people and create group chats.")}</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={groupConversations}
+              disabled={!canEdit || saving || loading}
+              onChange={event => setGroupConversations(event.target.checked)}
+            />
+          </label>
+
+          <label className="settings-toggle-row">
+            <span>
+              <strong>{t("Allow File & Image Sending")}</strong>
+              <small>{t("Team members can send images and files in Messages.")}</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={attachments}
+              disabled={!canEdit || saving || loading}
+              onChange={event => setAttachments(event.target.checked)}
+            />
+          </label>
+        </div>
+
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={loading} onClick={() => void loadSettings()}>
+            {t("Reload")}
+          </button>
+          <button className="button" type="button" disabled={!canEdit || saving || loading} onClick={handleSave}>
+            {saving ? t("Saving...") : t("Save")}
+          </button>
+        </div>
+        {!canEdit ? <p className="muted-copy">{t("Only workspace owners or admins can change these settings.")}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
+        {error ? <p className="layout-error">{error}</p> : null}
+      </section>
+    </div>
+  );
 }
 
 function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS }) {
