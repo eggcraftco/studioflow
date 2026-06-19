@@ -82,6 +82,10 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     fullPaymentReceived?: boolean;
     recordPayment?: { amount: number; method?: string; note?: string };
     deletePaymentId?: string;
+    // Per-order amounts for the workspace's custom Extra Spending / Remaining
+    // headings, keyed by heading title. Mirrors the Mac/iPhone/Android editors.
+    financialExpenseValues?: Record<string, number>;
+    financialRemainingValues?: Record<string, number>;
   };
   todo?: {
     action: "add" | "toggle" | "delete" | "update" | "move" | "reorder";

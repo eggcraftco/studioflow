@@ -65,6 +65,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { decodeFinancialItems } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
@@ -3353,6 +3354,24 @@ export function OrderDetailContent({
       ];
     }
 
+    // Optimistically reflect custom Extra Spending / Remaining heading amounts in
+    // the order's customFields (keyed financialExpense::<title> / financialRemaining::<title>).
+    let customFields = order.customFields;
+    const applyCustomMap = (prefix: string, map?: Record<string, number>) => {
+      if (!map) return;
+      customFields = { ...customFields };
+      for (const [title, raw] of Object.entries(map)) {
+        const cleanTitle = title.trim();
+        if (!cleanTitle) continue;
+        const key = `${prefix}${cleanTitle}`;
+        const next = Math.max(0, Number(raw) || 0);
+        if (next > 0) customFields[key] = String(next);
+        else delete customFields[key];
+      }
+    };
+    applyCustomMap("financialExpense::", patch.financialExpenseValues);
+    applyCustomMap("financialRemaining::", patch.financialRemainingValues);
+
     onOptimisticOrderPatch?.({
       paidAmount,
       remainingAmount,
@@ -3364,7 +3383,8 @@ export function OrderDetailContent({
       taxAmount,
       netProfit,
       paymentMethod,
-      payments
+      payments,
+      customFields
     });
   }
 
@@ -3427,6 +3447,15 @@ export function OrderDetailContent({
     const parsed = parseFinanceNumber(value);
     if (parsed === null) return;
     return saveFinancePatch({ [field]: parsed }, fieldLabel);
+  }
+
+  function saveCustomFinanceValue(kind: "expense" | "remaining", title: string, value: string | number, fieldLabel: string) {
+    const parsed = parseFinanceNumber(value);
+    if (parsed === null) return;
+    const patch: FinancePatch = kind === "expense"
+      ? { financialExpenseValues: { [title]: parsed } }
+      : { financialRemainingValues: { [title]: parsed } };
+    return saveFinancePatch(patch, fieldLabel);
   }
 
   function applyOptimisticDetailsPatch(patch: DetailsPatch) {
@@ -4950,6 +4979,36 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Shipping Cost"}
                       onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
                     />
+                    {decodeFinancialItems(moneySettings?.financialExpenseItemsJSON ?? "").map(item => {
+                      const amount = Number(String(order.customFields[`financialExpense::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                      return (
+                        <FinanceInlineRow
+                          key={`expense-${item.title}`}
+                          label={item.title}
+                          displayValue={money(amount, hideNumbers)}
+                          value={amount}
+                          tone="negative"
+                          disabled={!canInlineEditFinance}
+                          saving={savingFinanceField === `Expense: ${item.title}`}
+                          onSave={value => saveCustomFinanceValue("expense", item.title, value, `Expense: ${item.title}`)}
+                        />
+                      );
+                    })}
+                    {decodeFinancialItems(moneySettings?.financialRemainingItemsJSON ?? "").map(item => {
+                      const amount = Number(String(order.customFields[`financialRemaining::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                      return (
+                        <FinanceInlineRow
+                          key={`remaining-${item.title}`}
+                          label={item.title}
+                          displayValue={money(amount, hideNumbers)}
+                          value={amount}
+                          tone="negative-soft"
+                          disabled={!canInlineEditFinance}
+                          saving={savingFinanceField === `Remaining: ${item.title}`}
+                          onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
+                        />
+                      );
+                    })}
                     <div className="app-card-divider" />
                     <FinanceInlineRow
                       label="VAT Rule"
