@@ -7034,12 +7034,31 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   right: 0;
   z-index: 20;
   width: 190px;
+  max-height: min(60vh, 360px);
+  overflow-y: auto;
   padding: 7px;
   border: 1px solid rgba(209, 213, 219, 0.92);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(16px);
+}
+
+.order-actions-menu-section-title {
+  padding: 7px 10px 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.order-actions-menu-panel button span[aria-hidden] {
+  display: inline-block;
+  width: 16px;
+  margin-right: 4px;
+  color: #2563eb;
+  font-weight: 950;
 }
 
 .order-actions-header-details {

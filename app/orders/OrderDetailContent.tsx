@@ -41,6 +41,7 @@ import {
   type ScheduleHeadingItem
 } from "@/lib/studioflow/blockHeadings";
 import {
+  canDeleteOrdersForRole,
   canEditOrderDetailsForRole,
   canEditOrderFullyForRole,
   canEditOrderStatusForRole,
@@ -54,6 +55,7 @@ import {
 import {
   loadWorkspaceStatusOptions,
   loadTeamAccessData,
+  normalizeWorkspaceRole,
   workspaceAccessAllows,
   type ClientFileDetail,
   type OrderDetail,
@@ -1595,6 +1597,8 @@ export function OrderDetailContent({
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [customerGuideStyle, setCustomerGuideStyle] = useState<CSSProperties | null>(null);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
+  const [assignProjectMenuOpen, setAssignProjectMenuOpen] = useState(false);
+  const [savingAssignment, setSavingAssignment] = useState(false);
   const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [headerPreferencesLoaded, setHeaderPreferencesLoaded] = useState(false);
   const [headerShowDeliveryTime, setHeaderShowDeliveryTime] = useState(true);
@@ -1716,6 +1720,20 @@ export function OrderDetailContent({
   }, [orderActionsOpen]);
 
   useEffect(() => {
+    if (!assignProjectMenuOpen) return;
+    const closeMenu = () => setAssignProjectMenuOpen(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAssignProjectMenuOpen(false);
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [assignProjectMenuOpen]);
+
+  useEffect(() => {
     try {
       const delivery = window.localStorage.getItem(ORDER_HEADER_SHOW_DELIVERY_TIME_KEY);
       const schedule = window.localStorage.getItem(ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY);
@@ -1818,6 +1836,12 @@ export function OrderDetailContent({
   const clientFileMaxUploadSizeMB = Math.min(Math.max(Math.round(moneySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
   const clientFileRequiresPolicyAcceptance = moneySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
   const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
+  // Mirror the orders-list assignment gate (normalizeWorkspaceAssignmentAccess):
+  // owner, or a delete-capable role granted manageProjectAssignments.
+  const canAssignProjects = Boolean(
+    normalizeWorkspaceRole(workspace.role) === "owner" ||
+      (canDeleteOrdersForRole(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "manageProjectAssignments"))
+  );
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
   // History/Log and Materials cards are open on every plan, including Free Demo.
@@ -2125,7 +2149,7 @@ export function OrderDetailContent({
   }, [order.id]);
 
   useEffect(() => {
-    if (!canSeeTeamAssignment) {
+    if (!canSeeTeamAssignment && !canAssignProjects) {
       setTeamMembers([]);
       return;
     }
@@ -2144,7 +2168,7 @@ export function OrderDetailContent({
     return () => {
       cancelled = true;
     };
-  }, [canSeeTeamAssignment, workspace]);
+  }, [canSeeTeamAssignment, canAssignProjects, workspace]);
 
   const todoAssigneeOptions = useMemo(() => {
     const options: Array<{ uid: string; label: string; email: string }> = [
@@ -3584,6 +3608,48 @@ export function OrderDetailContent({
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update order detail.");
     } finally {
       setSavingInlineField(null);
+    }
+  }
+
+  // Assignable members for the order-detail "Assign Project" control. Mirrors the
+  // orders-list menu: workspace team members minus the owner, plus an Unassigned row.
+  const assignableMembers = useMemo(
+    () => teamMembers.filter(member => !member.isOwner),
+    [teamMembers]
+  );
+
+  const currentAssignee = useMemo(() => {
+    const assignedUid = order.assignedToUid?.trim() ?? "";
+    const assignedEmail = order.assignedToEmail?.trim().toLowerCase() ?? "";
+    if (!assignedUid && !assignedEmail) return null;
+    const member = teamMembers.find(item => assignedUid && item.id === assignedUid)
+      ?? teamMembers.find(item => assignedEmail && item.email.trim().toLowerCase() === assignedEmail)
+      ?? null;
+    if (member) return member.displayName.trim() || member.email.trim() || member.id;
+    return order.assignedToEmail?.trim() || assignedUid;
+  }, [order.assignedToUid, order.assignedToEmail, teamMembers]);
+
+  async function assignProjectToMember(member: TeamMemberDetail | null) {
+    if (!canAssignProjects) {
+      setOrderActionError("Your workspace role cannot assign projects.");
+      return;
+    }
+    const assignedToUid = member?.id ?? "";
+    const assignedToEmail = member?.email ?? "";
+    setAssignProjectMenuOpen(false);
+    setOrderActionError(null);
+    setSavingAssignment(true);
+    onOptimisticOrderPatch?.({ assignedToUid, assignedToEmail });
+    try {
+      await updateOrderFromWeb(workspace, {
+        orderId: order.id,
+        details: { assignedToUid, assignedToEmail }
+      });
+    } catch (assignFailure) {
+      await onReloadOrder();
+      setOrderActionError(assignFailure instanceof Error ? assignFailure.message : "Could not update project assignment.");
+    } finally {
+      setSavingAssignment(false);
     }
   }
 
@@ -6457,6 +6523,48 @@ export function OrderDetailContent({
         </div>
         {renderHeaderMeta()}
         <div className="order-toolbar-pills">
+          {canAssignProjects ? (
+            <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
+              <button
+                className="button secondary order-actions-button"
+                type="button"
+                disabled={savingAssignment}
+                onClick={event => {
+                  event.stopPropagation();
+                  setOrderActionsOpen(false);
+                  setAssignProjectMenuOpen(open => !open);
+                }}
+              >
+                {currentAssignee ? `${t("Assigned to")} ${currentAssignee}` : t("Unassigned")}
+              </button>
+              {assignProjectMenuOpen ? (
+                <div className="order-actions-menu-panel" style={{ zIndex: 130 }}>
+                  <div className="order-actions-menu-section-title">{t("Assign Project")}</div>
+                  <button
+                    type="button"
+                    disabled={!order.assignedToUid && !order.assignedToEmail}
+                    onClick={() => void assignProjectToMember(null)}
+                  >
+                    <span aria-hidden="true">{!order.assignedToUid && !order.assignedToEmail ? "✓" : "○"}</span>
+                    {t("Unassigned")}
+                  </button>
+                  {assignableMembers.map(member => {
+                    const isCurrent = order.assignedToUid?.trim() === member.id;
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={() => void assignProjectToMember(member)}
+                      >
+                        <span aria-hidden="true">{isCurrent ? "✓" : "○"}</span>
+                        {member.displayName.trim() || member.email.trim() || member.id}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <button
             className={["card-layout-lock-button", cardsLocked ? "is-locked" : "is-unlocked"].join(" ")}
             type="button"
