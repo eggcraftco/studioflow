@@ -7,7 +7,7 @@
 // Keep this route isolated from OAuth/MCP discovery. It only returns plain text.
 
 const CHALLENGE_TOKEN =
-  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "REPLACE_WITH_OPENAI_TOKEN";
+  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "aU3AeoxvW2W2EZvSnDAcFO-wZ5ymFzm4rUSD12UD_w4";
 
 const responseHeaders = {
   "Content-Type": "text/plain; charset=utf-8",
