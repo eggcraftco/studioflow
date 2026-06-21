@@ -10,7 +10,7 @@ const authorizationServerMetadata = {
   issuer: "https://nivadesk.app",
   authorization_endpoint: "https://nivadesk.app/chatgptOAuthAuthorize",
   token_endpoint: "https://nivadesk.app/chatgptOAuthToken",
-  client_id_metadata_document_supported: false,
+  client_id_metadata_document_supported: true,
   registration_endpoint: "https://nivadesk.app/chatgptOAuthRegister",
   response_types_supported: ["code"],
   grant_types_supported: ["authorization_code"],
