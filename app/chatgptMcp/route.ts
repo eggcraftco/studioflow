@@ -9,12 +9,18 @@ const RESOURCE_METADATA_URL =
 const REQUIRED_SCOPES =
   "orders.read orders.write notes.read notes.write finance.read tasks.write";
 
+const PUBLIC_MCP_METHODS = new Set([
+  "initialize",
+  "notifications/initialized",
+  "tools/list"
+]);
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Session-Id, mcp-session-id",
-    "Access-Control-Expose-Headers": "WWW-Authenticate, MCP-Session-Id, mcp-session-id"
+    "Access-Control-Expose-Headers": "WWW-Authenticate, Link, MCP-Session-Id, mcp-session-id"
   };
 }
 
@@ -30,7 +36,8 @@ function authChallengeHeaders() {
   return {
     ...corsHeaders(),
     ...noStoreHeaders(),
-    "WWW-Authenticate": `Bearer resource_metadata="${RESOURCE_METADATA_URL}", scope="${REQUIRED_SCOPES}"`
+    "WWW-Authenticate": `Bearer resource_metadata="${RESOURCE_METADATA_URL}", scope="${REQUIRED_SCOPES}"`,
+    "Link": `<${RESOURCE_METADATA_URL}>; rel="oauth-protected-resource"`
   };
 }
 
@@ -57,6 +64,15 @@ function unauthorizedResponse(method: string) {
       headers: authChallengeHeaders()
     }
   );
+}
+
+async function readMcpMethod(request: Request) {
+  try {
+    const payload = await request.clone().json();
+    return typeof payload?.method === "string" ? payload.method : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function OPTIONS() {
@@ -87,7 +103,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!hasBearerToken(request)) {
-    return unauthorizedResponse("POST");
+    const method = await readMcpMethod(request);
+
+    // OpenAI's submission scanner needs to read the MCP tool metadata before a
+    // user completes OAuth. Keep business data protected, but allow the public
+    // handshake/tool-list calls so the dashboard can scan the server.
+    if (!method || !PUBLIC_MCP_METHODS.has(method)) {
+      return unauthorizedResponse("POST");
+    }
   }
 
   return proxyNivaDeskFirebaseFunction(request, "chatgptMcp");
