@@ -2105,6 +2105,32 @@ export function PublicFeaturesPage() {
         <section className="public-section">
           <div className="public-shell">
             <SectionHeader
+              eyebrowKey="featuresPage.invoice.eyebrow"
+              titleKey="featuresPage.invoice.title"
+              bodyKey="featuresPage.invoice.body"
+            />
+            <div className="public-features-hero-strip">
+              {[
+                { key: "inv1", tone: "trend", label: "featuresPage.invoice.p1" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7.5h5M7.5 10.5h5M7.5 13h3" /></> },
+                { key: "inv2", tone: "calendar", label: "featuresPage.invoice.p2" as PublicSiteTranslationKey, icon: <path d="M4 16l1-3 8-8 2.5 2.5-8 8H4zM12 5l2.5 2.5" /> },
+                { key: "inv3", tone: "team", label: "featuresPage.invoice.p3" as PublicSiteTranslationKey, icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> }
+              ].map(item => (
+                <div className="public-features-hero-strip-item" key={item.key}>
+                  <span className="public-features-hero-strip-icon" data-tone={item.tone}>
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                  </span>
+                  <div>
+                    <strong>{t(item.label)}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell">
+            <SectionHeader
               eyebrowKey="capability.eyebrow"
               titleKey="capability.title"
               bodyKey="capability.body"
