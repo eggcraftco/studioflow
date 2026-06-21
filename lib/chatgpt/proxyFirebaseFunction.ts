@@ -6,6 +6,8 @@ const LEGACY_PUBLIC_ORIGINS = [
   "https://lightslategray-pheasant-732922.hostingersite.com"
 ];
 
+const CHATGPT_MCP_RESOURCE = "https://nivadesk.app/chatgptMcp";
+
 function rewritePublicLocation(location: string | null): string | null {
   if (!location) return null;
 
@@ -14,6 +16,58 @@ function rewritePublicLocation(location: string | null): string | null {
     updatedLocation = updatedLocation.replace(legacyOrigin, "https://nivadesk.app");
   }
   return updatedLocation;
+}
+
+function preserveOAuthResourceParam(
+  location: string | null,
+  incomingUrl: URL,
+  functionName: string
+): string | null {
+  if (!location || functionName !== "chatgptOAuthAuthorize") {
+    return location;
+  }
+
+  const resource = incomingUrl.searchParams.get("resource") ?? CHATGPT_MCP_RESOURCE;
+
+  try {
+    const isAbsolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(location);
+    const locationUrl = new URL(location, incomingUrl.origin);
+
+    if (
+      locationUrl.origin === "https://nivadesk.app" &&
+      locationUrl.pathname === "/chatgpt/connect" &&
+      !locationUrl.searchParams.has("resource")
+    ) {
+      locationUrl.searchParams.set("resource", resource);
+    }
+
+    if (isAbsolute) {
+      return locationUrl.toString();
+    }
+
+    return `${locationUrl.pathname}${locationUrl.search}${locationUrl.hash}`;
+  } catch {
+    return location;
+  }
+}
+
+function addMcpAuthChallengeIfNeeded(
+  responseHeaders: Headers,
+  functionName: string,
+  status: number
+) {
+  if (functionName !== "chatgptMcp" || status !== 401) {
+    return;
+  }
+
+  if (!responseHeaders.has("WWW-Authenticate")) {
+    responseHeaders.set(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://nivadesk.app/.well-known/oauth-protected-resource/chatgptMcp", scope="orders.read orders.write notes.read notes.write finance.read tasks.write"'
+    );
+  }
+
+  responseHeaders.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Session-Id, mcp-session-id");
 }
 
 export async function proxyNivaDeskFirebaseFunction(
@@ -52,10 +106,17 @@ export async function proxyNivaDeskFirebaseFunction(
   responseHeaders.set("Pragma", "no-cache");
   responseHeaders.set("Expires", "0");
 
-  const location = rewritePublicLocation(responseHeaders.get("location"));
+  const location = preserveOAuthResourceParam(
+    rewritePublicLocation(responseHeaders.get("location")),
+    incomingUrl,
+    functionName
+  );
+
   if (location) {
     responseHeaders.set("location", location);
   }
+
+  addMcpAuthChallengeIfNeeded(responseHeaders, functionName, upstream.status);
 
   return new Response(upstream.body, {
     status: upstream.status,
