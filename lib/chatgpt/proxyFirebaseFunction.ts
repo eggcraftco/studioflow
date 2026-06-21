@@ -51,6 +51,19 @@ function preserveOAuthResourceParam(
   }
 }
 
+function addChatGptCorsHeaders(responseHeaders: Headers, functionName: string) {
+  if (!functionName.startsWith("chatgpt")) {
+    return;
+  }
+
+  responseHeaders.set("Access-Control-Allow-Origin", "*");
+  responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
+  responseHeaders.set(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, MCP-Session-Id, mcp-session-id"
+  );
+}
+
 function addMcpAuthChallengeIfNeeded(
   responseHeaders: Headers,
   functionName: string,
@@ -116,6 +129,7 @@ export async function proxyNivaDeskFirebaseFunction(
     responseHeaders.set("location", location);
   }
 
+  addChatGptCorsHeaders(responseHeaders, functionName);
   addMcpAuthChallengeIfNeeded(responseHeaders, functionName, upstream.status);
 
   return new Response(upstream.body, {
