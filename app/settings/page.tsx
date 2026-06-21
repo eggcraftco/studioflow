@@ -48,6 +48,7 @@ import {
 import { workspaceOnboardingPromptSeed, isWorkspaceOnboardingPromptSeed } from "@/lib/studioflow/workspaceOnboarding";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
+import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
@@ -718,6 +719,43 @@ function PreferencesSection({
     <div className="settings-card-stack">
       <AppearanceSection workspace={workspace} settings={settings} onSaved={onSaved} />
       <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onSaved} />
+      <AutoLockSection language={language} />
+    </div>
+  );
+}
+
+function AutoLockSection({ language }: { language: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [minutes, setMinutes] = useState(0);
+
+  useEffect(() => {
+    setMinutes(getAutoLockMinutes());
+  }, []);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="lock" eyebrow={t("Security")} title={t("Auto-lock")} />
+        <p className="muted-copy">{t("Lock NivaDesk after a period of inactivity, then unlock with your password. This applies to this browser only.")}</p>
+        <label className="quick-reply-settings-label">
+          <span>{t("Auto-lock")}</span>
+          <select
+            className="input"
+            value={minutes}
+            onChange={event => {
+              const next = parseInt(event.target.value, 10) || 0;
+              setMinutes(next);
+              setAutoLockMinutes(next);
+            }}
+          >
+            <option value={0}>{t("Off")}</option>
+            <option value={1}>{t("After 1 minute")}</option>
+            <option value={5}>{t("After 5 minutes")}</option>
+            <option value={15}>{t("After 15 minutes")}</option>
+            <option value={60}>{t("After 1 hour")}</option>
+          </select>
+        </label>
+      </section>
     </div>
   );
 }

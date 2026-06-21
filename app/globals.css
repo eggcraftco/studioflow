@@ -19676,3 +19676,88 @@ html[data-studio-theme="dark"] .appshell-brand-logo,
 body[data-studio-theme="dark"] .appshell-brand-logo {
   content: url("/brand/nivadesk-logo-dark.png");
 }
+
+/* Inactivity lock overlay — covers the whole app until the user re-authenticates. */
+.session-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 10, 18, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.session-lock-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 32px 28px;
+}
+
+.session-lock-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.session-lock-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.session-lock-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.session-lock-copy {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+  line-height: 1.5;
+}
+
+.session-lock-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.session-lock-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.session-lock-error {
+  margin: 0;
+  font-size: 13px;
+  color: #e24b4a;
+}
+
+.session-lock-signout {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.session-lock-signout:hover {
+  opacity: 0.9;
+  text-decoration: underline;
+}

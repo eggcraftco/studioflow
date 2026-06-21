@@ -11,6 +11,7 @@ import { AppRouteFrame } from "@/components/AppRouteFrame";
 import { PricePrivacyProvider } from "@/components/PricePrivacy";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { SessionAutoLock } from "@/components/SessionAutoLock";
 
 const isStagingPreview = process.env.NEXT_PUBLIC_STAGING_NO_INDEX === "true";
 
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <PricePrivacyProvider>
             <AppRouteFrame>{children}</AppRouteFrame>
             <CookieConsent />
+            <SessionAutoLock />
           </PricePrivacyProvider>
         </AuthProvider>
       </body>
