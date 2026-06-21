@@ -10,7 +10,11 @@ const authorizationServerMetadata = {
   issuer: "https://nivadesk.app",
   authorization_endpoint: "https://nivadesk.app/chatgptOAuthAuthorize",
   token_endpoint: "https://nivadesk.app/chatgptOAuthToken",
-  client_id_metadata_document_supported: true,
+  // Our server implements Dynamic Client Registration (DCR) only, not the Client ID
+  // Metadata Document flow. ChatGPT PRIORITISES CIMD when this is true, then fails
+  // ("Error fetching OAuth configuration") because we don't actually serve CIMD. Keep
+  // false so ChatGPT uses the registration_endpoint (DCR), which we support.
+  client_id_metadata_document_supported: false,
   registration_endpoint: "https://nivadesk.app/chatgptOAuthRegister",
   response_types_supported: ["code"],
   grant_types_supported: ["authorization_code"],
