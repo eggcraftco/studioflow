@@ -49,6 +49,15 @@ export async function getShopifyWebhookDeliveryUrl(companyId: string): Promise<s
   return response.data?.deliveryUrl || "";
 }
 
+export async function getInboundWebhookDeliveryUrl(companyId: string): Promise<string> {
+  const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(
+    functions,
+    "getInboundWebhookToken"
+  );
+  const response = await callable({ companyId });
+  return response.data?.deliveryUrl || "";
+}
+
 export async function validateWorkspacePlanAction(
   companyId: string,
   action: string,
