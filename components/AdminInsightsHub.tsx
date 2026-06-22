@@ -476,7 +476,7 @@ function AdminSiteStatsSection() {
             </section>
             <section className="card app-card">
               <CardTitle icon="dashboard" eyebrow="Visitors" title="Traffic Sources (hosts)" />
-              <StatsRankedList entries={topStatsEntries(current, "referrers")} />
+              <StatsRankedList entries={topStatsEntries(current, "referrers", 10)} />
             </section>
           </div>
 
