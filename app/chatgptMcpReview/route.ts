@@ -1,8 +1,3 @@
-import {
-  OPTIONS as baseOptions,
-  POST as basePost
-} from "../chatgptMcp/route";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -66,49 +61,83 @@ function mcpMethodNotAllowedResponse() {
   );
 }
 
-async function readMcpMethod(request: Request) {
+const noAuthSecuritySchemes = [{ type: "noauth" }];
+
+const reviewTools = [
+  {
+    name: "search_orders",
+    title: "Search orders",
+    description: "Search NivaDesk orders in the connected workspace by customer name, email, watch model, status, order ID, or keyword.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [],
+      properties: {
+        query: {
+          type: "string",
+          description: "Search keyword, customer name, email, watch model, or order ID."
+        },
+        status: {
+          type: "string",
+          description: "Optional status filter."
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of orders to return. Default is 10."
+        }
+      }
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
+    securitySchemes: noAuthSecuritySchemes,
+    _meta: {
+      securitySchemes: noAuthSecuritySchemes
+    }
+  }
+];
+
+async function readMcpPayload(request: Request) {
   try {
-    const payload = await request.clone().json();
-    return typeof payload?.method === "string" ? payload.method : null;
+    const payload = await request.json();
+    return payload && typeof payload === "object" ? payload : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-async function noAuthToolsListResponse(response: Response) {
-  if (!response.ok) {
-    return response;
-  }
-
-  const payload = await response.clone().json();
-  const tools = payload?.result?.tools;
-
-  if (!Array.isArray(tools)) {
-    return response;
-  }
-
-  const securitySchemes = [{ type: "noauth" }];
-  const normalizedPayload = {
-    ...payload,
-    result: {
-      ...payload.result,
-      tools: tools.map((tool) => ({
-        ...tool,
-        securitySchemes,
-        _meta: {
-          ...(tool._meta || {}),
-          securitySchemes
-        }
-      }))
+function mcpResult(id: unknown, result: unknown, status = 200) {
+  return Response.json(
+    {
+      jsonrpc: "2.0",
+      id,
+      result
+    },
+    {
+      status,
+      headers
     }
-  };
-  const responseHeaders = new Headers(response.headers);
-  responseHeaders.delete("content-length");
+  );
+}
 
-  return Response.json(normalizedPayload, {
-    status: response.status,
-    headers: responseHeaders
-  });
+function mcpError(id: unknown, code: number, message: string, status = 200) {
+  return Response.json(
+    {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code,
+        message
+      }
+    },
+    {
+      status,
+      headers
+    }
+  );
 }
 
 export function GET(request: Request) {
@@ -144,17 +173,48 @@ export function HEAD(request: Request) {
 
 export function OPTIONS(request: Request) {
   logReviewRequest("OPTIONS", request);
-  return baseOptions();
+  return new Response(null, {
+    status: 204,
+    headers
+  });
 }
 
 export async function POST(request: Request) {
   logReviewRequest("POST", request);
-  const method = await readMcpMethod(request);
-  const response = await basePost(request);
+  const payload = await readMcpPayload(request);
+  const id = "id" in payload ? payload.id : null;
+  const method = typeof payload.method === "string" ? payload.method : "";
 
-  if (method === "tools/list") {
-    return noAuthToolsListResponse(response);
+  if (method.startsWith("notifications/")) {
+    return new Response(null, {
+      status: 202,
+      headers
+    });
   }
 
-  return response;
+  switch (method) {
+    case "initialize":
+      return mcpResult(id, {
+        protocolVersion: "2024-11-05",
+        serverInfo: {
+          name: "NivaDesk MCP Review",
+          version: "0.1.0"
+        },
+        capabilities: {
+          tools: {}
+        },
+        instructions: "Temporary no-auth MCP review endpoint for OpenAI Apps dashboard tool scanning."
+      });
+
+    case "ping":
+      return mcpResult(id, {});
+
+    case "tools/list":
+      return mcpResult(id, {
+        tools: reviewTools
+      });
+
+    default:
+      return mcpError(id, -32601, `Method not found: ${method || "(empty)"}`);
+  }
 }
