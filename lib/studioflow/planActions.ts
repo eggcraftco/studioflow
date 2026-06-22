@@ -40,6 +40,15 @@ export async function getWooCommerceWebhookDeliveryUrl(companyId: string): Promi
   return response.data?.deliveryUrl || "";
 }
 
+export async function getShopifyWebhookDeliveryUrl(companyId: string): Promise<string> {
+  const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(
+    functions,
+    "getShopifyWebhookToken"
+  );
+  const response = await callable({ companyId });
+  return response.data?.deliveryUrl || "";
+}
+
 export async function validateWorkspacePlanAction(
   companyId: string,
   action: string,

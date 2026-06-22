@@ -11,7 +11,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, functions } from "@/lib/firebase/client";
 import { httpsCallable } from "firebase/functions";
-import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
+import { getWooCommerceWebhookDeliveryUrl, getShopifyWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
@@ -86,6 +86,7 @@ type SettingsSectionId =
   | "quick-reply"
   | "financial"
   | "woocommerce"
+  | "shopify"
   | "safety-uploads"
   | "data"
   | "plan-access"
@@ -146,6 +147,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workspace" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "workspace" },
   { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart", group: "workspace" },
+  { id: "shopify", title: "Shopify Integration", appKey: "Shopify", description: "Live Shopify orders and webhook setup.", icon: "cart", group: "workspace" },
   { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "workspace" },
   { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "workspace" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "workspace" },
@@ -266,6 +268,7 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");
   if (sectionId === "data") return allowed("settingsData");
   if (sectionId === "woocommerce") return allowed("settingsWorkflow");
+  if (sectionId === "shopify") return allowed("settingsWorkflow");
   if (sectionId === "plan-access") return allowed("settingsPlanAccess");
   return false;
 }
@@ -564,6 +567,8 @@ function renderSettingsSection({
       return <FinancialSettingsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "woocommerce":
       return <WooCommerceIntegrationSection workspace={workspace} language={language} />;
+    case "shopify":
+      return <ShopifyIntegrationSection workspace={workspace} language={language} />;
     case "safety-uploads":
       return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
@@ -3539,6 +3544,95 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
           <IntegrationInfoRow number="2" title={t("Create a new webhook")} detail={t("Create a new webhook for NivaDesk orders.")} />
           <IntegrationInfoRow number="3" title={t("Set it active")} detail={t("Set Status to Active and Topic to Order created.")} />
           <IntegrationInfoRow number="4" title={t("Paste the Delivery URL")} detail={t("Paste the copied Delivery URL, save the webhook, then place a test order.")} />
+        </div>
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
+        <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
+      </section>
+    </div>
+  );
+}
+
+function ShopifyIntegrationSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [copyStatus, setCopyStatus] = useState("");
+  const companyId = workspace.id.trim();
+  // The signed Delivery URL (with this workspace's webhook token) is loaded from the backend
+  // so the copied URL authenticates with the webhook.
+  const [deliveryUrl, setDeliveryUrl] = useState("");
+  const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  useEffect(() => {
+    if (!companyId) {
+      setDeliveryUrl("");
+      return;
+    }
+    let active = true;
+    setDeliveryUrlLoading(true);
+    getShopifyWebhookDeliveryUrl(companyId)
+      .then((url) => {
+        if (active) setDeliveryUrl(url);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setDeliveryUrlLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
+
+  async function copyText(value: string, label: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyStatus(`${label} ${t("copied.")}`);
+    } catch {
+      setCopyStatus(t("Copy failed. Select the value and copy it manually."));
+    }
+    window.setTimeout(() => setCopyStatus(""), 1600);
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="orders" eyebrow={t("Shopify Integration")} title={t("Connect Shopify")} />
+        <div className="quick-reply-settings-info">
+          <strong>{t("Website orders can flow into this workspace.")}</strong>
+          <p>{t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders appear in Orders and Schedule automatically.")}</p>
+        </div>
+        {!companyId ? (
+          <p className="layout-error">{t("Company ID is not available yet. Sign in or reconnect your workspace first.")}</p>
+        ) : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="docText" eyebrow={t("Copy Setup Details")} title={t("Webhook values")} />
+        <CopyableIntegrationValue
+          title={t("Your Company ID")}
+          value={companyId || t("Unavailable")}
+          buttonTitle={t("Copy Company ID")}
+          canCopy={Boolean(companyId)}
+          onCopy={() => copyText(companyId, t("Company ID"))}
+        />
+        <CopyableIntegrationValue
+          title={t("Delivery URL with Company ID")}
+          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
+          buttonTitle={t("Copy Delivery URL")}
+          canCopy={Boolean(deliveryUrl)}
+          onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
+        />
+        {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="checklist" eyebrow={t("What you need to do")} title={t("Shopify webhook steps")} />
+        <div className="settings-rule-list">
+          <IntegrationInfoRow number="1" title={t("Open Shopify webhooks")} detail={t("In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).")} />
+          <IntegrationInfoRow number="2" title={t("Create an order webhook")} detail={t("Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.")} />
+          <IntegrationInfoRow number="3" title={t("Paste the Delivery URL")} detail={t("Paste the copied Delivery URL as the webhook URL and save it.")} />
+          <IntegrationInfoRow number="4" title={t("Place a test order")} detail={t("Place a paid test order in your store; it appears in Orders within seconds.")} />
         </div>
       </section>
 
