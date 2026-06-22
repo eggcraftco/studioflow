@@ -555,9 +555,14 @@ const TREE_EN: GuideNode[] = [
       },
       {
         id: "set-woocommerce",
-        title: "WooCommerce Integration",
+        title: "Store & website integrations",
         blocks: [
-          { kind: "para", text: "Connect a WooCommerce store so live website orders flow into NivaDesk automatically through a webhook. The screen shows your per-workspace signed delivery URL to paste into WooCommerce." }
+          { kind: "para", text: "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
+          { kind: "bullets", items: [
+            "WooCommerce — create one webhook (Order created) and paste the delivery URL.",
+            "Shopify — add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
+            "Other platforms — connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
+          ] }
         ]
       },
       {
@@ -1129,9 +1134,14 @@ const TREE_TR: GuideNode[] = [
       },
       {
         id: "set-woocommerce",
-        title: "WooCommerce Integration",
+        title: "Mağaza ve web sitesi entegrasyonları",
         blocks: [
-          { kind: "para", text: "Bir WooCommerce mağazası bağlayın; canlı web sitesi siparişleri bir webhook ile NivaDesk'e otomatik aksın. Ekran, WooCommerce'e yapıştıracağınız çalışma alanına özel imzalı delivery URL'ini gösterir." }
+          { kind: "para", text: "Online mağazanı bağla; canlı web sitesi siparişleri NivaDesk'e otomatik aksın. Her entegrasyon ekranı, platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'ini gösterir; yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
+          { kind: "bullets", items: [
+            "WooCommerce — bir webhook (Order created) oluştur ve delivery URL'ini yapıştır.",
+            "Shopify — bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
+            "Diğer platformlar — Wix, Squarespace, Etsy, BigCommerce veya özel siteyi generic sipariş webhook'u ya da Zapier/Make gibi kodsuz bir araçla bağla."
+          ] }
         ]
       },
       {
