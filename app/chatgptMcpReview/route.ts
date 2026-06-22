@@ -66,6 +66,51 @@ function mcpMethodNotAllowedResponse() {
   );
 }
 
+async function readMcpMethod(request: Request) {
+  try {
+    const payload = await request.clone().json();
+    return typeof payload?.method === "string" ? payload.method : null;
+  } catch {
+    return null;
+  }
+}
+
+async function noAuthToolsListResponse(response: Response) {
+  if (!response.ok) {
+    return response;
+  }
+
+  const payload = await response.clone().json();
+  const tools = payload?.result?.tools;
+
+  if (!Array.isArray(tools)) {
+    return response;
+  }
+
+  const securitySchemes = [{ type: "noauth" }];
+  const normalizedPayload = {
+    ...payload,
+    result: {
+      ...payload.result,
+      tools: tools.map((tool) => ({
+        ...tool,
+        securitySchemes,
+        _meta: {
+          ...(tool._meta || {}),
+          securitySchemes
+        }
+      }))
+    }
+  };
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete("content-length");
+
+  return Response.json(normalizedPayload, {
+    status: response.status,
+    headers: responseHeaders
+  });
+}
+
 export function GET(request: Request) {
   logReviewRequest("GET", request);
 
@@ -104,5 +149,12 @@ export function OPTIONS(request: Request) {
 
 export async function POST(request: Request) {
   logReviewRequest("POST", request);
-  return basePost(request);
+  const method = await readMcpMethod(request);
+  const response = await basePost(request);
+
+  if (method === "tools/list") {
+    return noAuthToolsListResponse(response);
+  }
+
+  return response;
 }
