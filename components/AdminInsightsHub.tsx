@@ -506,6 +506,11 @@ type SearchConsoleQuery = {
   isNew: boolean;
 };
 
+type SearchConsoleDay = { date: string; clicks: number; impressions: number; ctr: number; position: number };
+type SearchConsolePage = { page: string; clicks: number; impressions: number; ctr: number; position: number };
+type SearchConsoleCountry = { country: string; clicks: number; impressions: number };
+type SearchConsoleDevice = { device: string; clicks: number; impressions: number };
+
 type SearchConsoleResult = {
   ok: boolean;
   needsAccess?: boolean;
@@ -520,7 +525,94 @@ type SearchConsoleResult = {
     previous: { clicks: number; impressions: number; ctr: number; position: number };
   };
   queries?: SearchConsoleQuery[];
+  byDate?: SearchConsoleDay[];
+  pages?: SearchConsolePage[];
+  countries?: SearchConsoleCountry[];
+  devices?: SearchConsoleDevice[];
 };
+
+// GSC reports countries as ISO alpha-3; map the common ones to alpha-2 so we can
+// reuse the flag + localized name helpers. Unknown codes fall back to the code.
+const ALPHA3_TO_ALPHA2: Record<string, string> = {
+  GBR: "GB", USA: "US", IRL: "IE", DEU: "DE", FRA: "FR", NLD: "NL", ESP: "ES", ITA: "IT",
+  CAN: "CA", AUS: "AU", IND: "IN", TUR: "TR", BEL: "BE", CHE: "CH", AUT: "AT", SWE: "SE",
+  NOR: "NO", DNK: "DK", FIN: "FI", POL: "PL", PRT: "PT", GRC: "GR", ROU: "RO", CZE: "CZ",
+  NZL: "NZ", ZAF: "ZA", BRA: "BR", MEX: "MX", ARE: "AE", SAU: "SA", JPN: "JP", KOR: "KR",
+  CHN: "CN", RUS: "RU", UKR: "UA", HUN: "HU", BGR: "BG", HRV: "HR", SRB: "RS", SVK: "SK"
+};
+
+function searchCountryLabel(alpha3: string) {
+  const a2 = ALPHA3_TO_ALPHA2[alpha3];
+  if (!a2) return { flag: "🌍", name: alpha3 };
+  return { flag: flagEmoji(a2), name: countryName(a2) };
+}
+
+const SEARCH_DEVICE_LABELS: Record<string, string> = { DESKTOP: "Desktop", MOBILE: "Mobile", TABLET: "Tablet" };
+const SEARCH_DEVICE_COLORS: Record<string, string> = { DESKTOP: "#0a84ff", MOBILE: "#8a5cf6", TABLET: "#30b0c7" };
+
+// Clicks + impressions over time (impressions as area, clicks as line).
+function SearchTrendChart({ data }: { data: SearchConsoleDay[] }) {
+  if (data.length < 2) return <p className="muted-copy">Not enough days to chart yet.</p>;
+  const width = 600;
+  const height = 200;
+  const pad = 10;
+  const maxImpr = Math.max(...data.map(d => d.impressions), 1);
+  const maxClk = Math.max(...data.map(d => d.clicks), 1);
+  const x = (i: number) => pad + (i / Math.max(data.length - 1, 1)) * (width - pad * 2);
+  const yI = (v: number) => height - pad - (v / maxImpr) * (height - pad * 2);
+  const yC = (v: number) => height - pad - (v / maxClk) * (height - pad * 2);
+  const imprLine = data.map((d, i) => `${x(i)},${yI(d.impressions)}`).join(" ");
+  const imprArea = `${pad},${height - pad} ${imprLine} ${width - pad},${height - pad}`;
+  const clkLine = data.map((d, i) => `${x(i)},${yC(d.clicks)}`).join(" ");
+  return (
+    <>
+      <div style={{ display: "flex", gap: 16, fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: "#8a5cf6" }} />Impressions</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: "#0a84ff" }} />Clicks</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <polygon points={imprArea} fill="rgba(138, 92, 246, 0.16)" />
+        <polyline points={imprLine} fill="none" stroke="#8a5cf6" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={clkLine} fill="none" stroke="#0a84ff" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => (
+          <circle key={d.date} cx={x(i)} cy={yI(d.impressions)} r="2.5" fill="#8a5cf6">
+            <title>{`${d.date}: ${d.impressions} impressions, ${d.clicks} clicks`}</title>
+          </circle>
+        ))}
+      </svg>
+    </>
+  );
+}
+
+// Average position over time. Y is inverted (1 = best at the top); a line that
+// climbs means we rose toward #1.
+function SearchPositionChart({ data }: { data: SearchConsoleDay[] }) {
+  const pts = data.filter(d => d.position > 0);
+  if (pts.length < 2) return <p className="muted-copy">Not enough ranked days to chart yet.</p>;
+  const width = 600;
+  const height = 150;
+  const pad = 10;
+  const maxPos = Math.max(...pts.map(d => d.position));
+  const minPos = Math.min(...pts.map(d => d.position));
+  const span = Math.max(maxPos - minPos, 1);
+  const x = (i: number) => pad + (i / Math.max(pts.length - 1, 1)) * (width - pad * 2);
+  // Higher on screen = better (smaller position number).
+  const y = (v: number) => pad + ((v - minPos) / span) * (height - pad * 2);
+  const line = pts.map((d, i) => `${x(i)},${y(d.position)}`).join(" ");
+  return (
+    <>
+      <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 6px" }}>Higher line = better rank (closer to #1). Best {minPos.toFixed(1)} · worst {maxPos.toFixed(1)}.</p>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <polyline points={line} fill="none" stroke="#ff9f0a" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((d, i) => (
+          <circle key={d.date} cx={x(i)} cy={y(d.position)} r="2.5" fill="#ff9f0a">
+            <title>{`${d.date}: position ${d.position.toFixed(1)}`}</title>
+          </circle>
+        ))}
+      </svg>
+    </>
+  );
+}
 
 // Shows the rank shift vs the previous period. A larger position number is
 // worse, so positionDelta > 0 (we rose toward #1) is good → green ▲.
@@ -592,6 +684,10 @@ function AdminSearchConsoleSection() {
   const cur = totals?.current;
   const prev = totals?.previous;
   const queries = result?.queries ?? [];
+  const byDate = result?.byDate ?? [];
+  const pages = result?.pages ?? [];
+  const countries = result?.countries ?? [];
+  const devices = result?.devices ?? [];
   const movers = queries
     .filter(q => q.positionDelta !== null && !q.isNew && Math.abs(q.positionDelta) >= 0.5)
     .sort((a, b) => Math.abs(b.positionDelta as number) - Math.abs(a.positionDelta as number))
@@ -637,11 +733,21 @@ function AdminSearchConsoleSection() {
       {!loading && result?.ok && cur && prev ? (
         <>
           <div className="site-stats-grid">
-            <StatsCard title="Total Clicks" value={cur.clicks.toLocaleString()} delta={statsDeltaPercent(cur.clicks, prev.clicks)} spark={[]} color="#0a84ff" />
-            <StatsCard title="Impressions" value={cur.impressions.toLocaleString()} delta={statsDeltaPercent(cur.impressions, prev.impressions)} spark={[]} color="#8a5cf6" />
-            <StatsCard title="Avg. CTR" value={`${(cur.ctr * 100).toFixed(1)}%`} delta={statsDeltaPercent(cur.ctr, prev.ctr)} spark={[]} color="#30d158" />
-            <StatsCard title="Avg. Position" value={cur.position.toFixed(1)} delta={statsDeltaPercent(cur.position, prev.position)} invertGood spark={[]} color="#ff9f0a" />
+            <StatsCard title="Total Clicks" value={cur.clicks.toLocaleString()} delta={statsDeltaPercent(cur.clicks, prev.clicks)} spark={byDate.map(d => d.clicks)} color="#0a84ff" />
+            <StatsCard title="Impressions" value={cur.impressions.toLocaleString()} delta={statsDeltaPercent(cur.impressions, prev.impressions)} spark={byDate.map(d => d.impressions)} color="#8a5cf6" />
+            <StatsCard title="Avg. CTR" value={`${(cur.ctr * 100).toFixed(1)}%`} delta={statsDeltaPercent(cur.ctr, prev.ctr)} spark={byDate.map(d => d.ctr * 100)} color="#30d158" />
+            <StatsCard title="Avg. Position" value={cur.position.toFixed(1)} delta={statsDeltaPercent(cur.position, prev.position)} invertGood spark={byDate.map(d => d.position)} color="#ff9f0a" />
           </div>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Search" title="Clicks & impressions over time" />
+            <SearchTrendChart data={byDate} />
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Search" title="Average position over time" />
+            <SearchPositionChart data={byDate} />
+          </section>
 
           {movers.length > 0 ? (
             <section className="card app-card">
@@ -694,6 +800,79 @@ function AdminSearchConsoleSection() {
             )}
             <p style={{ fontSize: 11, color: "var(--muted)", margin: "10px 0 0" }}>Δ shows the average-position change vs the previous {result.previousRange ? `${result.previousRange.startDate} – ${result.previousRange.endDate}` : "period"}. ▲ green = moved up toward #1.</p>
           </section>
+
+          <section className="card app-card">
+            <CardTitle icon="files" eyebrow="Search" title="Top pages" />
+            {pages.length === 0 ? (
+              <p className="muted-copy">No pages have search impressions in this period yet.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, fontWeight: 800 }}>
+                      <th style={{ padding: "8px 6px", width: 28 }}>#</th>
+                      <th style={{ padding: "8px 6px" }}>Page</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Impr.</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Clicks</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>CTR</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Position</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pages.map((p, index) => {
+                      let label = p.page;
+                      try { label = new URL(p.page).pathname || "/"; } catch { /* keep raw */ }
+                      return (
+                        <tr key={p.page} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                          <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
+                          <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span title={p.page}>{label === "/" ? "Home page" : label}</span></td>
+                          <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.impressions.toLocaleString()}</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.clicks.toLocaleString()}</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right" }}>{(p.ctr * 100).toFixed(1)}%</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800 }}>{p.position.toFixed(1)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <div className="site-stats-panels">
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Search" title="Search by country" />
+              {countries.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <div style={{ display: "grid" }}>
+                  {countries.slice(0, 8).map((c, index) => {
+                    const { flag, name } = searchCountryLabel(c.country);
+                    const max = Math.max(...countries.map(x => x.impressions), 1);
+                    return (
+                      <div key={c.country} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                        <span aria-hidden="true">{flag}</span>
+                        <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>{((c.impressions / max) * 100).toFixed(0)}%</span>
+                        <strong style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>{c.impressions.toLocaleString()}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Search" title="Search by device" />
+              {devices.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <StatsDonut
+                  slices={devices.map(d => ({ label: SEARCH_DEVICE_LABELS[d.device] || d.device, value: d.impressions, color: SEARCH_DEVICE_COLORS[d.device] || "#9ca3af" }))}
+                  centerLabel="Impr."
+                />
+              )}
+            </section>
+          </div>
         </>
       ) : null}
     </div>
