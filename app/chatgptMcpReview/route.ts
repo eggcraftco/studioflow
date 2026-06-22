@@ -46,8 +46,32 @@ function logReviewRequest(method: string, request?: Request) {
   );
 }
 
+function mcpMethodNotAllowedResponse() {
+  return Response.json(
+    {
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32000,
+        message: "This MCP endpoint does not provide a server-initiated SSE stream."
+      }
+    },
+    {
+      status: 405,
+      headers: {
+        ...headers,
+        "Allow": "POST, OPTIONS"
+      }
+    }
+  );
+}
+
 export function GET(request: Request) {
   logReviewRequest("GET", request);
+
+  if ((request.headers.get("accept") ?? "").includes("text/event-stream")) {
+    return mcpMethodNotAllowedResponse();
+  }
 
   return Response.json(
     {
