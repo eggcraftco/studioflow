@@ -4,8 +4,8 @@ export const dynamic = "force-dynamic";
 const headers = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Session-Id, mcp-session-id",
-  "Access-Control-Expose-Headers": "WWW-Authenticate, Link, MCP-Session-Id, mcp-session-id",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Protocol-Version, mcp-protocol-version, MCP-Session-Id, mcp-session-id",
+  "Access-Control-Expose-Headers": "WWW-Authenticate, Link, MCP-Protocol-Version, mcp-protocol-version, MCP-Session-Id, mcp-session-id",
   "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
   "Pragma": "no-cache",
   "Expires": "0",
@@ -62,6 +62,7 @@ function mcpMethodNotAllowedResponse() {
 }
 
 const noAuthSecuritySchemes = [{ type: "noauth" }];
+const supportedProtocolVersions = ["2025-06-18", "2025-03-26"];
 
 const reviewTools = [
   {
@@ -140,6 +141,18 @@ function mcpError(id: unknown, code: number, message: string, status = 200) {
   );
 }
 
+function negotiatedProtocolVersion(payload: Record<string, unknown>) {
+  const params = payload.params && typeof payload.params === "object" ? payload.params : {};
+  const requestedVersion =
+    "protocolVersion" in params && typeof params.protocolVersion === "string"
+      ? params.protocolVersion
+      : "";
+
+  return supportedProtocolVersions.includes(requestedVersion)
+    ? requestedVersion
+    : supportedProtocolVersions[0];
+}
+
 export function GET(request: Request) {
   logReviewRequest("GET", request);
 
@@ -195,7 +208,7 @@ export async function POST(request: Request) {
   switch (method) {
     case "initialize":
       return mcpResult(id, {
-        protocolVersion: "2024-11-05",
+        protocolVersion: negotiatedProtocolVersion(payload),
         serverInfo: {
           name: "NivaDesk MCP Review",
           version: "0.1.0"
