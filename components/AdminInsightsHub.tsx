@@ -490,6 +490,218 @@ function AdminSiteStatsSection() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Google Search — Search Console rankings (queries, position, day-over-day change)
+// ---------------------------------------------------------------------------
+
+type SearchConsoleQuery = {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  prevPosition: number | null;
+  positionDelta: number | null;
+  impressionsDelta: number | null;
+  isNew: boolean;
+};
+
+type SearchConsoleResult = {
+  ok: boolean;
+  needsAccess?: boolean;
+  serviceAccountEmail?: string;
+  accessibleSites?: string[];
+  property?: string;
+  message?: string;
+  range?: { startDate: string; endDate: string };
+  previousRange?: { startDate: string; endDate: string };
+  totals?: {
+    current: { clicks: number; impressions: number; ctr: number; position: number };
+    previous: { clicks: number; impressions: number; ctr: number; position: number };
+  };
+  queries?: SearchConsoleQuery[];
+};
+
+// Shows the rank shift vs the previous period. A larger position number is
+// worse, so positionDelta > 0 (we rose toward #1) is good → green ▲.
+function PositionDeltaBadge({ delta, isNew }: { delta: number | null; isNew?: boolean }) {
+  if (isNew) {
+    return <span style={{ fontSize: 11, fontWeight: 800, color: "#1d8f43", background: "rgba(29,143,67,0.12)", borderRadius: 6, padding: "2px 6px" }}>New</span>;
+  }
+  if (delta === null || Math.abs(delta) < 0.05) {
+    return <span style={{ fontSize: 12, color: "var(--muted)" }}>–</span>;
+  }
+  const improved = delta > 0;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 800, color: improved ? "#1d8f43" : "#d92d20" }}>
+      <span aria-hidden="true">{improved ? "▲" : "▼"}</span>
+      {Math.abs(delta).toFixed(1)}
+    </span>
+  );
+}
+
+function AdminSearchConsoleSection() {
+  const [rangeDays, setRangeDays] = useState<number>(28); // 7 / 28 / 90
+  const [result, setResult] = useState<SearchConsoleResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    // GSC data lags ~3 days; end the window there so positions are populated.
+    const endMs = Date.now() - 3 * 86400000;
+    const startMs = endMs - (rangeDays - 1) * 86400000;
+    const callable = httpsCallable<{ startDate: string; endDate: string }, SearchConsoleResult>(functions, "getSearchConsoleStats");
+    callable({ startDate: new Date(startMs).toISOString().slice(0, 10), endDate: new Date(endMs).toISOString().slice(0, 10) })
+      .then(res => {
+        if (!cancelled) setResult(res.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load search rankings.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeDays]);
+
+  const rangeButton = (option: number, label: string) => (
+    <button
+      key={option}
+      type="button"
+      className="button"
+      onClick={() => setRangeDays(option)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: 999,
+        fontSize: 13,
+        fontWeight: 700,
+        background: rangeDays === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        color: rangeDays === option ? "#fff" : "var(--text)"
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  const totals = result?.totals;
+  const cur = totals?.current;
+  const prev = totals?.previous;
+  const queries = result?.queries ?? [];
+  const movers = queries
+    .filter(q => q.positionDelta !== null && !q.isNew && Math.abs(q.positionDelta) >= 0.5)
+    .sort((a, b) => Math.abs(b.positionDelta as number) - Math.abs(a.positionDelta as number))
+    .slice(0, 6);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Google Search rankings" />
+        <p className="muted-copy">What people search to find NivaDesk on Google, where we rank, and how positions changed vs the previous period. Data from Google Search Console (≈3-day lag).</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 4px" }}>
+          {rangeButton(7, "7d")}
+          {rangeButton(28, "28d")}
+          {rangeButton(90, "90d")}
+        </div>
+        {result?.property ? <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>Property: <strong>{result.property}</strong></p> : null}
+        {loading ? <p className="muted-copy">Loading search rankings…</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+      </section>
+
+      {!loading && result && result.ok === false ? (
+        <section className="card app-card" style={{ display: "grid", gap: 10 }}>
+          <CardTitle icon="lock" eyebrow="Setup required" title="Connect Google Search Console" />
+          <p className="muted-copy">{result.message || "Search Console access is not configured yet."}</p>
+          <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8, fontSize: 13.5, lineHeight: 1.5 }}>
+            <li>In Google Cloud Console, enable the <strong>Google Search Console API</strong> for project <code>eggcraft-studio</code>.</li>
+            <li>
+              In Search Console → <em>Settings → Users and permissions</em>, add this service account as a <strong>Full</strong> (or Restricted) user:
+              {result.serviceAccountEmail ? (
+                <div style={{ marginTop: 6 }}>
+                  <code style={{ display: "inline-block", padding: "4px 8px", borderRadius: 8, background: "rgba(17,24,39,0.06)", fontSize: 12.5, wordBreak: "break-all" }}>{result.serviceAccountEmail}</code>
+                </div>
+              ) : <em> (service account email unavailable — check function logs)</em>}
+            </li>
+            <li>Make sure the <code>{NIVADESK_DOMAIN_LABEL}</code> property is verified, then reload this page.</li>
+          </ol>
+          {result.accessibleSites && result.accessibleSites.length > 0 ? (
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: 0 }}>Currently visible properties: {result.accessibleSites.join(", ")}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {!loading && result?.ok && cur && prev ? (
+        <>
+          <div className="site-stats-grid">
+            <StatsCard title="Total Clicks" value={cur.clicks.toLocaleString()} delta={statsDeltaPercent(cur.clicks, prev.clicks)} spark={[]} color="#0a84ff" />
+            <StatsCard title="Impressions" value={cur.impressions.toLocaleString()} delta={statsDeltaPercent(cur.impressions, prev.impressions)} spark={[]} color="#8a5cf6" />
+            <StatsCard title="Avg. CTR" value={`${(cur.ctr * 100).toFixed(1)}%`} delta={statsDeltaPercent(cur.ctr, prev.ctr)} spark={[]} color="#30d158" />
+            <StatsCard title="Avg. Position" value={cur.position.toFixed(1)} delta={statsDeltaPercent(cur.position, prev.position)} invertGood spark={[]} color="#ff9f0a" />
+          </div>
+
+          {movers.length > 0 ? (
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Search" title="Biggest ranking movers" />
+              <div style={{ display: "grid" }}>
+                {movers.map((q, index) => (
+                  <div key={q.query} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                    <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{q.query}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{q.prevPosition?.toFixed(1)} → {q.position.toFixed(1)}</span>
+                    <PositionDeltaBadge delta={q.positionDelta} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Search" title="Top search queries" />
+            {queries.length === 0 ? (
+              <p className="muted-copy">No search impressions in this period yet.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, fontWeight: 800 }}>
+                      <th style={{ padding: "8px 6px", width: 28 }}>#</th>
+                      <th style={{ padding: "8px 6px" }}>Query</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Impr.</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Clicks</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>CTR</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Position</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Δ vs prev.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queries.map((q, index) => (
+                      <tr key={q.query} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                        <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
+                        <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.query}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}>{q.impressions.toLocaleString()}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}>{q.clicks.toLocaleString()}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}>{(q.ctr * 100).toFixed(1)}%</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800 }}>{q.position.toFixed(1)}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}><PositionDeltaBadge delta={q.positionDelta} isNew={q.isNew} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p style={{ fontSize: 11, color: "var(--muted)", margin: "10px 0 0" }}>Δ shows the average-position change vs the previous {result.previousRange ? `${result.previousRange.startDate} – ${result.previousRange.endDate}` : "period"}. ▲ green = moved up toward #1.</p>
+          </section>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+const NIVADESK_DOMAIN_LABEL = "nivadesk.app";
+
 type AdminInsights = {
   generatedAtMs: number;
   users: { total: number; new30d: number };
@@ -1972,7 +2184,8 @@ type AdminHubPage =
   | "features"
   | "storage"
   | "lookup"
-  | "sitestats";
+  | "sitestats"
+  | "searchconsole";
 
 const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -1983,7 +2196,8 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "features", label: "Feature Usage" },
   { id: "storage", label: "Storage" },
   { id: "lookup", label: "User Lookup" },
-  { id: "sitestats", label: "Global Statistics" }
+  { id: "sitestats", label: "Global Statistics" },
+  { id: "searchconsole", label: "Google Search" }
 ];
 
 export function AdminInsightsHub() {
@@ -2014,6 +2228,7 @@ export function AdminInsightsHub() {
         {page === "storage" ? <AdminStorageDetail onBack={goOverview} /> : null}
         {page === "lookup" ? <AdminUserLookupDetail onBack={goOverview} /> : null}
         {page === "sitestats" ? <AdminSiteStatsSection /> : null}
+        {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
       </div>
     </div>
   );
