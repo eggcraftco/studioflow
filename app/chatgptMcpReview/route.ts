@@ -1,7 +1,10 @@
+import {
+  OPTIONS as baseOptions,
+  POST as basePost
+} from "../chatgptMcp/route";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-export { OPTIONS, POST } from "../chatgptMcp/route";
 
 const headers = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +17,38 @@ const headers = {
   "Content-Type": "application/json; charset=utf-8"
 };
 
-export function GET() {
+function logReviewRequest(method: string, request?: Request) {
+  const safeHeaders: Record<string, string> = {};
+
+  if (request) {
+    for (const [key, value] of request.headers.entries()) {
+      const lowerKey = key.toLowerCase();
+
+      if (lowerKey === "authorization" || lowerKey === "cookie") {
+        safeHeaders[key] = "[redacted]";
+      } else {
+        safeHeaders[key] = value;
+      }
+    }
+  }
+
+  console.log(
+    "[OpenAI MCP Review Scan]",
+    JSON.stringify({
+      method,
+      url: request?.url ?? null,
+      userAgent: request?.headers.get("user-agent") ?? null,
+      xForwardedFor: request?.headers.get("x-forwarded-for") ?? null,
+      xRealIp: request?.headers.get("x-real-ip") ?? null,
+      headers: safeHeaders,
+      timestamp: new Date().toISOString()
+    })
+  );
+}
+
+export function GET(request: Request) {
+  logReviewRequest("GET", request);
+
   return Response.json(
     {
       name: "NivaDesk MCP Review",
@@ -30,9 +64,21 @@ export function GET() {
   );
 }
 
-export function HEAD() {
+export function HEAD(request: Request) {
+  logReviewRequest("HEAD", request);
+
   return new Response(null, {
     status: 200,
     headers
   });
+}
+
+export function OPTIONS(request: Request) {
+  logReviewRequest("OPTIONS", request);
+  return baseOptions();
+}
+
+export async function POST(request: Request) {
+  logReviewRequest("POST", request);
+  return basePost(request);
 }
