@@ -628,6 +628,12 @@ const FAQ_GROUPS: FaqGroup[] = [
     ]
   },
   {
+    categoryKey: "faq.cat.integrations",
+    items: [
+      { titleKey: "faq.q24.title", bodyKey: "faq.q24.body" }
+    ]
+  },
+  {
     categoryKey: "faq.cat.gpt",
     items: [
       { titleKey: "faq.q12.title", bodyKey: "faq.q12.body" },

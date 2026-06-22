@@ -52,11 +52,18 @@ const softwareApplication = {
     "Finance dashboard with paid, remaining and cost summaries",
     "ChatGPT App integration via secure OAuth",
     "WooCommerce order import",
+    "Shopify order sync",
+    "Connect any online store via webhook or Zapier (Wix, Squarespace, Etsy, BigCommerce)",
     "CSV and JSON exports on every plan"
   ]
 };
 
 const FAQ_ENTRIES: { question: string; answer: string }[] = [
+  {
+    question: "Can I connect my online store — WooCommerce, Shopify, Wix, Squarespace or Etsy?",
+    answer:
+      "Yes. WooCommerce and Shopify connect natively, and almost any other platform — Wix, Squarespace, Etsy, BigCommerce or a custom website — can connect through NivaDesk's generic order webhook or a no-code tool like Zapier or Make. New online orders flow straight into NivaDesk Orders and Schedule, with the customer, items and totals mapped to your order workflow."
+  },
   {
     question: "Is there a free version of NivaDesk?",
     answer:
