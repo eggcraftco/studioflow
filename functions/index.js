@@ -1,6 +1,7 @@
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { beforeUserCreated } = require("firebase-functions/v2/identity");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const archiver = require("archiver");
@@ -608,15 +609,18 @@ exports.markActivityNotificationRead = onCall({ region: "europe-west2" }, async 
   }
 
   const emailKey = notificationReadEmailKey(supportUserEmail(request));
-  const readPayload = {
-    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  };
+  // NOTE: dotted keys in set({...}, {merge:true}) create LITERAL top-level fields
+  // (e.g. "readBy.uid") instead of nesting under readBy. Use a nested object so
+  // the merge deep-updates readBy and clients (which read data.readBy) see it.
+  const readByMap = { [uid]: admin.firestore.FieldValue.serverTimestamp() };
   if (emailKey) {
-    readPayload[`readBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+    readByMap[emailKey] = admin.firestore.FieldValue.serverTimestamp();
   }
 
-  await notificationRef.set(readPayload, { merge: true });
+  await notificationRef.set({
+    readBy: readByMap,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
 
   return { ok: true, notificationId };
 });
@@ -640,15 +644,15 @@ exports.markAllActivityNotificationsRead = onCall({ region: "europe-west2" }, as
     const readBy = data.readBy && typeof data.readBy === "object" && !Array.isArray(data.readBy) ? data.readBy : {};
     if (readBy[uid] || (emailKey && readBy[emailKey])) return;
 
-    const readPayload = {
-      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+    const readByMap = { [uid]: admin.firestore.FieldValue.serverTimestamp() };
     if (emailKey) {
-      readPayload[`readBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+      readByMap[emailKey] = admin.firestore.FieldValue.serverTimestamp();
     }
 
-    batch.set(doc.ref, readPayload, { merge: true });
+    batch.set(doc.ref, {
+      readBy: readByMap,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
     updated += 1;
   });
 
@@ -682,18 +686,18 @@ exports.dismissActivityNotifications = onCall({ region: "europe-west2" }, async 
     const notificationData = notificationSnap.data() || {};
     if (!notificationMatchesCurrentUser(notificationData, request)) continue;
 
-    const payload = {
-      [`dismissedBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
-      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-
+    const dismissedByMap = { [uid]: admin.firestore.FieldValue.serverTimestamp() };
+    const readByMap = { [uid]: admin.firestore.FieldValue.serverTimestamp() };
     if (emailKey) {
-      payload[`dismissedBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
-      payload[`readBy.${emailKey}`] = admin.firestore.FieldValue.serverTimestamp();
+      dismissedByMap[emailKey] = admin.firestore.FieldValue.serverTimestamp();
+      readByMap[emailKey] = admin.firestore.FieldValue.serverTimestamp();
     }
 
-    batch.set(notificationRef, payload, { merge: true });
+    batch.set(notificationRef, {
+      dismissedBy: dismissedByMap,
+      readBy: readByMap,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
     updated += 1;
   }
 
@@ -2591,7 +2595,7 @@ exports.recalculateWorkspacePlanUsage = onCall({ region: "europe-west2" }, async
 
 
 
-const SUPPORT_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com"]);
+const SUPPORT_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
 const SUPPORT_TICKET_CATEGORIES = new Set(["bug", "question", "billing", "feature", "account", "other"]);
 const WORKSPACE_TICKET_CATEGORIES = new Set(["project", "task", "approval", "customer", "internal", "other"]);
 const SUPPORT_TICKET_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
@@ -3635,7 +3639,7 @@ exports.markSupportTicketRead = onCall({ region: "europe-west2" }, async (reques
     }
 
     await ticketRef.set({
-      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      readBy: { [uid]: admin.firestore.FieldValue.serverTimestamp() },
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
@@ -3670,7 +3674,7 @@ exports.markWorkspaceTicketRead = onCall({ region: "europe-west2" }, async (requ
     }
 
     await ticketRef.set({
-      [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+      readBy: { [uid]: admin.firestore.FieldValue.serverTimestamp() },
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
@@ -6042,6 +6046,20 @@ exports.changeAccountEmail = onCall({ region: "europe-west2" }, async (request) 
   }
 
   const authUser = await accountProfileAuthUser(uid);
+
+  // OAuth-only accounts (Google / Apple, no password provider) cannot change
+  // their sign-in email here — the address is owned by the provider. Blocking
+  // it avoids a misleading "verify your inbox" flow and an Auth/Firestore email
+  // mismatch when Firebase re-syncs the provider email on the next sign-in.
+  // Only block when we positively know the providers (authUser present).
+  const hasPasswordProvider = (authUser?.providerData || []).some((p) => p.providerId === "password");
+  if (authUser && !hasPasswordProvider) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Your sign-in email is managed by Google or Apple and can't be changed here."
+    );
+  }
+
   const existingMember = companyMembersMap(companyData)[uid] || {};
   const token = request.auth?.token || {};
   const currentEmail = String(authUser?.email || token.email || existingMember.email || "").trim().toLowerCase();
@@ -7082,6 +7100,31 @@ exports.scheduleDeletedOrderFileCleanup = onDocumentDeleted(
   }
 );
 
+// How long a soft-deleted order stays in the Trash before it is permanently
+// removed. Hard-deleting the doc here also fires scheduleDeletedOrderFileCleanup
+// above, so its client files are cleaned up too.
+const DELETED_ORDER_PURGE_DAYS = 30;
+exports.purgeDeletedOrders = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
+  async () => {
+    const db = admin.firestore();
+    const cutoffMs = Date.now() - DELETED_ORDER_PURGE_DAYS * 86400000;
+    let purged = 0;
+    const snap = await db.collection("siparisler").where("isDeleted", "==", true).get();
+    for (const doc of snap.docs) {
+      const deletedAt = doc.data()?.deletedAt;
+      const deletedMs = deletedAt && typeof deletedAt.toMillis === "function" ? deletedAt.toMillis() : null;
+      if (deletedMs !== null && deletedMs <= cutoffMs) {
+        await doc.ref.delete().catch((error) =>
+          console.warn("purgeDeletedOrders delete failed:", doc.id, error?.message || error)
+        );
+        purged += 1;
+      }
+    }
+    console.log(`[order-purge] purged ${purged} order(s) in Trash older than ${DELETED_ORDER_PURGE_DAYS}d`);
+  }
+);
+
 // --- Stale unverified account cleanup --------------------------------------
 //
 // Email/password accounts that never verify their address keep that email
@@ -7207,6 +7250,40 @@ async function deleteStaleUnverifiedUser(uid, ownedCompanyIds = []) {
   await admin.auth().deleteUser(uid);
 }
 
+// Disposable / throwaway email domains commonly used for bot and abuse signups.
+// Server-side check (can't be bypassed by hitting the Auth API directly).
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "mailinator.com", "guerrillamail.com", "guerrillamail.info", "guerrillamail.biz",
+  "sharklasers.com", "grr.la", "guerrillamailblock.com", "10minutemail.com",
+  "10minutemail.net", "20minutemail.com", "tempmail.com", "temp-mail.org",
+  "tempmailo.com", "tempr.email", "throwawaymail.com", "trashmail.com",
+  "trashmail.net", "dispostable.com", "getnada.com", "nada.email",
+  "maildrop.cc", "mailnesia.com", "mintemail.com", "moakt.com",
+  "mohmal.com", "yopmail.com", "yopmail.fr", "yopmail.net",
+  "fakeinbox.com", "spamgourmet.com", "mailcatch.com", "emailondeck.com",
+  "burnermail.io", "tempinbox.com", "tmail.ws", "tmailor.com",
+  "33mail.com", "anonbox.net", "discard.email", "mailsac.com",
+  "inboxbear.com", "spam4.me", "byom.de", "luxusmail.org",
+  "wegwerfmail.de", "einrot.com", "fakemailgenerator.com", "emailfake.com",
+  "tempmail.plus", "1secmail.com", "1secmail.net", "1secmail.org"
+]);
+
+// Auth blocking function: rejects new accounts whose email is on a disposable
+// domain. Runs at sign-up time on Firebase's side for every provider, so it
+// also stops scripted signups that never load our forms. Best-effort: only
+// throws to block a clearly disposable domain; anything else is allowed.
+exports.blockDisposableSignups = beforeUserCreated({ region: "europe-west2" }, (event) => {
+  const email = String(event?.data?.email || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) return;
+  const domain = email.slice(email.lastIndexOf("@") + 1);
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Please sign up with a permanent email address — temporary/disposable email domains are not allowed."
+    );
+  }
+});
+
 exports.cleanupStaleUnverifiedAccounts = onSchedule(
   { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
   async () => {
@@ -7282,6 +7359,69 @@ exports.cleanupExpiredOrderFiles = onSchedule(
       if (allDeleted) {
         await doc.ref.delete().catch(() => undefined);
       }
+    }
+  }
+);
+
+// Daily Auth backup. Lists every Firebase Auth user and writes a JSON snapshot to
+// the Storage bucket under `_auth_backups/`. Lets us reconstruct accidentally
+// deleted accounts (uid, email, providers, claims, metadata). Password-only users
+// would reset their password on restore; OAuth users restore fully. Kept private
+// (admin-only path) and pruned after AUTH_BACKUP_RETENTION_DAYS.
+const AUTH_BACKUP_RETENTION_DAYS = 30;
+exports.backupAuthUsers = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
+  async () => {
+    const bucket = admin.storage().bucket();
+    const users = [];
+    let pageToken;
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken);
+      for (const u of page.users) {
+        users.push({
+          uid: u.uid,
+          email: u.email || "",
+          emailVerified: Boolean(u.emailVerified),
+          displayName: u.displayName || "",
+          photoURL: u.photoURL || "",
+          disabled: Boolean(u.disabled),
+          phoneNumber: u.phoneNumber || "",
+          providerData: (u.providerData || []).map((p) => ({
+            providerId: p.providerId,
+            uid: p.uid,
+            email: p.email || "",
+            displayName: p.displayName || ""
+          })),
+          customClaims: u.customClaims || null,
+          metadata: {
+            creationTime: u.metadata?.creationTime || "",
+            lastSignInTime: u.metadata?.lastSignInTime || ""
+          }
+        });
+      }
+      pageToken = page.pageToken;
+    } while (pageToken);
+
+    const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const path = `_auth_backups/users-${stamp}.json`;
+    await bucket.file(path).save(
+      JSON.stringify({ exportedAt: new Date().toISOString(), count: users.length, users }),
+      { contentType: "application/json", resumable: false, metadata: { cacheControl: "private, no-store" } }
+    );
+    console.log(`[auth-backup] wrote ${users.length} users to ${path}`);
+
+    // Retention: drop snapshots older than AUTH_BACKUP_RETENTION_DAYS.
+    try {
+      const [files] = await bucket.getFiles({ prefix: "_auth_backups/" });
+      const cutoff = Date.now() - AUTH_BACKUP_RETENTION_DAYS * 86400000;
+      for (const file of files) {
+        const created = Date.parse(file.metadata?.timeCreated || "");
+        if (Number.isFinite(created) && created < cutoff) {
+          await file.delete().catch(() => undefined);
+        }
+      }
+    } catch (error) {
+      console.warn("[auth-backup] retention cleanup failed:", error?.message || error);
     }
   }
 );
@@ -8946,7 +9086,7 @@ function cleanCustomerPayload(data = {}, requireName = true) {
   const postalCode = cleanOrderText(data.postalCode || data.postcode || data.zipCode || data.zip, "", 40);
   const country = cleanOrderText(data.country, "", 120);
   const address = cleanOrderText(data.address, "", 1000) || composeCustomerAddressParts(streetAddress, city, postalCode, country);
-  return {
+  const payload = {
     name,
     email: cleanOrderText(data.email, "", 220),
     phone: cleanOrderText(data.phone, "", 80),
@@ -8958,6 +9098,12 @@ function cleanCustomerPayload(data = {}, requireName = true) {
     country,
     notes: cleanOrderNotes(data.notes)
   };
+  // Only touch the profile photo when the client explicitly sends it. Contact-field
+  // autosave omits this key, so an existing avatar is preserved (the doc is merged).
+  if (typeof data.profileImageUrl === "string") {
+    payload.profileImageUrl = cleanOrderText(data.profileImageUrl, "", 1000);
+  }
+  return payload;
 }
 
 function customerPayloadWithAddressAliases(payload = {}) {
@@ -9565,7 +9711,12 @@ exports.approveWorkflowOrderDeletion = onCall({ region: "europe-west2" }, async 
       if (orderCompanyId(orderData) !== companyId) {
         throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
       }
-      transaction.delete(orderRef);
+      // Soft-delete: move to the Trash (recoverable for 30 days) instead of a hard delete.
+      transaction.update(orderRef, {
+        isDeleted: true,
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deletedBy: uid
+      });
     }
     transaction.delete(viewRef);
     transaction.set(requestRef, {
@@ -9665,7 +9816,12 @@ exports.deleteWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     if (orderCompanyId(orderData) !== companyId) {
       throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
     }
-    transaction.delete(orderRef);
+    // Soft-delete: send to the Trash (recoverable for 30 days) instead of hard delete.
+    transaction.update(orderRef, {
+      isDeleted: true,
+      deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      deletedBy: uid
+    });
     return {
       customerName: cleanOrderText(orderData.customerName, "Order", 180),
       designName: cleanOrderText(orderData.designName, "", 180)
@@ -9688,8 +9844,35 @@ exports.deleteWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     orderId,
     customerName: deleted.customerName,
     designName: deleted.designName,
-    message: "Order deleted."
+    message: "Order moved to Trash."
   };
+});
+
+// Restore a soft-deleted order from the Trash back to the active list.
+exports.restoreWebOrder = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  if (!canDeleteOrder(role) || !uidCanAccessWorkspaceArea(companyData, uid, "orders")) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot restore orders.");
+  }
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const db = admin.firestore();
+  const orderRef = db.collection("siparisler").doc(orderId);
+  await db.runTransaction(async (transaction) => {
+    const orderSnap = await transaction.get(orderRef);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+    if (orderCompanyId(orderSnap.data() || {}) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+    transaction.update(orderRef, {
+      isDeleted: false,
+      deletedAt: admin.firestore.FieldValue.delete(),
+      deletedBy: admin.firestore.FieldValue.delete()
+    });
+  });
+  return { ok: true, companyId, orderId, message: "Order restored." };
 });
 
 const SWIFT_ORDER_FIELDS = [
@@ -12953,6 +13136,528 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
 });
 
 
+// ---------------------------------------------------------------------------
+// Shopify webhook integration.
+//
+// Mirrors the WooCommerce flow exactly (per-workspace token → map → dedupe →
+// write + push) but with a Shopify-shaped order mapper. It only REUSES the
+// generic utilities (cleanWooText / wooNumber / wooDate / wooSafeDocPart /
+// nvTimingSafeEqual / orderDocRef / sendPushNotificationToCompany); it does NOT
+// touch any WooCommerce function, so the existing integration is unaffected.
+// ---------------------------------------------------------------------------
+
+function shopifyCompanyId(req, order) {
+  const fromAttributes = Array.isArray(order?.note_attributes)
+    ? order.note_attributes.find((attr) => /^company_?id$|studioflow_company_id/i.test(cleanWooText(attr?.name)))?.value
+    : "";
+  return cleanWooText(
+    req.query?.companyId ||
+    req.query?.company_id ||
+    req.headers?.["x-studioflow-company-id"] ||
+    fromAttributes
+  );
+}
+
+function shopifyOrderDocId(companyId, shopifyOrderId) {
+  return `shopify_${wooSafeDocPart(companyId)}_${wooSafeDocPart(shopifyOrderId)}`;
+}
+
+function shopifyLineItems(order) {
+  return Array.isArray(order?.line_items) ? order.line_items : [];
+}
+
+function shopifyLineItemsSummary(order) {
+  return shopifyLineItems(order)
+    .map((item) => {
+      const quantity = item?.quantity ? ` x${item.quantity}` : "";
+      return `${cleanWooText(item?.title || item?.name) || "Product"}${quantity}`;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function shopifyCustomerName(order) {
+  const customer = order?.customer || {};
+  const customerName = [customer.first_name, customer.last_name].map(cleanWooText).filter(Boolean).join(" ");
+  if (customerName) return customerName;
+  const billing = order?.billing_address || {};
+  const billingName = cleanWooText(billing.name)
+    || [billing.first_name, billing.last_name].map(cleanWooText).filter(Boolean).join(" ");
+  return billingName || cleanWooText(billing.company) || "Shopify Customer";
+}
+
+function shopifyPhone(order) {
+  return cleanWooText(
+    order?.phone ||
+    order?.customer?.phone ||
+    order?.billing_address?.phone ||
+    order?.shipping_address?.phone ||
+    ""
+  );
+}
+
+function shopifyPaymentMethod(order) {
+  const gateways = Array.isArray(order?.payment_gateway_names)
+    ? order.payment_gateway_names.map(cleanWooText).filter(Boolean)
+    : [];
+  return cleanWooText(gateways.join(", ") || order?.gateway || "Shopify");
+}
+
+function shopifyShippingCost(order) {
+  const fromSet = order?.total_shipping_price_set?.shop_money?.amount;
+  if (fromSet !== undefined && fromSet !== null) return wooNumber(fromSet, 0);
+  const lines = Array.isArray(order?.shipping_lines) ? order.shipping_lines : [];
+  return lines.reduce((sum, line) => sum + wooNumber(line?.price, 0), 0);
+}
+
+function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
+  const now = new Date();
+  const shopifyId = cleanWooText(order?.id || order?.order_number || crypto.randomUUID());
+  const orderNumber = cleanWooText(order?.name || order?.order_number || order?.number || shopifyId);
+  const financialStatus = cleanWooText(order?.financial_status || "new");
+  const total = wooNumber(order?.total_price, 0);
+  const createdAt = wooDate(order?.created_at || order?.processed_at, now);
+  const lineSummary = shopifyLineItemsSummary(order);
+  const firstItem = shopifyLineItems(order)[0] || {};
+  const designName = cleanWooText(lineSummary || firstItem?.title || firstItem?.name || `Shopify ${orderNumber}`);
+  const watchRef = cleanWooText(firstItem?.sku || "");
+  const paymentMethod = shopifyPaymentMethod(order);
+  const customerNote = cleanWooText(order?.note || "");
+  const email = cleanWooText(order?.email || order?.customer?.email || order?.contact_email || "");
+  const phone = shopifyPhone(order);
+
+  const customFields = {
+    Source: "Shopify",
+    "Shopify Order ID": shopifyId,
+    "Shopify Order Number": orderNumber,
+    "Shopify Status": financialStatus,
+    "Shopify Payment Method": paymentMethod,
+    "Shopify Currency": cleanWooText(order?.currency || ""),
+    "Shopify Total": cleanWooText(order?.total_price || ""),
+    "Shopify Created At": cleanWooText(order?.created_at || ""),
+    "Shopify Products": lineSummary
+  };
+
+  const mapped = {
+    companyId,
+    paymentMethod,
+    customerName: shopifyCustomerName(order),
+    paymentDate: createdAt,
+    paidAmount: total,
+    remainingAmount: 0,
+    watchPurchasePrice: 0,
+    watchRef,
+    deliveryTime: 45,
+    designName,
+    designLink: cleanWooText(order?.order_status_url || ""),
+    communication: ["Shopify"],
+    emailAddress: email,
+    instagramUsername: "",
+    whatsappNumber: phone,
+    notes: customerNote,
+    designStatus: "Not Yet",
+    status: "Not Yet",
+    isDispatched: false,
+    trackingNumber: "",
+    courier: "Auto Detect",
+    isDelivered: false,
+    paymentFee: 0,
+    deliveryCost: shopifyShippingCost(order),
+    taxType: "",
+    extraStatuses: {},
+    taxRate: 0,
+    invBool1: false,
+    invBool2: false,
+    invBool3: false,
+    invBool4: false,
+    invNotes: "",
+    taxAmount: wooNumber(order?.total_tax, 0),
+    priority: "Normal",
+    risk: "None",
+    riskReason: "-",
+    customFields,
+    customToggles: {},
+    clientFiles: [],
+    todoItems: [],
+    workSessions: [],
+    assignedToUid: "",
+    assignedToEmail: ""
+  };
+
+  if (isNew) {
+    mapped.historyLog = [{
+      id: crypto.randomUUID(),
+      createdAt: now,
+      title: "Order created",
+      oldValue: "Shopify",
+      newValue: `${orderNumber}`
+    }];
+  }
+
+  return mapped;
+}
+
+function shopifyDeliveryUrl(companyId, token) {
+  return "https://europe-west2-eggcraft-studio.cloudfunctions.net/shopifyOrderWebhook"
+    + `?companyId=${encodeURIComponent(companyId)}&token=${encodeURIComponent(token)}`;
+}
+
+// Owner-only: returns this workspace's Shopify webhook token + full Delivery URL,
+// minting a per-workspace token on first use (isolated, unguessable per workspace).
+exports.getShopifyWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+  let token = String(companyData.shopifyWebhookToken || "").trim();
+  if (!token) {
+    token = crypto.randomBytes(24).toString("hex");
+    await companyRef.set({
+      shopifyWebhookToken: token,
+      shopifyWebhookTokenCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  return { ok: true, companyId, token, deliveryUrl: shopifyDeliveryUrl(companyId, token) };
+});
+
+exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(200).json({
+        ok: true,
+        message: "Shopify webhook endpoint is alive. Use POST from Shopify.",
+        requiredQuery: "companyId"
+      });
+      return;
+    }
+
+    const order = req.body || {};
+    const companyId = shopifyCompanyId(req, order);
+    if (!companyId) {
+      res.status(400).json({
+        ok: false,
+        error: "Missing companyId. Add ?companyId=YOUR_COMPANY_ID to the webhook Delivery URL."
+      });
+      return;
+    }
+
+    // Authentication. Primary: a per-workspace token (shopifyWebhookToken on the company
+    // doc, shown in the app's Shopify integration screen). Optional fallback: Shopify's
+    // HMAC signature (X-Shopify-Hmac-Sha256) verified against a configured global secret.
+    // Each workspace's token is isolated, so one workspace's URL cannot forge orders into
+    // another. Backward compatible: if neither exists, the request is allowed with a warning.
+    const providedToken = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+    const companyAuthRef = admin.firestore().collection("companies").doc(companyId);
+    const companyAuthSnap = await companyAuthRef.get();
+    if (!companyAuthSnap.exists) {
+      res.status(404).json({ ok: false, error: "unknown_company" });
+      return;
+    }
+    const workspaceToken = String(companyAuthSnap.data()?.shopifyWebhookToken || "").trim();
+    const globalSecret = String(process.env.SHOPIFY_WEBHOOK_SECRET || "").trim();
+
+    let authed = false;
+    if (workspaceToken && nvTimingSafeEqual(providedToken, workspaceToken)) {
+      authed = true;
+    }
+    if (!authed && globalSecret) {
+      const signature = String(req.headers["x-shopify-hmac-sha256"] || "");
+      if (signature) {
+        const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+        const expected = crypto.createHmac("sha256", globalSecret).update(rawBody).digest("base64");
+        authed = nvTimingSafeEqual(signature, expected);
+      }
+    }
+    if (!authed) {
+      if (!workspaceToken && !globalSecret) {
+        console.warn("shopifyOrderWebhook: no token configured for workspace — request not authenticated.");
+      } else {
+        console.warn("shopifyOrderWebhook: rejected request with invalid token/signature.");
+        res.status(401).json({ ok: false, error: "unauthorized" });
+        return;
+      }
+    }
+
+    const shopifyOrderId = cleanWooText(order?.id || order?.order_number || order?.name);
+    if (!shopifyOrderId) {
+      // Acknowledge non-order payloads (e.g. a webhook verification ping) with 200 so
+      // Shopify does not count them as failed deliveries and remove the webhook.
+      res.status(200).json({ ok: true, ignored: "no_order_id" });
+      return;
+    }
+
+    const docId = shopifyOrderDocId(companyId, shopifyOrderId);
+    const ref = orderDocRef(docId);
+    const existing = await ref.get();
+
+    // Only create a NEW app order for Shopify orders whose payment has actually been
+    // received (financial_status paid / partially_paid / partially_refunded). Everything
+    // else (pending, authorized, refunded, voided) is ignored on creation. Existing orders
+    // are still updated, so later status changes are reflected in the app.
+    const financialStatus = String(order?.financial_status || "").trim().toLowerCase();
+    const SHOPIFY_PAID_STATUSES = new Set(["paid", "partially_paid", "partially_refunded"]);
+    if (!existing.exists && !SHOPIFY_PAID_STATUSES.has(financialStatus)) {
+      res.status(200).json({ ok: true, ignored: "unpaid_status", status: financialStatus, orderId: docId });
+      return;
+    }
+
+    const mappedOrder = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
+    await ref.set(mappedOrder, { merge: true });
+
+    await sendPushNotificationToCompany(companyId, {
+      title: "New Shopify order",
+      body: `${mappedOrder.customerName}: ${mappedOrder.designName}`,
+      orderId: docId,
+      type: "shopify_order"
+    });
+
+    res.status(200).json({
+      ok: true,
+      created: !existing.exists,
+      orderId: docId,
+      companyId
+    });
+  } catch (error) {
+    console.error("shopifyOrderWebhook error:", error);
+    res.status(500).json({ ok: false, error: error.message || String(error) });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Generic inbound order webhook.
+//
+// A platform-agnostic endpoint that accepts a NORMALISED order JSON, so any
+// store / site / automation tool (Zapier, Make, n8n, Wix, Squarespace, Etsy,
+// BigCommerce, custom sites, ...) can push orders into the workspace without a
+// platform-specific mapper. Same per-workspace token model as the WooCommerce /
+// Shopify webhooks (token REQUIRED here — no legacy allow-if-unset branch). Reuses
+// only the generic utilities; touches no existing function.
+// ---------------------------------------------------------------------------
+
+function inboundValue(payload, keys, fallback = "") {
+  for (const key of keys) {
+    const raw = payload?.[key];
+    if (raw !== undefined && raw !== null && String(raw).trim() !== "") return raw;
+  }
+  return fallback;
+}
+
+function inboundCompanyId(req, payload) {
+  return cleanWooText(
+    req.query?.companyId ||
+    req.query?.company_id ||
+    req.headers?.["x-studioflow-company-id"] ||
+    inboundValue(payload, ["companyId", "company_id", "studioflow_company_id"])
+  );
+}
+
+function inboundOrderDocId(companyId, externalId) {
+  return `inbound_${wooSafeDocPart(companyId)}_${wooSafeDocPart(externalId)}`;
+}
+
+function inboundProductsSummary(payload) {
+  const products = inboundValue(payload, ["products", "items", "lineItems", "line_items", "productNames"]);
+  if (Array.isArray(products)) {
+    return products
+      .map((item) => {
+        if (typeof item === "string") return cleanWooText(item);
+        const name = cleanWooText(item?.name || item?.title || item?.product || "");
+        const qty = item?.quantity ? ` x${item.quantity}` : "";
+        return name ? `${name}${qty}` : "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+  return cleanWooText(products);
+}
+
+function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
+  const now = new Date();
+  const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]) || crypto.randomUUID());
+  const orderNumber = cleanWooText(inboundValue(payload, ["orderNumber", "number", "order_number", "orderId", "id"]) || externalId);
+  const total = wooNumber(inboundValue(payload, ["total", "amount", "total_price", "totalPrice", "grandTotal"]), 0);
+  const createdAt = wooDate(inboundValue(payload, ["createdAt", "created_at", "date", "orderDate"]), now);
+  const productsSummary = inboundProductsSummary(payload);
+  const designName = cleanWooText(inboundValue(payload, ["designName", "design_name", "title"]) || productsSummary || `Order ${orderNumber}`);
+  const customerName = cleanWooText(inboundValue(payload, ["customerName", "customer_name", "name", "fullName", "buyerName"]) || "Website Customer");
+  const sourceLabel = cleanWooText(inboundValue(payload, ["source", "platform", "store"]) || "Website");
+  const paymentMethod = cleanWooText(inboundValue(payload, ["paymentMethod", "payment_method", "gateway"]) || sourceLabel);
+  const email = cleanWooText(inboundValue(payload, ["email", "customerEmail", "buyerEmail"]));
+  const phone = cleanWooText(inboundValue(payload, ["phone", "telephone", "whatsapp", "mobile"]));
+  const note = cleanWooText(inboundValue(payload, ["note", "notes", "customerNote", "message"]));
+  const status = cleanWooText(inboundValue(payload, ["status", "financial_status", "paymentStatus"]));
+
+  const customFields = {
+    Source: sourceLabel,
+    "Order ID": externalId,
+    "Order Number": orderNumber,
+    "Status": status,
+    "Payment Method": paymentMethod,
+    "Currency": cleanWooText(inboundValue(payload, ["currency"])),
+    "Total": String(total),
+    "Products": productsSummary
+  };
+
+  const mapped = {
+    companyId,
+    paymentMethod,
+    customerName,
+    paymentDate: createdAt,
+    paidAmount: total,
+    remainingAmount: 0,
+    watchPurchasePrice: 0,
+    watchRef: cleanWooText(inboundValue(payload, ["sku", "ref", "watchRef"])),
+    deliveryTime: wooNumber(inboundValue(payload, ["deliveryTime", "delivery_days"]), 45),
+    designName,
+    designLink: cleanWooText(inboundValue(payload, ["orderUrl", "url", "link", "permalink"])),
+    communication: [sourceLabel],
+    emailAddress: email,
+    instagramUsername: cleanWooText(inboundValue(payload, ["instagram", "instagramUsername"])),
+    whatsappNumber: phone,
+    notes: note,
+    designStatus: "Not Yet",
+    status: "Not Yet",
+    isDispatched: false,
+    trackingNumber: "",
+    courier: "Auto Detect",
+    isDelivered: false,
+    paymentFee: 0,
+    deliveryCost: wooNumber(inboundValue(payload, ["shipping", "shippingCost", "shipping_total", "deliveryCost"]), 0),
+    taxType: "",
+    extraStatuses: {},
+    taxRate: 0,
+    invBool1: false,
+    invBool2: false,
+    invBool3: false,
+    invBool4: false,
+    invNotes: "",
+    taxAmount: wooNumber(inboundValue(payload, ["tax", "total_tax", "taxAmount"]), 0),
+    priority: "Normal",
+    risk: "None",
+    riskReason: "-",
+    customFields,
+    customToggles: {},
+    clientFiles: [],
+    todoItems: [],
+    workSessions: [],
+    assignedToUid: "",
+    assignedToEmail: ""
+  };
+
+  if (isNew) {
+    mapped.historyLog = [{
+      id: crypto.randomUUID(),
+      createdAt: now,
+      title: "Order created",
+      oldValue: sourceLabel,
+      newValue: `${orderNumber}`
+    }];
+  }
+
+  return mapped;
+}
+
+function inboundDeliveryUrl(companyId, token) {
+  return "https://europe-west2-eggcraft-studio.cloudfunctions.net/inboundOrderWebhook"
+    + `?companyId=${encodeURIComponent(companyId)}&token=${encodeURIComponent(token)}`;
+}
+
+// Owner-only: returns this workspace's generic inbound webhook token + Delivery URL.
+exports.getInboundWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+  let token = String(companyData.inboundWebhookToken || "").trim();
+  if (!token) {
+    token = crypto.randomBytes(24).toString("hex");
+    await companyRef.set({
+      inboundWebhookToken: token,
+      inboundWebhookTokenCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  return { ok: true, companyId, token, deliveryUrl: inboundDeliveryUrl(companyId, token) };
+});
+
+exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(200).json({
+        ok: true,
+        message: "NivaDesk inbound order webhook is alive. POST a normalised order JSON with a valid token.",
+        requiredQuery: "companyId, token",
+        exampleBody: {
+          orderId: "1001",
+          orderNumber: "#1001",
+          customerName: "Jane Doe",
+          email: "jane@example.com",
+          phone: "+44...",
+          total: 120.5,
+          currency: "GBP",
+          status: "paid",
+          products: "Custom dial x1",
+          note: "Gift wrap",
+          source: "Wix"
+        }
+      });
+      return;
+    }
+
+    const payload = req.body && typeof req.body === "object" ? req.body : {};
+    const companyId = inboundCompanyId(req, payload);
+    if (!companyId) {
+      res.status(400).json({ ok: false, error: "Missing companyId. Add ?companyId=YOUR_COMPANY_ID to the URL." });
+      return;
+    }
+
+    // Token is REQUIRED here (unlike the legacy Woo/Shopify allow-if-unset branch).
+    const providedToken = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+    const companyAuthRef = admin.firestore().collection("companies").doc(companyId);
+    const companyAuthSnap = await companyAuthRef.get();
+    if (!companyAuthSnap.exists) {
+      res.status(404).json({ ok: false, error: "unknown_company" });
+      return;
+    }
+    const workspaceToken = String(companyAuthSnap.data()?.inboundWebhookToken || "").trim();
+    if (!workspaceToken || !nvTimingSafeEqual(providedToken, workspaceToken)) {
+      console.warn("inboundOrderWebhook: rejected request with missing/invalid token.");
+      res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
+    }
+
+    const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]));
+    if (!externalId) {
+      res.status(400).json({ ok: false, error: "Missing orderId in the payload." });
+      return;
+    }
+
+    const docId = inboundOrderDocId(companyId, externalId);
+    const ref = orderDocRef(docId);
+    const existing = await ref.get();
+
+    // The source is user-configured (Zapier / their own site), so we trust what it
+    // sends rather than gating on a specific paid status — we only skip orders that
+    // are clearly cancelled/refunded on creation.
+    const status = String(inboundValue(payload, ["status", "financial_status", "paymentStatus"]) || "").trim().toLowerCase();
+    const REJECT_STATUSES = new Set(["cancelled", "canceled", "refunded", "voided", "failed", "deleted"]);
+    if (!existing.exists && REJECT_STATUSES.has(status)) {
+      res.status(200).json({ ok: true, ignored: "rejected_status", status, orderId: docId });
+      return;
+    }
+
+    const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
+    await ref.set(mappedOrder, { merge: true });
+
+    await sendPushNotificationToCompany(companyId, {
+      title: "New website order",
+      body: `${mappedOrder.customerName}: ${mappedOrder.designName}`,
+      orderId: docId,
+      type: "inbound_order"
+    });
+
+    res.status(200).json({ ok: true, created: !existing.exists, orderId: docId, companyId });
+  } catch (error) {
+    console.error("inboundOrderWebhook error:", error);
+    res.status(500).json({ ok: false, error: error.message || String(error) });
+  }
+});
+
+
 exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) => {
   try {
     if (req.method !== "POST") {
@@ -13420,7 +14125,7 @@ exports.markMessageThreadRead = onCall({ region: "europe-west2" }, async (reques
     : admin.firestore.FieldValue.serverTimestamp();
 
   await threadRef.set({
-    [`readBy.${uid}`]: readAt,
+    readBy: { [uid]: readAt },
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
@@ -13890,7 +14595,7 @@ exports.addMembersToMessageThread = onCall({ region: "europe-west2" }, async (re
     lastMessageByName: sender.name || sender.email || "Team member",
     lastMessageByPhotoURL: sender.photoURL || "",
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    readBy: { [uid]: admin.firestore.FieldValue.serverTimestamp() },
     messageSchemaVersion: 1
   }, { merge: true });
   batch.set(messageRef, messagePayload);
@@ -13951,7 +14656,7 @@ exports.renameMessageThread = onCall({ region: "europe-west2" }, async (request)
     lastMessageByName: sender.name || sender.email || "Team member",
     lastMessageByPhotoURL: sender.photoURL || "",
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
+    readBy: { [uid]: admin.firestore.FieldValue.serverTimestamp() }
   }, { merge: true });
   batch.set(messageRef, messagePayload);
   await batch.commit();
@@ -14092,7 +14797,7 @@ exports.removeMemberFromMessageThread = onCall({ region: "europe-west2" }, async
     lastMessageByName: sender.name || sender.email || "Team member",
     lastMessageByPhotoURL: sender.photoURL || "",
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
+    readBy: { [uid]: admin.firestore.FieldValue.serverTimestamp() }
   }, { merge: true });
   batch.set(messageRef, messagePayload);
   await batch.commit();
@@ -14192,7 +14897,7 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
     lastMessageByPhotoURL: sender.photoURL,
     lastMessageId: messageRef.id,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    [`readBy.${uid}`]: admin.firestore.FieldValue.serverTimestamp()
+    readBy: { [uid]: admin.firestore.FieldValue.serverTimestamp() }
   }, { merge: true });
   await batch.commit();
 
@@ -14269,8 +14974,13 @@ exports.editThreadMessage = onCall({ region: "europe-west2" }, async (request) =
 
 function nvChatCors(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  // The ChatGPT MCP/OAuth surface is now served directly from Firebase Hosting
+  // (mcp.nivadesk.app) instead of the Next.js proxy, so the function must self-serve
+  // the MCP transport CORS itself: allow the MCP request headers and EXPOSE the
+  // WWW-Authenticate challenge + protocol/session headers to the browser-side client.
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version, mcp-protocol-version, MCP-Session-Id, mcp-session-id");
+  res.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
+  res.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Protocol-Version, MCP-Session-Id, mcp-session-id");
   if (req.method === "OPTIONS") {
     res.status(204).send("");
     return true;
@@ -15547,8 +16257,16 @@ const NV_CHATGPT_OAUTH_CODE_TTL_MS = 10 * 60 * 1000;
 // Users can still revoke access by reconnecting/removing the connector.
 const NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const NV_CHATGPT_OAUTH_ISSUER_NAME = "NivaDesk";
-const NV_CHATGPT_PUBLIC_BASE_URL = "https://nivadesk.app";
-const NV_CHATGPT_LOGIN_URL = `${NV_CHATGPT_PUBLIC_BASE_URL}/chatgpt/connect`;
+// MCP / OAuth discovery host — served directly from STABLE Firebase Hosting
+// (mcp.nivadesk.app → Cloud Functions), so OpenAI's scanner never depends on the
+// flaky Hostinger Node app. This drives the OAuth issuer, resource, all endpoint
+// URLs and the WWW-Authenticate resource_metadata; they must all be on this host.
+const NV_CHATGPT_PUBLIC_BASE_URL = "https://mcp.nivadesk.app";
+// The interactive OAuth consent page is a Next.js page that stays on the main web
+// app host. It is a user-facing browser redirect (not on the scanner path), so a
+// Hostinger hiccup there only affects a human mid-login, not the app-add scan.
+const NV_CHATGPT_WEB_BASE_URL = "https://nivadesk.app";
+const NV_CHATGPT_LOGIN_URL = `${NV_CHATGPT_WEB_BASE_URL}/chatgpt/connect`;
 
 function nvBase64Url(buffer) {
   return Buffer.from(buffer)
@@ -15626,7 +16344,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
     issuer,
     authorization_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthAuthorize"),
     token_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthToken"),
-    client_id_metadata_document_supported: true,
+    client_id_metadata_document_supported: false,
     registration_endpoint: nvOAuthEndpointUrl(req, "chatgptOAuthRegister"),
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
@@ -15846,14 +16564,25 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
     return;
   }
 
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  // RFC 7591: the registration response MUST reflect the registered metadata,
+  // including redirect_uris. ChatGPT validates the OAuth callback against the
+  // redirect_uris it gets back here — if we omit them it treats the redirect as
+  // unregistered and fails with "something went wrong" before calling the token
+  // endpoint. Echo the client's redirect_uris (and core fields) back.
+  const redirectUris = Array.isArray(body.redirect_uris)
+    ? body.redirect_uris.map((u) => nvSafeOAuthUri(u)).filter(Boolean).slice(0, 20)
+    : [];
   const clientId = `chatgpt_${nvRandomToken(18)}`;
   nvOAuthJson(res, 201, {
     client_id: clientId,
     client_id_issued_at: Math.floor(Date.now() / 1000),
-    token_endpoint_auth_method: "none",
-    grant_types: ["authorization_code"],
-    response_types: ["code"],
-    scope: "orders.read orders.write notes.read notes.write finance.read tasks.write"
+    redirect_uris: redirectUris,
+    token_endpoint_auth_method: nvCleanString(body.token_endpoint_auth_method || "none", 60) || "none",
+    grant_types: Array.isArray(body.grant_types) && body.grant_types.length ? body.grant_types : ["authorization_code"],
+    response_types: Array.isArray(body.response_types) && body.response_types.length ? body.response_types : ["code"],
+    scope: nvCleanString(body.scope || "orders.read orders.write notes.read notes.write finance.read tasks.write", 500),
+    client_name: nvCleanString(body.client_name || "ChatGPT", 200)
   });
 });
 
@@ -16130,7 +16859,13 @@ exports.chatgptOAuthToken = onRequest({ region: "europe-west2", cors: true }, as
 
 // MARK: - ChatGPT MCP endpoint MVP
 
-const NV_MCP_PROTOCOL_VERSION = "2024-11-05";
+// MCP protocol versions we understand. We echo back the version the client asks
+// for (when supported) so BOTH the older ChatGPT connector (2024-11-05) and the
+// newer Apps platform (2025-03-26 / 2025-06-18) negotiate successfully. A modern
+// client that requested 2025-06-18 and received a hard-coded 2024-11-05 would treat
+// it as an unsupported version and drop the connection ("Connection failed").
+const NV_MCP_SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
+const NV_MCP_DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 
 function nvMcpServerInfo() {
   return {
@@ -16311,6 +17046,16 @@ function nvMcpOAuthScopesForTool(toolName = "") {
   }
 }
 
+function nvMcpNormalizedAnnotations(tool = {}) {
+  const annotations = tool.annotations && typeof tool.annotations === "object" ? tool.annotations : {};
+  return {
+    readOnlyHint: annotations.readOnlyHint === true,
+    destructiveHint: annotations.destructiveHint === true,
+    idempotentHint: annotations.idempotentHint === true,
+    openWorldHint: annotations.openWorldHint === true
+  };
+}
+
 function nvMcpToolsWithSecuritySchemes() {
   return nvMcpOrderToolSchemas().map((tool) => {
     const securitySchemes = [
@@ -16319,6 +17064,7 @@ function nvMcpToolsWithSecuritySchemes() {
 
     return {
       ...tool,
+      annotations: nvMcpNormalizedAnnotations(tool),
       securitySchemes,
       _meta: {
         ...(tool._meta || {}),
@@ -16527,7 +17273,7 @@ function nvMcpOrderToolSchemas() {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: false
       }
@@ -16619,7 +17365,7 @@ function nvMcpOrderToolSchemas() {
           colorName: { type: "string", description: "Replacement color name." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
     },
     {
       name: "pin_note",
@@ -16635,7 +17381,7 @@ function nvMcpOrderToolSchemas() {
           isPinned: { type: "boolean", description: "True to pin, false to unpin." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
     },
     {
       name: "archive_note",
@@ -16651,7 +17397,7 @@ function nvMcpOrderToolSchemas() {
           isArchived: { type: "boolean", description: "True to archive, false to unarchive." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
     },
     {
       name: "get_order_financials",
@@ -16804,9 +17550,12 @@ function nvMcpOrderToolSchemas() {
   ];
 }
 
-function nvMcpInitializeResult() {
+function nvMcpInitializeResult(requestedProtocolVersion) {
+  const protocolVersion = NV_MCP_SUPPORTED_PROTOCOL_VERSIONS.includes(requestedProtocolVersion)
+    ? requestedProtocolVersion
+    : NV_MCP_DEFAULT_PROTOCOL_VERSION;
   return {
-    protocolVersion: NV_MCP_PROTOCOL_VERSION,
+    protocolVersion,
     serverInfo: nvMcpServerInfo(),
     capabilities: {
       tools: {}
@@ -16857,9 +17606,16 @@ async function nvHandleMcpRequest(req, body = {}) {
   const method = String(body.method || "").trim();
   const params = body.params && typeof body.params === "object" && !Array.isArray(body.params) ? body.params : {};
 
+  // JSON-RPC notifications (e.g. notifications/initialized) expect NO response —
+  // the Streamable HTTP transport wants HTTP 202 with an empty body. Returning a
+  // JSON-RPC error here breaks strict clients during the post-initialize handshake.
+  if (method.startsWith("notifications/")) {
+    return null;
+  }
+
   switch (method) {
     case "initialize":
-      return nvMcpJsonRpcResult(id, nvMcpInitializeResult());
+      return nvMcpJsonRpcResult(id, nvMcpInitializeResult(nvCleanString(params.protocolVersion || "", 20)));
 
     case "ping":
       return nvMcpJsonRpcResult(id, {});
@@ -16892,10 +17648,24 @@ async function nvHandleMcpRequest(req, body = {}) {
   }
 }
 
-exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (req, res) => {
+exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true, minInstances: 1, memory: "512MiB", timeoutSeconds: 60 }, async (req, res) => {
   if (nvChatCors(req, res)) return;
 
   if (req.method === "GET") {
+    // MCP Streamable HTTP: a GET with `Accept: text/event-stream` is the client
+    // asking to open a server->client SSE stream. This server is stateless and offers
+    // no server-initiated stream, so per spec it MUST answer 405 Method Not Allowed.
+    // Returning 200/JSON here makes strict MCP clients (the OpenAI Apps platform)
+    // treat the transport as broken -> "Connection failed". Plain GETs (browser /
+    // discovery) still receive the lightweight JSON below.
+    const acceptHeader = String(req.headers["accept"] || "");
+    if (acceptHeader.includes("text/event-stream")) {
+      res.set("Allow", "POST, OPTIONS");
+      res.status(405).json(
+        nvMcpJsonRpcError(null, -32000, "This MCP endpoint does not provide a server-initiated SSE stream.")
+      );
+      return;
+    }
     res.status(200).json({
       ok: true,
       name: "NivaDesk",
@@ -16905,6 +17675,7 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
         name: tool.name,
         title: tool.title,
         description: tool.description,
+        annotations: tool.annotations,
         securitySchemes: tool.securitySchemes
       }))
     });
@@ -16921,6 +17692,11 @@ exports.chatgptMcp = onRequest({ region: "europe-west2", cors: true }, async (re
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const response = await nvHandleMcpRequest(req, body);
+    if (response === null) {
+      // Notification acknowledged — no JSON-RPC response body.
+      res.status(202).end();
+      return;
+    }
     res.status(200).json(response);
   } catch (error) {
     const code = nvMcpErrorCodeFromHttps(error);
@@ -17446,6 +18222,296 @@ exports.getSitePresence = onCall({ region: "europe-west2" }, async (request) => 
 });
 
 // ---------------------------------------------------------------------------
+// Google Search Console — admin-only search-performance panel.
+// Pulls real query-level data (impressions, clicks, CTR, average position) from
+// the Search Analytics API for nivadesk.app, plus the change vs the previous
+// equal-length period so admins can see how rankings shifted day over day.
+// Uses the function's own runtime service account (ADC, webmasters.readonly
+// scope); that service account must be added as a user on the Search Console
+// property. Google strips search terms from referrers ("not provided"), so this
+// API is the only source for "what people searched and where we ranked".
+// ---------------------------------------------------------------------------
+
+const NV_GSC_PROPERTY_DOMAIN = "nivadesk.app";
+
+// Best-effort: read the function's own runtime service-account email from the
+// GCP metadata server so the UI can tell the admin exactly which account to add
+// in Search Console (needed before any access has been granted).
+async function nvDetectRuntimeServiceAccountEmail() {
+  try {
+    const res = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
+      { headers: { "Metadata-Flavor": "Google" } }
+    );
+    if (res.ok) return (await res.text()).trim();
+  } catch (error) {
+    console.warn("GSC: could not read runtime SA email:", error?.message || error);
+  }
+  return "";
+}
+
+// Pick the nivadesk.app property the service account can see. Prefer the Domain
+// property (sc-domain:), then the https URL-prefix, then any matching entry.
+function nvPickSearchConsoleProperty(siteEntries = []) {
+  const urls = siteEntries.map((s) => String(s.siteUrl || "")).filter(Boolean);
+  return (
+    urls.find((u) => u === `sc-domain:${NV_GSC_PROPERTY_DOMAIN}`) ||
+    urls.find((u) => u === `https://${NV_GSC_PROPERTY_DOMAIN}/`) ||
+    urls.find((u) => u.includes(NV_GSC_PROPERTY_DOMAIN)) ||
+    ""
+  );
+}
+
+exports.getSearchConsoleStats = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Search statistics are restricted to NivaDesk admins.");
+  }
+
+  const { google } = require("googleapis");
+  const serviceAccountEmail = await nvDetectRuntimeServiceAccountEmail();
+
+  // Auth + client.
+  let searchconsole;
+  try {
+    const auth = new google.auth.GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/webmasters.readonly"]
+    });
+    const authClient = await auth.getClient();
+    searchconsole = google.searchconsole({ version: "v1", auth: authClient });
+  } catch (error) {
+    return { ok: false, needsAccess: true, serviceAccountEmail, message: `Auth init failed: ${error?.message || error}` };
+  }
+
+  // Resolve which property this service account can read. A clear "needsAccess"
+  // response drives the setup card in the UI (enable API / add SA / verify).
+  let property = "";
+  let accessibleSites = [];
+  try {
+    const sitesRes = await searchconsole.sites.list();
+    const entries = sitesRes.data?.siteEntry || [];
+    accessibleSites = entries.map((s) => String(s.siteUrl || "")).filter(Boolean);
+    property = nvPickSearchConsoleProperty(entries);
+  } catch (error) {
+    return {
+      ok: false,
+      needsAccess: true,
+      serviceAccountEmail,
+      accessibleSites,
+      message: `Could not list Search Console sites: ${error?.errors?.[0]?.message || error?.message || error}`
+    };
+  }
+  if (!property) {
+    return {
+      ok: false,
+      needsAccess: true,
+      serviceAccountEmail,
+      accessibleSites,
+      message: `The service account has no access to ${NV_GSC_PROPERTY_DOMAIN}. Add it as a user in Search Console.`
+    };
+  }
+
+  // Date window: current = [startDate, endDate]; previous = equal-length window
+  // immediately before. GSC data lags ~2-3 days, so default end = 3 days ago.
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  let endRaw = String(request.data?.endDate || "").trim();
+  let startRaw = String(request.data?.startDate || "").trim();
+  if (!datePattern.test(endRaw)) {
+    endRaw = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+  }
+  if (!datePattern.test(startRaw)) {
+    startRaw = new Date(Date.parse(`${endRaw}T12:00:00Z`) - 27 * 86400000).toISOString().slice(0, 10);
+  }
+  const curStartMs = Date.parse(`${startRaw}T12:00:00Z`);
+  const curEndMs = Date.parse(`${endRaw}T12:00:00Z`);
+  if (!Number.isFinite(curStartMs) || !Number.isFinite(curEndMs) || curStartMs > curEndMs) {
+    throw new HttpsError("invalid-argument", "Invalid date range.");
+  }
+  const spanDays = Math.round((curEndMs - curStartMs) / 86400000) + 1;
+  const prevEndMs = curStartMs - 86400000;
+  const prevStartMs = prevEndMs - (spanDays - 1) * 86400000;
+  const fmt = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+  const queryPeriod = async (startDate, endDate, dimensions, rowLimit) => {
+    const res = await searchconsole.searchanalytics.query({
+      siteUrl: property,
+      requestBody: { startDate, endDate, dimensions, rowLimit, dataState: "all" }
+    });
+    return res.data?.rows || [];
+  };
+
+  let curRows = [];
+  let prevRows = [];
+  let curTotalRows = [];
+  let prevTotalRows = [];
+  let dateRows = [];
+  let pageRows = [];
+  let countryRows = [];
+  let deviceRows = [];
+  try {
+    [curRows, prevRows, curTotalRows, prevTotalRows, dateRows, pageRows, countryRows, deviceRows] = await Promise.all([
+      queryPeriod(startRaw, endRaw, ["query"], 100),
+      queryPeriod(fmt(prevStartMs), fmt(prevEndMs), ["query"], 1000),
+      queryPeriod(startRaw, endRaw, [], 1),
+      queryPeriod(fmt(prevStartMs), fmt(prevEndMs), [], 1),
+      queryPeriod(startRaw, endRaw, ["date"], 1000),
+      queryPeriod(startRaw, endRaw, ["page"], 50),
+      queryPeriod(startRaw, endRaw, ["country"], 20),
+      queryPeriod(startRaw, endRaw, ["device"], 5)
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      needsAccess: false,
+      serviceAccountEmail,
+      property,
+      message: `Search Analytics query failed: ${error?.errors?.[0]?.message || error?.message || error}`
+    };
+  }
+
+  const prevByQuery = new Map();
+  prevRows.forEach((r) => prevByQuery.set(String(r.keys?.[0] || ""), r));
+
+  const queries = curRows.map((r) => {
+    const q = String(r.keys?.[0] || "");
+    const prev = prevByQuery.get(q);
+    const position = Number(r.position || 0);
+    const prevPosition = prev ? Number(prev.position || 0) : null;
+    return {
+      query: q,
+      clicks: Number(r.clicks || 0),
+      impressions: Number(r.impressions || 0),
+      ctr: Number(r.ctr || 0),
+      position,
+      prevPosition,
+      // positionDelta > 0 means the average rank improved (moved toward #1),
+      // since a smaller position number is better. The UI shows ▲ green for >0.
+      positionDelta: prevPosition != null ? prevPosition - position : null,
+      impressionsDelta: prev ? Number(r.impressions || 0) - Number(prev.impressions || 0) : null,
+      isNew: !prev
+    };
+  });
+
+  const totalsRow = (rows) => {
+    const row = rows[0] || {};
+    return {
+      clicks: Number(row.clicks || 0),
+      impressions: Number(row.impressions || 0),
+      ctr: Number(row.ctr || 0),
+      position: Number(row.position || 0)
+    };
+  };
+
+  const byDate = (dateRows || [])
+    .map((r) => ({
+      date: String(r.keys?.[0] || ""),
+      clicks: Number(r.clicks || 0),
+      impressions: Number(r.impressions || 0),
+      ctr: Number(r.ctr || 0),
+      position: Number(r.position || 0)
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const pages = (pageRows || []).map((r) => ({
+    page: String(r.keys?.[0] || ""),
+    clicks: Number(r.clicks || 0),
+    impressions: Number(r.impressions || 0),
+    ctr: Number(r.ctr || 0),
+    position: Number(r.position || 0)
+  }));
+
+  // GSC returns ISO-3166-1 alpha-3 country codes (e.g. "gbr"); uppercase them.
+  const countries = (countryRows || []).map((r) => ({
+    country: String(r.keys?.[0] || "").toUpperCase(),
+    clicks: Number(r.clicks || 0),
+    impressions: Number(r.impressions || 0)
+  }));
+
+  const devices = (deviceRows || []).map((r) => ({
+    device: String(r.keys?.[0] || ""), // DESKTOP | MOBILE | TABLET
+    clicks: Number(r.clicks || 0),
+    impressions: Number(r.impressions || 0)
+  }));
+
+  return {
+    ok: true,
+    property,
+    serviceAccountEmail,
+    range: { startDate: startRaw, endDate: endRaw },
+    previousRange: { startDate: fmt(prevStartMs), endDate: fmt(prevEndMs) },
+    totals: { current: totalsRow(curTotalRows), previous: totalsRow(prevTotalRows) },
+    queries,
+    byDate,
+    pages,
+    countries,
+    devices
+  };
+});
+
+// Daily snapshot: persist Search Console totals per day so we keep history
+// beyond GSC's ~16-month window for long-term trends. Each run upserts the last
+// ~10 days because GSC data keeps finalizing for ~3 days after the fact.
+exports.snapshotSearchConsoleDaily = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
+  async () => {
+    const { google } = require("googleapis");
+    let searchconsole;
+    let property = "";
+    try {
+      const auth = new google.auth.GoogleAuth({
+        scopes: ["https://www.googleapis.com/auth/webmasters.readonly"]
+      });
+      const authClient = await auth.getClient();
+      searchconsole = google.searchconsole({ version: "v1", auth: authClient });
+      const sitesRes = await searchconsole.sites.list();
+      property = nvPickSearchConsoleProperty(sitesRes.data?.siteEntry || []);
+    } catch (error) {
+      console.warn("snapshotSearchConsoleDaily: GSC access not ready:", error?.message || error);
+      return;
+    }
+    if (!property) {
+      console.warn("snapshotSearchConsoleDaily: no nivadesk.app property accessible yet.");
+      return;
+    }
+
+    const endMs = Date.now() - 3 * 86400000; // GSC ~3-day finalization lag
+    const startMs = endMs - 9 * 86400000;
+    const fmt = (ms) => new Date(ms).toISOString().slice(0, 10);
+    let rows = [];
+    try {
+      const res = await searchconsole.searchanalytics.query({
+        siteUrl: property,
+        requestBody: { startDate: fmt(startMs), endDate: fmt(endMs), dimensions: ["date"], rowLimit: 1000, dataState: "all" }
+      });
+      rows = res.data?.rows || [];
+    } catch (error) {
+      console.warn("snapshotSearchConsoleDaily: query failed:", error?.message || error);
+      return;
+    }
+
+    const batch = admin.firestore().batch();
+    let written = 0;
+    for (const r of rows) {
+      const date = String(r.keys?.[0] || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const ref = admin.firestore().collection("searchConsoleDaily").doc(date);
+      batch.set(ref, {
+        date,
+        clicks: Number(r.clicks || 0),
+        impressions: Number(r.impressions || 0),
+        ctr: Number(r.ctr || 0),
+        position: Number(r.position || 0),
+        property,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      written += 1;
+    }
+    if (written > 0) await batch.commit();
+    console.log(`snapshotSearchConsoleDaily: stored ${written} day(s) for ${property}.`);
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Admin Insights — cross-workspace overview for NivaDesk admins only.
 // Aggregates real Firestore data (counts + company docs). Revenue figures are
 // ESTIMATES derived from plan assignments; live billing is not connected.
@@ -17718,6 +18784,7 @@ exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeout
   let neverLoggedIn = 0;
   let createdBeforeWindow = 0;
   const signupsByDay = {};
+  const recentUsersAll = [];
   try {
     let pageToken = undefined;
     let pages = 0;
@@ -17743,6 +18810,13 @@ exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeout
         } else {
           neverLoggedIn += 1;
         }
+        recentUsersAll.push({
+          uid: user.uid,
+          email: user.email || "",
+          displayName: user.displayName || "",
+          createdAtMs: Number.isFinite(created) ? created : 0,
+          lastSignInMs: Number.isFinite(lastSignIn) ? lastSignIn : 0
+        });
       });
       pageToken = page.pageToken;
       pages += 1;
@@ -17858,10 +18932,31 @@ exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeout
     console.warn("usersDetail workspaceAccess failed:", error?.message || error);
   }
 
+  // Best plan per owner email (for showing each user's plan in the list).
+  const planRank = { demo: 0, lifetime_lite: 1, pro_monthly: 2, team_monthly: 3 };
+  const planByOwnerEmail = new Map();
+  companyInfo.forEach((info) => {
+    const owner = String(info.ownerEmail || "").trim().toLowerCase();
+    if (!owner) return;
+    const existing = planByOwnerEmail.get(owner);
+    if (!existing || (planRank[info.plan] ?? 0) > (planRank[existing] ?? 0)) {
+      planByOwnerEmail.set(owner, info.plan);
+    }
+  });
+
+  const recentUsers = recentUsersAll
+    .sort((a, b) => b.createdAtMs - a.createdAtMs)
+    .slice(0, 500)
+    .map((u) => ({
+      ...u,
+      plan: planByOwnerEmail.get(String(u.email || "").trim().toLowerCase()) || "demo"
+    }));
+
   return {
     ok: true,
     generatedAtMs: now,
     users: { total: totalUsers, new7d, new30d, active7d, active30d, neverLoggedIn },
+    recentUsers,
     growth,
     workspaces: {
       total: companiesSnap.size,
