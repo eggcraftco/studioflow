@@ -25,9 +25,9 @@ const brandImage = "/brand/nivadesk-logo.png";
 
 const publicMetadata: Record<PublicMetadataKey, { title: string; description: string; path: string }> = {
   home: {
-    title: "NivaDesk | Premium Studio Management",
+    title: "NivaDesk | Studio, Order & Client Management Software",
     description:
-      "A calm, premium workspace for artists, custom studios and order-based creative businesses across web, Apple devices and Android phone and tablet support.",
+      "NivaDesk is studio management software for creative studios and makers. Track orders, clients, schedules, invoices and files in one place, on web, Mac, iPhone and Android.",
     path: "/"
   },
   features: {

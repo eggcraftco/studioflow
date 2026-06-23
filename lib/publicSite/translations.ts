@@ -96,7 +96,7 @@ export const PUBLIC_SITE_EN = {
 
   "accent.eyebrow": "Flexible workspace",
   "accent.title": "Build a workspace that fits the way you work.",
-  "accent.body": "NivaDesk lets you customise card layouts, colours, statuses and workspace feel — so your studio's workflow stays front and center.",
+  "accent.body": "Customise card layouts, colours, statuses and workspace feel so your studio's order and client management stays clear, organised and fast.",
   "accent.card.orders": "Orders",
   "accent.card.files": "Files",
   "accent.card.delivery": "Delivery",
