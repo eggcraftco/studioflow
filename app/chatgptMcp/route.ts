@@ -19,8 +19,8 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Session-Id, mcp-session-id",
-    "Access-Control-Expose-Headers": "WWW-Authenticate, Link, MCP-Session-Id, mcp-session-id"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Protocol-Version, mcp-protocol-version, MCP-Session-Id, mcp-session-id",
+    "Access-Control-Expose-Headers": "WWW-Authenticate, Link, MCP-Protocol-Version, MCP-Session-Id, mcp-session-id"
   };
 }
 
