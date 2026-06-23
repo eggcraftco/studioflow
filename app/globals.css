@@ -4011,6 +4011,10 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   font-size: 14px;
   line-height: 1;
   font-weight: 950;
+  /* Keep the price on one line so it never breaks mid-number ("£88 / 5.00")
+     when the card/sidebar narrows. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .order-list-amount.muted {
@@ -4101,6 +4105,10 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   min-width: 0;
   display: grid;
   gap: 12px;
+  /* The pane is stretched to the workspace min-height; pack rows at the top so
+     the header/control/notice cards keep their natural height instead of the
+     grid distributing the extra space into them (which left big gaps). */
+  align-content: start;
 }
 
 /* Team Schedule uses the full pane width (no resizable order sidebar). */
