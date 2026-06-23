@@ -940,6 +940,7 @@ type AdminUsersDetail = {
   workspaces: { total: number; active30d: number; inactive: number; planCounts: Record<string, number> };
   quick: { avgWorkspacesPerUser: number; usersWithMultipleWorkspaces: number };
   topWorkspaces: { id: string; name: string; ownerEmail: string; plan: string; members: number | null; orders30d: number; ordersTotal: number | null; lastOrderAtMs: number }[];
+  recentUsers: { uid: string; email: string; displayName: string; createdAtMs: number; lastSignInMs: number; plan: string }[];
   heatmap: number[][];
 };
 
@@ -1123,6 +1124,43 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Users" title="Recent signups" />
+        {(() => {
+          const recent = (data.recentUsers ?? []).slice(0, 50);
+          if (recent.length === 0) return <p className="muted-copy">No recent signups.</p>;
+          return (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                    <th style={{ padding: "6px 8px" }}>#</th>
+                    <th style={{ padding: "6px 8px" }}>Email</th>
+                    <th style={{ padding: "6px 8px" }}>Name</th>
+                    <th style={{ padding: "6px 8px" }}>Signed up</th>
+                    <th style={{ padding: "6px 8px" }}>Last sign-in</th>
+                    <th style={{ padding: "6px 8px" }}>Plan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((u, index) => (
+                    <tr key={u.uid} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{u.email || "—"}</td>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.displayName || "—"}</td>
+                      <td style={{ padding: "7px 8px" }}>{u.createdAtMs ? new Date(u.createdAtMs).toLocaleDateString() : "—"}</td>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.lastSignInMs ? new Date(u.lastSignInMs).toLocaleDateString() : "never"}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[u.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[u.plan] || u.plan}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+        <p className="muted-copy" style={{ marginTop: 8 }}>Newest first (latest 50).</p>
       </section>
 
       <section className="card app-card">
