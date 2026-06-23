@@ -31,27 +31,27 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
     path: "/"
   },
   features: {
-    title: "NivaDesk Features | Orders, Files, Teams and Exports",
+    title: "NivaDesk Features | Orders, Clients, Scheduling & Files",
     description:
-      "Explore NivaDesk features for order tracking, Client Files, timeline and delivery planning, To Do, Team Access, dashboards, export and cross-platform studio workflows.",
+      "See how NivaDesk manages orders, customers, schedules, invoices, client files, to do lists, team roles and dashboards in one studio workspace, on web, Mac, iPhone and Android.",
     path: "/features"
   },
   pricing: {
-    title: "NivaDesk Pricing | Free, Lite, Pro and Team Plans",
+    title: "NivaDesk Pricing | Free, Lite, Pro & Team Plans",
     description:
-      "Preview NivaDesk pricing for Free/Demo, NivaDesk Lite, NivaDesk Pro, NivaDesk Team and future storage add-ons. Live billing is not enabled yet.",
+      "Compare NivaDesk plans: start free, then Lite, Pro or Team as your studio grows. See order limits, client file storage, finance tools and team seats to find the right fit.",
     path: "/pricing"
   },
   signup: {
-    title: "Get Started with NivaDesk",
+    title: "Start Free with NivaDesk | Studio & Order Management",
     description:
-      "Start with the NivaDesk Free/Demo path, sign in to the web portal, or review pricing before paid billing is enabled.",
+      "Get started with NivaDesk free. Create your studio workspace and start tracking orders, clients, schedules and invoices in minutes, on web, Mac, iPhone and Android.",
     path: "/signup"
   },
   faq: {
-    title: "NivaDesk FAQ",
+    title: "NivaDesk FAQ | Plans, Features & Getting Started",
     description:
-      "Answers about NivaDesk plans, platform priorities, Free/Demo fallback behavior, export access and safe billing placeholders.",
+      "Common questions about NivaDesk: plans and pricing, supported platforms, online store integrations, the Free Demo, exporting your data and getting started.",
     path: "/faq"
   },
   privacy: {
@@ -117,7 +117,7 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
   guide: {
     title: "How to Use NivaDesk | User Guide",
     description:
-      "A short tour of every NivaDesk menu — orders, client files, tasks, schedule, team access, settings and more — what each does and how to use it, on Mac, iPhone, iPad, Android and web.",
+      "A short tour of every NivaDesk menu: orders, client files, tasks, schedule, team access and settings. Learn what each does and how to use it on Mac, iPhone, iPad, Android and web.",
     path: "/guide"
   },
   contact: {

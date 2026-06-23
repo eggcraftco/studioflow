@@ -60,24 +60,24 @@ const softwareApplication = {
 
 const FAQ_ENTRIES: { question: string; answer: string }[] = [
   {
-    question: "Can I connect my online store — WooCommerce, Shopify, Wix, Squarespace or Etsy?",
+    question: "Can I connect my online store, like WooCommerce, Shopify, Wix, Squarespace or Etsy?",
     answer:
-      "Yes. WooCommerce and Shopify connect natively, and almost any other platform — Wix, Squarespace, Etsy, BigCommerce or a custom website — can connect through NivaDesk's generic order webhook or a no-code tool like Zapier or Make. New online orders flow straight into NivaDesk Orders and Schedule, with the customer, items and totals mapped to your order workflow."
+      "Yes. WooCommerce and Shopify connect natively, and almost any other platform, including Wix, Squarespace, Etsy, BigCommerce or a custom website, can connect through NivaDesk's generic order webhook or a no-code tool like Zapier or Make. New online orders flow straight into NivaDesk Orders and Schedule, with the customer, items and totals mapped to your order workflow."
   },
   {
     question: "Is there a free version of NivaDesk?",
     answer:
-      "Yes. Free Demo lets you try NivaDesk with a small sample workspace — up to 5 orders and 3 customers — at no cost and with no card required. Upgrade whenever you're ready."
+      "Yes. Free Demo lets you try NivaDesk with a small sample workspace of up to 5 orders and 3 customers, at no cost and with no card required. Upgrade whenever you're ready."
   },
   {
     question: "Which NivaDesk plans are available?",
     answer:
-      "Free Demo (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability — from unlimited orders to Client Files, advanced finance and team collaboration."
+      "Free Demo (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
   },
   {
     question: "Can I pay monthly or yearly?",
     answer:
-      "Both. Choose monthly for flexibility or yearly to save — paying for ten months instead of twelve. You can switch billing period at any time."
+      "Both. Choose monthly for flexibility or yearly to save, paying for ten months instead of twelve. You can switch billing period at any time."
   },
   {
     question: "Can I change my plan later?",
