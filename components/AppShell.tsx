@@ -1352,9 +1352,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <header className="app-toolbar app-toolbar-native">
             <div className="toolbar-main">
               <Link
-                href={canSeeToolbarFinance ? "/dashboard" : "/orders"}
+                href="/orders"
                 className="toolbar-brand native-brand"
-                aria-label={canSeeToolbarFinance ? "Dashboard" : "Orders"}
+                aria-label="Orders"
               >
                 <span
                   className="native-brand-logo-frame"
