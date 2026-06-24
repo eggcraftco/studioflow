@@ -3492,6 +3492,12 @@ export function OrderDetailContent({
     if (typeof patch.emailAddress === "string") nextPatch.emailAddress = patch.emailAddress;
     if (typeof patch.whatsappNumber === "string") nextPatch.whatsappNumber = patch.whatsappNumber;
     if (typeof patch.instagramUsername === "string") nextPatch.instagramUsername = patch.instagramUsername;
+    if (typeof patch.shippingName === "string") nextPatch.shippingName = patch.shippingName;
+    if (typeof patch.shippingStreetAddress === "string") nextPatch.shippingStreetAddress = patch.shippingStreetAddress;
+    if (typeof patch.shippingCity === "string") nextPatch.shippingCity = patch.shippingCity;
+    if (typeof patch.shippingPostalCode === "string") nextPatch.shippingPostalCode = patch.shippingPostalCode;
+    if (typeof patch.shippingCountry === "string") nextPatch.shippingCountry = patch.shippingCountry;
+    if (typeof patch.shippingPhone === "string") nextPatch.shippingPhone = patch.shippingPhone;
     if (typeof patch.notes === "string") nextPatch.notes = patch.notes;
     if (typeof patch.customerNotes === "string") {
       nextPatch.customFields = {
@@ -4897,6 +4903,50 @@ export function OrderDetailContent({
                   />
                 </>
               ) : null}
+              <div className="app-card-divider" />
+              <div className="app-subsection-title"><span>▱</span><strong>Shipping address</strong></div>
+              <InlineValueRow
+                label="Recipient"
+                value={order.shippingName || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping recipient"}
+                onSave={value => saveDetailsPatch({ shippingName: String(value) }, "Shipping recipient")}
+              />
+              <InlineValueRow
+                label="Street"
+                value={order.shippingStreetAddress || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping street"}
+                onSave={value => saveDetailsPatch({ shippingStreetAddress: String(value) }, "Shipping street")}
+              />
+              <InlineValueRow
+                label="City"
+                value={order.shippingCity || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping city"}
+                onSave={value => saveDetailsPatch({ shippingCity: String(value) }, "Shipping city")}
+              />
+              <InlineValueRow
+                label="Postcode"
+                value={order.shippingPostalCode || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping postcode"}
+                onSave={value => saveDetailsPatch({ shippingPostalCode: String(value) }, "Shipping postcode")}
+              />
+              <InlineValueRow
+                label="Country"
+                value={order.shippingCountry || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping country"}
+                onSave={value => saveDetailsPatch({ shippingCountry: String(value) }, "Shipping country")}
+              />
+              <InlineValueRow
+                label="Shipping phone"
+                value={order.shippingPhone || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping phone"}
+                onSave={value => saveDetailsPatch({ shippingPhone: String(value) }, "Shipping phone")}
+              />
             </div>
           </section>
         );

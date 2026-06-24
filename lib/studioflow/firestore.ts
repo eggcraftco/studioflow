@@ -433,6 +433,12 @@ export type OrderDetail = {
   emailAddress: string;
   instagramUsername: string;
   whatsappNumber: string;
+  shippingName: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  shippingPhone: string;
   communication: string[];
   notes: string;
   invBool1: boolean;
@@ -1594,6 +1600,12 @@ function mapOrderDetailSnapshot(
     emailAddress: stringValue(data.emailAddress, ""),
     instagramUsername: stringValue(data.instagramUsername, ""),
     whatsappNumber: stringValue(data.whatsappNumber, ""),
+    shippingName: stringValue(data.shippingName, ""),
+    shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
+    shippingCity: stringValue(data.shippingCity, ""),
+    shippingPostalCode: stringValue(data.shippingPostalCode, ""),
+    shippingCountry: stringValue(data.shippingCountry, ""),
+    shippingPhone: stringValue(data.shippingPhone, ""),
     communication: stringArrayValue(data.communication),
     notes: stringValue(data.notes, ""),
     invBool1: booleanValue(data.invBool1, false),

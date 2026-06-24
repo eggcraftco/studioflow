@@ -43,6 +43,12 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     instagramUsername?: string;
     tiktokUsername?: string;
     address?: string;
+    shippingName?: string;
+    shippingStreetAddress?: string;
+    shippingCity?: string;
+    shippingPostalCode?: string;
+    shippingCountry?: string;
+    shippingPhone?: string;
     communication?: string[];
     customerNotes?: string;
     paymentDate?: string;
