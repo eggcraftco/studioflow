@@ -684,8 +684,7 @@ function CustomerDetail({
                 saving={savingInlineField === "Customer details"}
                 onSave={patch => onSaveDetails(patch, "Customer details")}
               />
-              {customer.shippingAddress.trim() &&
-              customer.shippingAddress.trim().toLowerCase() !== customer.address.trim().toLowerCase() ? (
+              {customer.shippingAddress.trim() ? (
                 <>
                   <InfoRow label="Shipping address" value={customer.shippingAddress} />
                   {customer.shippingPhone.trim() ? (
