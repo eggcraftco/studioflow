@@ -315,6 +315,8 @@ export type CustomerDirectoryItem = {
   city: string;
   postalCode: string;
   country: string;
+  shippingAddress: string;
+  shippingPhone: string;
   notes: string;
   profileImageUrl: string;
   lastContactDate: Date | null;
@@ -1309,6 +1311,8 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       city: firstStringValue(data.city, data.town),
       postalCode: firstStringValue(data.postalCode, data.postcode, data.zipCode, data.zip),
       country: stringValue(data.country, ""),
+      shippingAddress: stringValue(data.shippingAddress, ""),
+      shippingPhone: stringValue(data.shippingPhone, ""),
       notes: stringValue(data.notes, ""),
       profileImageUrl: stringValue(data.profileImageUrl, ""),
       lastContactDate: dateValue(data.lastContactDate),
