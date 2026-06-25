@@ -3701,7 +3701,7 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
         <CardTitle icon="orders" eyebrow={t("Other Platforms")} title={t("Connect any store with one webhook")} />
         <div className="quick-reply-settings-info">
           <strong>{t("Orders from almost any platform can flow into this workspace.")}</strong>
-          <p>{t("Use Zapier, Make or your own site to POST each new order to the Delivery URL below. It works with Wix, Squarespace, Etsy, BigCommerce, custom sites and more — orders appear in Orders and Schedule automatically.")}</p>
+          <p>{t("Use Zapier, Make or your own site to POST each new order to the Delivery URL below. It works with Wix, Squarespace, Etsy, BigCommerce, custom sites and more. Orders appear in Orders and Schedule automatically.")}</p>
         </div>
         {!companyId ? (
           <p className="layout-error">{t("Company ID is not available yet. Sign in or reconnect your workspace first.")}</p>

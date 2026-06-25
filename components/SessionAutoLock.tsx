@@ -147,7 +147,7 @@ export function SessionAutoLock() {
           </svg>
         </div>
         <h2 className="session-lock-title">{t("NivaDesk is locked")}</h2>
-        <p className="session-lock-copy">{t("Locked after inactivity. Re-authenticate to continue — you stay signed in.")}</p>
+        <p className="session-lock-copy">{t("Locked after inactivity. Re-authenticate to continue, you stay signed in.")}</p>
 
         {hasPassword ? (
           <form className="session-lock-form" onSubmit={handlePasswordUnlock}>

@@ -6,7 +6,7 @@ import type { StudioLanguage } from "@/lib/studioflow/language";
 // HOW TO ADD A RELEASE (for the team):
 //   1. Add a new object to the TOP of CHANGELOG below (newest first).
 //   2. Set `version` (match the app version), `date` (e.g. "14 June 2026").
-//   3. Optionally set `highlight` — one short headline sentence.
+//   3. Optionally set `highlight`: one short headline sentence.
 //   4. List `changes`, each tagged "new" | "improved" | "fixed".
 //   5. Update CHANGELOG_LAST_UPDATED to the same date.
 //
@@ -34,7 +34,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "0.1.3",
     date: "June 2026",
-    highlight: "Welcome to NivaDesk — this is our first release, and we're just getting started.",
+    highlight: "Welcome to NivaDesk: this is our first release, and we're just getting started.",
     changes: [
       { tag: "new", text: "First release of NivaDesk: run your studio, orders, client files, tasks and team from one place across Mac, iPhone, iPad, Android and web." },
       { tag: "improved", text: "NivaDesk is under active development. We're improving it continuously and listening to early feedback." },
@@ -123,7 +123,7 @@ const LABELS: Partial<Record<StudioLanguage, ChangelogLabels>> = {
   "Русский (Russian)": {
     eyebrow: "Обновления продукта",
     title: "Что нового в NivaDesk",
-    intro: "Каждая версия NivaDesk с описанием изменений и датой. Новые обновления — сверху.",
+    intro: "Каждая версия NivaDesk с описанием изменений и датой. Новые обновления: сверху.",
     latest: "Последнее",
     versionWord: "Версия",
     lastUpdated: "Последнее обновление",

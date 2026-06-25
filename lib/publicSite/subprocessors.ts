@@ -456,7 +456,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
     ],
     sectionSummaries: [
       "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. По вопросам privacy, data protection или subprocessors пишите на contact@nivadesk.co.uk.",
-      "Subprocessor — сторонний provider, который может обрабатывать personal data от имени NivaDesk, чтобы помогать предоставлять сервис, например cloud infrastructure, authentication, payments или email.",
+      "Subprocessor: сторонний provider, который может обрабатывать personal data от имени NivaDesk, чтобы помогать предоставлять сервис, например cloud infrastructure, authentication, payments или email.",
       "Мы стремимся использовать trusted providers с разумными security, reliability и privacy standards. Данные обрабатываются только для нужных services; мы не продаем personal data и не используем workspace content для рекламы.",
       "В зависимости от сервиса могут обрабатываться account data, workspace data, file metadata, payment/subscription information, technical data и communication data.",
       "Ожидаемые providers могут включать Firebase / Google Cloud, Apple, Google / Google Play, Stripe, email delivery, analytics, crash/error monitoring и customer support. Production providers, services и regions нужно подтвердить до публикации.",

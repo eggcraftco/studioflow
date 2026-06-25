@@ -116,7 +116,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
       if (auth.currentUser?.emailVerified) {
         window.location.reload();
       } else {
-        setStatus("Not verified yet — click the link in the email first.");
+        setStatus("Not verified yet. Click the link in the email first.");
       }
     } catch {
       setStatus("Could not check verification status. Try again.");
@@ -140,7 +140,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
         {status ? <p style={{ fontSize: 13, fontWeight: 650, margin: "0 0 14px" }}>{status}</p> : null}
         <div style={{ display: "grid", gap: 10 }}>
           <button className="button" type="button" onClick={() => void checkVerified()} disabled={busy}>
-            I&apos;ve verified — continue
+            I&apos;ve verified, continue
           </button>
           <button className="button secondary" type="button" onClick={() => void resend()} disabled={busy}>
             Resend email

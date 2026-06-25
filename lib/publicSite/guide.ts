@@ -43,9 +43,9 @@ const TREE_EN: GuideNode[] = [
     blocks: [
       { kind: "para", text: "When you first open NivaDesk, a short setup gets your workspace ready for your kind of work." },
       { kind: "steps", items: [
-        "Pick your industry — NivaDesk tailors the workflow steps, order fields and labels to your craft.",
-        "Review the business description — it auto-fills to fit your trade and shapes how orders are set up. You can edit it any time in Settings ▸ Workflow Steps.",
-        "Explore the Free Demo workspace — sample orders and customers let you try everything before adding real data.",
+        "Pick your industry: NivaDesk tailors the workflow steps, order fields and labels to your craft.",
+        "Review the business description: it auto-fills to fit your trade and shapes how orders are set up. You can edit it any time in Settings ▸ Workflow Steps.",
+        "Explore the Free Demo workspace: sample orders and customers let you try everything before adding real data.",
         "Add your first real order with Add Project when you are ready."
       ] },
       { kind: "para", text: "You can change your industry, workflow steps and labels later in Settings, so nothing here is permanent." }
@@ -67,29 +67,29 @@ const TREE_EN: GuideNode[] = [
     id: "orders",
     title: "Orders",
     blocks: [
-      { kind: "para", text: "Orders is the heart of NivaDesk — the list of every job you are working on. From here you create orders, find them quickly and open one to manage all of its details." },
+      { kind: "para", text: "Orders is the heart of NivaDesk: the list of every job you are working on. From here you create orders, find them quickly and open one to manage all of its details." },
       { kind: "sub", text: "The orders list" },
       { kind: "bullets", items: [
-        "Add Project — create a new order. You give it a customer, a title and the basics; you can fill in the rest inside the order.",
-        "Search — type a customer name, order number or keyword to jump straight to an order.",
-        "Quick filters — narrow the list (for example only your assigned orders, or by stage) without losing the others.",
-        "Sort — order the list by smart priority, newest, due date and more.",
-        "Status badges — small colored tags on each card show production status at a glance; you can turn them off in settings.",
-        "Open an order — tap a card to open its detail workspace."
+        "Add Project: create a new order. You give it a customer, a title and the basics; you can fill in the rest inside the order.",
+        "Search: type a customer name, order number or keyword to jump straight to an order.",
+        "Quick filters: narrow the list (for example only your assigned orders, or by stage) without losing the others.",
+        "Sort: order the list by smart priority, newest, due date and more.",
+        "Status badges: small colored tags on each card show production status at a glance; you can turn them off in settings.",
+        "Open an order: tap a card to open its detail workspace."
       ] },
       { kind: "sub", text: "The order detail workspace" },
-      { kind: "para", text: "Opening an order shows a set of cards — Preview, Order Summary, Financial Info, Client Files and more. Each card covers one part of the job. You decide which cards you see and how they are arranged." },
+      { kind: "para", text: "Opening an order shows a set of cards: Preview, Order Summary, Financial Info, Client Files and more. Each card covers one part of the job. You decide which cards you see and how they are arranged." },
       { kind: "bullets", items: [
         "Show or hide any card so you only see what matters to you.",
         "Drag a card to reorder it; drag its edge to resize the height.",
         "Give a card a color (8 options) to make it stand out.",
-        "Your layout is saved to your own user as a card profile — your teammates keep their own layouts, while the order content stays shared.",
+        "Your layout is saved to your own user as a card profile: your teammates keep their own layouts, while the order content stays shared.",
         "Some cards let you Edit headings to rename, add or remove their sections and fields (covered on each card below)."
       ] },
       { kind: "sub", text: "Export & invoice" },
       { kind: "bullets", items: [
-        "Export the order as a PDF — a clean summary built from your PDF Export Settings.",
-        "Generate an Invoice — NivaDesk assigns an invoice number automatically (if the order has none) and uses your business details and footer note from Settings.",
+        "Export the order as a PDF: a clean summary built from your PDF Export Settings.",
+        "Generate an Invoice: NivaDesk assigns an invoice number automatically (if the order has none) and uses your business details and footer note from Settings.",
         "You can also print the To Do list and the History log as PDFs.",
         "Customize how all of these look in Settings ▸ PDF Export Settings."
       ] },
@@ -114,13 +114,13 @@ const TREE_EN: GuideNode[] = [
         id: "card-summary",
         title: "Order Summary card",
         blocks: [
-          { kind: "para", text: "The Order Summary card is your at-a-glance status panel — the key numbers, stages and dates you check most often, all in one place." },
+          { kind: "para", text: "The Order Summary card is your at-a-glance status panel: the key numbers, stages and dates you check most often, all in one place." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
-            "Order Value — the total value of the order. If your role cannot see finances it shows ‘Hidden’ instead.",
-            "Two status steps — the two most important stages of the job (for example design and production), each with a colored badge that reflects its current status.",
-            "Placed On — the date the order was started.",
-            "Delivery In — a live countdown to the delivery date that turns red when the order is due soon or overdue."
+            "Order Value: the total value of the order. If your role cannot see finances it shows ‘Hidden’ instead.",
+            "Two status steps: the two most important stages of the job (for example design and production), each with a colored badge that reflects its current status.",
+            "Placed On: the date the order was started.",
+            "Delivery In: a live countdown to the delivery date that turns red when the order is due soon or overdue."
           ] },
           { kind: "sub", text: "What you can change" },
           { kind: "bullets", items: [
@@ -133,11 +133,11 @@ const TREE_EN: GuideNode[] = [
         id: "card-customer",
         title: "Customer & Communication card",
         blocks: [
-          { kind: "para", text: "This card holds who the order is for and how to reach them — the customer's details and your communication channels, all editable in place." },
+          { kind: "para", text: "This card holds who the order is for and how to reach them: the customer's details and your communication channels, all editable in place." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "Customer Name and Design Name.",
-            "Any custom fields you add — for example a reference number, an Instagram handle or a project code.",
+            "Any custom fields you add, for example a reference number, an Instagram handle or a project code.",
             "A Communication section with Telephone, Email and Address.",
             "Channel buttons such as Instagram, WhatsApp or TikTok for quick contact."
           ] },
@@ -154,7 +154,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-materials",
         title: "Materials & Inventory card",
         blocks: [
-          { kind: "para", text: "Track the parts and materials a job needs — whether each one is sourced, received and ready — so you never start work missing something." },
+          { kind: "para", text: "Track the parts and materials a job needs, whether each one is sourced, received and ready, so you never start work missing something." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "A yes/no checklist of material steps. The default labels come from your workspace Inventory Labels (set in Settings), for example ‘Dial Sourced’, ‘Dial Received’ or ‘Materials Ready’.",
@@ -177,9 +177,9 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Flag how urgent an order is and whether anything is holding it up, so the team can focus on what matters and spot stuck jobs early." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
-            "Priority — Low, Normal, High or Urgent. High and Urgent stand out in the Orders list so they are easy to catch.",
-            "Risk — None, Waiting, Blocked or Overdue, to mark a job that cannot move forward right now.",
-            "Risk reason — appears once Risk is set to anything other than None. Choose why, for example Waiting for customer, Waiting for payment or Waiting for material."
+            "Priority: Low, Normal, High or Urgent. High and Urgent stand out in the Orders list so they are easy to catch.",
+            "Risk: None, Waiting, Blocked or Overdue, to mark a job that cannot move forward right now.",
+            "Risk reason: appears once Risk is set to anything other than None. Choose why, for example Waiting for customer, Waiting for payment or Waiting for material."
           ] },
           { kind: "para", text: "Pick a value from each dropdown and it saves instantly. Priority and risk also feed the smart sort and the status badges in the Orders list, so flagged jobs rise to the top." }
         ]
@@ -192,12 +192,12 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "Created Date and Delivery Due, shown as two clear date cards.",
-            "Time Remaining — the days left until delivery, color-coded so a tight or overdue deadline stands out.",
-            "Add to Calendar — downloads an all-day calendar file spanning the created date to the delivery date, so the order appears in your calendar app (available from NivaDesk Lite)."
+            "Time Remaining: the days left until delivery, color-coded so a tight or overdue deadline stands out.",
+            "Add to Calendar: downloads an all-day calendar file spanning the created date to the delivery date, so the order appears in your calendar app (available from NivaDesk Lite)."
           ] },
           { kind: "sub", text: "What you can edit" },
           { kind: "bullets", items: [
-            "Delivery Time (in days), the Delivery Due date and the Created Date — tap to change any of them.",
+            "Delivery Time (in days), the Delivery Due date and the Created Date: tap to change any of them.",
             "Time Remaining and all the colors recalculate automatically as soon as you change a date."
           ] }
         ]
@@ -206,7 +206,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-notes",
         title: "Notes card",
         blocks: [
-          { kind: "para", text: "Keep written notes about the order — instructions, decisions and reminders — in one place the whole workspace can see." },
+          { kind: "para", text: "Keep written notes about the order, instructions, decisions and reminders, in one place the whole workspace can see." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "The main Customer Notes, which stays linked to the customer's profile.",
@@ -214,7 +214,7 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
-            "Type into any section — it saves automatically.",
+            "Type into any section: it saves automatically.",
             "Use the + button to add a note field to this order only, give it a title, and remove it when you no longer need it.",
             "Use Edit headings to add, rename or remove the Special Notes sections that appear on every order across the workspace."
           ] }
@@ -224,13 +224,13 @@ const TREE_EN: GuideNode[] = [
         id: "card-clientfiles",
         title: "Client Files card",
         blocks: [
-          { kind: "para", text: "Attach the documents and images that belong to this order — proofs, designs, receipts, reference photos — so everything for the job lives with it." },
+          { kind: "para", text: "Attach the documents and images that belong to this order, proofs, designs, receipts, reference photos, so everything for the job lives with it." },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
-            "Upload File — pick PDF, image, PSD or PSB files. You can also drag and drop files straight onto the card.",
+            "Upload File: pick PDF, image, PSD or PSB files. You can also drag and drop files straight onto the card.",
             "Tap a file to preview it, or use Download all to grab everything at once.",
             "Delete a file if your role is allowed to.",
-            "Works offline — files are saved on the device and upload automatically when you are back online."
+            "Works offline: files are saved on the device and upload automatically when you are back online."
           ] },
           { kind: "sub", text: "Safety" },
           { kind: "bullets", items: [
@@ -243,7 +243,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-todo",
         title: "To Do card",
         blocks: [
-          { kind: "para", text: "A task checklist for this specific order — break the job into steps, assign them and track what is done." },
+          { kind: "para", text: "A task checklist for this specific order: break the job into steps, assign them and track what is done." },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
             "Add a task with the input, then give it a due date, a priority, an assignee and an optional note.",
@@ -264,7 +264,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Track how much time you spend on an order, so you can see the real effort per job and price future work more accurately." },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
-            "Give the work a title and start a timed session — the card shows ‘Running now’ while it counts.",
+            "Give the work a title and start a timed session: the card shows ‘Running now’ while it counts.",
             "Stop a session when you pause, and Continue it later to keep adding to the same task.",
             "See the Total Work Time for the order, plus a list of every session.",
             "Delete a session you no longer need."
@@ -275,7 +275,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-financial",
         title: "Financial Info card",
         blocks: [
-          { kind: "para", text: "The full money picture for the order — what was charged, what it costs you, the tax, and the real profit left over." },
+          { kind: "para", text: "The full money picture for the order: what was charged, what it costs you, the tax, and the real profit left over." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "Order Value, Paid / Received and the Remaining balance, plus the payment method.",
@@ -295,7 +295,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-status",
         title: "Production Status card",
         blocks: [
-          { kind: "para", text: "Track where the order is in production — each stage of your workflow with its own status, so anyone can see progress at a glance." },
+          { kind: "para", text: "Track where the order is in production: each stage of your workflow with its own status, so anyone can see progress at a glance." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "One row per workflow step (for example Design, Production or Finishing), each set to a status such as Not Yet, In Progress, Done or Cancelled.",
@@ -312,7 +312,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-shipping",
         title: "Shipping & Tracking card",
         blocks: [
-          { kind: "para", text: "Manage delivery for the order — the courier, the tracking number, and live status updates, all without leaving the app." },
+          { kind: "para", text: "Manage delivery for the order: the courier, the tracking number, and live status updates, all without leaving the app." },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
             "Set the Courier (Auto Detect, Royal Mail, DHL, FedEx or UPS) and enter the Tracking number.",
@@ -330,7 +330,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-schedule",
         title: "Schedule & Alerts card",
         blocks: [
-          { kind: "para", text: "Set reminders tied to this order so important follow-ups — approvals, payments, client updates — never get forgotten." },
+          { kind: "para", text: "Set reminders tied to this order so important follow-ups, approvals, payments, client updates, never get forgotten." },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
             "Pick a Quick Reminder shortcut (for example Ask for approval, Send design update or Check payment) or type your own title.",
@@ -347,7 +347,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-history",
         title: "History / Log card",
         blocks: [
-          { kind: "para", text: "An automatic audit trail of the order — what changed and when — so you can always see how it reached its current state." },
+          { kind: "para", text: "An automatic audit trail of the order, what changed and when, so you can always see how it reached its current state." },
           { kind: "sub", text: "What it shows" },
           { kind: "bullets", items: [
             "A list of recent important changes, newest first.",
@@ -392,10 +392,10 @@ const TREE_EN: GuideNode[] = [
     id: "notes",
     title: "Notes",
     blocks: [
-      { kind: "para", text: "A full notes board for your workspace — capture ideas, lists and reminders, share them with your team, and keep the important ones pinned to the top." },
+      { kind: "para", text: "A full notes board for your workspace: capture ideas, lists and reminders, share them with your team, and keep the important ones pinned to the top." },
       { kind: "sub", text: "Create & format" },
       { kind: "bullets", items: [
-        "New Note — give it a title and body, and add an image if you need one.",
+        "New Note: give it a title and body, and add an image if you need one.",
         "Duplicate or copy a note to reuse it.",
         "Search notes to find anything fast, and switch to a grid view."
       ] },
@@ -431,7 +431,7 @@ const TREE_EN: GuideNode[] = [
     id: "customers",
     title: "Customers",
     blocks: [
-      { kind: "para", text: "Your client directory — every customer with their details and the work linked to them." },
+      { kind: "para", text: "Your client directory: every customer with their details and the work linked to them." },
       { kind: "bullets", items: [
         "Add a customer, edit their details, or remove one you no longer need.",
         "Open a customer to see their details and their designs and orders.",
@@ -457,7 +457,7 @@ const TREE_EN: GuideNode[] = [
     id: "messages",
     title: "Messages",
     blocks: [
-      { kind: "para", text: "Talk to your team inside NivaDesk — direct messages and group conversations, kept right next to your work." },
+      { kind: "para", text: "Talk to your team inside NivaDesk: direct messages and group conversations, kept right next to your work." },
       { kind: "bullets", items: [
         "Start a Direct message with a teammate or a Group conversation.",
         "Send text, files and images; forward, edit or leave a conversation.",
@@ -473,7 +473,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "para", text: "Draft polished customer messages in seconds, in your own style." },
       { kind: "bullets", items: [
         "Generate a quick reply with AI, then copy it to the clipboard to send.",
-        "Set your reply style — the greeting and sign-off (for example ‘Hi there,’ and ‘Kind regards,’) — and it is reused every time.",
+        "Set your reply style, the greeting and sign-off (for example ‘Hi there,’ and ‘Kind regards,’), and it is reused every time.",
         "Reference your saved products and prices so replies include the right details.",
         "Reach clients through the channel buttons on an order."
       ] },
@@ -493,10 +493,10 @@ const TREE_EN: GuideNode[] = [
         blocks: [
           { kind: "para", text: "Your personal and appearance settings." },
           { kind: "bullets", items: [
-            "Appearance & theme — switch between light and dark mode.",
-            "Language — choose one of 12 languages for the whole app.",
-            "Profile — your name and account details.",
-            "Security — manage how you sign in and protect your account."
+            "Appearance & theme: switch between light and dark mode.",
+            "Language: choose one of 12 languages for the whole app.",
+            "Profile: your name and account details.",
+            "Security: manage how you sign in and protect your account."
           ] }
         ]
       },
@@ -516,7 +516,7 @@ const TREE_EN: GuideNode[] = [
         id: "set-pdf",
         title: "PDF Export Settings",
         blocks: [
-          { kind: "para", text: "Control how invoices and order PDFs look — your business details, logo and a footer note, plus what is included in the export." }
+          { kind: "para", text: "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export." }
         ]
       },
       {
@@ -526,16 +526,16 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Set up how NivaDesk drafts replies to customers and what it knows about your business." },
           { kind: "sub", text: "Choose how replies are generated" },
           { kind: "bullets", items: [
-            "OpenAI Online — uses OpenAI with your own OpenAI API key. Paste your key here, and replace or clear it any time.",
-            "On-Device (Apple) — uses Apple's on-device AI on supported Apple Intelligence devices, with no API key needed.",
-            "Offline Template — builds replies from your saved products and rules, without any AI model."
+            "OpenAI Online: uses OpenAI with your own OpenAI API key. Paste your key here, and replace or clear it any time.",
+            "On-Device (Apple): uses Apple's on-device AI on supported Apple Intelligence devices, with no API key needed.",
+            "Offline Template: builds replies from your saved products and rules, without any AI model."
           ] },
           { kind: "sub", text: "Teach it about your business" },
           { kind: "bullets", items: [
-            "Company Knowledge Base — extra facts, rules and FAQs you give the AI so replies stay accurate and on-brand.",
-            "Products — your services or products with prices, so quotes include the right figures.",
-            "Rules / FAQs — common answers such as delivery times or deposit policy.",
-            "Reply style — your greeting and sign-off, reused on every reply."
+            "Company Knowledge Base: extra facts, rules and FAQs you give the AI so replies stay accurate and on-brand.",
+            "Products: your services or products with prices, so quotes include the right figures.",
+            "Rules / FAQs: common answers such as delivery times or deposit policy.",
+            "Reply style: your greeting and sign-off, reused on every reply."
           ] },
           { kind: "para", text: "Your OpenAI key belongs to you and is stored securely for your workspace; remove it whenever you like." }
         ]
@@ -559,9 +559,9 @@ const TREE_EN: GuideNode[] = [
         blocks: [
           { kind: "para", text: "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
           { kind: "bullets", items: [
-            "WooCommerce — create one webhook (Order created) and paste the delivery URL.",
-            "Shopify — add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
-            "Other platforms — connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
+            "WooCommerce: create one webhook (Order created) and paste the delivery URL.",
+            "Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
+            "Other platforms: connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
           ] }
         ]
       },
@@ -607,7 +607,7 @@ const TREE_EN: GuideNode[] = [
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
-          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team — the same tickets you see in the Messages menu." }
+          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu." }
         ]
       }
     ]
@@ -618,8 +618,8 @@ const TREE_EN: GuideNode[] = [
     blocks: [
       { kind: "para", text: "Make NivaDesk look and read the way you prefer. Both live in Settings ▸ General and sync across your devices." },
       { kind: "bullets", items: [
-        "Language — choose any of 12 languages; the whole app, including menus and labels, switches instantly.",
-        "Appearance — switch between light and dark mode.",
+        "Language: choose any of 12 languages; the whole app, including menus and labels, switches instantly.",
+        "Appearance: switch between light and dark mode.",
         "Your choices are saved to your account, so they follow you on Mac, iPhone, iPad, Android and web."
       ] }
     ]
@@ -635,9 +635,9 @@ const TREE_TR: GuideNode[] = [
     blocks: [
       { kind: "para", text: "NivaDesk'i ilk açtığınızda kısa bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar." },
       { kind: "steps", items: [
-        "İş kolunuzu seçin — NivaDesk iş akışı adımlarını, sipariş alanlarını ve etiketleri mesleğinize göre ayarlar.",
-        "İş açıklamasını gözden geçirin — mesleğinize uyacak şekilde otomatik dolar ve siparişlerin nasıl kurulacağını belirler. İstediğiniz zaman Settings ▸ Workflow Steps'ten düzenleyebilirsiniz.",
-        "Free Demo çalışma alanını keşfedin — örnek siparişler ve müşteriler, gerçek veri eklemeden her şeyi denemenizi sağlar.",
+        "İş kolunuzu seçin: NivaDesk iş akışı adımlarını, sipariş alanlarını ve etiketleri mesleğinize göre ayarlar.",
+        "İş açıklamasını gözden geçirin: mesleğinize uyacak şekilde otomatik dolar ve siparişlerin nasıl kurulacağını belirler. İstediğiniz zaman Settings ▸ Workflow Steps'ten düzenleyebilirsiniz.",
+        "Free Demo çalışma alanını keşfedin: örnek siparişler ve müşteriler, gerçek veri eklemeden her şeyi denemenizi sağlar.",
         "Hazır olduğunuzda Add Project ile ilk gerçek siparişinizi ekleyin."
       ] },
       { kind: "para", text: "İş kolunuzu, iş akışı adımlarınızı ve etiketleri sonradan Settings'ten değiştirebilirsiniz; burada hiçbir şey kalıcı değildir." }
@@ -659,15 +659,15 @@ const TREE_TR: GuideNode[] = [
     id: "orders",
     title: "Siparişler (Orders)",
     blocks: [
-      { kind: "para", text: "Siparişler, NivaDesk'in kalbidir — üzerinde çalıştığınız tüm işlerin listesi. Buradan sipariş oluşturur, hızlıca bulur ve birini açıp tüm detaylarını yönetirsiniz." },
+      { kind: "para", text: "Siparişler, NivaDesk'in kalbidir: üzerinde çalıştığınız tüm işlerin listesi. Buradan sipariş oluşturur, hızlıca bulur ve birini açıp tüm detaylarını yönetirsiniz." },
       { kind: "sub", text: "Sipariş listesi" },
       { kind: "bullets", items: [
-        "Add Project — yeni sipariş oluşturur. Müşteri, başlık ve temel bilgileri verirsiniz; gerisini siparişin içinde doldurabilirsiniz.",
-        "Arama — müşteri adı, sipariş numarası veya anahtar kelime yazarak doğrudan siparişe gidin.",
-        "Hızlı filtreler — listeyi daraltın (örneğin yalnızca size atanan siparişler ya da aşamaya göre), diğerlerini kaybetmeden.",
-        "Sıralama — listeyi akıllı önceliğe, en yeniye, teslim tarihine ve daha fazlasına göre sıralayın.",
-        "Durum etiketleri — her kartta üretim durumunu bir bakışta gösteren küçük renkli etiketler; ayarlardan kapatabilirsiniz.",
-        "Siparişi aç — bir karta dokunarak detay çalışma alanını açın."
+        "Add Project: yeni sipariş oluşturur. Müşteri, başlık ve temel bilgileri verirsiniz; gerisini siparişin içinde doldurabilirsiniz.",
+        "Arama: müşteri adı, sipariş numarası veya anahtar kelime yazarak doğrudan siparişe gidin.",
+        "Hızlı filtreler: listeyi daraltın (örneğin yalnızca size atanan siparişler ya da aşamaya göre), diğerlerini kaybetmeden.",
+        "Sıralama: listeyi akıllı önceliğe, en yeniye, teslim tarihine ve daha fazlasına göre sıralayın.",
+        "Durum etiketleri: her kartta üretim durumunu bir bakışta gösteren küçük renkli etiketler; ayarlardan kapatabilirsiniz.",
+        "Siparişi aç: bir karta dokunarak detay çalışma alanını açın."
       ] },
       { kind: "sub", text: "Sipariş detay çalışma alanı" },
       { kind: "para", text: "Bir siparişi açtığınızda Preview, Order Summary, Financial Info, Client Files ve daha fazlası gibi kartlar gelir. Her kart işin bir bölümünü kapsar. Hangi kartları göreceğinize ve nasıl dizileceğine siz karar verirsiniz." },
@@ -675,13 +675,13 @@ const TREE_TR: GuideNode[] = [
         "Herhangi bir kartı gösterin veya gizleyin; yalnızca size gerekenleri görün.",
         "Bir kartı sürükleyerek yerini değiştirin; kenarından sürükleyerek yüksekliğini ayarlayın.",
         "Bir karta renk verin (8 seçenek) ki öne çıksın.",
-        "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir — ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
+        "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir: ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
         "Bazı kartlarda Başlıkları Düzenle ile bölümleri ve alanları yeniden adlandırabilir, ekleyebilir veya kaldırabilirsiniz (aşağıda her kartta anlatılıyor)."
       ] },
       { kind: "sub", text: "Dışa aktarma & fatura" },
       { kind: "bullets", items: [
-        "Siparişi PDF olarak dışa aktarın — PDF Export Settings'inizden oluşturulan derli toplu bir özet.",
-        "Invoice (Fatura) oluşturun — NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
+        "Siparişi PDF olarak dışa aktarın: PDF Export Settings'inizden oluşturulan derli toplu bir özet.",
+        "Invoice (Fatura) oluşturun: NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
         "Ayrıca To Do listesini ve History kaydını da PDF olarak yazdırabilirsiniz.",
         "Bunların tümünün görünümünü Settings ▸ PDF Export Settings'ten özelleştirin."
       ] },
@@ -706,13 +706,13 @@ const TREE_TR: GuideNode[] = [
         id: "card-summary",
         title: "Order Summary kartı",
         blocks: [
-          { kind: "para", text: "Order Summary (Sipariş Özeti) kartı, bir bakışta durum panelinizdir — en sık kontrol ettiğiniz temel rakamlar, aşamalar ve tarihler tek yerde." },
+          { kind: "para", text: "Order Summary (Sipariş Özeti) kartı, bir bakışta durum panelinizdir: en sık kontrol ettiğiniz temel rakamlar, aşamalar ve tarihler tek yerde." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
-            "Order Value (Sipariş Değeri) — siparişin toplam değeri. Rolünüz finansı göremiyorsa bunun yerine ‘Hidden’ (Gizli) yazar.",
-            "İki durum adımı — işin en önemli iki aşaması (örneğin tasarım ve üretim); her biri mevcut durumu yansıtan renkli bir rozetle.",
-            "Placed On — siparişin başlatıldığı tarih.",
-            "Delivery In — teslim tarihine canlı geri sayım; sipariş yaklaştığında veya geciktiğinde kırmızıya döner."
+            "Order Value (Sipariş Değeri): siparişin toplam değeri. Rolünüz finansı göremiyorsa bunun yerine ‘Hidden’ (Gizli) yazar.",
+            "İki durum adımı: işin en önemli iki aşaması (örneğin tasarım ve üretim); her biri mevcut durumu yansıtan renkli bir rozetle.",
+            "Placed On: siparişin başlatıldığı tarih.",
+            "Delivery In: teslim tarihine canlı geri sayım; sipariş yaklaştığında veya geciktiğinde kırmızıya döner."
           ] },
           { kind: "sub", text: "Neleri değiştirebilirsiniz" },
           { kind: "bullets", items: [
@@ -725,11 +725,11 @@ const TREE_TR: GuideNode[] = [
         id: "card-customer",
         title: "Customer & Communication kartı",
         blocks: [
-          { kind: "para", text: "Bu kart, siparişin kime ait olduğunu ve müşteriye nasıl ulaşacağınızı tutar — müşteri bilgileri ve iletişim kanallarınız; hepsi yerinde düzenlenebilir." },
+          { kind: "para", text: "Bu kart, siparişin kime ait olduğunu ve müşteriye nasıl ulaşacağınızı tutar: müşteri bilgileri ve iletişim kanallarınız; hepsi yerinde düzenlenebilir." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "Customer Name (Müşteri Adı) ve Design Name (Tasarım Adı).",
-            "Eklediğiniz özel alanlar — örneğin bir referans numarası, Instagram kullanıcı adı veya proje kodu.",
+            "Eklediğiniz özel alanlar, örneğin bir referans numarası, Instagram kullanıcı adı veya proje kodu.",
             "Telephone, Email ve Address içeren bir İletişim (Communication) bölümü.",
             "Hızlı iletişim için Instagram, WhatsApp veya TikTok gibi kanal butonları."
           ] },
@@ -746,7 +746,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-materials",
         title: "Materials & Inventory kartı",
         blocks: [
-          { kind: "para", text: "Bir işin ihtiyaç duyduğu parça ve malzemeleri takip edin — her birinin tedarik edildi mi, geldi mi, hazır mı — böylece işe eksikle başlamazsınız." },
+          { kind: "para", text: "Bir işin ihtiyaç duyduğu parça ve malzemeleri takip edin, her birinin tedarik edildi mi, geldi mi, hazır mı, böylece işe eksikle başlamazsınız." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "Malzeme adımlarının evet/hayır kontrol listesi. Varsayılan etiketler çalışma alanınızın Inventory Labels (Envanter Etiketleri) ayarından gelir; örneğin ‘Dial Sourced’, ‘Dial Received’ veya ‘Materials Ready’.",
@@ -769,9 +769,9 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Bir siparişin ne kadar acil olduğunu ve onu bekleten bir şey olup olmadığını işaretleyin; böylece ekip önemli olana odaklanır ve takılan işleri erkenden fark eder." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
-            "Priority (Öncelik) — Low, Normal, High veya Urgent. High ve Urgent, Siparişler listesinde öne çıkar; kolayca yakalanır.",
-            "Risk — None, Waiting, Blocked veya Overdue; şu an ilerleyemeyen bir işi işaretlemek için.",
-            "Risk reason (Risk nedeni) — Risk, None dışında bir şeye ayarlanınca görünür. Nedenini seçin; örneğin Waiting for customer, Waiting for payment veya Waiting for material."
+            "Priority (Öncelik): Low, Normal, High veya Urgent. High ve Urgent, Siparişler listesinde öne çıkar; kolayca yakalanır.",
+            "Risk: None, Waiting, Blocked veya Overdue; şu an ilerleyemeyen bir işi işaretlemek için.",
+            "Risk reason (Risk nedeni): Risk, None dışında bir şeye ayarlanınca görünür. Nedenini seçin; örneğin Waiting for customer, Waiting for payment veya Waiting for material."
           ] },
           { kind: "para", text: "Her açılır menüden bir değer seçin, anında kaydedilir. Öncelik ve risk ayrıca akıllı sıralamayı ve Siparişler listesindeki durum rozetlerini besler; işaretlenen işler en üste çıkar." }
         ]
@@ -784,12 +784,12 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "Created Date (Oluşturulma) ve Delivery Due (Teslim Tarihi); iki net tarih kartı olarak.",
-            "Time Remaining (Kalan Süre) — teslime kalan gün sayısı; sıkışık veya geçmiş bir son tarih öne çıksın diye renk kodlu.",
-            "Add to Calendar — oluşturulma tarihinden teslim tarihine kadar uzanan tüm-gün bir takvim dosyası indirir; böylece sipariş takvim uygulamanızda görünür (NivaDesk Lite'tan itibaren)."
+            "Time Remaining (Kalan Süre): teslime kalan gün sayısı; sıkışık veya geçmiş bir son tarih öne çıksın diye renk kodlu.",
+            "Add to Calendar: oluşturulma tarihinden teslim tarihine kadar uzanan tüm-gün bir takvim dosyası indirir; böylece sipariş takvim uygulamanızda görünür (NivaDesk Lite'tan itibaren)."
           ] },
           { kind: "sub", text: "Neleri düzenleyebilirsiniz" },
           { kind: "bullets", items: [
-            "Delivery Time (gün olarak), Delivery Due tarihi ve Created Date — herhangi birine dokunup değiştirin.",
+            "Delivery Time (gün olarak), Delivery Due tarihi ve Created Date: herhangi birine dokunup değiştirin.",
             "Bir tarihi değiştirir değiştirmez Kalan Süre ve tüm renkler otomatik yeniden hesaplanır."
           ] }
         ]
@@ -798,7 +798,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-notes",
         title: "Notes kartı",
         blocks: [
-          { kind: "para", text: "Sipariş hakkındaki yazılı notları — talimatlar, kararlar ve hatırlatmalar — tüm çalışma alanının görebileceği tek bir yerde tutun." },
+          { kind: "para", text: "Sipariş hakkındaki yazılı notları, talimatlar, kararlar ve hatırlatmalar, tüm çalışma alanının görebileceği tek bir yerde tutun." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "Müşterinin profiline bağlı kalan ana Customer Notes (Müşteri Notu).",
@@ -806,7 +806,7 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
-            "Herhangi bir bölüme yazın — otomatik kaydedilir.",
+            "Herhangi bir bölüme yazın: otomatik kaydedilir.",
             "+ butonuyla yalnızca bu siparişe özel bir not alanı ekleyin, başlık verin ve gerek kalmayınca kaldırın.",
             "Başlıkları Düzenle ile çalışma alanındaki her siparişte görünen Special Notes bölümlerini ekleyin, yeniden adlandırın veya kaldırın."
           ] }
@@ -816,13 +816,13 @@ const TREE_TR: GuideNode[] = [
         id: "card-clientfiles",
         title: "Client Files kartı",
         blocks: [
-          { kind: "para", text: "Bu siparişe ait belge ve görselleri — provalar, tasarımlar, fişler, referans fotoğraflar — ekleyin; böylece işe dair her şey onunla birlikte durur." },
+          { kind: "para", text: "Bu siparişe ait belge ve görselleri, provalar, tasarımlar, fişler, referans fotoğraflar, ekleyin; böylece işe dair her şey onunla birlikte durur." },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
-            "Upload File — PDF, görsel, PSD veya PSB dosyaları seçin. Dosyaları doğrudan kartın üzerine sürükleyip bırakabilirsiniz.",
+            "Upload File: PDF, görsel, PSD veya PSB dosyaları seçin. Dosyaları doğrudan kartın üzerine sürükleyip bırakabilirsiniz.",
             "Önizlemek için bir dosyaya dokunun veya Download all ile hepsini tek seferde indirin.",
             "Rolünüz izin veriyorsa bir dosyayı silin.",
-            "Çevrimdışı çalışır — dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir."
+            "Çevrimdışı çalışır: dosyalar cihaza kaydedilir ve bağlantı gelince otomatik yüklenir."
           ] },
           { kind: "sub", text: "Güvenlik" },
           { kind: "bullets", items: [
@@ -835,7 +835,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-todo",
         title: "To Do kartı",
         blocks: [
-          { kind: "para", text: "Bu siparişe özel bir görev kontrol listesi — işi adımlara bölün, atayın ve neyin yapıldığını takip edin." },
+          { kind: "para", text: "Bu siparişe özel bir görev kontrol listesi: işi adımlara bölün, atayın ve neyin yapıldığını takip edin." },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
             "Giriş alanıyla bir görev ekleyin; sonra ona bitiş tarihi, öncelik, bir sorumlu ve isteğe bağlı bir not verin.",
@@ -856,7 +856,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Bir siparişe ne kadar zaman harcadığınızı takip edin; böylece iş başına gerçek emeği görür ve gelecekteki işleri daha doğru fiyatlandırırsınız." },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
-            "Çalışmaya bir başlık verip zamanlı bir oturum başlatın — sayarken kartta ‘Running now’ görünür.",
+            "Çalışmaya bir başlık verip zamanlı bir oturum başlatın: sayarken kartta ‘Running now’ görünür.",
             "Ara verdiğinizde oturumu Stop ile durdurun, sonra Continue ile aynı işe eklemeye devam edin.",
             "Sipariş için Total Work Time toplamını ve her oturumun listesini görün.",
             "Gerekmeyen bir oturumu silin."
@@ -867,7 +867,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-financial",
         title: "Financial Info kartı",
         blocks: [
-          { kind: "para", text: "Siparişin tam para tablosu — ne tahsil edildi, size maliyeti ne, vergi ne kadar ve geriye kalan gerçek kâr." },
+          { kind: "para", text: "Siparişin tam para tablosu: ne tahsil edildi, size maliyeti ne, vergi ne kadar ve geriye kalan gerçek kâr." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "Order Value, Paid / Received ve kalan Remaining bakiyesi, ayrıca ödeme yöntemi.",
@@ -887,7 +887,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-status",
         title: "Production Status kartı",
         blocks: [
-          { kind: "para", text: "Siparişin üretimde nerede olduğunu takip edin — iş akışınızın her aşaması kendi durumuyla; böylece herkes ilerlemeyi bir bakışta görür." },
+          { kind: "para", text: "Siparişin üretimde nerede olduğunu takip edin: iş akışınızın her aşaması kendi durumuyla; böylece herkes ilerlemeyi bir bakışta görür." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "İş akışındaki her adım için bir satır (örneğin Tasarım, Üretim veya Sonlandırma); her biri Not Yet, In Progress, Done veya Cancelled gibi bir duruma ayarlı.",
@@ -904,7 +904,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-shipping",
         title: "Shipping & Tracking kartı",
         blocks: [
-          { kind: "para", text: "Siparişin teslimatını yönetin — kurye, takip numarası ve canlı durum güncellemeleri; hepsi uygulamadan çıkmadan." },
+          { kind: "para", text: "Siparişin teslimatını yönetin: kurye, takip numarası ve canlı durum güncellemeleri; hepsi uygulamadan çıkmadan." },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
             "Courier'i ayarlayın (Auto Detect, Royal Mail, DHL, FedEx veya UPS) ve Tracking numarasını girin.",
@@ -922,7 +922,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-schedule",
         title: "Schedule & Alerts kartı",
         blocks: [
-          { kind: "para", text: "Bu siparişe bağlı hatırlatıcılar kurun; böylece önemli takipler — onaylar, ödemeler, müşteri güncellemeleri — asla unutulmaz." },
+          { kind: "para", text: "Bu siparişe bağlı hatırlatıcılar kurun; böylece önemli takipler, onaylar, ödemeler, müşteri güncellemeleri, asla unutulmaz." },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
             "Bir Quick Reminder kısayolu seçin (örneğin Ask for approval, Send design update veya Check payment) ya da kendi başlığınızı yazın.",
@@ -939,7 +939,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-history",
         title: "History / Log kartı",
         blocks: [
-          { kind: "para", text: "Siparişin otomatik bir değişiklik kaydı — neyin ne zaman değiştiği — böylece mevcut duruma nasıl geldiğini her zaman görebilirsiniz." },
+          { kind: "para", text: "Siparişin otomatik bir değişiklik kaydı, neyin ne zaman değiştiği, böylece mevcut duruma nasıl geldiğini her zaman görebilirsiniz." },
           { kind: "sub", text: "Neler gösterir" },
           { kind: "bullets", items: [
             "Son önemli değişikliklerin listesi, en yeni en üstte.",
@@ -971,10 +971,10 @@ const TREE_TR: GuideNode[] = [
     id: "notes",
     title: "Notes (Notlar)",
     blocks: [
-      { kind: "para", text: "Çalışma alanınız için tam bir not panosu — fikirleri, listeleri ve hatırlatmaları yakalayın, ekibinizle paylaşın ve önemlileri en üste sabitleyin." },
+      { kind: "para", text: "Çalışma alanınız için tam bir not panosu: fikirleri, listeleri ve hatırlatmaları yakalayın, ekibinizle paylaşın ve önemlileri en üste sabitleyin." },
       { kind: "sub", text: "Oluştur & biçimlendir" },
       { kind: "bullets", items: [
-        "New Note — başlık ve metin verin, gerekiyorsa bir görsel ekleyin.",
+        "New Note: başlık ve metin verin, gerekiyorsa bir görsel ekleyin.",
         "Bir notu yeniden kullanmak için çoğaltın (Duplicate) veya kopyalayın.",
         "Her şeyi hızla bulmak için notlarda arayın ve ızgara (grid) görünümüne geçin."
       ] },
@@ -1010,7 +1010,7 @@ const TREE_TR: GuideNode[] = [
     id: "customers",
     title: "Customers (Müşteriler)",
     blocks: [
-      { kind: "para", text: "Müşteri rehberiniz — her müşteri, bilgileri ve ona bağlı işlerle birlikte." },
+      { kind: "para", text: "Müşteri rehberiniz: her müşteri, bilgileri ve ona bağlı işlerle birlikte." },
       { kind: "bullets", items: [
         "Müşteri ekleyin, bilgilerini düzenleyin veya gerekmeyeni kaldırın.",
         "Bir müşteriyi açıp bilgilerini, tasarımlarını ve siparişlerini görün.",
@@ -1036,7 +1036,7 @@ const TREE_TR: GuideNode[] = [
     id: "messages",
     title: "Messages (Mesajlar)",
     blocks: [
-      { kind: "para", text: "Ekibinizle NivaDesk içinde konuşun — direkt mesajlar ve grup sohbetleri, tam işinizin yanında." },
+      { kind: "para", text: "Ekibinizle NivaDesk içinde konuşun: direkt mesajlar ve grup sohbetleri, tam işinizin yanında." },
       { kind: "bullets", items: [
         "Bir ekip arkadaşıyla Direct mesaj veya bir Group sohbeti başlatın.",
         "Metin, dosya ve görsel gönderin; bir konuşmayı iletin (forward), düzenleyin veya ayrılın.",
@@ -1052,7 +1052,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "para", text: "Saniyeler içinde, kendi üslubunuzda özenli müşteri mesajları hazırlayın." },
       { kind: "bullets", items: [
         "AI ile hızlı bir yanıt üretin, sonra göndermek için panoya kopyalayın.",
-        "Yanıt stilinizi — selamlama ve kapanışı (örneğin ‘Hi there,’ ve ‘Kind regards,’) — belirleyin; her seferinde yeniden kullanılır.",
+        "Yanıt stilinizi, selamlama ve kapanışı (örneğin ‘Hi there,’ ve ‘Kind regards,’), belirleyin; her seferinde yeniden kullanılır.",
         "Kayıtlı ürünlerinize ve fiyatlarınıza atıfta bulunun; yanıtlar doğru ayrıntıları içersin.",
         "Müşterilere bir siparişteki kanal butonlarıyla ulaşın."
       ] },
@@ -1072,10 +1072,10 @@ const TREE_TR: GuideNode[] = [
         blocks: [
           { kind: "para", text: "Kişisel ve görünüm ayarlarınız." },
           { kind: "bullets", items: [
-            "Görünüm & tema — açık ve koyu mod arasında geçiş.",
-            "Dil — tüm uygulama için 12 dilden birini seçin.",
-            "Profil — adınız ve hesap bilgileriniz.",
-            "Güvenlik — nasıl giriş yaptığınızı ve hesabınızı korumanızı yönetin."
+            "Görünüm & tema: açık ve koyu mod arasında geçiş.",
+            "Dil: tüm uygulama için 12 dilden birini seçin.",
+            "Profil: adınız ve hesap bilgileriniz.",
+            "Güvenlik: nasıl giriş yaptığınızı ve hesabınızı korumanızı yönetin."
           ] }
         ]
       },
@@ -1095,7 +1095,7 @@ const TREE_TR: GuideNode[] = [
         id: "set-pdf",
         title: "PDF Export Settings",
         blocks: [
-          { kind: "para", text: "Fatura ve sipariş PDF'lerinin görünümünü — işletme bilgileri, logo ve alt not — ve dışa aktarıma neyin dahil edileceğini ayarlayın." }
+          { kind: "para", text: "Fatura ve sipariş PDF'lerinin görünümünü, işletme bilgileri, logo ve alt not, ve dışa aktarıma neyin dahil edileceğini ayarlayın." }
         ]
       },
       {
@@ -1105,16 +1105,16 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "NivaDesk'in müşterilere yanıtları nasıl hazırlayacağını ve işiniz hakkında neleri bildiğini ayarlayın." },
           { kind: "sub", text: "Yanıtların nasıl üretileceğini seçin" },
           { kind: "bullets", items: [
-            "OpenAI Online — kendi OpenAI API anahtarınızla OpenAI'ı kullanır. Anahtarınızı buraya yapıştırın; istediğiniz zaman değiştirin veya silin.",
-            "On-Device (Apple) — desteklenen Apple Intelligence cihazlarında Apple'ın cihaz üstü yapay zekâsını kullanır; API anahtarı gerekmez.",
-            "Offline Template — kayıtlı ürün ve kurallarınızdan, herhangi bir yapay zekâ modeli olmadan yanıt oluşturur."
+            "OpenAI Online: kendi OpenAI API anahtarınızla OpenAI'ı kullanır. Anahtarınızı buraya yapıştırın; istediğiniz zaman değiştirin veya silin.",
+            "On-Device (Apple): desteklenen Apple Intelligence cihazlarında Apple'ın cihaz üstü yapay zekâsını kullanır; API anahtarı gerekmez.",
+            "Offline Template: kayıtlı ürün ve kurallarınızdan, herhangi bir yapay zekâ modeli olmadan yanıt oluşturur."
           ] },
           { kind: "sub", text: "İşinizi ona öğretin" },
           { kind: "bullets", items: [
-            "Company Knowledge Base — yapay zekâya verdiğiniz ek bilgiler, kurallar ve SSS; böylece yanıtlar doğru ve markanıza uygun kalır.",
-            "Products — fiyatlarıyla birlikte hizmet veya ürünleriniz; teklifler doğru rakamları içersin.",
-            "Rules / FAQs — teslim süreleri veya kapora politikası gibi sık yanıtlar.",
-            "Reply style — her yanıtta yeniden kullanılan selamlama ve kapanışınız."
+            "Company Knowledge Base: yapay zekâya verdiğiniz ek bilgiler, kurallar ve SSS; böylece yanıtlar doğru ve markanıza uygun kalır.",
+            "Products: fiyatlarıyla birlikte hizmet veya ürünleriniz; teklifler doğru rakamları içersin.",
+            "Rules / FAQs: teslim süreleri veya kapora politikası gibi sık yanıtlar.",
+            "Reply style: her yanıtta yeniden kullanılan selamlama ve kapanışınız."
           ] },
           { kind: "para", text: "OpenAI anahtarınız size aittir ve çalışma alanınız için güvenli biçimde saklanır; istediğiniz zaman kaldırabilirsiniz." }
         ]
@@ -1138,9 +1138,9 @@ const TREE_TR: GuideNode[] = [
         blocks: [
           { kind: "para", text: "Online mağazanı bağla; canlı web sitesi siparişleri NivaDesk'e otomatik aksın. Her entegrasyon ekranı, platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'ini gösterir; yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
           { kind: "bullets", items: [
-            "WooCommerce — bir webhook (Order created) oluştur ve delivery URL'ini yapıştır.",
-            "Shopify — bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
-            "Diğer platformlar — Wix, Squarespace, Etsy, BigCommerce veya özel siteyi generic sipariş webhook'u ya da Zapier/Make gibi kodsuz bir araçla bağla."
+            "WooCommerce: bir webhook (Order created) oluştur ve delivery URL'ini yapıştır.",
+            "Shopify: bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
+            "Diğer platformlar: Wix, Squarespace, Etsy, BigCommerce veya özel siteyi generic sipariş webhook'u ya da Zapier/Make gibi kodsuz bir araçla bağla."
           ] }
         ]
       },
@@ -1186,7 +1186,7 @@ const TREE_TR: GuideNode[] = [
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
-          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın — Messages menüsünde gördüğünüz ticketların aynısı." }
+          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın: Messages menüsünde gördüğünüz ticketların aynısı." }
         ]
       }
     ]
@@ -1197,8 +1197,8 @@ const TREE_TR: GuideNode[] = [
     blocks: [
       { kind: "para", text: "NivaDesk'in görünüşünü ve dilini istediğiniz gibi yapın. İkisi de Settings ▸ General altındadır ve cihazlarınız arasında senkronlanır." },
       { kind: "bullets", items: [
-        "Dil — 12 dilden birini seçin; menüler ve etiketler dahil tüm uygulama anında değişir.",
-        "Görünüm — açık ve koyu mod arasında geçiş yapın.",
+        "Dil: 12 dilden birini seçin; menüler ve etiketler dahil tüm uygulama anında değişir.",
+        "Görünüm: açık ve koyu mod arasında geçiş yapın.",
         "Tercihleriniz hesabınıza kaydedilir; Mac, iPhone, iPad, Android ve web'de sizi takip eder."
       ] }
     ]
@@ -1237,7 +1237,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   Deutsch: {
     eyebrow: "Benutzerhandbuch",
     title: "So nutzen Sie NivaDesk",
-    intro: "Wählen Sie links ein Menü, um zu sehen, was es tut und wie man es Schritt für Schritt nutzt. Die Apps teilen sich dasselbe Layout — für Mac, iPhone, iPad, Android und Web.",
+    intro: "Wählen Sie links ein Menü, um zu sehen, was es tut und wie man es Schritt für Schritt nutzt. Die Apps teilen sich dasselbe Layout: für Mac, iPhone, iPad, Android und Web.",
     menuLabel: "Menüs",
     searchPlaceholder: "Im Handbuch suchen…",
     lastUpdated: "Zuletzt aktualisiert"
@@ -1245,7 +1245,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   Français: {
     eyebrow: "Guide d'utilisation",
     title: "Comment utiliser NivaDesk",
-    intro: "Choisissez un menu à gauche pour voir à quoi il sert et comment l'utiliser, étape par étape. Les apps partagent la même structure — pour Mac, iPhone, iPad, Android et web.",
+    intro: "Choisissez un menu à gauche pour voir à quoi il sert et comment l'utiliser, étape par étape. Les apps partagent la même structure: pour Mac, iPhone, iPad, Android et web.",
     menuLabel: "Menus",
     searchPlaceholder: "Rechercher dans le guide…",
     lastUpdated: "Dernière mise à jour"
@@ -1253,7 +1253,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   Italiano: {
     eyebrow: "Guida utente",
     title: "Come usare NivaDesk",
-    intro: "Scegli un menu a sinistra per vedere cosa fa e come si usa, passo dopo passo. Le app condividono lo stesso layout — per Mac, iPhone, iPad, Android e web.",
+    intro: "Scegli un menu a sinistra per vedere cosa fa e come si usa, passo dopo passo. Le app condividono lo stesso layout: per Mac, iPhone, iPad, Android e web.",
     menuLabel: "Menu",
     searchPlaceholder: "Cerca nella guida…",
     lastUpdated: "Ultimo aggiornamento"
@@ -1261,7 +1261,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   "Español (Spanish)": {
     eyebrow: "Guía de uso",
     title: "Cómo usar NivaDesk",
-    intro: "Elige un menú a la izquierda para ver qué hace y cómo usarlo, paso a paso. Las apps comparten el mismo diseño — para Mac, iPhone, iPad, Android y web.",
+    intro: "Elige un menú a la izquierda para ver qué hace y cómo usarlo, paso a paso. Las apps comparten el mismo diseño: para Mac, iPhone, iPad, Android y web.",
     menuLabel: "Menús",
     searchPlaceholder: "Buscar en la guía…",
     lastUpdated: "Última actualización"
@@ -1269,7 +1269,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   Português: {
     eyebrow: "Guia do utilizador",
     title: "Como usar o NivaDesk",
-    intro: "Escolha um menu à esquerda para ver o que faz e como usar, passo a passo. As apps partilham o mesmo layout — para Mac, iPhone, iPad, Android e web.",
+    intro: "Escolha um menu à esquerda para ver o que faz e como usar, passo a passo. As apps partilham o mesmo layout: para Mac, iPhone, iPad, Android e web.",
     menuLabel: "Menus",
     searchPlaceholder: "Pesquisar no guia…",
     lastUpdated: "Última atualização"
@@ -1277,7 +1277,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   "Русский (Russian)": {
     eyebrow: "Руководство пользователя",
     title: "Как пользоваться NivaDesk",
-    intro: "Выберите меню слева, чтобы увидеть, что оно делает и как им пользоваться, шаг за шагом. Приложения имеют одинаковую структуру — для Mac, iPhone, iPad, Android и веба.",
+    intro: "Выберите меню слева, чтобы увидеть, что оно делает и как им пользоваться, шаг за шагом. Приложения имеют одинаковую структуру: для Mac, iPhone, iPad, Android и веба.",
     menuLabel: "Меню",
     searchPlaceholder: "Поиск по руководству…",
     lastUpdated: "Последнее обновление"
@@ -1301,7 +1301,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   "العربية (Arabic)": {
     eyebrow: "دليل المستخدم",
     title: "كيفية استخدام NivaDesk",
-    intro: "اختر قائمة من اليسار لترى وظيفتها وكيفية استخدامها خطوة بخطوة. تشترك التطبيقات في التخطيط نفسه — لنظام Mac وiPhone وiPad وAndroid والويب.",
+    intro: "اختر قائمة من اليسار لترى وظيفتها وكيفية استخدامها خطوة بخطوة. تشترك التطبيقات في التخطيط نفسه: لنظام Mac وiPhone وiPad وAndroid والويب.",
     menuLabel: "القوائم",
     searchPlaceholder: "ابحث في الدليل…",
     lastUpdated: "آخر تحديث"
@@ -1309,7 +1309,7 @@ const CHROME: Partial<Record<StudioLanguage, GuideChrome>> = {
   "हिन्दी (Hindi)": {
     eyebrow: "उपयोगकर्ता गाइड",
     title: "NivaDesk का उपयोग कैसे करें",
-    intro: "बाईं ओर एक मेन्यू चुनें और देखें कि वह क्या करता है और चरण-दर-चरण कैसे उपयोग करें। ऐप्स एक ही लेआउट साझा करते हैं — Mac, iPhone, iPad, Android और वेब के लिए।",
+    intro: "बाईं ओर एक मेन्यू चुनें और देखें कि वह क्या करता है और चरण-दर-चरण कैसे उपयोग करें। ऐप्स एक ही लेआउट साझा करते हैं: Mac, iPhone, iPad, Android और वेब के लिए।",
     menuLabel: "मेन्यू",
     searchPlaceholder: "गाइड में खोजें…",
     lastUpdated: "अंतिम अपडेट"

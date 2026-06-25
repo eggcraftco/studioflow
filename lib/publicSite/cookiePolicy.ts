@@ -497,7 +497,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
     ],
     sectionSummaries: [
       "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Вопросы о cookies или приватности: contact@nivadesk.co.uk.",
-      "Cookies — небольшие текстовые файлы в браузере или устройстве. Эта политика также охватывает local storage, session storage, пиксели, теги, SDK, идентификаторы устройств и похожие технологии.",
+      "Cookies: небольшие текстовые файлы в браузере или устройстве. Эта политика также охватывает local storage, session storage, пиксели, теги, SDK, идентификаторы устройств и похожие технологии.",
       "Мы можем использовать их для сохранения входа, языка и workspace, защиты доступа, предотвращения мошенничества, платежей, анализа использования, улучшения performance, диагностики ошибок и разрешенного маркетингового измерения.",
       "NivaDesk может использовать необходимые, preference, analytics, performance, marketing и third-party cookies. Необязательные cookies могут требовать согласия по местному закону.",
       "Необходимые cookies нужны для безопасности, входа, аккаунта, сессий, checkout, записей согласия и разрешений workspace. При блокировке части NivaDesk могут работать неправильно.",

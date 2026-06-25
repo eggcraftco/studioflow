@@ -311,6 +311,7 @@ const ORDER_CARDS: OrderCardInfo[] = [
   { titleKey: "orderCard.preview", detailKey: "orderCard.preview.detail", icon: "photo" },
   { titleKey: "orderCard.summary", detailKey: "orderCard.summary.detail", icon: "docText" },
   { titleKey: "orderCard.customer", detailKey: "orderCard.customer.detail", icon: "customer" },
+  { titleKey: "orderCard.invoiceItems", detailKey: "orderCard.invoiceItems.detail", icon: "docText" },
   { titleKey: "orderCard.materials", detailKey: "orderCard.materials.detail", icon: "shippingBox" },
   { titleKey: "orderCard.priority", detailKey: "orderCard.priority.detail", icon: "warningTriangle" },
   { titleKey: "orderCard.delivery", detailKey: "orderCard.delivery.detail", icon: "calendarClock" },
@@ -1001,7 +1002,7 @@ function heroCurrencySymbol(): string {
     if (["Europe/London", "Europe/Belfast", "Europe/Guernsey", "Europe/Jersey", "Europe/Isle_of_Man"].includes(tz)) return "£";
     if (tz.startsWith("Europe/")) return "€";
   } catch {
-    // ignore — fall through to the language region / default
+    // ignore: fall through to the language region / default
   }
   if (typeof navigator !== "undefined") {
     const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
@@ -2351,7 +2352,7 @@ export function PublicSignupPage() {
       event.preventDefault();
       setError(null);
 
-      // Bot traps — either tripping means an automated submission; reject quietly.
+      // Bot traps: either tripping means an automated submission; reject quietly.
       if (honeypot.trim() !== "" || Date.now() - formStartedAt < 1500) {
         setError(t("signup.error.generic"));
         return;
@@ -2384,7 +2385,7 @@ export function PublicSignupPage() {
         let currentUser = auth.currentUser;
         if (!currentUser) {
           const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-          // Non-blocking email verification — standard account-security hygiene.
+          // Non-blocking email verification: standard account-security hygiene.
           void sendEmailVerification(credential.user, { url: "https://nivadesk.app/login" }).catch(() => undefined);
           currentUser = credential.user;
         }
