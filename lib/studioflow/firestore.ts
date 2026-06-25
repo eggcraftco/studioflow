@@ -184,6 +184,7 @@ export type WorkspaceSettingsOverview = {
   pdfShowPriority: boolean;
   pdfShowAddress: boolean;
   pdfShowShippingAddress: boolean;
+  orderItemsHeading: string;
   financialExpenseItemsJSON: string;
   financialRemainingItemsJSON: string;
   financialShowBaseCost: boolean;
@@ -411,6 +412,16 @@ export type PaymentEntryDetail = {
   createdByEmail: string;
 };
 
+// One billable invoice line (gross / VAT-inclusive). When present, their sum drives the
+// order total. Mirrors the Swift LineItem, Android StudioLineItem, and backend webhook schema.
+export type LineItemDetail = {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
 export type OrderDetail = {
   id: string;
   companyId: string;
@@ -449,6 +460,7 @@ export type OrderDetail = {
   shippingPhone: string;
   communication: string[];
   notes: string;
+  invoiceNote: string;
   invBool1: boolean;
   invBool2: boolean;
   invBool3: boolean;
@@ -466,6 +478,7 @@ export type OrderDetail = {
   workSessions: WorkSessionDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
+  lineItems: LineItemDetail[];
   invoiceNumber: string;
 };
 
@@ -967,6 +980,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     pdfShowMaterials: booleanValue(data.pdfShowMaterials, true),
     pdfShowAddress: booleanValue(data.pdfShowAddress, true),
     pdfShowShippingAddress: booleanValue(data.pdfShowShippingAddress, true),
+    orderItemsHeading: stringValue(data.orderItemsHeading, ""),
     pdfShowPriority: booleanValue(data.pdfShowPriority, true),
     financialExpenseItemsJSON: stringValue(data.financialExpenseItemsJSON, ""),
     financialRemainingItemsJSON: stringValue(data.financialRemainingItemsJSON, ""),
@@ -1558,6 +1572,19 @@ function mapPayments(value: unknown): PaymentEntryDetail[] {
   }).sort((first, second) => (second.date?.getTime() ?? 0) - (first.date?.getTime() ?? 0));
 }
 
+function mapLineItems(value: unknown): LineItemDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `item-${index}`),
+      name: stringValue(entry.name, ""),
+      quantity: numberValue(entry.quantity, 1),
+      unitPrice: numberValue(entry.unitPrice),
+      lineTotal: numberValue(entry.lineTotal)
+    };
+  });
+}
+
 function mapOrderDetailSnapshot(
   snapshot: DocumentSnapshot<DocumentData>,
   companyId: string,
@@ -1645,6 +1672,8 @@ function mapOrderDetailSnapshot(
     workSessions: mapWorkSessions(data.workSessions),
     historyLog: mapHistoryLog(data.historyLog),
     payments: mapPayments(data.payments),
+    invoiceNote: stringValue(data.invoiceNote, ""),
+    lineItems: mapLineItems(data.lineItems),
     invoiceNumber: stringValue(data.invoiceNumber, "")
   };
 }

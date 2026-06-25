@@ -53,11 +53,17 @@ import {
   type UpdateOrderInput
 } from "@/lib/studioflow/orders";
 import {
+  savePdfExportSettings,
+  type PdfExportSettingsInput
+} from "@/lib/studioflow/settingsActions";
+import {
   loadWorkspaceStatusOptions,
   loadTeamAccessData,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
   type ClientFileDetail,
+  type CompanyNumberSetting,
+  type LineItemDetail,
   type OrderDetail,
   type TeamMemberDetail,
   type ToDoDetail,
@@ -683,6 +689,10 @@ function orderPdfHtml(
   const customerSection = showCustomer ? orderPdfSectionHtml("Customer & Design", orderPdfRowsHtml([
     { title: "Customer Name", value: order.customerName },
     { title: "Design Name", value: designName },
+    ...order.lineItems.map((it) => ({
+      title: "  • " + (it.name || "-"),
+      value: it.quantity !== 1 ? "×" + (Number.isInteger(it.quantity) ? String(it.quantity) : it.quantity.toFixed(2)) : ""
+    })),
     { title: "Reference", value: order.watchRef || "-" },
     { title: "Placed On", value: formatDate(order.paymentDate) }
   ])) : "";
@@ -875,6 +885,16 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
     .map(n => `<div>${escapeHtml(n.title)}: ${escapeHtml(n.value)}</div>`).join("");
   const orderDate = order.paymentDate ? order.paymentDate.toLocaleDateString() : "";
   const description = order.designName?.trim() || order.customerName?.trim() || "Order";
+  const showAddress = settings?.pdfShowAddress ?? true;
+  const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
+  const billingAddr = (order.customFields.communicationAddress || order.customFields.Address || "").trim();
+  const shipLine = [order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry].filter(Boolean).join(", ");
+  const shipRecipient = order.shippingName || order.customerName || "";
+  const itemsHeading = "Description";
+  const fmtQty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(2));
+  const itemRows = order.lineItems.length > 0
+    ? order.lineItems.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#6b7280;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
+    : `<tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr>`;
 
   let vatRow = "";
   if (isMarginScheme) {
@@ -928,14 +948,24 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
       </div>
     </header>
     <hr/>
-    <div class="bill">
-      <div class="label">BILL TO</div>
-      <div class="who">${escapeHtml(order.customerName || "-")}</div>
-      ${order.emailAddress ? `<div class="email">${escapeHtml(order.emailAddress)}</div>` : ""}
+    <div class="bill" style="display:flex; gap:40px; align-items:flex-start;">
+      <div>
+        <div class="label">BILL TO</div>
+        <div class="who">${escapeHtml(order.customerName || "-")}</div>
+        ${showAddress && billingAddr ? `<div class="email">${escapeHtml(billingAddr)}</div>` : ""}
+        ${order.emailAddress ? `<div class="email">${escapeHtml(order.emailAddress)}</div>` : ""}
+        ${showAddress && order.whatsappNumber ? `<div class="email">${escapeHtml(order.whatsappNumber)}</div>` : ""}
+      </div>
+      ${showShippingAddress && shipLine ? `<div>
+        <div class="label">SHIP TO</div>
+        <div class="who">${escapeHtml(shipRecipient || "-")}</div>
+        <div class="email">${escapeHtml(shipLine)}</div>
+        ${order.shippingPhone ? `<div class="email">${escapeHtml(order.shippingPhone)}</div>` : ""}
+      </div>` : ""}
     </div>
     <table>
-      <thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
-      <tbody><tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr></tbody>
+      <thead><tr><th>${escapeHtml(itemsHeading)}</th><th class="r">Amount</th></tr></thead>
+      <tbody>${itemRows}</tbody>
     </table>
     <div class="totals">
       <div class="trow"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
@@ -944,6 +974,7 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
       <div class="trow"><span>Paid</span><strong class="paid">${money(order.paidAmount)}</strong></div>
       <div class="trow"><span>Balance Due</span><strong class="${order.remainingAmount > 0.005 ? "due" : "paid"}">${money(order.remainingAmount)}</strong></div>
     </div>
+    ${order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
     <div class="credit">Generated with NivaDesk</div>
   </div></body></html>`;
@@ -1070,6 +1101,7 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
   summary: "Order Summary",
   customer: "Customer & Communication",
+  invoiceItems: "Invoice Items",
   materials: "Materials & Inventory",
   priority: "Priority / Risk",
   delivery: "Timeline & Delivery",
@@ -1088,6 +1120,7 @@ const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   preview: "cardPreview",
   summary: "cardSummary",
   customer: "cardCustomer",
+  invoiceItems: "cardCustomer",
   materials: "cardMaterials",
   priority: "cardPriority",
   delivery: "cardDelivery",
@@ -1162,6 +1195,7 @@ const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   preview: 250,
   summary: 210,
   customer: 200,
+  invoiceItems: 220,
   materials: 200,
   priority: 200,
   delivery: 200,
@@ -2392,6 +2426,7 @@ export function OrderDetailContent({
       preview: "photo",
       summary: "docText",
       customer: "customer",
+      invoiceItems: "docText",
       materials: "shippingBox",
       priority: "warningTriangle",
       delivery: "calendarClock",
@@ -3498,6 +3533,16 @@ export function OrderDetailContent({
 
     if (typeof patch.customerName === "string") nextPatch.customerName = normalizeOrderCustomerName(patch.customerName);
     if (typeof patch.designName === "string") nextPatch.designName = patch.designName;
+    if (typeof patch.invoiceNote === "string") nextPatch.invoiceNote = patch.invoiceNote;
+    if (Array.isArray(patch.lineItems)) {
+      const items = patch.lineItems.map((it) => ({ ...it }));
+      nextPatch.lineItems = items;
+      // Items drive the order total: remaining = total − already paid.
+      if (items.length > 0) {
+        const itemsTotal = Math.round(items.reduce((sum, it) => sum + it.lineTotal, 0) * 100) / 100;
+        nextPatch.remainingAmount = Math.max(0, Math.round((itemsTotal - order.paidAmount) * 100) / 100);
+      }
+    }
     if (typeof patch.watchRef === "string") nextPatch.watchRef = patch.watchRef;
     if (typeof patch.designLink === "string") nextPatch.designLink = patch.designLink;
     if (typeof patch.emailAddress === "string") nextPatch.emailAddress = patch.emailAddress;
@@ -4804,6 +4849,41 @@ export function OrderDetailContent({
           </section>
         );
       }
+      case "invoiceItems":
+        return (
+          <section key={cardId} className="card order-detail-card">
+            {renderCardTitle(cardId)}
+            <div className="app-card-panel">
+              <LineItemsEditor
+                items={order.lineItems}
+                disabled={!canInlineEditFullDetails}
+                formatMoney={value => money(value)}
+                onSave={items => saveDetailsPatch({ lineItems: items }, "Invoice items")}
+              />
+              {moneySettings ? (
+                <CompanyNumbersEditor
+                  numbers={moneySettings.companyNumbers}
+                  disabled={!canInlineEditFullDetails}
+                  onSave={numbers => {
+                    if (moneySettings) void savePdfExportSettings(workspace, pdfInputFrom(moneySettings, numbers));
+                  }}
+                />
+              ) : null}
+              <InvoiceFooterEditor
+                note={order.invoiceNote}
+                disabled={!canInlineEditFullDetails}
+                onSave={note => saveDetailsPatch({ invoiceNote: note }, "Invoice note")}
+              />
+              <button
+                type="button"
+                onClick={() => void handleExportInvoice()}
+                style={{ marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              >
+                Invoice PDF
+              </button>
+            </div>
+          </section>
+        );
       case "customer":
         return (
           <section key={cardId} className="card order-detail-card">
@@ -7768,6 +7848,243 @@ function AppValueRow({
       ) : (
         <strong className={className}>{value || ""}</strong>
       )}
+    </div>
+  );
+}
+
+function pdfInputFrom(s: WorkspaceSettingsOverview, companyNumbers: CompanyNumberSetting[]): PdfExportSettingsInput {
+  return {
+    pdfShowCustomer: s.pdfShowCustomer,
+    pdfShowContact: s.pdfShowContact,
+    pdfShowPreview: s.pdfShowPreview,
+    pdfShowFinCustomer: s.pdfShowFinCustomer,
+    pdfShowPaymentMethod: s.pdfShowPaymentMethod,
+    pdfShowFinInternal: s.pdfShowFinInternal,
+    pdfShowStatus: s.pdfShowStatus,
+    pdfShowShipping: s.pdfShowShipping,
+    pdfShowMaterials: s.pdfShowMaterials,
+    pdfShowPriority: s.pdfShowPriority,
+    pdfShowAddress: s.pdfShowAddress,
+    pdfShowShippingAddress: s.pdfShowShippingAddress,
+    companyNumbers
+  };
+}
+
+function CompanyNumbersEditor({
+  numbers,
+  disabled,
+  onSave
+}: {
+  numbers: CompanyNumberSetting[];
+  disabled: boolean;
+  onSave: (numbers: CompanyNumberSetting[]) => void;
+}) {
+  const [draft, setDraft] = useState<CompanyNumberSetting[]>(numbers);
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  const sig = JSON.stringify(numbers);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setDraft(numbers);
+  }, [sig]);
+
+  const commit = (next?: CompanyNumberSetting[]) => {
+    const base = next ?? draftRef.current;
+    setDraft(base);
+    onSave(base);
+  };
+  const updateRow = (index: number, patch: Partial<CompanyNumberSetting>) =>
+    setDraft(prev => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Company invoice numbers</span>
+        {!disabled ? (
+          <button
+            type="button"
+            onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), title: "New Number", value: "" }])}
+            style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            + Add
+          </button>
+        ) : null}
+      </div>
+      {draft.map((it, index) => (
+        <div key={it.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+          <input
+            className="input"
+            style={{ flex: "1 1 100px", minWidth: 80 }}
+            placeholder="Label"
+            value={it.title}
+            disabled={disabled}
+            onChange={e => updateRow(index, { title: e.target.value })}
+            onBlur={() => commit()}
+          />
+          <input
+            className="input"
+            style={{ flex: "1 1 110px", minWidth: 90 }}
+            placeholder="Number / value"
+            value={it.value}
+            disabled={disabled}
+            onChange={e => updateRow(index, { value: e.target.value })}
+            onBlur={() => commit()}
+          />
+          {!disabled ? (
+            <button
+              type="button"
+              onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
+              aria-label="Remove"
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InvoiceFooterEditor({
+  note,
+  disabled,
+  onSave
+}: {
+  note: string;
+  disabled: boolean;
+  onSave: (note: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(note.trim().length > 0);
+  const [draft, setDraft] = useState(note);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setDraft(note);
+  }, [note]);
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => setExpanded(value => !value)}
+        style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: 0.8 }}
+      >
+        <span style={{ fontSize: 16, lineHeight: 1 }}>{expanded ? "−" : "+"}</span>
+        Invoice Note
+      </button>
+      {expanded ? (
+        <textarea
+          className="input"
+          style={{ width: "100%", minHeight: 70, marginTop: 8, resize: "vertical" }}
+          placeholder="Bank details, payment terms, thank-you note…"
+          value={draft}
+          disabled={disabled}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => {
+            if (draft !== note) onSave(draft);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LineItemsEditor({
+  items,
+  disabled,
+  formatMoney,
+  onSave
+}: {
+  items: LineItemDetail[];
+  disabled: boolean;
+  formatMoney: (value: number) => string;
+  onSave: (items: LineItemDetail[]) => void;
+}) {
+  const [draft, setDraft] = useState<LineItemDetail[]>(items);
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  const itemsSig = JSON.stringify(items);
+  // Resync the local draft when the order's items change on the server / via optimistic update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setDraft(items);
+  }, [itemsSig]);
+
+  const lineTotalOf = (it: LineItemDetail) => Math.round(it.quantity * it.unitPrice * 100) / 100;
+  const commit = (next: LineItemDetail[]) => {
+    const normalized = next.map(it => ({ ...it, lineTotal: lineTotalOf(it) }));
+    setDraft(normalized);
+    onSave(normalized);
+  };
+  const updateRow = (index: number, patch: Partial<LineItemDetail>) =>
+    setDraft(prev => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+
+  const runningTotal = Math.round(draft.reduce((sum, it) => sum + lineTotalOf(it), 0) * 100) / 100;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Invoice Items</span>
+        {draft.length > 0 ? <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
+      </div>
+      {draft.map((it, index) => (
+        <div key={it.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+          <input
+            className="input"
+            style={{ flex: "1 1 130px", minWidth: 110 }}
+            placeholder="Item"
+            value={it.name}
+            disabled={disabled}
+            onChange={e => updateRow(index, { name: e.target.value })}
+            onBlur={() => commit(draftRef.current)}
+          />
+          <input
+            className="input"
+            style={{ width: 64 }}
+            type="number"
+            min={0}
+            value={it.quantity}
+            disabled={disabled}
+            onChange={e => updateRow(index, { quantity: Number(e.target.value) || 0 })}
+            onBlur={() => commit(draftRef.current)}
+          />
+          <input
+            className="input"
+            style={{ width: 88 }}
+            type="number"
+            min={0}
+            step="0.01"
+            value={it.unitPrice}
+            disabled={disabled}
+            onChange={e => updateRow(index, { unitPrice: Number(e.target.value) || 0 })}
+            onBlur={() => commit(draftRef.current)}
+          />
+          <span style={{ minWidth: 72, textAlign: "right", fontSize: 13, fontWeight: 600 }}>{formatMoney(lineTotalOf(it))}</span>
+          {!disabled ? (
+            <button
+              type="button"
+              onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
+              aria-label="Remove item"
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+      {!disabled ? (
+        <button
+          type="button"
+          onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), name: "", quantity: 1, unitPrice: 0, lineTotal: 0 }])}
+          style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+        >
+          + Add Item
+        </button>
+      ) : null}
     </div>
   );
 }

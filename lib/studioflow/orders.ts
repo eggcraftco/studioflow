@@ -34,6 +34,7 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
   details?: {
     customerName?: string;
     designName?: string;
+    invoiceNote?: string;
     assignedToUid?: string;
     assignedToEmail?: string;
     watchRef?: string;
@@ -74,6 +75,7 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     notes?: string;
     customFields?: Record<string, string>;
     specialNotes?: Record<string, string>;
+    lineItems?: { id: string; name: string; quantity: number; unitPrice: number; lineTotal: number }[];
   };
   finance?: {
     orderValue?: number;
