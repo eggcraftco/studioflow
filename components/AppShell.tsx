@@ -569,6 +569,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     pathname === "/orders" ||
     pathname.startsWith("/orders/") ||
     pathname === "/customers" ||
+    pathname === "/export" ||
     pathname === "/schedule" ||
     pathname === "/team-schedule" ||
     pathname === "/dashboard" ||
