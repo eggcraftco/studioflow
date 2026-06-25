@@ -18506,7 +18506,7 @@ html[dir="rtl"] .login-public-shell {
   display: grid;
   grid-template-columns: 0.86fr 1.14fr;
   gap: 26px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .gpt-copy-card {
@@ -18664,9 +18664,6 @@ html[dir="rtl"] .login-public-shell {
   border-radius: 21px;
   padding: 22px;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
 }
 
 .gpt-demo-head {
@@ -18838,6 +18835,16 @@ html[dir="rtl"] .login-public-shell {
 }
 
 .gpt-trust-icon svg { width: 16px; height: 16px; }
+
+/* Desktop only: tighten the left copy card so it stays as compact as the demo
+   card on the right (instead of overhanging it). Mobile keeps the base sizes. */
+@media (min-width: 901px) {
+  .gpt-copy-card { padding: 30px 32px; }
+  .gpt-copy-card h2 { font-size: clamp(26px, 2.4vw, 34px); margin: 12px 0 10px; line-height: 1.05; }
+  .gpt-copy-card > p { font-size: 15px; line-height: 1.5; margin: 0 0 16px; }
+  .gpt-queries { gap: 9px; }
+  .gpt-query { padding: 10px 14px; }
+}
 
 @media (max-width: 900px) {
   .gpt-grid { grid-template-columns: 1fr; gap: 18px; }
