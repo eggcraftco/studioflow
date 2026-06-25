@@ -42,6 +42,11 @@ export type CustomerFormInput = {
   city: string;
   postalCode: string;
   country: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  shippingPhone: string;
   notes: string;
   // Optional: only sent when changing the customer photo. Omitting it preserves the
   // existing avatar (the backend skips the key and the doc is merged).

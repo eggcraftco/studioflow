@@ -316,6 +316,10 @@ export type CustomerDirectoryItem = {
   postalCode: string;
   country: string;
   shippingAddress: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
   shippingPhone: string;
   notes: string;
   profileImageUrl: string;
@@ -1312,6 +1316,10 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       postalCode: firstStringValue(data.postalCode, data.postcode, data.zipCode, data.zip),
       country: stringValue(data.country, ""),
       shippingAddress: stringValue(data.shippingAddress, ""),
+      shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
+      shippingCity: stringValue(data.shippingCity, ""),
+      shippingPostalCode: stringValue(data.shippingPostalCode, ""),
+      shippingCountry: stringValue(data.shippingCountry, ""),
       shippingPhone: stringValue(data.shippingPhone, ""),
       notes: stringValue(data.notes, ""),
       profileImageUrl: stringValue(data.profileImageUrl, ""),

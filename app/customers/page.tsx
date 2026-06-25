@@ -45,6 +45,11 @@ const EMPTY_CUSTOMER_FORM: CustomerFormInput = {
   city: "",
   postalCode: "",
   country: "",
+  shippingStreetAddress: "",
+  shippingCity: "",
+  shippingPostalCode: "",
+  shippingCountry: "",
+  shippingPhone: "",
   notes: ""
 };
 
@@ -81,6 +86,11 @@ function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
     city: input.city.trim(),
     postalCode: input.postalCode.trim(),
     country: input.country.trim(),
+    shippingStreetAddress: input.shippingStreetAddress.trim(),
+    shippingCity: input.shippingCity.trim(),
+    shippingPostalCode: input.shippingPostalCode.trim(),
+    shippingCountry: input.shippingCountry.trim(),
+    shippingPhone: input.shippingPhone.trim(),
     notes: input.notes.trim()
   };
   // Pass the photo through only when a patch explicitly sets it; otherwise the
@@ -102,6 +112,11 @@ function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
     city: customer.city,
     postalCode: customer.postalCode,
     country: customer.country,
+    shippingStreetAddress: customer.shippingStreetAddress,
+    shippingCity: customer.shippingCity,
+    shippingPostalCode: customer.shippingPostalCode,
+    shippingCountry: customer.shippingCountry,
+    shippingPhone: customer.shippingPhone,
     notes: customer.notes
   };
 }
@@ -684,14 +699,6 @@ function CustomerDetail({
                 saving={savingInlineField === "Customer details"}
                 onSave={patch => onSaveDetails(patch, "Customer details")}
               />
-              {customer.shippingAddress.trim() ? (
-                <>
-                  <InfoRow label="Shipping address" value={customer.shippingAddress} />
-                  {customer.shippingPhone.trim() ? (
-                    <InfoRow label="Shipping phone" value={customer.shippingPhone} />
-                  ) : null}
-                </>
-              ) : null}
               <InfoRow label="Last Contact" value={formatDate(customer.lastContactDate)} />
             </div>
           </section>
@@ -772,7 +779,12 @@ function CustomerDetailsForm({
     { label: "Street", field: "streetAddress" },
     { label: "City", field: "city" },
     { label: "Postal Code", field: "postalCode" },
-    { label: "Country", field: "country" }
+    { label: "Country", field: "country" },
+    { label: "Shipping Street", field: "shippingStreetAddress" },
+    { label: "Shipping City", field: "shippingCity" },
+    { label: "Shipping Postcode", field: "shippingPostalCode" },
+    { label: "Shipping Country", field: "shippingCountry" },
+    { label: "Shipping Phone", field: "shippingPhone" }
   ];
 
   return (
