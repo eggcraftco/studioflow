@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
-import { loadWorkspaceContext, loadWorkspaceExportData, type WorkspaceContext, type WorkspaceExportData } from "@/lib/studioflow/firestore";
+import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, safeFileDate } from "@/lib/studioflow/export";
+import { loadWorkspaceContext, loadWorkspaceExportData, workspaceAccessAllows, type WorkspaceContext, type WorkspaceExportData } from "@/lib/studioflow/firestore";
+import { ExportOrdersPanel } from "@/components/ExportOrdersPanel";
 
 function filePrefix(workspace: WorkspaceContext | null) {
   const base = workspace?.name || "studioflow";
@@ -63,12 +64,6 @@ export default function ExportPage() {
   const prefix = useMemo(() => filePrefix(workspace), [workspace]);
   const date = safeFileDate();
 
-  function exportOrdersCsv() {
-    if (!exportData) return;
-    downloadTextFile(`${prefix}-orders-${date}.csv`, ordersToCsv(exportData.orders), "text/csv");
-    setStatus("Orders CSV downloaded.");
-  }
-
   function exportCustomersCsv() {
     if (!exportData) return;
     downloadTextFile(`${prefix}-customers-${date}.csv`, customersToCsv(exportData.customers), "text/csv");
@@ -98,6 +93,7 @@ export default function ExportPage() {
   if (loading || !user) return <LoadingScreen />;
 
   const exportAllowed = workspace?.entitlements.features.export_data ?? true;
+  const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
 
   return (
     <AppShell>
@@ -127,16 +123,11 @@ export default function ExportPage() {
         </p>
       </section>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-        <ExportCard
-          title="Orders CSV"
-          description="Download order rows for spreadsheets. This includes customer name, design name, status, paid amount, remaining amount, order date, delivery time and file count."
-          count={exportData?.orders.length ?? 0}
-          buttonTitle="Download orders CSV"
-          disabled={!exportAllowed || !exportData}
-          onClick={exportOrdersCsv}
-        />
+      <section style={{ marginBottom: 18 }}>
+        <ExportOrdersPanel workspace={workspace} canSeeFinance={canSeeFinance} disabled={!exportAllowed} />
+      </section>
 
+      <section className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
         <ExportCard
           title="Customers CSV"
           description="Download customer rows for spreadsheets. This first version keeps the common fields and leaves full details in the JSON backup."

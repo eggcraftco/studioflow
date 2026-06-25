@@ -451,6 +451,15 @@ export default function DashboardPage() {
               <span className="studio-pill">{t("Orders")} {counts.orderCount}</span>
               <span className="studio-pill">{t("Customers")} {counts.customerCount}</span>
               <span className="studio-pill">{t("Due soon")} {counts.dueSoonCount}</span>
+              <button
+                type="button"
+                className="studio-pill"
+                onClick={() => router.push("/export")}
+                style={{ cursor: "pointer", border: "none" }}
+                title={t("Export orders to CSV")}
+              >
+                {t("Export CSV")}
+              </button>
             </div>
           </section>
 

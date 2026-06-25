@@ -546,6 +546,15 @@ export default function OrdersPage() {
             <div className="sidebar-toolbar-actions">
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
               <button
+                type="button"
+                className="studio-pill"
+                onClick={() => router.push("/export")}
+                style={{ cursor: "pointer", border: "none" }}
+                title={t("Export orders to CSV")}
+              >
+                {t("Export")}
+              </button>
+              <button
                 className="sidebar-toggle-button"
                 type="button"
                 title={sidebar.collapsed ? t("Expand order list") : t("Collapse order list")}
