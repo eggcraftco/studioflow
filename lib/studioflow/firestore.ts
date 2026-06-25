@@ -182,6 +182,8 @@ export type WorkspaceSettingsOverview = {
   pdfShowShipping: boolean;
   pdfShowMaterials: boolean;
   pdfShowPriority: boolean;
+  pdfShowAddress: boolean;
+  pdfShowShippingAddress: boolean;
   financialExpenseItemsJSON: string;
   financialRemainingItemsJSON: string;
   financialShowBaseCost: boolean;
@@ -963,6 +965,8 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     pdfShowStatus: booleanValue(data.pdfShowStatus, true),
     pdfShowShipping: booleanValue(data.pdfShowShipping, true),
     pdfShowMaterials: booleanValue(data.pdfShowMaterials, true),
+    pdfShowAddress: booleanValue(data.pdfShowAddress, true),
+    pdfShowShippingAddress: booleanValue(data.pdfShowShippingAddress, true),
     pdfShowPriority: booleanValue(data.pdfShowPriority, true),
     financialExpenseItemsJSON: stringValue(data.financialExpenseItemsJSON, ""),
     financialRemainingItemsJSON: stringValue(data.financialRemainingItemsJSON, ""),

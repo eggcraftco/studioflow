@@ -32,6 +32,8 @@ export type PdfExportSettingsInput = {
   pdfShowShipping: boolean;
   pdfShowMaterials: boolean;
   pdfShowPriority: boolean;
+  pdfShowAddress: boolean;
+  pdfShowShippingAddress: boolean;
   companyNumbers: CompanyNumberSetting[];
 };
 
@@ -373,6 +375,8 @@ export type PersonalInterfaceSettings = {
   pdfShowPriority?: boolean;
   pdfShowStatus?: boolean;
   pdfShowShipping?: boolean;
+  pdfShowAddress?: boolean;
+  pdfShowShippingAddress?: boolean;
 };
 
 export async function getPersonalInterfaceSettings(workspace: WorkspaceContext) {

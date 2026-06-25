@@ -1740,7 +1740,9 @@ const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
   "pdfShowStatus" |
   "pdfShowShipping" |
   "pdfShowMaterials" |
-  "pdfShowPriority"
+  "pdfShowPriority" |
+  "pdfShowAddress" |
+  "pdfShowShippingAddress"
 >, string]> = [
   ["pdfShowCustomer", "Customer & Design"],
   ["pdfShowContact", "Contact & Notes"],
@@ -1751,7 +1753,9 @@ const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
   ["pdfShowPaymentMethod", "Payment Method"],
   ["pdfShowFinInternal", "Internal Financials"],
   ["pdfShowStatus", "Production Status"],
-  ["pdfShowShipping", "Shipping & Tracking"]
+  ["pdfShowShipping", "Shipping & Tracking"],
+  ["pdfShowAddress", "Billing Address"],
+  ["pdfShowShippingAddress", "Shipping Address"]
 ];
 
 function PdfExportSettingsSection({
@@ -1834,7 +1838,9 @@ function PdfExportSettingsSection({
             pdfShowStatus: draft.pdfShowStatus,
             pdfShowShipping: draft.pdfShowShipping,
             pdfShowMaterials: draft.pdfShowMaterials,
-            pdfShowPriority: draft.pdfShowPriority
+            pdfShowPriority: draft.pdfShowPriority,
+            pdfShowAddress: draft.pdfShowAddress,
+            pdfShowShippingAddress: draft.pdfShowShippingAddress
           })
         : await savePdfExportSettings(workspace, {
             pdfShowCustomer: draft.pdfShowCustomer,
@@ -1847,6 +1853,8 @@ function PdfExportSettingsSection({
             pdfShowShipping: draft.pdfShowShipping,
             pdfShowMaterials: draft.pdfShowMaterials,
             pdfShowPriority: draft.pdfShowPriority,
+            pdfShowAddress: draft.pdfShowAddress,
+            pdfShowShippingAddress: draft.pdfShowShippingAddress,
             companyNumbers: draft.companyNumbers
           });
       const savedSettings = { ...draft, ...(result.settings ?? {}) };

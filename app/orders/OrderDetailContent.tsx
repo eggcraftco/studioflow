@@ -669,6 +669,8 @@ function orderPdfHtml(
   const showFinInternal = Boolean(options.canSeeAdvancedFinance && (settings?.pdfShowFinInternal ?? false));
   const showStatus = settings?.pdfShowStatus ?? true;
   const showShipping = settings?.pdfShowShipping ?? true;
+  const showAddress = settings?.pdfShowAddress ?? true;
+  const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
   const showMaterials = settings?.pdfShowMaterials ?? true;
   const showPriority = settings?.pdfShowPriority ?? true;
   const appSubtitle = settings?.appSubtitle?.trim() || workspaceName || "NivaDesk";
@@ -698,16 +700,23 @@ function orderPdfHtml(
 
   const contactRows: OrderPdfRow[] = [
     { title: "Email", value: order.emailAddress || "-" },
-    { title: "Telephone", value: order.whatsappNumber || "-" },
     { title: "Instagram", value: order.instagramUsername || "-" },
     { title: "Channel", value: order.communication.length > 0 ? order.communication.join(", ") : "-" }
   ];
   const address = order.customFields.communicationAddress || order.customFields.Address || "";
-  if (address.trim()) contactRows.push({ title: "Address", value: address });
   const contactSection = showContact ? orderPdfSectionHtml("Contact & Notes", [
     orderPdfRowsHtml(contactRows),
     `<div class="pdf-divider"></div><p><strong>Special Notes:</strong><br />${escapeHtml(order.notes || "No special notes provided.")}</p>`
   ].join("")) : "";
+  const billingAddressSection = showAddress ? orderPdfSectionHtml("Billing Address", orderPdfRowsHtml([
+    { title: "Address", value: address || "-" },
+    { title: "Telephone", value: order.whatsappNumber || "-" }
+  ])) : "";
+  const shippingAddressSection = showShippingAddress ? orderPdfSectionHtml("Shipping Address", orderPdfRowsHtml([
+    { title: "Recipient", value: order.shippingName || order.customerName || "-" },
+    { title: "Address", value: [order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry].filter(Boolean).join(", ") || "-" },
+    { title: "Shipping Phone", value: order.shippingPhone || "-" }
+  ])) : "";
 
   const previewSection = showPreview ? `
     <section class="pdf-section">
@@ -820,12 +829,14 @@ function orderPdfHtml(
               ${prioritySection}
               ${materialSection}
               ${contactSection}
+              ${billingAddressSection}
               ${previewSection}
             </div>
             <div>
               ${financeSection}
               ${statusSection}
               ${shippingSection}
+              ${shippingAddressSection}
             </div>
           </div>
           <footer>Generated automatically from NivaDesk</footer>
