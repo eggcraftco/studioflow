@@ -966,7 +966,7 @@ function PublicShell({ children }: { children: ReactNode }) {
 const HERO_CHIPS: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
   { key: "heroChip.orders", icon: <path d="M4 5h12M4 9h12M4 13h8" /> },
   { key: "heroChip.files", icon: <path d="M3 6l1.5-2h4l1 1.5H17v9H3V6z" /> },
-  { key: "heroChip.finance", icon: <path d="M7 4h6M7 7h6M11 4c-3 0-3 5 0 5s3 4 0 4H7" /> },
+  { key: "heroChip.finance", icon: <><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><circle cx="10" cy="10" r="2" /><path d="M5 8.5v3M15 8.5v3" /></> },
   { key: "heroChip.notes", icon: <path d="M5 3h10v14H5zM7 7h6M7 10h6M7 13h4" /> },
   { key: "heroChip.chatgpt", icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> },
   { key: "heroChip.team", icon: <path d="M7 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13 9a2 2 0 100-4M3 16c0-2.2 1.8-4 4-4s4 1.8 4 4M12 12c2 0 4 1.4 4 4" /> }
@@ -991,8 +991,33 @@ function HeroFeatureChips() {
   );
 }
 
+// Pick a currency symbol matching the visitor's region for the decorative hero badge:
+// US/Americas → $, continental Europe → €, UK and everywhere else → £. Uses the browser
+// timezone (a good proxy for physical location), falling back to the language region.
+function heroCurrencySymbol(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (tz.startsWith("America/")) return "$";
+    if (["Europe/London", "Europe/Belfast", "Europe/Guernsey", "Europe/Jersey", "Europe/Isle_of_Man"].includes(tz)) return "£";
+    if (tz.startsWith("Europe/")) return "€";
+  } catch {
+    // ignore — fall through to the language region / default
+  }
+  if (typeof navigator !== "undefined") {
+    const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
+    if (region === "US") return "$";
+    if (region === "GB") return "£";
+  }
+  return "£";
+}
+
 function ProductScene() {
   const { t } = usePublicSiteLanguage();
+  // Default to £ for the server render; resolve the visitor's symbol after hydration.
+  const [currencySymbol, setCurrencySymbol] = useState("£");
+  useEffect(() => {
+    setCurrencySymbol(heroCurrencySymbol());
+  }, []);
   return (
     <div className="public-hero-visual" aria-hidden="true">
       <div className="hero-app-shot">
@@ -1007,9 +1032,9 @@ function ProductScene() {
       </div>
       <div className="hero-float hero-float-received">
         <span className="hero-float-icon" data-tone="green">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 5h5M8 8h5M11 5c-3 0-3 5 0 5s3 4 0 4H8" /></svg>
+          <span className="hero-float-currency">{currencySymbol}</span>
         </span>
-        <div><strong>{t("heroFloat.receivedTitle")}</strong><span>{t("heroFloat.receivedSub")}</span></div>
+        <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
       </div>
       <div className="hero-float hero-float-chatgpt">
         <span className="hero-float-icon" data-tone="violet">
@@ -1845,7 +1870,7 @@ function ChatGPTAppShowcase() {
   ];
   const stats: { label: PublicSiteTranslationKey; value: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
     { label: "chatgptApp.resultMetric1Label", value: "chatgptApp.resultMetric1Value", tone: "clock", icon: <><circle cx="10" cy="10" r="6.4" /><path d="M10 6.4V10l2.6 1.6" /></> },
-    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", tone: "money", icon: <path d="M8 5.5h5M8 8.5h5M11 5.5c-3 0-3 5 0 5s3 4 0 4H8" /> },
+    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", tone: "money", icon: <><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><circle cx="10" cy="10" r="2" /><path d="M5 8.5v3M15 8.5v3" /></> },
     { label: "chatgptApp.resultMetric3Label", value: "chatgptApp.resultMetric3Value", tone: "lock", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
   ];
   const trust: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [

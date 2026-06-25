@@ -13104,7 +13104,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .hero-chips-frame {
-  margin-top: 26px;
+  margin-top: 52px;
   max-width: 520px;
   padding: 14px 16px 16px;
   border: 1px solid var(--public-border);
@@ -13192,6 +13192,12 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 .hero-float-icon svg {
   width: 18px;
   height: 18px;
+}
+
+.hero-float-icon .hero-float-currency {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .hero-float-icon[data-tone="sage"] { background: rgba(47, 111, 109, 0.12); color: #2f6f6d; }
@@ -18500,7 +18506,7 @@ html[dir="rtl"] .login-public-shell {
   display: grid;
   grid-template-columns: 0.86fr 1.14fr;
   gap: 26px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .gpt-copy-card {
@@ -18658,6 +18664,9 @@ html[dir="rtl"] .login-public-shell {
   border-radius: 21px;
   padding: 22px;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .gpt-demo-head {
@@ -18831,12 +18840,19 @@ html[dir="rtl"] .login-public-shell {
 .gpt-trust-icon svg { width: 16px; height: 16px; }
 
 @media (max-width: 900px) {
-  .gpt-grid { grid-template-columns: 1fr; }
+  .gpt-grid { grid-template-columns: 1fr; gap: 18px; }
+  .gpt-copy-card { padding: 26px 22px; }
+  .gpt-demo-inner { padding: 18px; }
 }
 
 @media (max-width: 560px) {
-  .gpt-stats,
+  /* Keep the three result cards in a row (don't stack) so the section stays compact. */
   .gpt-trust { grid-template-columns: 1fr; }
+  .gpt-stats { gap: 8px; }
+  .gpt-stat { padding: 12px 6px; gap: 6px; }
+  .gpt-stat-icon { width: 30px; height: 30px; }
+  .gpt-stat strong { font-size: 16px; }
+  .gpt-stat-label { font-size: 10px; }
 }
 
 .public-chatgpt-app-section {
