@@ -1979,6 +1979,45 @@ function PlatformLogo({ kind }: { kind: PlatformKind }) {
   );
 }
 
+const APP_STORE_URL = "https://apps.apple.com/app/id6765475980";
+
+function AppStoreDownload() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="public-appstore-download">
+      <a
+        href={APP_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="public-appstore-btn"
+        aria-label="Download NivaDesk on the App Store"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+          <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 8.02 7.36c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.51 4.04zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+        </svg>
+        <span className="public-appstore-btn-text">
+          <small>Download on the</small>
+          <strong>App Store</strong>
+        </span>
+      </a>
+      <div className="public-appstore-qr">
+        <img src="/appstore-qr.png" alt={t("platform.apple.qrAlt")} width={60} height={60} loading="lazy" />
+        <span>{t("platform.apple.scan")}</span>
+      </div>
+    </div>
+  );
+}
+
+function WebPortalLinks() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="public-web-links">
+      <Link href="/signup" className="public-button">{t("cta.startFree")}</Link>
+      <Link href="/login" className="public-button ghost">{t("cta.login")}</Link>
+    </div>
+  );
+}
+
 function PlatformNote() {
   const { t } = usePublicSiteLanguage();
   return (
@@ -1998,6 +2037,8 @@ function PlatformNote() {
                 <span>{t(platform.statusKey)}</span>
                 <h3>{t(platform.nameKey)}</h3>
                 <p>{t(platform.detailKey)}</p>
+                {platform.kind === "apple" ? <AppStoreDownload /> : null}
+                {platform.kind === "web" ? <WebPortalLinks /> : null}
               </div>
             </article>
           ))}
