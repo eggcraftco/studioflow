@@ -1981,30 +1981,64 @@ function PlatformLogo({ kind }: { kind: PlatformKind }) {
 
 const APP_STORE_URL = "https://apps.apple.com/app/id6765475980";
 
+function AppStoreBadge() {
+  return (
+    <a
+      href={APP_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="public-appstore-btn"
+      aria-label="Download NivaDesk on the App Store"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+        <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 8.02 7.36c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.51 4.04zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+      </svg>
+      <span className="public-appstore-btn-text">
+        <small>Download on the</small>
+        <strong>App Store</strong>
+      </span>
+    </a>
+  );
+}
+
 function AppStoreDownload() {
   const { t } = usePublicSiteLanguage();
+  const [qrOpen, setQrOpen] = useState(false);
   return (
-    <div className="public-appstore-download">
-      <a
-        href={APP_STORE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="public-appstore-btn"
-        aria-label="Download NivaDesk on the App Store"
-      >
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
-          <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 8.02 7.36c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.51 4.04zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-        </svg>
-        <span className="public-appstore-btn-text">
-          <small>Download on the</small>
-          <strong>App Store</strong>
-        </span>
-      </a>
-      <div className="public-appstore-qr">
-        <img src="/appstore-qr.png" alt={t("platform.apple.qrAlt")} width={60} height={60} loading="lazy" />
-        <span>{t("platform.apple.scan")}</span>
+    <>
+      <div className="public-appstore-download">
+        <AppStoreBadge />
+        <button type="button" className="public-appstore-qr-trigger" onClick={() => setQrOpen(true)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5z" />
+            <path d="M14 3h7v7h-7V3zm2 2v3h3V5h-3z" />
+            <path d="M3 14h7v7H3v-7zm2 2v3h3v-3H5z" />
+            <path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z" />
+          </svg>
+          {t("platform.apple.scan")}
+        </button>
       </div>
-    </div>
+      {qrOpen ? (
+        <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setQrOpen(false)}>
+          <div
+            className="public-qr-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("platform.apple.qrAlt")}
+            onClick={event => event.stopPropagation()}
+          >
+            <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+            <img src="/appstore-qr.png" alt={t("platform.apple.qrAlt")} width={220} height={220} />
+            <p>{t("platform.apple.scanHint")}</p>
+            <AppStoreBadge />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

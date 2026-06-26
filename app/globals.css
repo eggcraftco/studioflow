@@ -13651,26 +13651,87 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   letter-spacing: -0.01em;
 }
 
-.public-appstore-qr {
-  display: flex;
-  flex-direction: column;
+.public-appstore-qr-trigger {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-}
-
-.public-appstore-qr img {
-  width: 60px;
-  height: 60px;
-  border-radius: 9px;
-  background: #fff;
-  padding: 3px;
-  border: 1px solid rgba(31, 35, 38, 0.12);
-}
-
-.public-appstore-qr span {
-  font-size: 10px;
+  gap: 7px;
+  background: rgba(31, 35, 38, 0.055);
+  color: var(--public-text);
+  border: none;
+  border-radius: 11px;
+  padding: 8px 13px;
+  cursor: pointer;
+  font-size: 13px;
   font-weight: 800;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.public-appstore-qr-trigger:hover {
+  background: rgba(31, 35, 38, 0.10);
+}
+
+.public-qr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 17, 19, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.public-qr-modal {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 30px 28px 26px;
+  text-align: center;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.public-qr-modal img {
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  border-radius: 14px;
+}
+
+.public-qr-modal p {
+  margin: 16px 0 18px;
   color: var(--public-muted);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.5;
+}
+
+.public-qr-modal .public-appstore-btn {
+  justify-content: center;
+}
+
+.public-qr-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(31, 35, 38, 0.06);
+  color: var(--public-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.public-qr-modal-close:hover {
+  background: rgba(31, 35, 38, 0.12);
 }
 
 .public-web-links {
