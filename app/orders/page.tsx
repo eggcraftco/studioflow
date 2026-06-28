@@ -33,6 +33,7 @@ import {
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
   deleteOrderFromWeb,
+  mergeOrders,
   restoreOrderFromWeb,
   requestWorkflowOrderDeletionFromWeb,
   updateOrderFromWeb
@@ -141,6 +142,9 @@ export default function OrdersPage() {
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
   const lastSelectedOrderIdRef = useRef<string | null>(null);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergePrimaryId, setMergePrimaryId] = useState("");
+  const [mergingOrders, setMergingOrders] = useState(false);
   const [showOrderStatusBadges, setShowOrderStatusBadges] = useState(true);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-orders-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
 
@@ -476,6 +480,44 @@ export default function OrdersPage() {
     }
   }
 
+  function openMergeSelectedModal() {
+    setOrderContextMenu(null);
+    if (selectedOrderIds.size < 2) return;
+    const firstId = [...selectedOrderIds].find(id => orders.some(order => order.id === id)) ?? "";
+    setMergePrimaryId(current => (current && selectedOrderIds.has(current) ? current : firstId));
+    setMergeModalOpen(true);
+  }
+
+  async function confirmMergeSelected() {
+    if (!workspace || !user) return;
+    const uid = user.uid;
+    const idList = [...selectedOrderIds].filter(id => orders.some(order => order.id === id));
+    const primaryId = mergePrimaryId && idList.includes(mergePrimaryId) ? mergePrimaryId : idList[0] || "";
+    const sourceIds = idList.filter(id => id !== primaryId);
+    if (!primaryId || sourceIds.length === 0) {
+      setMergeModalOpen(false);
+      return;
+    }
+
+    setMergingOrders(true);
+    setOrderActionError(null);
+    try {
+      const result = await mergeOrders(workspace, primaryId, sourceIds);
+      const mergedSet = new Set(sourceIds);
+      setOrders(current => current.filter(order => !mergedSet.has(order.id)));
+      setSelectedOrderIds(new Set());
+      lastSelectedOrderIdRef.current = null;
+      setMergeModalOpen(false);
+      setSelectedOrderId(primaryId);
+      setOrderActionStatus(result.message || "Orders merged.");
+      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+    } catch (mergeError) {
+      setOrderActionError(mergeError instanceof Error ? mergeError.message : "Could not merge the selected orders.");
+    } finally {
+      setMergingOrders(false);
+    }
+  }
+
   function optimisticStatusPatch(orderId: string, status: string) {
     const extraStatuses = orders.find(order => order.id === orderId)?.extraStatuses ?? {};
     const nextExtraStatuses = Object.fromEntries(Object.keys(extraStatuses).map(key => [key, status]));
@@ -654,6 +696,10 @@ export default function OrdersPage() {
   const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
   const selectionActive = selectedOrderIds.size > 0;
   const contextOrderSelected = contextOrder ? selectedOrderIds.has(contextOrder.id) : false;
+  const mergeCandidates = mergeModalOpen ? orders.filter(order => selectedOrderIds.has(order.id)) : [];
+  const effectiveMergePrimaryId = mergePrimaryId && selectedOrderIds.has(mergePrimaryId)
+    ? mergePrimaryId
+    : (mergeCandidates[0]?.id ?? "");
   const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
   const canRequestOrderDeletion = workspace
     ? normalizeWorkspaceRole(workspace.role) === "workflow"
@@ -747,6 +793,11 @@ export default function OrdersPage() {
               <span>{`${selectedOrderIds.size} ${t("selected")}`}</span>
               <div className="orders-selection-bar-actions">
                 <button type="button" onClick={clearOrderSelection}>{t("Clear")}</button>
+                {canDeleteOrders && selectedOrderIds.size >= 2 ? (
+                  <button type="button" onClick={openMergeSelectedModal}>
+                    {`${t("Merge")} (${selectedOrderIds.size})`}
+                  </button>
+                ) : null}
                 {canDeleteOrders ? (
                   <button type="button" className="danger" onClick={() => void deleteSelectedOrders()}>
                     {`${t("Delete")} (${selectedOrderIds.size})`}
@@ -876,6 +927,17 @@ export default function OrdersPage() {
               <div className="order-list-context-divider" />
               {selectionActive && canDeleteOrders ? (
                 <>
+                  {selectedOrderIds.size >= 2 ? (
+                    <button
+                      role="menuitem"
+                      type="button"
+                      className="order-list-context-row"
+                      onClick={openMergeSelectedModal}
+                    >
+                      <span aria-hidden="true">⊕</span>
+                      {`${t("Merge Selected")} (${selectedOrderIds.size})`}
+                    </button>
+                  ) : null}
                   <button
                     role="menuitem"
                     type="button"
@@ -906,6 +968,80 @@ export default function OrdersPage() {
                 <span aria-hidden="true">⌫</span>
                 {canRequestOrderDeletion ? "Request Deletion" : t("Delete")}
               </button>
+            </div>
+          ) : null}
+
+          {mergeModalOpen ? (
+            <div
+              className="modal-backdrop"
+              role="presentation"
+              onMouseDown={() => { if (!mergingOrders) setMergeModalOpen(false); }}
+            >
+              <section
+                className="card"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="merge-selected-title"
+                onMouseDown={event => event.stopPropagation()}
+                style={{ width: "min(540px, 94vw)", display: "flex", flexDirection: "column", gap: 16 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <h2 id="merge-selected-title" style={{ margin: 0, fontSize: 18 }}>{t("Merge selected orders")}</h2>
+                  <button
+                    type="button"
+                    className="toolbar-icon-button"
+                    onClick={() => { if (!mergingOrders) setMergeModalOpen(false); }}
+                    aria-label={t("Close")}
+                    disabled={mergingOrders}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <p className="muted-copy" style={{ margin: 0 }}>
+                  {t("Pick the main order to keep. The other selected orders' payments move into it, then they move to Trash.")}
+                </p>
+
+                <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {mergeCandidates.map(candidate => {
+                    const isPrimary = candidate.id === effectiveMergePrimaryId;
+                    return (
+                      <button
+                        type="button"
+                        key={candidate.id}
+                        onClick={() => setMergePrimaryId(candidate.id)}
+                        style={{
+                          textAlign: "left",
+                          border: isPrimary ? "2px solid #2563eb" : "1px solid var(--border)",
+                          borderRadius: 10,
+                          padding: "10px 12px",
+                          background: isPrimary ? "rgba(37, 99, 235, 0.08)" : "transparent",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10
+                        }}
+                      >
+                        <span aria-hidden="true" style={{ color: isPrimary ? "#2563eb" : "var(--muted)", fontSize: 16 }}>{isPrimary ? "●" : "○"}</span>
+                        <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
+                          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.customerName.trim() || "New Project"}</strong>
+                          <span className="muted-copy" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(candidate.designName || "").trim() || "—"}</span>
+                        </span>
+                        {isPrimary ? <span style={{ color: "#2563eb", fontWeight: 700, fontSize: 12 }}>{t("Main")}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {orderActionError ? <p className="orders-sidebar-error" style={{ margin: 0 }}>{orderActionError}</p> : null}
+
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  <button type="button" className="button secondary" disabled={mergingOrders} onClick={() => setMergeModalOpen(false)}>{t("Cancel")}</button>
+                  <button type="button" className="button" disabled={mergingOrders || mergeCandidates.length < 2} onClick={() => void confirmMergeSelected()}>
+                    {mergingOrders ? t("Merging…") : `${t("Merge")} (${mergeCandidates.length})`}
+                  </button>
+                </div>
+              </section>
             </div>
           ) : null}
         </aside>

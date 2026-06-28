@@ -349,6 +349,36 @@ export async function mergeOrderIntoOrder(
   }, "Merging order in cloud.");
 }
 
+export type MergeOrdersResult = {
+  ok?: boolean;
+  primaryOrderId?: string;
+  mergedCount?: number;
+  mergedAmount?: number;
+  message?: string;
+};
+
+export async function mergeOrders(
+  workspace: WorkspaceContext,
+  primaryOrderId: string,
+  sourceOrderIds: string[]
+): Promise<MergeOrdersResult> {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot merge orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, MergeOrdersResult>(functions, "mergeOrders");
+    const response = await callable({
+      companyId: workspace.id,
+      primaryOrderId,
+      sourceOrderIds
+    });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not merge the selected orders.");
+    }
+    return response.data || {};
+  }, "Merging orders in cloud.");
+}
+
 export async function uploadOrderPreviewImage({
   workspace,
   orderId,
