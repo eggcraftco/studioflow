@@ -320,6 +320,35 @@ export async function restoreOrderFromWeb(workspace: WorkspaceContext, orderId: 
   }, "Restoring order from cloud.");
 }
 
+export type MergeOrderResult = {
+  ok?: boolean;
+  targetOrderId?: string;
+  mergedAmount?: number;
+  message?: string;
+};
+
+export async function mergeOrderIntoOrder(
+  workspace: WorkspaceContext,
+  sourceOrderId: string,
+  targetOrderId: string
+): Promise<MergeOrderResult> {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot merge orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, MergeOrderResult>(functions, "mergeOrderIntoOrder");
+    const response = await callable({
+      companyId: workspace.id,
+      sourceOrderId,
+      targetOrderId
+    });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not merge the order.");
+    }
+    return response.data || {};
+  }, "Merging order in cloud.");
+}
+
 export async function uploadOrderPreviewImage({
   workspace,
   orderId,

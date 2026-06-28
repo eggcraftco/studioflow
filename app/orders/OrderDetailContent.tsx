@@ -47,9 +47,11 @@ import {
   canEditOrderStatusForRole,
   ORDER_PREVIEW_IMAGE_ACCEPT,
   assignInvoiceNumberFromWeb,
+  mergeOrderIntoOrder,
   updateOrderFromWeb,
   uploadOrderPreviewImage,
   type CreateOrderInput,
+  type MergeOrderResult,
   type UpdateOrderInput
 } from "@/lib/studioflow/orders";
 import {
@@ -58,6 +60,7 @@ import {
 } from "@/lib/studioflow/settingsActions";
 import {
   loadWorkspaceStatusOptions,
+  loadWorkspaceOrderOptions,
   loadTeamAccessData,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
@@ -65,6 +68,7 @@ import {
   type CompanyNumberSetting,
   type LineItemDetail,
   type OrderDetail,
+  type OrderOptionItem,
   type TeamMemberDetail,
   type ToDoDetail,
   type WorkSessionDetail,
@@ -1702,6 +1706,13 @@ export function OrderDetailContent({
   const [workspacePanning, setWorkspacePanning] = useState(false);
   const [isNarrowLayout, setIsNarrowLayout] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeCandidates, setMergeCandidates] = useState<OrderOptionItem[]>([]);
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const [mergeDone, setMergeDone] = useState<MergeOrderResult | null>(null);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<OrderDetailCardId | null>(null);
@@ -1715,6 +1726,43 @@ export function OrderDetailContent({
   const [paymentNoteInput, setPaymentNoteInput] = useState("");
   const [inlineStatus, setInlineStatus] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+
+  async function openMergeModal() {
+    setMergeOpen(true);
+    setMergeError(null);
+    setMergeDone(null);
+    setMergeTargetId(null);
+    setMergeCandidates([]);
+    setMergeLoading(true);
+    try {
+      const options = await loadWorkspaceOrderOptions(workspace.id, workspace, user?.uid ?? "");
+      const currentName = (order.customerName || "").trim().toLowerCase();
+      const others = options.filter(option => option.id !== order.id);
+      const matchesCustomer = (option: OrderOptionItem) =>
+        currentName.length > 0 && (option.customerName || "").trim().toLowerCase() === currentName;
+      const sameCustomer = others.filter(matchesCustomer);
+      const rest = others.filter(option => !matchesCustomer(option));
+      setMergeCandidates([...sameCustomer, ...rest]);
+    } catch (loadError) {
+      setMergeError(loadError instanceof Error ? loadError.message : "Could not load orders.");
+    } finally {
+      setMergeLoading(false);
+    }
+  }
+
+  async function handleMergeIntoTarget() {
+    if (!mergeTargetId || merging) return;
+    setMerging(true);
+    setMergeError(null);
+    try {
+      const result = await mergeOrderIntoOrder(workspace, order.id, mergeTargetId);
+      setMergeDone(result);
+    } catch (mergeErr) {
+      setMergeError(mergeErr instanceof Error ? mergeErr.message : "Could not merge the order.");
+    } finally {
+      setMerging(false);
+    }
+  }
 
   useEffect(() => {
     try {
@@ -6822,6 +6870,17 @@ export function OrderDetailContent({
                 >
                   Customize cards
                 </button>
+                {canAccessOrders && canDeleteOrdersForRole(workspace.role) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderActionsOpen(false);
+                      void openMergeModal();
+                    }}
+                  >
+                    Merge into another order
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -6854,6 +6913,111 @@ export function OrderDetailContent({
         onSaved={handleOrderEditSaved}
         onError={setOrderActionError}
       />
+
+      {mergeOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => { if (!merging) setMergeOpen(false); }}
+        >
+          <section
+            className="card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="merge-order-title"
+            onMouseDown={event => event.stopPropagation()}
+            style={{ width: "min(540px, 94vw)", display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <h2 id="merge-order-title" style={{ margin: 0, fontSize: 18 }}>Merge into another order</h2>
+              <button
+                type="button"
+                className="toolbar-icon-button"
+                onClick={() => { if (!merging) setMergeOpen(false); }}
+                aria-label="Close"
+                disabled={merging}
+              >
+                ×
+              </button>
+            </div>
+
+            {mergeDone ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ margin: 0, color: "#15803d", fontWeight: 600 }}>
+                  {mergeDone.message || "Order merged. This order moved to Trash."}
+                </p>
+                <p className="muted-copy" style={{ margin: 0 }}>
+                  This order&apos;s payments were moved into the order you chose. This order is now in Trash.
+                </p>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  <a className="button secondary" href="/orders">Back to orders</a>
+                  {mergeDone.targetOrderId ? (
+                    <a className="button" href={`/orders/${mergeDone.targetOrderId}`}>Open merged order</a>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <p className="muted-copy" style={{ margin: 0 }}>
+                  Move this order&apos;s payments into another order, then send this one to Trash. Use it when a customer paid for the same job in separate WooCommerce orders.
+                </p>
+
+                {mergeLoading ? (
+                  <p className="muted-copy" style={{ margin: 0 }}>Loading orders…</p>
+                ) : mergeCandidates.length === 0 ? (
+                  <p className="muted-copy" style={{ margin: 0 }}>No other orders to merge into.</p>
+                ) : (
+                  <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {mergeCandidates.map(candidate => {
+                      const selected = mergeTargetId === candidate.id;
+                      return (
+                        <button
+                          type="button"
+                          key={candidate.id}
+                          onClick={() => setMergeTargetId(candidate.id)}
+                          style={{
+                            textAlign: "left",
+                            border: selected ? "2px solid #2563eb" : "1px solid #e5e7eb",
+                            borderRadius: 10,
+                            padding: "10px 12px",
+                            background: selected ? "#eff6ff" : "#fff",
+                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 2
+                          }}
+                        >
+                          <strong style={{ fontSize: 14, color: "#111827" }}>{candidate.customerName}</strong>
+                          <span style={{ fontSize: 13, color: "#6b7280" }}>
+                            {candidate.designName}
+                            {candidate.paymentDate ? ` · ${candidate.paymentDate.toLocaleDateString()}` : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {mergeError ? <p className="layout-error" style={{ margin: 0 }}>{mergeError}</p> : null}
+
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  <button type="button" className="button secondary" onClick={() => setMergeOpen(false)} disabled={merging}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => void handleMergeIntoTarget()}
+                    disabled={!mergeTargetId || merging}
+                  >
+                    {merging ? "Merging…" : "Merge"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
 
       <BlockHeadingsModal
         cardId={headingEditorCardId}
