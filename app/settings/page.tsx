@@ -50,7 +50,7 @@ import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJs
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
@@ -3159,6 +3159,7 @@ function FinancialSettingsSection({
   const [draft, setDraft] = useState<WorkspaceSettingsOverview | null>(settings);
   const [saving, setSaving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [clearingTax, setClearingTax] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
@@ -3257,6 +3258,23 @@ function FinancialSettingsSection({
       setError(recalculateError instanceof Error ? recalculateError.message : t("Existing projects could not be recalculated."));
     } finally {
       setRecalculating(false);
+    }
+  }
+
+  async function handleClearTax() {
+    if (!workspace) return;
+    const confirmed = window.confirm(t("Set VAT/tax to 0 on ALL orders? Use this when VAT does not apply (e.g. you sell abroad / are not VAT-registered). This cannot be undone."));
+    if (!confirmed) return;
+    setClearingTax(true);
+    setError("");
+    setStatus("");
+    try {
+      const result = await clearAllOrdersTax(workspace);
+      setStatus(result.message || t("VAT removed from all orders."));
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : t("VAT could not be removed."));
+    } finally {
+      setClearingTax(false);
     }
   }
 
@@ -3470,6 +3488,10 @@ function FinancialSettingsSection({
           <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
             <span aria-hidden="true">↻</span>
             {recalculating ? t("Recalculating...") : t("Recalculate Taxes for Past Orders")}
+          </button>
+          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
+            <span aria-hidden="true">⊘</span>
+            {clearingTax ? t("Removing VAT...") : t("Remove VAT from all orders")}
           </button>
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
