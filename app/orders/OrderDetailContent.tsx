@@ -4908,15 +4908,6 @@ export function OrderDetailContent({
                 formatMoney={value => money(value)}
                 onSave={items => saveDetailsPatch({ lineItems: items }, "Invoice items")}
               />
-              {moneySettings ? (
-                <CompanyNumbersEditor
-                  numbers={moneySettings.companyNumbers}
-                  disabled={!canInlineEditFullDetails}
-                  onSave={numbers => {
-                    if (moneySettings) void savePdfExportSettings(workspace, pdfInputFrom(moneySettings, numbers));
-                  }}
-                />
-              ) : null}
               <InvoiceFooterEditor
                 note={order.invoiceNote}
                 disabled={!canInlineEditFullDetails}
@@ -7026,6 +7017,10 @@ export function OrderDetailContent({
         canSave={canEditCardLayout}
         perOrderExtraNoteSections={perOrderExtraNoteSections}
         onSavePerOrderExtraNoteSections={savePerOrderExtraNoteSections}
+        companyNumbers={moneySettings?.companyNumbers ?? []}
+        onSaveCompanyNumbers={numbers => {
+          if (moneySettings) void savePdfExportSettings(workspace, pdfInputFrom(moneySettings, numbers));
+        }}
         onClose={() => setHeadingEditorCardId(null)}
         onSaved={settings => {
           setBlockHeadingSettings(settings);
@@ -7567,6 +7562,8 @@ function BlockHeadingsModal({
   canSave,
   perOrderExtraNoteSections,
   onSavePerOrderExtraNoteSections,
+  companyNumbers,
+  onSaveCompanyNumbers,
   onClose,
   onSaved
 }: {
@@ -7576,6 +7573,8 @@ function BlockHeadingsModal({
   canSave: boolean;
   perOrderExtraNoteSections?: HeadingItem[];
   onSavePerOrderExtraNoteSections?: (next: HeadingItem[]) => void;
+  companyNumbers?: CompanyNumberSetting[];
+  onSaveCompanyNumbers?: (numbers: CompanyNumberSetting[]) => void;
   onClose: () => void;
   onSaved?: (settings: BlockHeadingSettings) => void;
 }) {
@@ -7597,6 +7596,9 @@ function BlockHeadingsModal({
     setError("");
 
     if (!supported) return;
+    // invoiceItems has no renamable headings — the dialog only edits the workspace
+    // company invoice numbers, which CompanyNumbersEditor self-saves. Skip the load.
+    if (cardId === "invoiceItems") { setLoading(false); return; }
 
     let cancelled = false;
     async function run() {
@@ -7910,6 +7912,14 @@ function BlockHeadingsModal({
         return renderList("Special Note Fields", "specialNoteSections", "Special Note", true);
       case "schedule":
         return renderList("Quick reminders", "scheduleQuickReminders", "Custom reminder");
+      case "invoiceItems":
+        return (
+          <CompanyNumbersEditor
+            numbers={companyNumbers ?? []}
+            disabled={!canSave}
+            onSave={next => onSaveCompanyNumbers?.(next)}
+          />
+        );
       default:
         return null;
     }
@@ -7944,7 +7954,7 @@ function BlockHeadingsModal({
 
         <div className="add-order-actions">
           <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Close</button>
-          {supported ? (
+          {supported && cardId !== "invoiceItems" ? (
             <button className="button" type="button" onClick={handleSave} disabled={saving || loading || !settings || !canSave}>
               {saving ? "Saving..." : "Save Headings"}
             </button>

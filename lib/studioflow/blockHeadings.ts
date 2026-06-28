@@ -65,7 +65,10 @@ export const WEB_BLOCK_HEADING_CARD_IDS = new Set<OrderDetailCardId>([
   "customer",
   "notes",
   "materials",
-  "schedule"
+  "schedule",
+  // invoiceItems uses the dialog only to edit the workspace company invoice numbers
+  // (VAT/EORI/company no.) — it has no renamable headings.
+  "invoiceItems"
 ]);
 
 function friendlyBlockHeadingError(error: unknown) {
