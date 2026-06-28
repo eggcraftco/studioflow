@@ -2069,28 +2069,50 @@ function WebPortalLinks() {
   );
 }
 
+function PlatformHintBanner({ kind, text }: { kind: "android" | "windows"; text: string }) {
+  return (
+    <div className="public-platform-hint" data-hint={kind}>
+      {kind === "android" ? (
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 7 9 6 9-6" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      )}
+      <span>{text}</span>
+    </div>
+  );
+}
+
 function PlatformNote() {
   const { t } = usePublicSiteLanguage();
   return (
     <section className="public-section public-section-soft public-scroll-reveal">
       <div className="public-shell public-platform-panel">
-        <div>
+        <div className="public-platform-intro">
           <span className="public-eyebrow">{t("platform.eyebrow")}</span>
           <h2>{t("platform.title")}</h2>
+          <p>{t("platform.subtitle")}</p>
         </div>
         <div className="public-platform-grid public-scroll-stagger" aria-label={t("platform.gridAria")}>
           {PLATFORM_CARDS.map(platform => (
             <article className="public-platform-card" data-platform={platform.kind} key={platform.kind}>
-              <span className="public-platform-logo">
-                <PlatformLogo kind={platform.kind} />
-              </span>
-              <div>
-                <span>{t(platform.statusKey)}</span>
-                <h3>{t(platform.nameKey)}</h3>
-                <p>{t(platform.detailKey)}</p>
-                {platform.kind === "apple" ? <AppStoreDownload /> : null}
-                {platform.kind === "web" ? <WebPortalLinks /> : null}
+              <div className="public-platform-card-head">
+                <span className="public-platform-logo">
+                  <PlatformLogo kind={platform.kind} />
+                </span>
+                <span className="public-platform-status">{t(platform.statusKey)}</span>
               </div>
+              <h3>{t(platform.nameKey)}</h3>
+              <p>{t(platform.detailKey)}</p>
+              {platform.kind === "apple" ? <AppStoreDownload /> : null}
+              {platform.kind === "web" ? <WebPortalLinks /> : null}
+              {platform.kind === "android" ? <PlatformHintBanner kind="android" text={t("platform.android.hint")} /> : null}
+              {platform.kind === "windows" ? <PlatformHintBanner kind="windows" text={t("platform.windows.hint")} /> : null}
             </article>
           ))}
         </div>

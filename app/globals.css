@@ -13671,6 +13671,15 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   align-items: start;
 }
 
+.public-platform-intro p {
+  margin: 18px 0 0;
+  max-width: 32ch;
+  color: var(--public-muted);
+  font-size: 17px;
+  font-weight: 760;
+  line-height: 1.5;
+}
+
 .public-platform-panel ul {
   display: grid;
   gap: 14px;
@@ -13695,16 +13704,22 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-platform-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-  min-height: 138px;
+  display: flex;
+  flex-direction: column;
+  min-height: 150px;
   border: 1px solid rgba(31, 35, 38, 0.10);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 18px;
+  padding: 18px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow: var(--public-shadow-soft);
+}
+
+.public-platform-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
 }
 
 .public-appstore-download {
@@ -13865,7 +13880,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-platform-card h3 {
-  margin: 6px 0 6px;
+  margin: 0 0 7px;
   color: var(--public-text);
   font-size: 22px;
   line-height: 1.08;
@@ -13879,14 +13894,68 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   line-height: 1.45;
 }
 
-.public-platform-card > div > span {
+.public-platform-status {
   display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border-radius: 999px;
-  padding: 5px 8px;
-  background: rgba(31, 35, 38, 0.055);
+  padding: 5px 11px 5px 9px;
+  background: rgba(31, 35, 38, 0.06);
   color: var(--public-muted);
   font-size: 11px;
   font-weight: 950;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.public-platform-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.public-platform-card[data-platform="apple"] .public-platform-status,
+.public-platform-card[data-platform="android"] .public-platform-status {
+  color: #1f9d52;
+  background: rgba(46, 199, 97, 0.14);
+}
+
+.public-platform-card[data-platform="web"] .public-platform-status {
+  color: #2f6dbd;
+  background: rgba(51, 133, 255, 0.14);
+}
+
+.public-platform-card[data-platform="windows"] .public-platform-status {
+  color: #6b4fc2;
+  background: rgba(158, 97, 255, 0.15);
+}
+
+.public-platform-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.public-platform-hint svg {
+  flex: none;
+}
+
+.public-platform-hint[data-hint="android"] {
+  background: rgba(46, 199, 97, 0.12);
+  color: #1f7a45;
+}
+
+.public-platform-hint[data-hint="windows"] {
+  background: rgba(158, 97, 255, 0.12);
+  color: #5a47a5;
 }
 
 .public-platform-card[data-platform="apple"] {
