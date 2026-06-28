@@ -8126,6 +8126,9 @@ function InvoiceFooterEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setDraft(note);
+    // Auto-expand when a note arrives (e.g. synced live from another device), so the
+    // user actually sees it instead of a collapsed "+ Invoice Note" button.
+    if (note.trim().length > 0) setExpanded(true);
   }, [note]);
 
   return (
