@@ -50,6 +50,7 @@ export type FinancialSettingsInput = {
   taxRuleNameRevenue: string;
   taxRuleNameProfit: string;
   defaultTaxRate: number;
+  defaultDeliveryTime?: number;
   taxCalculationType: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;

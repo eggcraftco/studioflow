@@ -168,6 +168,7 @@ export type WorkspaceSettingsOverview = {
   selectedDecimalSeparator: string;
   feePercentage: number;
   defaultTaxRate: number;
+  defaultDeliveryTime: number;
   taxCalculationType: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
@@ -965,6 +966,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
     feePercentage: numberValue(data.feePercentage, 3),
     defaultTaxRate: numberValue(data.defaultTaxRate, 20),
+    defaultDeliveryTime: numberValue(data.defaultDeliveryTime, 30),
     taxCalculationType: stringValue(data.taxCalculationType, "Revenue"),
     taxMilestoneEnabled: booleanValue(data.taxMilestoneEnabled, false),
     taxMilestoneDate: numberValue(data.taxMilestoneDate, Date.now() / 1000),

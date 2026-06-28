@@ -3184,7 +3184,7 @@ function FinancialSettingsSection({
     setError("");
   }
 
-  function updateNumber(key: "feePercentage" | "defaultTaxRate" | "taxMilestoneDate" | "corporationTaxRate", value: number) {
+  function updateNumber(key: "feePercentage" | "defaultTaxRate" | "defaultDeliveryTime" | "taxMilestoneDate" | "corporationTaxRate", value: number) {
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
@@ -3209,6 +3209,7 @@ function FinancialSettingsSection({
         taxRuleNameRevenue: draft.taxRuleNameRevenue,
         taxRuleNameProfit: draft.taxRuleNameProfit,
         defaultTaxRate: draft.defaultTaxRate,
+        defaultDeliveryTime: draft.defaultDeliveryTime,
         taxCalculationType: draft.taxCalculationType,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
         taxMilestoneDate: draft.taxMilestoneDate,
@@ -3242,6 +3243,7 @@ function FinancialSettingsSection({
         taxRuleNameRevenue: draft.taxRuleNameRevenue,
         taxRuleNameProfit: draft.taxRuleNameProfit,
         defaultTaxRate: draft.defaultTaxRate,
+        defaultDeliveryTime: draft.defaultDeliveryTime,
         taxCalculationType: draft.taxCalculationType,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
         taxMilestoneDate: draft.taxMilestoneDate,
@@ -3394,6 +3396,20 @@ function FinancialSettingsSection({
               />
               <em>%</em>
             </span>
+          </label>
+
+          <label className="financial-settings-row wide-control">
+            <span>{t("Default delivery time for new orders (days)")}</span>
+            <input
+              className="input financial-control"
+              type="number"
+              min="1"
+              max="730"
+              step="1"
+              value={draft.defaultDeliveryTime}
+              disabled={!canEdit || saving}
+              onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
+            />
           </label>
 
           <label className="financial-settings-row wide-control">
