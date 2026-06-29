@@ -11,6 +11,8 @@ import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
 import { clearLandingAttribution, getLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
+import { GoogleAdsTag } from "@/components/GoogleAdsTag";
+import { fireGoogleAdsSignupConversion } from "@/lib/googleAds";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import {
   PLAN_ENTITLEMENTS,
@@ -951,6 +953,7 @@ function PublicShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="public-site" dir={dir}>
       <SiteVisitBeacon />
+      <GoogleAdsTag />
       <PublicHeader />
       <main>{children}</main>
       <PublicFooter />
@@ -2528,6 +2531,7 @@ export function PublicSignupPage() {
         // from it, then clear the marker so it is counted at most once.
         if (getLandingAttribution() !== null) {
           trackLandingEvent("custom_order_landing_signup_completed");
+          fireGoogleAdsSignupConversion();
           clearLandingAttribution();
         }
         router.replace("/dashboard");
