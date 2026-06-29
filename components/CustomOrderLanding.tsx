@@ -138,8 +138,20 @@ export function CustomOrderLanding() {
               <Link href="/signup" className="public-button large" onClick={onStartTrialClick}>Start Free Trial</Link>
               <a href="#how-it-works" className="public-button large ghost" onClick={onHowItWorksClick}>See How It Works</a>
             </div>
-            <p className="lp-hero-trust">Built for small studios, workshops and service businesses.</p>
+            <p className="lp-hero-trust">No credit card required. Set up your first order in minutes.</p>
           </div>
+          <figure className="lp-hero-shot">
+            <img
+              className="lp-hero-shot-img"
+              src="/hero-app.webp"
+              alt="NivaDesk order management workspace showing client details, files, payments and delivery progress"
+              width={3744}
+              height={2612}
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>One place for client details, order status, files, payments and delivery progress.</figcaption>
+          </figure>
         </section>
 
         {/* 2. PROBLEM */}

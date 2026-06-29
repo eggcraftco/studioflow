@@ -20225,6 +20225,32 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
   letter-spacing: 0.01em;
 }
 
+/* Hero product screenshot — large centered premium mockup below the CTAs. */
+.lp-hero-shot {
+  max-width: 1180px;
+  margin: 48px auto 0;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.lp-hero-shot-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid var(--public-border);
+  box-shadow: 0 26px 64px rgba(23, 25, 35, 0.15);
+  background: #fff;
+}
+
+.lp-hero-shot figcaption {
+  margin-top: 16px;
+  color: var(--public-muted);
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.5;
+}
+
 /* Generic section */
 .lp-section {
   padding: 78px 0;
