@@ -89,7 +89,11 @@ export function AuthFeatureRotator({ words, style }: { prefix?: string; words: s
         borderRadius: 4.5,
         background: caretColor,
         opacity: hidden ? 0 : isHolding ? 0.7 : 0.9,
-        animation: isHolding ? "auth-caret-blink 1.45s ease-in-out infinite" : "none",
+        // The left caret is only an invisible spacer that keeps the word
+        // centered — it must never paint. Guard the blink animation with
+        // !hidden, otherwise its opacity keyframes override opacity:0 during the
+        // hold phase and the "ghost" left caret blinks into view.
+        animation: !hidden && isHolding ? "auth-caret-blink 1.45s ease-in-out infinite" : "none",
         transition: "background 0.3s ease, width 0.3s ease, height 0.3s ease",
         flex: "0 0 auto"
       }}
