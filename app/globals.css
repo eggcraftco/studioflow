@@ -8528,6 +8528,44 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   color: #777b80;
 }
 
+/* Inline-rename for a card heading (click to edit, Finder-style). */
+.app-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.app-inline-label:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.app-inline-label-pencil {
+  flex: 0 0 auto;
+  opacity: 0;
+  color: var(--muted);
+  transition: opacity 0.12s ease;
+}
+.app-inline-label:hover .app-inline-label-pencil {
+  opacity: 0.85;
+}
+.app-inline-label-input {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 2px 6px;
+  margin: -2px 0;
+  max-width: 150px;
+  border-radius: 6px;
+  border: 1.5px solid var(--accent);
+}
+
 .app-value-row {
   display: grid;
   grid-template-columns: minmax(104px, 0.62fr) minmax(0, 1fr);

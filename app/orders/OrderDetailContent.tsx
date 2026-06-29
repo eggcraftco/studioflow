@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -1653,6 +1653,15 @@ export function OrderDetailContent({
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
+  // Scalar per-card heading labels read straight from companySettings (the
+  // structured headings come from the block-headings callable). Inline-renamed
+  // in place; written back with setDoc(merge) so the Mac/iPhone apps sync them.
+  const [cardLabels, setCardLabels] = useState<{ financialBaseCostLabel: string; designNameLabel: string; priorityCardLabel: string; riskCardLabel: string }>({
+    financialBaseCostLabel: "Cost (Base)",
+    designNameLabel: "Design Name",
+    priorityCardLabel: "Priority",
+    riskCardLabel: "Risk"
+  });
   const [savingLayout, setSavingLayout] = useState(false);
   const [layoutReadyOrderId, setLayoutReadyOrderId] = useState("");
   const savingLayoutRef = useRef(false);
@@ -2602,7 +2611,16 @@ export function OrderDetailContent({
     void refreshBlockHeadings();
     const unsubscribe = onSnapshot(
       doc(db, "companySettings", workspace.id),
-      () => {
+      snapshot => {
+        const data = snapshot.data() ?? {};
+        const str = (key: string, fallback: string) =>
+          typeof data[key] === "string" && (data[key] as string).trim() ? (data[key] as string) : fallback;
+        setCardLabels({
+          financialBaseCostLabel: str("financialBaseCostLabel", "Cost (Base)"),
+          designNameLabel: str("designNameLabel", "Design Name"),
+          priorityCardLabel: str("priorityCardLabel", "Priority"),
+          riskCardLabel: str("riskCardLabel", "Risk")
+        });
         void refreshBlockHeadings();
       },
       () => {
@@ -3647,6 +3665,60 @@ export function OrderDetailContent({
 
     if (Object.keys(nextPatch).length > 0) {
       onOptimisticOrderPatch?.(nextPatch);
+    }
+  }
+
+  async function saveCardLabel(
+    key: "financialBaseCostLabel" | "designNameLabel" | "priorityCardLabel" | "riskCardLabel",
+    value: string
+  ) {
+    const cleaned = value.trim();
+    if (!cleaned || cleaned === cardLabels[key]) return;
+    setCardLabels(prev => ({ ...prev, [key]: cleaned }));
+    try {
+      await setDoc(doc(db, "companySettings", workspace.id), { [key]: cleaned }, { merge: true });
+    } catch {
+      // The companySettings snapshot listener re-syncs the label if the write fails.
+    }
+  }
+
+  async function renameStatusStep(index: number, newTitle: string) {
+    if (!blockHeadingSettings) return;
+    const cleaned = newTitle.trim();
+    if (!cleaned) return;
+    const current = productionSteps();
+    if (index < 0 || index >= current.length) return;
+    const updatedSteps = current.map((step, i) => ({
+      id: step.id || webHeadingId(),
+      title: i === index ? cleaned : step.title
+    }));
+    const updated = { ...blockHeadingSettings, customSteps: updatedSteps };
+    setBlockHeadingSettings(updated);
+    try {
+      const saved = await saveWorkspaceBlockHeadings(workspace, "status", updated);
+      setBlockHeadingSettings(saved);
+    } catch {
+      // Optimistic state stays; the next companySettings snapshot re-syncs.
+    }
+  }
+
+  async function renameMaterialCheck(index: number, newTitle: string) {
+    if (!blockHeadingSettings) return;
+    const cleaned = newTitle.trim();
+    if (!cleaned) return;
+    const current = materialDefaultCheckItems(blockHeadingSettings);
+    if (index < 0 || index >= current.length) return;
+    const updatedChecks = current.map((item, i) => ({
+      id: blockHeadingSettings.materialsDefaultChecks[i]?.id ?? webHeadingId(),
+      title: i === index ? cleaned : item.title
+    }));
+    const updated = { ...blockHeadingSettings, materialsDefaultChecks: updatedChecks };
+    setBlockHeadingSettings(updated);
+    try {
+      const saved = await saveWorkspaceBlockHeadings(workspace, "materials", updated);
+      setBlockHeadingSettings(saved);
+    } catch {
+      // Optimistic state stays; the next companySettings snapshot re-syncs.
     }
   }
 
@@ -4702,6 +4774,8 @@ export function OrderDetailContent({
                     <InlineYesNoRow
                       key={item.id}
                       label={item.title}
+                      labelRaw={item.title}
+                      onLabelSave={canInlineEditFullDetails ? value => renameMaterialCheck(index, value) : undefined}
                       value={materialDefaultCheckValue(order, index, item.title)}
                       disabled={!canInlineEditFullDetails}
                       saving={savingInlineField === fieldKey}
@@ -4754,7 +4828,9 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel">
               <InlineSelectRow
-                label="Priority"
+                label={cardLabels.priorityCardLabel}
+                labelRaw={cardLabels.priorityCardLabel}
+                onLabelSave={canInlineEditFullDetails ? value => saveCardLabel("priorityCardLabel", value) : undefined}
                 value={order.priority || "Normal"}
                 options={PRIORITY_OPTIONS}
                 disabled={!canEditWorkflowFields}
@@ -4762,7 +4838,9 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ priority: value }, "Priority")}
               />
               <InlineSelectRow
-                label="Risk"
+                label={cardLabels.riskCardLabel}
+                labelRaw={cardLabels.riskCardLabel}
+                onLabelSave={canInlineEditFullDetails ? value => saveCardLabel("riskCardLabel", value) : undefined}
                 value={order.risk || "None"}
                 options={RISK_OPTIONS}
                 disabled={!canEditWorkflowFields}
@@ -4890,7 +4968,9 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ customerName: normalizeOrderCustomerName(String(value)) }, "Customer Name")}
               />
               <InlineValueRow
-                label="Design Name"
+                label={cardLabels.designNameLabel}
+                labelRaw={cardLabels.designNameLabel}
+                onLabelSave={canInlineEditFullDetails ? value => saveCardLabel("designNameLabel", value) : undefined}
                 value={order.designName || ""}
                 disabled={!canInlineEditFullDetails}
                 saving={savingInlineField === "Design Name"}
@@ -5152,7 +5232,9 @@ export function OrderDetailContent({
                     />
                     <div className="app-card-divider" />
                     <FinanceInlineRow
-                      label="Cost (Base)"
+                      label={cardLabels.financialBaseCostLabel}
+                      labelRaw={cardLabels.financialBaseCostLabel}
+                      onLabelSave={canInlineEditFinance ? value => saveCardLabel("financialBaseCostLabel", value) : undefined}
                       displayValue={money(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
@@ -5293,6 +5375,8 @@ export function OrderDetailContent({
                     <InlineSelectRow
                       key={`${stepTitle}-${index}`}
                       label={stepTitle}
+                      labelRaw={stepTitle}
+                      onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                       value={order.designStatus || "Not Yet"}
                       options={statusOptions}
                       disabled={!canEditOrderStatus}
@@ -5307,6 +5391,8 @@ export function OrderDetailContent({
                     <InlineSelectRow
                       key={`${stepTitle}-${index}`}
                       label={stepTitle}
+                      labelRaw={stepTitle}
+                      onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                       value={order.status || "Not Yet"}
                       options={statusOptions}
                       disabled={!canEditOrderStatus}
@@ -5320,6 +5406,8 @@ export function OrderDetailContent({
                   <InlineSelectRow
                     key={step.id || `${stepTitle}-${index}`}
                     label={stepTitle}
+                    labelRaw={stepTitle}
+                    onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                     value={statusStepValue(step)}
                     options={statusOptions}
                     disabled={!canEditOrderStatus}
@@ -8104,6 +8192,79 @@ function LineItemsEditor({
   );
 }
 
+// Inline-rename for a card heading: shows `display`, reveals a hover highlight +
+// pencil, and edits in place on click (Enter / blur commits, Escape cancels) —
+// the same Finder-style rename the Mac/iPhone apps use instead of the
+// "Edit Block Headings" dialog.
+function InlineEditableLabel({
+  display,
+  rawValue,
+  editable,
+  onSave
+}: {
+  display: string;
+  rawValue: string;
+  editable: boolean;
+  onSave: (value: string) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(rawValue);
+  const cancellingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(rawValue);
+  }, [editing, rawValue]);
+
+  if (!editable) return <span>{display}</span>;
+
+  function commit() {
+    if (cancellingRef.current) return;
+    setEditing(false);
+    const cleaned = draft.trim();
+    if (cleaned && cleaned !== rawValue) void onSave(cleaned);
+  }
+  function cancel() {
+    cancellingRef.current = true;
+    setDraft(rawValue);
+    setEditing(false);
+    window.setTimeout(() => {
+      cancellingRef.current = false;
+    }, 0);
+  }
+
+  if (editing) {
+    return (
+      <input
+        className="app-inline-label-input"
+        autoFocus
+        value={draft}
+        onChange={event => setDraft(event.target.value)}
+        onFocus={event => event.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={event => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            cancel();
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <button type="button" className="app-inline-label" title="Rename" onClick={() => setEditing(true)}>
+      <span>{display}</span>
+      <svg className="app-inline-label-pencil" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    </button>
+  );
+}
+
 function InlineValueRow({
   label,
   value,
@@ -8112,7 +8273,9 @@ function InlineValueRow({
   tone,
   disabled,
   saving,
-  onSave
+  onSave,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   value: string;
@@ -8122,6 +8285,8 @@ function InlineValueRow({
   disabled: boolean;
   saving: boolean;
   onSave: (value: string | number) => Promise<void> | void;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -8158,7 +8323,7 @@ function InlineValueRow({
 
   return (
     <div className="app-value-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
       {editing && !disabled ? (
         <form
           className="app-value-edit-form"
@@ -8281,7 +8446,9 @@ function InlineSelectRow({
   disabled,
   saving,
   onSave,
-  statusColor = false
+  statusColor = false,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   value: string;
@@ -8290,6 +8457,8 @@ function InlineSelectRow({
   saving: boolean;
   onSave: (value: string) => Promise<void> | void;
   statusColor?: boolean;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   const selectOptions = useMemo(() => {
     const cleanedValue = value.trim();
@@ -8299,7 +8468,7 @@ function InlineSelectRow({
 
   return (
     <div className="app-value-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
       <select
         className={[
           "app-value-pill app-inline-select",
@@ -8324,17 +8493,21 @@ function InlineYesNoRow({
   value,
   disabled,
   saving,
-  onSave
+  onSave,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   value: boolean;
   disabled: boolean;
   saving: boolean;
   onSave: (value: boolean) => Promise<void> | void;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   return (
     <div className="app-value-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave)} onSave={onLabelSave ?? (() => {})} />
       <div className="finance-binary-row">
         <button
           className={value ? "is-selected" : ""}
@@ -8401,7 +8574,9 @@ function FinanceInlineRow({
   options = [],
   disabled,
   saving,
-  onSave
+  onSave,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   displayValue: string;
@@ -8412,6 +8587,8 @@ function FinanceInlineRow({
   disabled: boolean;
   saving: boolean;
   onSave: (value: string | number) => Promise<void> | void;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
@@ -8455,7 +8632,7 @@ function FinanceInlineRow({
 
   return (
     <div className="detail-row finance-inline-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
       {editing && !disabled ? (
         mode === "select" ? (
           <select
