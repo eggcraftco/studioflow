@@ -2063,6 +2063,85 @@ function AppStoreDownload() {
   );
 }
 
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=uk.co.eggcraft.studioflow";
+
+function PlayStoreBadge() {
+  return (
+    <a
+      href={PLAY_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="public-appstore-btn"
+      aria-label="Get NivaDesk on Google Play"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+        <path d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z" />
+      </svg>
+      <span className="public-appstore-btn-text">
+        <small>Get it on</small>
+        <strong>Google Play</strong>
+      </span>
+    </a>
+  );
+}
+
+function PlayStoreDownload() {
+  const { t } = usePublicSiteLanguage();
+  const [qrOpen, setQrOpen] = useState(false);
+  useEffect(() => {
+    if (!qrOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQrOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [qrOpen]);
+  return (
+    <>
+      <div className="public-appstore-download">
+        <PlayStoreBadge />
+        <button type="button" className="public-appstore-qr-trigger" onClick={() => setQrOpen(true)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5z" />
+            <path d="M14 3h7v7h-7V3zm2 2v3h3V5h-3z" />
+            <path d="M3 14h7v7H3v-7zm2 2v3h3v-3H5z" />
+            <path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z" />
+          </svg>
+          {t("platform.android.scan")}
+        </button>
+      </div>
+      {qrOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setQrOpen(false)}>
+              <div
+                className="public-qr-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("platform.android.qrAlt")}
+                onClick={event => event.stopPropagation()}
+              >
+                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                <img src="/playstore-qr.png" alt={t("platform.android.qrAlt")} width={220} height={220} />
+                <p>{t("platform.android.scanHint")}</p>
+                <PlayStoreBadge />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
 function WebPortalLinks() {
   const { t } = usePublicSiteLanguage();
   return (
@@ -2115,7 +2194,7 @@ function PlatformNote() {
               <p>{t(platform.detailKey)}</p>
               {platform.kind === "apple" ? <AppStoreDownload /> : null}
               {platform.kind === "web" ? <WebPortalLinks /> : null}
-              {platform.kind === "android" ? <PlatformHintBanner kind="android" text={t("platform.android.hint")} /> : null}
+              {platform.kind === "android" ? <PlayStoreDownload /> : null}
               {platform.kind === "windows" ? <PlatformHintBanner kind="windows" text={t("platform.windows.hint")} /> : null}
             </article>
           ))}
