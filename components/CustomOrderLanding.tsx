@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
+import { PublicHeader } from "@/components/PublicMarketing";
 
 /* Standalone paid-ads landing page for NivaDesk.
    Intentionally separate from the main marketing shell: a slim header with one
@@ -116,14 +117,7 @@ export function CustomOrderLanding() {
   return (
     <div className="lp">
       <GoogleAdsTag />
-      <header className="lp-header">
-        <div className="lp-shell lp-header-inner">
-          <Link href="/" className="lp-brand" aria-label="NivaDesk home">
-            <img className="lp-brand-logo" src="/brand/nivadesk-logo.png" alt="NivaDesk" />
-          </Link>
-          <Link href="/signup" className="public-button" onClick={onStartTrialClick}>Start Free Trial</Link>
-        </div>
-      </header>
+      <PublicHeader hideLanguage />
 
       <main>
         {/* 1. HERO */}

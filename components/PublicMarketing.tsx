@@ -818,7 +818,7 @@ function PublicLanguageSelector() {
   );
 }
 
-function PublicHeader() {
+export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean } = {}) {
   const { user } = useAuth();
   const { t } = usePublicSiteLanguage();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -838,7 +838,7 @@ function PublicHeader() {
         </nav>
 
         <div className="public-header-actions">
-          <span className="public-header-lang-desktop"><PublicLanguageSelector /></span>
+          {hideLanguage ? null : <span className="public-header-lang-desktop"><PublicLanguageSelector /></span>}
           <Link href={user ? "/dashboard" : "/login"} className="public-button ghost public-header-login-desktop">
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
@@ -868,7 +868,7 @@ function PublicHeader() {
           <Link href={user ? "/dashboard" : "/login"} onClick={closeMenu}>
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
-          <div className="public-header-mobile-lang"><PublicLanguageSelector /></div>
+          {hideLanguage ? null : <div className="public-header-mobile-lang"><PublicLanguageSelector /></div>}
         </div>
       ) : null}
     </header>

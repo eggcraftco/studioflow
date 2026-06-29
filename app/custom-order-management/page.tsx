@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CustomOrderLanding } from "@/components/CustomOrderLanding";
+import { PublicSiteLanguageProvider } from "@/lib/publicSite/i18n";
 
 const TITLE = "Order management software for small custom-order businesses | NivaDesk";
 const DESCRIPTION =
@@ -23,5 +24,9 @@ export const metadata: Metadata = {
 };
 
 export default function CustomOrderManagementPage() {
-  return <CustomOrderLanding />;
+  return (
+    <PublicSiteLanguageProvider lockLanguage="English">
+      <CustomOrderLanding />
+    </PublicSiteLanguageProvider>
+  );
 }

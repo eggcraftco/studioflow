@@ -109,14 +109,26 @@ function getInitialPublicSiteLanguage() {
   }
 }
 
-export function PublicSiteLanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<StudioLanguage>("English");
+export function PublicSiteLanguageProvider({
+  children,
+  lockLanguage
+}: {
+  children: ReactNode;
+  // When set, the whole subtree is pinned to this language: no browser/stored
+  // auto-detection and the selector's setLanguage is a no-op. Used by the
+  // paid-ads landing page, whose body copy is English-only — so the header must
+  // stay English too rather than auto-translating for non-English browsers.
+  lockLanguage?: StudioLanguage;
+}) {
+  const [language, setLanguageState] = useState<StudioLanguage>(lockLanguage ?? "English");
 
   useEffect(() => {
+    if (lockLanguage) return;
     setLanguageState(getInitialPublicSiteLanguage());
-  }, []);
+  }, [lockLanguage]);
 
   const setLanguage = useCallback((nextLanguage: StudioLanguage | string) => {
+    if (lockLanguage) return;
     const normalized = normalizeStudioLanguage(nextLanguage);
     setLanguageState(normalized);
     try {
@@ -124,7 +136,7 @@ export function PublicSiteLanguageProvider({ children }: { children: ReactNode }
     } catch {
       // The selector still works for the current session if storage is unavailable.
     }
-  }, []);
+  }, [lockLanguage]);
 
   const dir = publicLanguageDir(language);
   const locale = PUBLIC_LANGUAGE_LOCALES[language];
