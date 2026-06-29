@@ -326,6 +326,181 @@ function LiveOnSiteCard() {
   );
 }
 
+type LandingDay = {
+  date: string;
+  views: number;
+  ctaClicks: number;
+  howItWorksClicks: number;
+  signupVisits: number;
+  signupsCompleted: number;
+};
+
+type LandingStats = {
+  ok: boolean;
+  days: LandingDay[];
+  totals: { views: number; ctaClicks: number; howItWorksClicks: number; signupVisits: number; signupsCompleted: number };
+  devices: Record<string, number>;
+  sources: Record<string, number>;
+};
+
+function landingRate(numerator: number, denominator: number): string {
+  if (!denominator) return "—";
+  return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
+
+function LandingMetricTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: 14, padding: "14px 16px", background: "var(--surface, #fff)" }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 950, marginTop: 4 }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 2 }}>{sub}</div> : null}
+    </div>
+  );
+}
+
+function AdminCustomOrderLandingSection() {
+  const [days, setDays] = useState<number>(30);
+  const [data, setData] = useState<LandingStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ days: number }, LandingStats>(functions, "getCustomOrderLandingStats");
+    callable({ days })
+      .then(result => { if (!cancelled) setData(result.data); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load landing-page statistics."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [days]);
+
+  const totals = data?.totals ?? { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0 };
+  const rangeDays = data?.days ?? [];
+  const deviceEntries = Object.entries(data?.devices ?? {}).sort((a, b) => b[1] - a[1]);
+  const sourceEntries = Object.entries(data?.sources ?? {}).sort((a, b) => b[1] - a[1]);
+  const deviceTotal = deviceEntries.reduce((sum, [, value]) => sum + value, 0);
+  const sourceTotal = sourceEntries.reduce((sum, [, value]) => sum + value, 0);
+
+  const rangeButton = (option: number, label: string) => (
+    <button
+      key={option}
+      type="button"
+      className="button"
+      onClick={() => setDays(option)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: 999,
+        fontSize: 13,
+        fontWeight: 700,
+        background: days === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        color: days === option ? "#fff" : "var(--text)"
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Custom Order Landing Page" />
+        <p className="muted-copy">
+          Anonymous, aggregate-only stats for <strong>/custom-order-management</strong>. No cookies or personal data —
+          event counts, device class and traffic source only.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0" }}>
+          {rangeButton(7, "Last 7 days")}
+          {rangeButton(30, "Last 30 days")}
+        </div>
+        {loading ? <p className="muted-copy" style={{ marginTop: 8 }}>Loading…</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{error}</p> : null}
+      </section>
+
+      {!loading && !error ? (
+        <>
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow={`Last ${days} days`} title="Key metrics" />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 10 }}>
+              <LandingMetricTile label="Landing page views" value={totals.views.toLocaleString()} />
+              <LandingMetricTile label="Start Free Trial clicks" value={totals.ctaClicks.toLocaleString()} />
+              <LandingMetricTile label="CTA click-through rate" value={landingRate(totals.ctaClicks, totals.views)} sub="clicks ÷ views" />
+              <LandingMetricTile label="See How It Works clicks" value={totals.howItWorksClicks.toLocaleString()} />
+              <LandingMetricTile label="Signup page visits" value={totals.signupVisits.toLocaleString()} sub="from this landing page" />
+              <LandingMetricTile label="Signups completed" value={totals.signupsCompleted.toLocaleString()} sub="from this landing page" />
+              <LandingMetricTile label="Landing → signup conversion" value={landingRate(totals.signupsCompleted, totals.views)} sub="completed ÷ views" />
+            </div>
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Daily" title={`Daily breakdown — last ${days} days`} />
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
+                    <th style={{ padding: "7px 8px" }}>Date</th>
+                    <th style={{ padding: "7px 8px" }}>Views</th>
+                    <th style={{ padding: "7px 8px" }}>CTA clicks</th>
+                    <th style={{ padding: "7px 8px" }}>How it works</th>
+                    <th style={{ padding: "7px 8px" }}>Signup visits</th>
+                    <th style={{ padding: "7px 8px" }}>Signups</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...rangeDays].reverse().map(day => (
+                    <tr key={day.date} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{day.date}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.views}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.ctaClicks}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.howItWorksClicks}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.signupVisits}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.signupsCompleted}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div className="site-stats-grid">
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Traffic" title="Device breakdown" />
+              {deviceEntries.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {deviceEntries.map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                      <span style={{ textTransform: "capitalize" }}>{key}</span>
+                      <span>{value.toLocaleString()} · {landingRate(value, deviceTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Traffic" title="Source / referrer" />
+              {sourceEntries.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {sourceEntries.map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                      <span style={{ textTransform: "capitalize" }}>{key}</span>
+                      <span>{value.toLocaleString()} · {landingRate(value, sourceTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function AdminSiteStatsSection() {
   const todayKey = new Date().toISOString().slice(0, 10);
   const [rangeMode, setRangeMode] = useState<number>(30); // 7 / 30 / 90, -1 = custom
@@ -2402,7 +2577,8 @@ type AdminHubPage =
   | "storage"
   | "lookup"
   | "sitestats"
-  | "searchconsole";
+  | "searchconsole"
+  | "customorderlanding";
 
 const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -2414,7 +2590,8 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "storage", label: "Storage" },
   { id: "lookup", label: "User Lookup" },
   { id: "sitestats", label: "Global Statistics" },
-  { id: "searchconsole", label: "Google Search" }
+  { id: "searchconsole", label: "Google Search" },
+  { id: "customorderlanding", label: "Custom Order Landing Page" }
 ];
 
 export function AdminInsightsHub() {
@@ -2446,6 +2623,7 @@ export function AdminInsightsHub() {
         {page === "lookup" ? <AdminUserLookupDetail onBack={goOverview} /> : null}
         {page === "sitestats" ? <AdminSiteStatsSection /> : null}
         {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
+        {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
       </div>
     </div>
   );

@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useRef } from "react";
+import { parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 
 /* Standalone paid-ads landing page for NivaDesk.
    Intentionally separate from the main marketing shell: a slim header with one
@@ -89,6 +93,25 @@ function FeatureIcon({ icon }: { icon: Feature["icon"] }) {
 }
 
 export function CustomOrderLanding() {
+  const sourceRef = useRef<string>("direct");
+
+  // Landing page view + traffic source (anonymous, aggregate-only).
+  useEffect(() => {
+    const source = parseLandingSource();
+    sourceRef.current = source;
+    trackLandingEvent("custom_order_landing_view", source);
+  }, []);
+
+  // Every "Start Free Trial" click is tracked and stamps an attribution marker
+  // (source only) so a later signup can be credited to this landing page.
+  const onStartTrialClick = () => {
+    setLandingAttribution(sourceRef.current);
+    trackLandingEvent("custom_order_landing_cta_click");
+  };
+  const onHowItWorksClick = () => {
+    trackLandingEvent("custom_order_landing_how_it_works_click");
+  };
+
   return (
     <div className="lp">
       <header className="lp-header">
@@ -96,7 +119,7 @@ export function CustomOrderLanding() {
           <Link href="/" className="lp-brand" aria-label="NivaDesk home">
             <img className="lp-brand-logo" src="/brand/nivadesk-logo.png" alt="NivaDesk" />
           </Link>
-          <Link href="/signup" className="public-button">Start Free Trial</Link>
+          <Link href="/signup" className="public-button" onClick={onStartTrialClick}>Start Free Trial</Link>
         </div>
       </header>
 
@@ -110,8 +133,8 @@ export function CustomOrderLanding() {
               NivaDesk helps small custom-order businesses manage clients, orders, files, payments and team tasks in one calm workspace.
             </p>
             <div className="lp-cta-row">
-              <Link href="/signup" className="public-button large">Start Free Trial</Link>
-              <a href="#how-it-works" className="public-button large ghost">See How It Works</a>
+              <Link href="/signup" className="public-button large" onClick={onStartTrialClick}>Start Free Trial</Link>
+              <a href="#how-it-works" className="public-button large ghost" onClick={onHowItWorksClick}>See How It Works</a>
             </div>
             <p className="lp-hero-trust">Built for small studios, workshops and service businesses.</p>
           </div>
@@ -181,7 +204,7 @@ export function CustomOrderLanding() {
             </div>
             <div className="lp-midcta">
               <p>Everything for one order — details, files, deposits and tasks — in one place.</p>
-              <Link href="/signup" className="public-button large">Start Free Trial</Link>
+              <Link href="/signup" className="public-button large" onClick={onStartTrialClick}>Start Free Trial</Link>
             </div>
           </div>
         </section>
@@ -258,7 +281,7 @@ export function CustomOrderLanding() {
               tasks and delivery progress together — and start for free.
             </p>
             <div className="lp-cta-row center">
-              <Link href="/signup" className="public-button large">Start Free Trial</Link>
+              <Link href="/signup" className="public-button large" onClick={onStartTrialClick}>Start Free Trial</Link>
             </div>
             <p className="lp-hero-trust">Built for small studios, workshops and service businesses.</p>
           </div>

@@ -10,6 +10,7 @@ import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
+import { clearLandingAttribution, getLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import {
   PLAN_ENTITLEMENTS,
@@ -2462,6 +2463,14 @@ export function PublicSignupPage() {
     const [honeypot, setHoneypot] = useState("");
     const [formStartedAt] = useState(() => Date.now());
 
+    // Count a signup-page visit only when the visitor arrived from the
+    // /custom-order-management landing page (attribution marker or referrer).
+    useEffect(() => {
+      const fromLanding = getLandingAttribution() !== null ||
+        (typeof document !== "undefined" && document.referrer.includes("/custom-order-management"));
+      if (fromLanding) trackLandingEvent("custom_order_landing_signup_visit");
+    }, []);
+
     async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
       event.preventDefault();
       setError(null);
@@ -2515,6 +2524,12 @@ export function PublicSignupPage() {
           fullName: cleanFullName,
           workspaceName: cleanWorkspaceName
         });
+        // Credit the completed signup to the landing page if this visitor came
+        // from it, then clear the marker so it is counted at most once.
+        if (getLandingAttribution() !== null) {
+          trackLandingEvent("custom_order_landing_signup_completed");
+          clearLandingAttribution();
+        }
         router.replace("/dashboard");
       } catch (signupError) {
         setError(signupErrorMessage(signupError, t));
