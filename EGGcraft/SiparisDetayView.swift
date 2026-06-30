@@ -1450,6 +1450,51 @@ struct SiparisDetayView: View {
     var financialExpenseItems: [CustomStepDTO] { if let data = financialExpenseItemsJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec.filter { isUsableFinancialExpenseTitle($0.title) } }; return [] }
     var financialRemainingItems: [CustomStepDTO] { if let data = financialRemainingItemsJSON.data(using: .utf8), let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) { return dec.filter { isUsableFinancialRemainingTitle($0.title) } }; return [] }
 
+    // Spending / Remaining headings are PER-ORDER: each order keeps its own list
+    // in customFields, seeded from the workspace template the first time it is
+    // edited. The workspace financialExpense/RemainingItemsJSON only seed new or
+    // not-yet-customised orders. Amounts stay keyed by title; renaming an item
+    // moves its amount key so the value follows the rename (see the editor save).
+    var orderExpenseItemsKey: String { "orderExpenseItemsJSON" }
+    var orderRemainingItemsKey: String { "orderRemainingItemsJSON" }
+    private func decodeOrderFinancialItems(_ raw: String?, usable: (String) -> Bool) -> [CustomStepDTO]? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+              let data = raw.data(using: .utf8),
+              let dec = try? JSONDecoder().decode([CustomStepDTO].self, from: data) else { return nil }
+        return dec.filter { usable($0.title) }
+    }
+    var orderExpenseItems: [CustomStepDTO] {
+        decodeOrderFinancialItems(siparis.customFields?[orderExpenseItemsKey], usable: isUsableFinancialExpenseTitle) ?? financialExpenseItems
+    }
+    var orderRemainingItems: [CustomStepDTO] {
+        decodeOrderFinancialItems(siparis.customFields?[orderRemainingItemsKey], usable: isUsableFinancialRemainingTitle) ?? financialRemainingItems
+    }
+    // Persist a per-order spending/remaining list edit onto the order. Amounts are
+    // keyed by title, so when an item is renamed (same id, new title) its stored
+    // amount is moved to the new key — the value follows the rename, per order.
+    private func saveOrderFinancialItems(newJSON: String, key: String, amountPrefix: String, workspaceItems: [CustomStepDTO]) {
+        var current = siparis.customFields ?? [:]
+        let oldItems = decodeOrderFinancialItems(current[key], usable: { _ in true }) ?? workspaceItems
+        let newItems = (try? JSONDecoder().decode([CustomStepDTO].self, from: Data(newJSON.utf8))) ?? []
+        let oldTitleByID = Dictionary(oldItems.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+        for item in newItems {
+            guard let oldTitle = oldTitleByID[item.id], oldTitle != item.title else { continue }
+            let oldKey = amountPrefix + oldTitle
+            let newKey = amountPrefix + item.title
+            if let amount = current[oldKey] {
+                current[newKey] = amount
+                current.removeValue(forKey: oldKey)
+            }
+        }
+        if newJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            current.removeValue(forKey: key)
+        } else {
+            current[key] = newJSON
+        }
+        siparis.customFields = current
+        if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
+    }
+
     @ViewBuilder
     private var orderDetailHeader: some View {
         #if os(iOS)
@@ -2017,6 +2062,14 @@ struct SiparisDetayView: View {
                         siparis.customFields = current
                         if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
                     }
+                ),
+                orderFinancialExpenseItemsJSON: Binding(
+                    get: { siparis.customFields?[orderExpenseItemsKey] ?? "" },
+                    set: { newValue in saveOrderFinancialItems(newJSON: newValue, key: orderExpenseItemsKey, amountPrefix: "financialExpense::", workspaceItems: financialExpenseItems) }
+                ),
+                orderFinancialRemainingItemsJSON: Binding(
+                    get: { siparis.customFields?[orderRemainingItemsKey] ?? "" },
+                    set: { newValue in saveOrderFinancialItems(newJSON: newValue, key: orderRemainingItemsKey, amountPrefix: "financialRemaining::", workspaceItems: financialRemainingItems) }
                 )
             )
         }
@@ -9406,11 +9459,11 @@ struct SiparisDetayView: View {
     }
 
     private var customExpenseTotal: Double {
-        customFinancialTotal(prefix: "financialExpense::", items: financialExpenseItems)
+        customFinancialTotal(prefix: "financialExpense::", items: orderExpenseItems)
     }
 
     private var customRemainingTotal: Double {
-        customFinancialTotal(prefix: "financialRemaining::", items: financialRemainingItems)
+        customFinancialTotal(prefix: "financialRemaining::", items: orderRemainingItems)
     }
 
     private var outstandingPaymentTotal: Double {
@@ -9461,7 +9514,7 @@ struct SiparisDetayView: View {
         if markFinal {
             updatedOrder.remainingAmount = 0
             var currentFields = updatedOrder.customFields ?? [:]
-            for item in financialRemainingItems {
+            for item in orderRemainingItems {
                 let key = financialCustomKey(prefix: "financialRemaining::", title: item.title)
                 if currentFields[key] != nil { currentFields[key] = "0" }
             }
@@ -9758,8 +9811,8 @@ struct SiparisDetayView: View {
             "Payment Method"
         ]
 
-        titles.append(contentsOf: financialRemainingItems.map { $0.title })
-        titles.append(contentsOf: financialExpenseItems.map { $0.title })
+        titles.append(contentsOf: orderRemainingItems.map { $0.title })
+        titles.append(contentsOf: orderExpenseItems.map { $0.title })
         titles.append(contentsOf: [
             "Platform Fee",
             "Shipping Cost",
@@ -9843,8 +9896,8 @@ struct SiparisDetayView: View {
                 CurrencyField(label: t("Remaining", lang: seciliDil), value: $siparis.remainingAmount, sembol: seciliParaBirimi, ondalik: seciliOndalik, onCommit: { seedInitialRemainingLogIfNeeded() })
                     .onChange(of: siparis.remainingAmount) { _, _ in otomatikKesintiHesapla() }
 
-                if !financialRemainingItems.isEmpty {
-                    ForEach(financialRemainingItems, id: \.id) { item in
+                if !orderRemainingItems.isEmpty {
+                    ForEach(orderRemainingItems, id: \.id) { item in
                         CurrencyField(
                             label: t(item.title, lang: seciliDil),
                             value: customCurrencyBinding(prefix: "financialRemaining::", title: item.title),
@@ -9900,8 +9953,8 @@ struct SiparisDetayView: View {
                 }
                 demoFinancialLockedSummary(demoFinancialLockedFieldTitles)
             } else {
-                if !financialExpenseItems.isEmpty {
-                    ForEach(financialExpenseItems, id: \.id) { item in
+                if !orderExpenseItems.isEmpty {
+                    ForEach(orderExpenseItems, id: \.id) { item in
                         CurrencyField(
                             label: t(item.title, lang: seciliDil),
                             value: customCurrencyBinding(prefix: "financialExpense::", title: item.title),
@@ -13364,6 +13417,12 @@ struct BlockHeadingsEditorSheet: View {
     @Binding var communicationChannelLabelsJSON: String
     @Binding var specialNoteSectionsJSON: String
     var orderExtraNoteSectionsJSON: Binding<String>? = nil
+    // When set (the editor is opened from an order), the Spending / Cost and
+    // Remaining / Pending heading lists are edited PER-ORDER: loaded from these
+    // bindings (seeded from the workspace template when empty) and saved back to
+    // them instead of to the shared workspace setting.
+    var orderFinancialExpenseItemsJSON: Binding<String>? = nil
+    var orderFinancialRemainingItemsJSON: Binding<String>? = nil
 
     @State private var perOrderOriginIDs: Set<UUID> = []
     @State private var companyNumbersDraft: [CompanyNumberSettingDTO] = []
@@ -14372,10 +14431,20 @@ private var notesSupplierEditor: some View {
 
             financialShowBaseCostDraft = financialShowBaseCost
             financialBaseCostLabelDraft = financialBaseCostLabel
-            editableItems = decodeItems(from: financialExpenseItemsJSON)
+
+            // Per-order spending / remaining lists when opened from an order: use
+            // the order's own list, seeding from the workspace template the first
+            // time (so an un-customised order still shows the shared headings).
+            let expenseSource = orderFinancialExpenseItemsJSON.map {
+                $0.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? financialExpenseItemsJSON : $0.wrappedValue
+            } ?? financialExpenseItemsJSON
+            editableItems = decodeItems(from: expenseSource)
                 .filter { isUsableFinancialExpenseTitle($0.title) }
 
-            editableToggleItems = decodeItems(from: financialRemainingItemsJSON)
+            let remainingSource = orderFinancialRemainingItemsJSON.map {
+                $0.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? financialRemainingItemsJSON : $0.wrappedValue
+            } ?? financialRemainingItemsJSON
+            editableToggleItems = decodeItems(from: remainingSource)
                 .filter { isUsableFinancialRemainingTitle($0.title) }
 
             return
@@ -14520,9 +14589,22 @@ private var notesSupplierEditor: some View {
             financialShowBaseCost = financialShowBaseCostDraft
             let cleanedBaseLabel = cleaned(financialBaseCostLabelDraft)
             financialBaseCostLabel = cleanedBaseLabel.isEmpty ? "Cost (Base)" : cleanedBaseLabel
-            financialExpenseItemsJSON = encodeItems(editableItems)
-            financialRemainingItemsJSON = encodeItems(editableToggleItems)
-            syncEditedSettingsToCloud()
+
+            if let expenseBinding = orderFinancialExpenseItemsJSON, let remainingBinding = orderFinancialRemainingItemsJSON {
+                // Per-order: write the lists onto the order via the bindings (whose
+                // setters persist them and move the matching amount keys on rename).
+                // Only the base-cost label / toggle stay workspace-wide.
+                expenseBinding.wrappedValue = encodeItems(editableItems)
+                remainingBinding.wrappedValue = encodeItems(editableToggleItems)
+                Firestore.firestore()
+                    .collection("companySettings")
+                    .document(firebaseManager.currentCompanyId)
+                    .setData(["financialShowBaseCost": financialShowBaseCost, "financialBaseCostLabel": financialBaseCostLabel], merge: true)
+            } else {
+                financialExpenseItemsJSON = encodeItems(editableItems)
+                financialRemainingItemsJSON = encodeItems(editableToggleItems)
+                syncEditedSettingsToCloud()
+            }
             return
         }
 

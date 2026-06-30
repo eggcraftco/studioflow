@@ -165,6 +165,22 @@ struct DashboardView: View {
         }
     }
 
+    // Per-order spending/remaining headings: each order keeps its own list in
+    // customFields (falling back to the workspace template). Matches the order
+    // detail so the amounts — keyed by the order's own titles — resolve correctly.
+    private func orderFinancialItems(for siparis: Siparis, key: String, workspace: [DashboardFinancialItemDTO]) -> [DashboardFinancialItemDTO] {
+        if let raw = siparis.customFields?[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+           let data = raw.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([DashboardFinancialItemDTO].self, from: data) {
+            let filtered = decoded.filter { item in
+                let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !title.isEmpty && !isAutoFinancialPlaceholder(title)
+            }
+            if !filtered.isEmpty { return filtered }
+        }
+        return workspace
+    }
+
     private func isAutoFinancialPlaceholder(_ title: String) -> Bool {
         if title.hasPrefix("Cost ") {
             let numberPart = title.dropFirst("Cost ".count)
@@ -291,9 +307,8 @@ struct DashboardView: View {
     }
 
     private var extraSpendingEntries: [DashboardExtraSpendingEntry] {
-        let headings = financialExpenseItems
-
         return ordersForSpendingScope(extraSpendingScope).flatMap { siparis in
+            let headings = orderFinancialItems(for: siparis, key: "orderExpenseItemsJSON", workspace: financialExpenseItems)
             let customEntries = headings.compactMap { item -> DashboardExtraSpendingEntry? in
                 let amount = customFinancialAmountValue(for: siparis, prefix: "financialExpense::", title: item.title)
                 guard amount > 0 else { return nil }
@@ -430,11 +445,11 @@ struct DashboardView: View {
 
 
     private func customExpenseTotal(for siparis: Siparis) -> Double {
-        customFinancialAmount(for: siparis, prefix: "financialExpense::", items: financialExpenseItems)
+        customFinancialAmount(for: siparis, prefix: "financialExpense::", items: orderFinancialItems(for: siparis, key: "orderExpenseItemsJSON", workspace: financialExpenseItems))
     }
 
     private func customPendingTotal(for siparis: Siparis) -> Double {
-        customFinancialAmount(for: siparis, prefix: "financialRemaining::", items: financialRemainingItems)
+        customFinancialAmount(for: siparis, prefix: "financialRemaining::", items: orderFinancialItems(for: siparis, key: "orderRemainingItemsJSON", workspace: financialRemainingItems))
     }
 
     private func baseCostTotal(for siparis: Siparis) -> Double {
