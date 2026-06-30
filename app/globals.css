@@ -8566,6 +8566,23 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   border: 1.5px solid var(--accent);
 }
 
+/* The editable label/input must match its sibling row labels, not the row's
+   default font. The originals are styled via `.app-value-row > span` (a child
+   combinator that can't reach the button's inner span) and the descendant
+   `.detail-row span`, so re-apply the same typography to the button + input. */
+.app-value-row > .app-inline-label,
+.app-value-row > .app-inline-label-input {
+  color: #858990;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.detail-row > .app-inline-label,
+.detail-row > .app-inline-label-input {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .app-value-row {
   display: grid;
   grid-template-columns: minmax(104px, 0.62fr) minmax(0, 1fr);
