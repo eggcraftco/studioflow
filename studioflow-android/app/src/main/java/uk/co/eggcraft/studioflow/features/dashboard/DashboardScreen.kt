@@ -1219,9 +1219,9 @@ private fun ExtraSpendingSummarySection(
         spendingDateRange(scope, customStartMs, customEndMs)
     }
 
-    val customTitles: List<StudioHeadingItem> = workspaceSettings.financialExpenseItems
+    val workspaceExpenseTitles: List<StudioHeadingItem> = workspaceSettings.financialExpenseItems
 
-    val groups: List<ExtraSpendingGroup> = remember(orders, rangeStart, rangeEnd, incBase, incShipping, incFee, incTax, customTitles) {
+    val groups: List<ExtraSpendingGroup> = remember(orders, rangeStart, rangeEnd, incBase, incShipping, incFee, incTax, workspaceExpenseTitles) {
         val list = mutableListOf<ExtraSpendingGroup>()
         for (o in orders) {
             val pd = o.paymentDate
@@ -1234,7 +1234,8 @@ private fun ExtraSpendingSummarySection(
             if (incShipping) add("Shipping", "Delivery cost", o.deliveryCost)
             if (incFee) add("Platform Fee", "Payment fee", o.paymentFee)
             if (incTax) add("Tax", "VAT / Tax", o.taxAmount)
-            for (item in customTitles) {
+            // Per-order spending headings (fall back to the workspace template).
+            for (item in dashboardOrderExpenseTitles(o, workspaceExpenseTitles)) {
                 val raw = o.customFields["financialExpense::${item.title}"]
                     ?: o.customFields["financialExpense::${item.id}"]
                 val amount = raw?.replace(",", "")?.toDoubleOrNull() ?: 0.0
@@ -1472,6 +1473,23 @@ private fun MetricBox(label: String, value: String, modifier: Modifier = Modifie
     ) {
         Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
         Text(value, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+// Per-order spending headings for dashboard aggregation: an order's own list
+// (customFields.orderExpenseItemsJSON) if it has one, otherwise the workspace template.
+private fun dashboardOrderExpenseTitles(order: StudioOrder, workspace: List<StudioHeadingItem>): List<StudioHeadingItem> {
+    val raw = order.customFields["orderExpenseItemsJSON"]?.trim().orEmpty()
+    if (raw.isEmpty()) return workspace
+    return try {
+        val arr = org.json.JSONArray(raw)
+        (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+            val title = obj.optString("title").trim()
+            if (title.isBlank()) null else StudioHeadingItem(obj.optString("id").trim().ifBlank { title }, title)
+        }
+    } catch (_: Throwable) {
+        workspace
     }
 }
 

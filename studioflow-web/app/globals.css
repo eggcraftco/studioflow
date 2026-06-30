@@ -8970,6 +8970,52 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   align-items: center;
 }
 
+.finance-value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.finance-value-wrap > select,
+.finance-value-wrap > .finance-value-pill,
+.finance-value-wrap > .finance-inline-form {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.finance-heading-remove {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: #d23b3b;
+  opacity: 0.55;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.finance-heading-remove:hover {
+  opacity: 1;
+}
+
+.finance-heading-add {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--accent, #2f6df6);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 2px 0;
+  margin: 0;
+}
+
+.finance-heading-add:hover {
+  text-decoration: underline;
+}
+
 .app-financial-panel .detail-row {
   border-bottom: 0;
 }

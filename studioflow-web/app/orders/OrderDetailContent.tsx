@@ -73,7 +73,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
-import { decodeFinancialItems } from "@/lib/studioflow/finance";
+import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
@@ -3682,6 +3682,43 @@ export function OrderDetailContent({
     }
   }
 
+  // Per-order spending / remaining headings. The list lives on the order
+  // (customFields.orderExpenseItemsJSON / orderRemainingItemsJSON); renaming keeps the
+  // id so the backend moves the keyed amount, removing clears it.
+  function orderExpenseHeadings(): FinancialItemWithId[] {
+    return decodeOrderFinancialItems(order, "orderExpenseItemsJSON", moneySettings?.financialExpenseItemsJSON ?? "");
+  }
+  function orderRemainingHeadings(): FinancialItemWithId[] {
+    return decodeOrderFinancialItems(order, "orderRemainingItemsJSON", moneySettings?.financialRemainingItemsJSON ?? "");
+  }
+  function nextFinancialDefaultTitle(items: FinancialItemWithId[], base: string): string {
+    const titles = new Set(items.map(it => it.title.toLowerCase()));
+    if (!titles.has(base.toLowerCase())) return base;
+    let n = 2;
+    while (titles.has(`${base} ${n}`.toLowerCase())) n += 1;
+    return `${base} ${n}`;
+  }
+  function saveOrderHeadingList(key: "orderExpenseItemsJSON" | "orderRemainingItemsJSON", items: FinancialItemWithId[], label: string) {
+    const json = JSON.stringify(items.map(it => ({ id: it.id, title: it.title })));
+    void saveDetailsPatch({ customFields: { [key]: json } }, label);
+  }
+  function renameOrderHeading(key: "orderExpenseItemsJSON" | "orderRemainingItemsJSON", items: FinancialItemWithId[], id: string, newTitle: string) {
+    const cleaned = newTitle.trim();
+    if (!cleaned) return;
+    saveOrderHeadingList(key, items.map(it => (it.id === id ? { ...it, title: cleaned } : it)), "Financial headings");
+  }
+  function addOrderHeading(key: "orderExpenseItemsJSON" | "orderRemainingItemsJSON", items: FinancialItemWithId[], base: string) {
+    saveOrderHeadingList(key, [...items, { id: webHeadingId(), title: nextFinancialDefaultTitle(items, base) }], "Financial headings");
+  }
+  function removeOrderHeading(key: "orderExpenseItemsJSON" | "orderRemainingItemsJSON", items: FinancialItemWithId[], id: string) {
+    saveOrderHeadingList(key, items.filter(it => it.id !== id), "Financial headings");
+  }
+  function saveOrderBaseCostLabel(value: string) {
+    const cleaned = value.trim();
+    if (!cleaned) return;
+    void saveDetailsPatch({ customFields: { orderBaseCostLabel: cleaned } }, "Base cost heading");
+  }
+
   async function renameStatusStep(index: number, newTitle: string) {
     if (!blockHeadingSettings) return;
     const cleaned = newTitle.trim();
@@ -5232,9 +5269,9 @@ export function OrderDetailContent({
                     />
                     <div className="app-card-divider" />
                     <FinanceInlineRow
-                      label={cardLabels.financialBaseCostLabel}
-                      labelRaw={cardLabels.financialBaseCostLabel}
-                      onLabelSave={canInlineEditFinance ? value => saveCardLabel("financialBaseCostLabel", value) : undefined}
+                      label={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
+                      labelRaw={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
+                      onLabelSave={canInlineEditFinance ? value => saveOrderBaseCostLabel(value) : undefined}
                       displayValue={money(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
@@ -5260,36 +5297,58 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Shipping Cost"}
                       onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
                     />
-                    {decodeFinancialItems(moneySettings?.financialExpenseItemsJSON ?? "").map(item => {
-                      const amount = Number(String(order.customFields[`financialExpense::${item.title}`] ?? "").replace(/,/g, "")) || 0;
-                      return (
-                        <FinanceInlineRow
-                          key={`expense-${item.title}`}
-                          label={item.title}
-                          displayValue={money(amount, hideNumbers)}
-                          value={amount}
-                          tone="negative"
-                          disabled={!canInlineEditFinance}
-                          saving={savingFinanceField === `Expense: ${item.title}`}
-                          onSave={value => saveCustomFinanceValue("expense", item.title, value, `Expense: ${item.title}`)}
-                        />
-                      );
-                    })}
-                    {decodeFinancialItems(moneySettings?.financialRemainingItemsJSON ?? "").map(item => {
-                      const amount = Number(String(order.customFields[`financialRemaining::${item.title}`] ?? "").replace(/,/g, "")) || 0;
-                      return (
-                        <FinanceInlineRow
-                          key={`remaining-${item.title}`}
-                          label={item.title}
-                          displayValue={money(amount, hideNumbers)}
-                          value={amount}
-                          tone="negative-soft"
-                          disabled={!canInlineEditFinance}
-                          saving={savingFinanceField === `Remaining: ${item.title}`}
-                          onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
-                        />
-                      );
-                    })}
+                    {(() => {
+                      const expenseHeadings = orderExpenseHeadings();
+                      return expenseHeadings.map(item => {
+                        const amount = Number(String(order.customFields[`financialExpense::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                        return (
+                          <FinanceInlineRow
+                            key={`expense-${item.id}`}
+                            label={item.title}
+                            labelRaw={item.title}
+                            onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderExpenseItemsJSON", expenseHeadings, item.id, value) : undefined}
+                            onRemove={canInlineEditFinance ? () => removeOrderHeading("orderExpenseItemsJSON", expenseHeadings, item.id) : undefined}
+                            displayValue={money(amount, hideNumbers)}
+                            value={amount}
+                            tone="negative"
+                            disabled={!canInlineEditFinance}
+                            saving={savingFinanceField === `Expense: ${item.title}`}
+                            onSave={value => saveCustomFinanceValue("expense", item.title, value, `Expense: ${item.title}`)}
+                          />
+                        );
+                      });
+                    })()}
+                    {canInlineEditFinance ? (
+                      <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderExpenseItemsJSON", orderExpenseHeadings(), "Spending")}>
+                        + Spending
+                      </button>
+                    ) : null}
+                    {(() => {
+                      const remainingHeadings = orderRemainingHeadings();
+                      return remainingHeadings.map(item => {
+                        const amount = Number(String(order.customFields[`financialRemaining::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                        return (
+                          <FinanceInlineRow
+                            key={`remaining-${item.id}`}
+                            label={item.title}
+                            labelRaw={item.title}
+                            onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id, value) : undefined}
+                            onRemove={canInlineEditFinance ? () => removeOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id) : undefined}
+                            displayValue={money(amount, hideNumbers)}
+                            value={amount}
+                            tone="negative-soft"
+                            disabled={!canInlineEditFinance}
+                            saving={savingFinanceField === `Remaining: ${item.title}`}
+                            onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
+                          />
+                        );
+                      });
+                    })()}
+                    {canInlineEditFinance ? (
+                      <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderRemainingItemsJSON", orderRemainingHeadings(), "Remaining")}>
+                        + Remaining
+                      </button>
+                    ) : null}
                     <div className="app-card-divider" />
                     <FinanceInlineRow
                       label="VAT Rule"
@@ -6947,6 +7006,25 @@ export function OrderDetailContent({
         onSaveCompanyNumbers={numbers => {
           if (moneySettings) void savePdfExportSettings(workspace, pdfInputFrom(moneySettings, numbers));
         }}
+        orderExpenseItemsRaw={order.customFields.orderExpenseItemsJSON ?? ""}
+        orderRemainingItemsRaw={order.customFields.orderRemainingItemsJSON ?? ""}
+        workspaceExpenseItemsJSON={moneySettings?.financialExpenseItemsJSON ?? ""}
+        workspaceRemainingItemsJSON={moneySettings?.financialRemainingItemsJSON ?? ""}
+        orderFinancialBaseCostLabel={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
+        onSavePerOrderFinancial={(expense, remaining, baseLabel, showBaseCost, setAsDefault) => {
+          void saveDetailsPatch({ customFields: {
+            orderExpenseItemsJSON: JSON.stringify(expense.map(it => ({ id: it.id, title: it.title }))),
+            orderRemainingItemsJSON: JSON.stringify(remaining.map(it => ({ id: it.id, title: it.title }))),
+            orderBaseCostLabel: baseLabel.trim() || "Cost (Base)"
+          } }, "Financial headings");
+          const workspacePayload: Record<string, unknown> = { financialShowBaseCost: showBaseCost };
+          if (setAsDefault) {
+            workspacePayload.financialExpenseItemsJSON = JSON.stringify(expense.map(it => ({ id: it.id, title: it.title })));
+            workspacePayload.financialRemainingItemsJSON = JSON.stringify(remaining.map(it => ({ id: it.id, title: it.title })));
+            workspacePayload.financialBaseCostLabel = baseLabel.trim() || "Cost (Base)";
+          }
+          void setDoc(doc(db, "companySettings", workspace.id), workspacePayload, { merge: true });
+        }}
         onClose={() => setHeadingEditorCardId(null)}
         onSaved={settings => {
           setBlockHeadingSettings(settings);
@@ -7490,6 +7568,12 @@ function BlockHeadingsModal({
   onSavePerOrderExtraNoteSections,
   companyNumbers,
   onSaveCompanyNumbers,
+  orderExpenseItemsRaw,
+  orderRemainingItemsRaw,
+  workspaceExpenseItemsJSON,
+  workspaceRemainingItemsJSON,
+  orderFinancialBaseCostLabel,
+  onSavePerOrderFinancial,
   onClose,
   onSaved
 }: {
@@ -7501,6 +7585,12 @@ function BlockHeadingsModal({
   onSavePerOrderExtraNoteSections?: (next: HeadingItem[]) => void;
   companyNumbers?: CompanyNumberSetting[];
   onSaveCompanyNumbers?: (numbers: CompanyNumberSetting[]) => void;
+  orderExpenseItemsRaw?: string;
+  orderRemainingItemsRaw?: string;
+  workspaceExpenseItemsJSON?: string;
+  workspaceRemainingItemsJSON?: string;
+  orderFinancialBaseCostLabel?: string;
+  onSavePerOrderFinancial?: (expense: FinancialItemWithId[], remaining: FinancialItemWithId[], baseLabel: string, showBaseCost: boolean, setAsDefault: boolean) => void;
   onClose: () => void;
   onSaved?: (settings: BlockHeadingSettings) => void;
 }) {
@@ -7511,6 +7601,7 @@ function BlockHeadingsModal({
   const [error, setError] = useState("");
   const [originalPerOrderIds, setOriginalPerOrderIds] = useState<Set<string>>(new Set());
   const [originalGlobalIds, setOriginalGlobalIds] = useState<Set<string>>(new Set());
+  const [financialSetAsDefault, setFinancialSetAsDefault] = useState(false);
 
   const supported = Boolean(cardId && WEB_BLOCK_HEADING_CARD_IDS.has(cardId));
 
@@ -7546,6 +7637,17 @@ function BlockHeadingsModal({
           } else {
             setOriginalGlobalIds(new Set());
           }
+          if (activeCardId === "financial") {
+            // Seed the lists + base label from THIS order (fall back to the workspace
+            // template). financialShowBaseCost stays the workspace value just loaded.
+            prepared = {
+              ...prepared,
+              financialExpenseItems: decodeOrderFinancialItemsFromRaw(orderExpenseItemsRaw ?? "", workspaceExpenseItemsJSON ?? ""),
+              financialRemainingItems: decodeOrderFinancialItemsFromRaw(orderRemainingItemsRaw ?? "", workspaceRemainingItemsJSON ?? ""),
+              financialBaseCostLabel: (orderFinancialBaseCostLabel ?? "").trim() || prepared.financialBaseCostLabel
+            };
+            setFinancialSetAsDefault(false);
+          }
           setSettings(prepared);
         }
       } catch (loadError) {
@@ -7559,7 +7661,7 @@ function BlockHeadingsModal({
     return () => {
       cancelled = true;
     };
-  }, [cardId, supported, workspace, perOrderExtraNoteSections]);
+  }, [cardId, supported, workspace, perOrderExtraNoteSections, orderExpenseItemsRaw, orderRemainingItemsRaw, workspaceExpenseItemsJSON, workspaceRemainingItemsJSON, orderFinancialBaseCostLabel]);
 
   if (!cardId) return null;
 
@@ -7602,6 +7704,19 @@ function BlockHeadingsModal({
 
     setSaving(true);
     try {
+      if (activeCardId === "financial" && onSavePerOrderFinancial) {
+        // Financial headings are per-order: write them onto the order. Only when
+        // "Set as default" is ticked do they also become the new-order template.
+        onSavePerOrderFinancial(
+          (settings.financialExpenseItems ?? []).map(item => ({ id: item.id, title: item.title })),
+          (settings.financialRemainingItems ?? []).map(item => ({ id: item.id, title: item.title })),
+          (settings.financialBaseCostLabel ?? "").trim() || "Cost (Base)",
+          Boolean(settings.financialShowBaseCost),
+          financialSetAsDefault
+        );
+        onClose();
+        return;
+      }
       let settingsToSave = settings;
       let perOrderToSave: HeadingItem[] | null = null;
       if (activeCardId === "notes" && onSavePerOrderExtraNoteSections) {
@@ -7741,6 +7856,16 @@ function BlockHeadingsModal({
               {renderList("Extra spending headings", "financialExpenseItems", "Spending")}
             </section>
             {renderList("Remaining / Pending headings", "financialRemainingItems", "Remaining")}
+            <label className="block-heading-toggle">
+              <input
+                type="checkbox"
+                checked={financialSetAsDefault}
+                disabled={saving || !canSave}
+                onChange={event => setFinancialSetAsDefault(event.target.checked)}
+              />
+              <span>Set as default for new orders</span>
+            </label>
+            <p className="muted-copy">These spending and remaining headings apply to this order. New orders keep the workspace default unless you tick the box above.</p>
           </>
         );
       case "materials":
@@ -8576,7 +8701,8 @@ function FinanceInlineRow({
   saving,
   onSave,
   labelRaw,
-  onLabelSave
+  onLabelSave,
+  onRemove
 }: {
   label: string;
   displayValue: string;
@@ -8589,6 +8715,7 @@ function FinanceInlineRow({
   onSave: (value: string | number) => Promise<void> | void;
   labelRaw?: string;
   onLabelSave?: (value: string) => Promise<void> | void;
+  onRemove?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
@@ -8630,67 +8757,82 @@ function FinanceInlineRow({
     setEditing(true);
   }
 
+  const valueContent = editing && !disabled ? (
+    mode === "select" ? (
+      <select
+        className={["finance-inline-input", toneClass(tone)].filter(Boolean).join(" ")}
+        autoFocus
+        value={draft}
+        disabled={saving}
+        onBlur={() => setEditing(false)}
+        onChange={async event => {
+          setDraft(event.target.value);
+          setEditing(false);
+          await onSave(event.target.value);
+        }}
+        onKeyDown={event => {
+          if (event.key === "Escape") cancelEdit();
+        }}
+      >
+        {options.map(option => <option key={option} value={option}>{option}</option>)}
+      </select>
+    ) : (
+      <form
+        className="finance-inline-form"
+        onSubmit={async event => {
+          event.preventDefault();
+          await submit();
+        }}
+      >
+        <input
+          className={["finance-inline-input", toneClass(tone)].filter(Boolean).join(" ")}
+          type="number"
+          min="0"
+          step="0.01"
+          autoFocus
+          value={draft}
+          disabled={saving}
+          onBlur={saveOnBlur}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === "Escape") cancelEdit();
+            if (event.key === "Enter" || event.code === "NumpadEnter") {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+        />
+      </form>
+    )
+  ) : (
+    <button
+      className={["finance-value-pill", toneClass(tone)].filter(Boolean).join(" ")}
+      type="button"
+      disabled={disabled || saving}
+      onClick={startEditing}
+      title={disabled ? "This field is read-only for your role or plan." : "Click to edit"}
+    >
+      {saving ? "Saving..." : displayValue}
+    </button>
+  );
+
   return (
     <div className="detail-row finance-inline-row">
       <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
-      {editing && !disabled ? (
-        mode === "select" ? (
-          <select
-            className={["finance-inline-input", toneClass(tone)].filter(Boolean).join(" ")}
-            autoFocus
-            value={draft}
-            disabled={saving}
-            onBlur={() => setEditing(false)}
-            onChange={async event => {
-              setDraft(event.target.value);
-              setEditing(false);
-              await onSave(event.target.value);
-            }}
-            onKeyDown={event => {
-              if (event.key === "Escape") cancelEdit();
-            }}
+      {onRemove && !disabled ? (
+        <div className="finance-value-wrap">
+          {valueContent}
+          <button
+            type="button"
+            className="finance-heading-remove"
+            onClick={onRemove}
+            title="Remove heading"
+            aria-label="Remove heading"
           >
-            {options.map(option => <option key={option} value={option}>{option}</option>)}
-          </select>
-        ) : (
-          <form
-            className="finance-inline-form"
-            onSubmit={async event => {
-              event.preventDefault();
-              await submit();
-            }}
-          >
-            <input
-              className={["finance-inline-input", toneClass(tone)].filter(Boolean).join(" ")}
-              type="number"
-              min="0"
-              step="0.01"
-              autoFocus
-              value={draft}
-            disabled={saving}
-            onBlur={saveOnBlur}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Escape") cancelEdit();
-              if (event.key === "Enter" || event.code === "NumpadEnter") {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-          />
-          </form>
-        )
-      ) : (
-        <button
-          className={["finance-value-pill", toneClass(tone)].filter(Boolean).join(" ")}
-          type="button"
-          disabled={disabled || saving}
-          onClick={startEditing}
-          title={disabled ? "This field is read-only for your role or plan." : "Click to edit"}
-        >
-          {saving ? "Saving..." : displayValue}
-        </button>
-      )}
+            −
+          </button>
+        </div>
+      ) : valueContent}
     </div>
   );
 }

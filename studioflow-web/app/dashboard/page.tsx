@@ -979,7 +979,10 @@ function ExtraSpendingSection({
       if (incShipping) push(t("Shipping"), t("Delivery cost"), o.deliveryCost);
       if (incFee) push(t("Platform Fee"), t("Payment fee"), o.paymentFee);
       if (incTax) push(t("Tax"), t("VAT / Tax"), o.taxAmount);
-      for (const title of customTitles) {
+      // Per-order spending headings (this order's own list, else workspace template).
+      const orderExpenseRaw = (o.customFields["orderExpenseItemsJSON"] ?? "").trim();
+      const titlesForOrder = orderExpenseRaw ? parseCustomExpenseTitles(orderExpenseRaw) : customTitles;
+      for (const title of titlesForOrder) {
         const raw = o.customFields[`financialExpense::${title}`];
         const amount = raw ? parseFloat(raw.replace(/,/g, "")) : 0;
         if (!Number.isNaN(amount) && amount > 0) {

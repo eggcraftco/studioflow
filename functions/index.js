@@ -6406,8 +6406,14 @@ exports.exportOrders = onCall({ region: "europe-west2" }, async (request) => {
       const baseCost = showBaseCost ? exportNumberValue(o.watchPurchasePrice) : 0;
       const customFields = o.customFields && typeof o.customFields === "object" ? o.customFields : {};
       let customExpenses = 0;
-      for (const item of expenseItems) {
-        customExpenses += exportFinancialAmount(customFields[`financialExpense::${item.title}`], currency);
+      // Prefer this order's own per-order spending headings; fall back to the
+      // workspace template for orders that were never customised.
+      const orderExpenseTitles = orderHeadingTitleList(customFields.orderExpenseItemsJSON);
+      const expenseTitlesForOrder = orderExpenseTitles.length > 0
+        ? orderExpenseTitles
+        : expenseItems.map((item) => item.title);
+      for (const expenseTitle of expenseTitlesForOrder) {
+        customExpenses += exportFinancialAmount(customFields[`financialExpense::${expenseTitle}`], currency);
       }
       const paymentFee = exportNumberValue(o.paymentFee);
       const deliveryCost = exportNumberValue(o.deliveryCost);
@@ -8293,6 +8299,31 @@ function webFinanceTaxAmount({ paidAmount, remainingAmount, watchPurchasePrice, 
   return roundMoneyValue((orderValue * cleanTaxRate(taxRate)) / 100);
 }
 
+// Per-order spending / remaining headings live on the order itself, keyed
+// customFields.orderExpenseItemsJSON / orderRemainingItemsJSON as a JSON array of
+// { id, title }. Parse them so the finance allowlist and the rename/remove
+// amount-move logic can see an order's own headings (not just the workspace ones).
+function parseOrderHeadingItemList(raw) {
+  const trimmed = blockHeadingString(raw, "", 8000).trim();
+  if (!trimmed) return [];
+  try {
+    const arr = JSON.parse(trimmed);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((item) => ({
+        id: cleanOrderText(item && item.id, "", 80),
+        title: cleanOrderText(item && item.title, "", 120)
+      }))
+      .filter((item) => item.title);
+  } catch (_) {
+    return [];
+  }
+}
+
+function orderHeadingTitleList(raw) {
+  return parseOrderHeadingItemList(raw).map((item) => item.title).filter(Boolean);
+}
+
 function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, email, entitlements, financialSettings }) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
 
@@ -8510,22 +8541,29 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     pushHistoryChange(historyEntries, `${cleanTitle} changed`, amountHistoryValue(previous), amountHistoryValue(next), uid, email);
     customFieldsChanged = true;
   };
-  const applyCustomFinancialMap = (field, prefix, configuredItems) => {
+  const applyCustomFinancialMap = (field, prefix, configuredItems, orderListKey) => {
     if (!hasOwnField(patch, field)) return;
     const incoming = patch[field] && typeof patch[field] === "object" && !Array.isArray(patch[field])
       ? patch[field]
       : {};
+    // Allow the workspace template titles AND this order's own per-order headings
+    // (orderExpenseItemsJSON / orderRemainingItemsJSON). Without the per-order union,
+    // amounts for renamed / added headings would be silently dropped on Android + web.
     const allowedTitles = new Set((configuredItems || [])
       .map((item) => cleanOrderText(item?.title, "", 120))
       .filter(Boolean));
+    orderHeadingTitleList(currentFields[orderListKey]).forEach((title) => allowedTitles.add(title));
     for (const [title, value] of Object.entries(incoming)) {
       const cleanTitle = cleanOrderText(title, "", 120);
-      if (!cleanTitle || !allowedTitles.has(cleanTitle)) continue;
+      if (!cleanTitle) continue;
+      // Deletions (value <= 0) are always allowed so a removed / renamed heading's
+      // stale amount can be cleared even when its title is no longer in the allowlist.
+      if (roundMoneyValue(value) > 0 && !allowedTitles.has(cleanTitle)) continue;
       setCustomMoneyField(prefix, cleanTitle, value);
     }
   };
-  applyCustomFinancialMap("financialRemainingValues", "financialRemaining::", financialSettings?.financialRemainingItems || []);
-  applyCustomFinancialMap("financialExpenseValues", "financialExpense::", financialSettings?.financialExpenseItems || []);
+  applyCustomFinancialMap("financialRemainingValues", "financialRemaining::", financialSettings?.financialRemainingItems || [], "orderRemainingItemsJSON");
+  applyCustomFinancialMap("financialExpenseValues", "financialExpense::", financialSettings?.financialExpenseItems || [], "orderExpenseItemsJSON");
   if (customFieldsChanged) {
     updates.customFields = currentFields;
   }
@@ -8737,6 +8775,62 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
           if (next) currentFields[cleanTitle] = next;
           else delete currentFields[cleanTitle];
           pushHistoryChange(historyEntries, "Note sections updated", previous ? "Sections" : "-", next ? "Sections" : "-", uid, email);
+          customFieldsChanged = true;
+          changed = true;
+        }
+        continue;
+      }
+      if (cleanTitle === "orderExpenseItemsJSON" || cleanTitle === "orderRemainingItemsJSON") {
+        // Per-order spending / remaining heading list. When it changes, follow the
+        // edit on the keyed amounts: a renamed heading (same id, new title) moves its
+        // financial amount to the new key; a removed heading clears its amount.
+        const amountPrefix = cleanTitle === "orderExpenseItemsJSON" ? "financialExpense::" : "financialRemaining::";
+        const previous = blockHeadingString(currentFields[cleanTitle], "", 8000);
+        const next = blockHeadingString(value, "", 8000);
+        if (previous !== next) {
+          // When the order had no per-order list yet, the amounts are still keyed by
+          // the workspace template titles — use that template (same ids) as the "old"
+          // list so the first rename still moves the existing amount.
+          const workspaceFallbackItems = cleanTitle === "orderExpenseItemsJSON"
+            ? (materialSettings.financialExpenseItems || [])
+            : (materialSettings.financialRemainingItems || []);
+          const oldItems = previous
+            ? parseOrderHeadingItemList(previous)
+            : workspaceFallbackItems
+                .map((it) => ({ id: cleanOrderText(it && it.id, "", 80), title: cleanOrderText(it && it.title, "", 120) }))
+                .filter((it) => it.title);
+          const newItems = parseOrderHeadingItemList(next);
+          const newById = new Map(newItems.filter((it) => it.id).map((it) => [it.id, it]));
+          const newTitlesLower = new Set(newItems.map((it) => it.title.toLowerCase()));
+          oldItems.forEach((oldItem) => {
+            const oldKey = `${amountPrefix}${oldItem.title}`;
+            if (!Object.prototype.hasOwnProperty.call(currentFields, oldKey)) return;
+            const renamed = oldItem.id ? newById.get(oldItem.id) : null;
+            if (renamed && renamed.title && renamed.title !== oldItem.title) {
+              const amount = roundMoneyValue(currentFields[oldKey]);
+              delete currentFields[oldKey];
+              if (amount > 0) currentFields[`${amountPrefix}${renamed.title}`] = String(amount);
+              customFieldsChanged = true;
+            } else if (!newTitlesLower.has(oldItem.title.toLowerCase())) {
+              delete currentFields[oldKey];
+              customFieldsChanged = true;
+            }
+          });
+          if (next) currentFields[cleanTitle] = next;
+          else delete currentFields[cleanTitle];
+          pushHistoryChange(historyEntries, "Financial headings updated", previous ? "Headings" : "-", next ? "Headings" : "-", uid, email);
+          customFieldsChanged = true;
+          changed = true;
+        }
+        continue;
+      }
+      if (cleanTitle === "orderBaseCostLabel") {
+        const previous = blockHeadingString(currentFields[cleanTitle], "", 120);
+        const next = blockHeadingString(value, "", 120);
+        if (previous !== next) {
+          if (next) currentFields[cleanTitle] = next;
+          else delete currentFields[cleanTitle];
+          pushHistoryChange(historyEntries, "Base cost heading changed", previous || "-", next || "-", uid, email);
           customFieldsChanged = true;
           changed = true;
         }

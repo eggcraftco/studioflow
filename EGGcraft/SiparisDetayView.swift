@@ -1495,6 +1495,64 @@ struct SiparisDetayView: View {
         if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
     }
 
+    // Per-order base-cost-field label (the "default base cost" heading at the top
+    // of the editor). Overridden on the order, falling back to the workspace label.
+    var orderBaseCostLabelKey: String { "orderBaseCostLabel" }
+    var orderBaseCostLabel: String {
+        let override = (siparis.customFields?[orderBaseCostLabelKey] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return override.isEmpty ? financialBaseCostLabel : override
+    }
+    func setOrderBaseCostLabel(_ newValue: String) {
+        var current = siparis.customFields ?? [:]
+        let cleaned = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || cleaned == financialBaseCostLabel { current.removeValue(forKey: orderBaseCostLabelKey) }
+        else { current[orderBaseCostLabelKey] = cleaned }
+        siparis.customFields = current
+        if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
+    }
+
+    // Inline rename of one per-order spending/remaining heading from the card.
+    func renameOrderFinancialItem(id: UUID, newTitle: String, key: String, amountPrefix: String, workspaceItems: [CustomStepDTO]) {
+        let cleaned = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        var items = decodeOrderFinancialItems(siparis.customFields?[key], usable: { _ in true }) ?? workspaceItems
+        guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].title != cleaned else { return }
+        items[idx].title = cleaned
+        let json = (try? JSONEncoder().encode(items)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        saveOrderFinancialItems(newJSON: json, key: key, amountPrefix: amountPrefix, workspaceItems: workspaceItems)
+    }
+
+    // Add a new per-order spending/remaining heading from the card's + button.
+    // Generates a unique non-placeholder title so it renders and its amount key
+    // does not collide; the user renames it inline straight away.
+    func addOrderFinancialItem(key: String, workspaceItems: [CustomStepDTO], defaultBase: String) {
+        var items = decodeOrderFinancialItems(siparis.customFields?[key], usable: { _ in true }) ?? workspaceItems
+        var n = items.count + 1
+        var title = "\(defaultBase) \(n)"
+        while items.contains(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) {
+            n += 1
+            title = "\(defaultBase) \(n)"
+        }
+        items.append(CustomStepDTO(title: title))
+        let json = (try? JSONEncoder().encode(items)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        saveOrderFinancialItems(newJSON: json, key: key, amountPrefix: "", workspaceItems: workspaceItems)
+    }
+
+    // Remove one per-order spending/remaining heading from the card. Clears its
+    // amount and writes the remaining list (even when empty, so the order does not
+    // fall back to the workspace template after the user deletes everything).
+    func removeOrderFinancialItem(id: UUID, key: String, amountPrefix: String, workspaceItems: [CustomStepDTO]) {
+        var items = decodeOrderFinancialItems(siparis.customFields?[key], usable: { _ in true }) ?? workspaceItems
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        let removedTitle = items[idx].title
+        items.remove(at: idx)
+        var current = siparis.customFields ?? [:]
+        current.removeValue(forKey: amountPrefix + removedTitle)
+        current[key] = (try? JSONEncoder().encode(items)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        siparis.customFields = current
+        if let sid = siparis.id { firebaseManager.updateSiparisCustomFields(sid, customFields: current) }
+    }
+
     @ViewBuilder
     private var orderDetailHeader: some View {
         #if os(iOS)
@@ -2070,6 +2128,10 @@ struct SiparisDetayView: View {
                 orderFinancialRemainingItemsJSON: Binding(
                     get: { siparis.customFields?[orderRemainingItemsKey] ?? "" },
                     set: { newValue in saveOrderFinancialItems(newJSON: newValue, key: orderRemainingItemsKey, amountPrefix: "financialRemaining::", workspaceItems: financialRemainingItems) }
+                ),
+                orderFinancialBaseCostLabel: Binding(
+                    get: { orderBaseCostLabel },
+                    set: { newValue in setOrderBaseCostLabel(newValue) }
                 )
             )
         }
@@ -9898,13 +9960,44 @@ struct SiparisDetayView: View {
 
                 if !orderRemainingItems.isEmpty {
                     ForEach(orderRemainingItems, id: \.id) { item in
-                        CurrencyField(
-                            label: t(item.title, lang: seciliDil),
-                            value: customCurrencyBinding(prefix: "financialRemaining::", title: item.title),
-                            sembol: seciliParaBirimi,
-                            ondalik: seciliOndalik
-                        )
+                        HStack(spacing: 8) {
+                            CurrencyField(
+                                label: t(item.title, lang: seciliDil),
+                                value: customCurrencyBinding(prefix: "financialRemaining::", title: item.title),
+                                sembol: seciliParaBirimi,
+                                ondalik: seciliOndalik,
+                                editableLabelRaw: canEditOrderDetails ? item.title : nil,
+                                onLabelCommit: canEditOrderDetails ? { newValue in
+                                    renameOrderFinancialItem(id: item.id, newTitle: newValue, key: orderRemainingItemsKey, amountPrefix: "financialRemaining::", workspaceItems: financialRemainingItems)
+                                } : nil
+                            )
+                            if canEditOrderDetails {
+                                Button {
+                                    removeOrderFinancialItem(id: item.id, key: orderRemainingItemsKey, amountPrefix: "financialRemaining::", workspaceItems: financialRemainingItems)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 15))
+                                        .foregroundColor(.red.opacity(0.5))
+                                }
+                                .buttonStyle(.plain)
+                                .help(t("Remove", lang: seciliDil))
+                            }
+                        }
                     }
+                }
+                if canEditOrderDetails {
+                    Button {
+                        addOrderFinancialItem(key: orderRemainingItemsKey, workspaceItems: financialRemainingItems, defaultBase: t("Remaining", lang: seciliDil))
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle.fill").font(.system(size: 13))
+                            Text(t("Remaining", lang: seciliDil)).font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
                 }
 
                 YesNoField(label: t("Full Payment Received?", lang: seciliDil), value: Binding(
@@ -9925,18 +10018,14 @@ struct SiparisDetayView: View {
 
             if financialShowBaseCost || isBasicFinancialLimited {
                 CurrencyField(
-                    label: t(financialBaseCostLabel, lang: seciliDil),
+                    label: t(orderBaseCostLabel, lang: seciliDil),
                     value: $siparis.watchPurchasePrice,
                     isCost: true,
                     sembol: seciliParaBirimi,
                     ondalik: seciliOndalik,
-                    editableLabelRaw: canEditOrderDetails ? financialBaseCostLabel : nil,
+                    editableLabelRaw: canEditOrderDetails ? orderBaseCostLabel : nil,
                     onLabelCommit: canEditOrderDetails ? { newValue in
-                        financialBaseCostLabel = newValue
-                        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !companyId.isEmpty else { return }
-                        Firestore.firestore().collection("companySettings").document(companyId)
-                            .setData(["financialBaseCostLabel": newValue], merge: true)
+                        setOrderBaseCostLabel(newValue)
                     } : nil
                 )
                     .onChange(of: siparis.watchPurchasePrice) { _, _ in otomatikKesintiHesapla() }
@@ -9955,14 +10044,45 @@ struct SiparisDetayView: View {
             } else {
                 if !orderExpenseItems.isEmpty {
                     ForEach(orderExpenseItems, id: \.id) { item in
-                        CurrencyField(
-                            label: t(item.title, lang: seciliDil),
-                            value: customCurrencyBinding(prefix: "financialExpense::", title: item.title),
-                            isCost: true,
-                            sembol: seciliParaBirimi,
-                            ondalik: seciliOndalik
-                        )
+                        HStack(spacing: 8) {
+                            CurrencyField(
+                                label: t(item.title, lang: seciliDil),
+                                value: customCurrencyBinding(prefix: "financialExpense::", title: item.title),
+                                isCost: true,
+                                sembol: seciliParaBirimi,
+                                ondalik: seciliOndalik,
+                                editableLabelRaw: canEditOrderDetails ? item.title : nil,
+                                onLabelCommit: canEditOrderDetails ? { newValue in
+                                    renameOrderFinancialItem(id: item.id, newTitle: newValue, key: orderExpenseItemsKey, amountPrefix: "financialExpense::", workspaceItems: financialExpenseItems)
+                                } : nil
+                            )
+                            if canEditOrderDetails {
+                                Button {
+                                    removeOrderFinancialItem(id: item.id, key: orderExpenseItemsKey, amountPrefix: "financialExpense::", workspaceItems: financialExpenseItems)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 15))
+                                        .foregroundColor(.red.opacity(0.5))
+                                }
+                                .buttonStyle(.plain)
+                                .help(t("Remove", lang: seciliDil))
+                            }
+                        }
                     }
+                }
+                if canEditOrderDetails {
+                    Button {
+                        addOrderFinancialItem(key: orderExpenseItemsKey, workspaceItems: financialExpenseItems, defaultBase: t("Spending", lang: seciliDil))
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle.fill").font(.system(size: 13))
+                            Text(t("Spending", lang: seciliDil)).font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
                 }
 
                 CurrencyField(label: t("Platform Fee", lang: seciliDil), value: $siparis.paymentFee, isCost: true, isReadOnly: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
@@ -13423,6 +13543,8 @@ struct BlockHeadingsEditorSheet: View {
     // them instead of to the shared workspace setting.
     var orderFinancialExpenseItemsJSON: Binding<String>? = nil
     var orderFinancialRemainingItemsJSON: Binding<String>? = nil
+    // Per-order base-cost-field label (effective label in; override out).
+    var orderFinancialBaseCostLabel: Binding<String>? = nil
 
     @State private var perOrderOriginIDs: Set<UUID> = []
     @State private var companyNumbersDraft: [CompanyNumberSettingDTO] = []
@@ -13451,6 +13573,10 @@ struct BlockHeadingsEditorSheet: View {
     @State private var orderItemsHeadingDraft: String = ""
     @State private var financialShowBaseCostDraft: Bool = true
     @State private var financialBaseCostLabelDraft: String = "Cost (Base)"
+    // Per-order financial editor only: when ON, Save also promotes the current
+    // spending / remaining lists to the workspace template so NEW orders start
+    // from them (existing customised orders keep their own).
+    @State private var applyFinancialAsWorkspaceDefault: Bool = false
     @State private var communicationShowTelephoneDraft: Bool = true
     @State private var communicationShowEmailDraft: Bool = true
     @State private var communicationShowAddressDraft: Bool = true
@@ -13512,6 +13638,10 @@ struct BlockHeadingsEditorSheet: View {
                         Divider().padding(.vertical, 2)
                         EditorSectionTitle(title: t("Remaining / Pending Headings", lang: seciliDil), systemImage: "clock")
                         financialRemainingEditor
+                        if orderFinancialExpenseItemsJSON != nil {
+                            Divider().padding(.vertical, 2)
+                            financialSetAsDefaultEditor
+                        }
                     } else if kartTipi == .materials {
                         EditorSectionTitle(title: t("Default Material Checks", lang: seciliDil), systemImage: "shippingbox")
                         materialsEditor
@@ -13955,6 +14085,22 @@ struct BlockHeadingsEditorSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 2)
         }
+    }
+
+    private var financialSetAsDefaultEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: $applyFinancialAsWorkspaceDefault) {
+                Text(t("Set as default for new orders", lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            Text(t("New orders will start with these spending and remaining headings. Existing orders keep their own.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var productionStepOptions: [String] {
@@ -14430,7 +14576,7 @@ private var notesSupplierEditor: some View {
         if kartTipi == .financial {
 
             financialShowBaseCostDraft = financialShowBaseCost
-            financialBaseCostLabelDraft = financialBaseCostLabel
+            financialBaseCostLabelDraft = orderFinancialBaseCostLabel?.wrappedValue ?? financialBaseCostLabel
 
             // Per-order spending / remaining lists when opened from an order: use
             // the order's own list, seeding from the workspace template the first
@@ -14587,20 +14733,39 @@ private var notesSupplierEditor: some View {
         if kartTipi == .financial {
 
             financialShowBaseCost = financialShowBaseCostDraft
-            let cleanedBaseLabel = cleaned(financialBaseCostLabelDraft)
-            financialBaseCostLabel = cleanedBaseLabel.isEmpty ? "Cost (Base)" : cleanedBaseLabel
+            let cleanedBaseLabelRaw = cleaned(financialBaseCostLabelDraft)
+            let cleanedBaseLabel = cleanedBaseLabelRaw.isEmpty ? "Cost (Base)" : cleanedBaseLabelRaw
 
             if let expenseBinding = orderFinancialExpenseItemsJSON, let remainingBinding = orderFinancialRemainingItemsJSON {
-                // Per-order: write the lists onto the order via the bindings (whose
-                // setters persist them and move the matching amount keys on rename).
-                // Only the base-cost label / toggle stay workspace-wide.
-                expenseBinding.wrappedValue = encodeItems(editableItems)
-                remainingBinding.wrappedValue = encodeItems(editableToggleItems)
+                // Per-order: write the lists + base-cost label onto the order (the
+                // binding setters persist them and move amount keys on rename). Only
+                // the show-base-cost toggle stays workspace-wide.
+                let encodedExpenses = encodeItems(editableItems)
+                let encodedRemaining = encodeItems(editableToggleItems)
+                expenseBinding.wrappedValue = encodedExpenses
+                remainingBinding.wrappedValue = encodedRemaining
+                if let baseBinding = orderFinancialBaseCostLabel {
+                    baseBinding.wrappedValue = cleanedBaseLabel
+                } else {
+                    financialBaseCostLabel = cleanedBaseLabel
+                }
+                var workspacePayload: [String: Any] = ["financialShowBaseCost": financialShowBaseCost]
+                if applyFinancialAsWorkspaceDefault {
+                    // Promote the current lists to the workspace template so NEW
+                    // orders (and existing un-customised ones) start from them.
+                    financialExpenseItemsJSON = encodedExpenses
+                    financialRemainingItemsJSON = encodedRemaining
+                    financialBaseCostLabel = cleanedBaseLabel
+                    workspacePayload["financialExpenseItemsJSON"] = encodedExpenses
+                    workspacePayload["financialRemainingItemsJSON"] = encodedRemaining
+                    workspacePayload["financialBaseCostLabel"] = cleanedBaseLabel
+                }
                 Firestore.firestore()
                     .collection("companySettings")
                     .document(firebaseManager.currentCompanyId)
-                    .setData(["financialShowBaseCost": financialShowBaseCost, "financialBaseCostLabel": financialBaseCostLabel], merge: true)
+                    .setData(workspacePayload, merge: true)
             } else {
+                financialBaseCostLabel = cleanedBaseLabel
                 financialExpenseItemsJSON = encodeItems(editableItems)
                 financialRemainingItemsJSON = encodeItems(editableToggleItems)
                 syncEditedSettingsToCloud()
