@@ -15,7 +15,8 @@ struct MusterilerView: View {
     @Binding var seciliSiparis: Siparis?
     @Binding var aktifSekme: String
     @Binding var seciliMusteri: Musteri?
-    
+    var onOpenOrder: (Siparis) -> Void = { _ in }
+
     @State private var aramaMetni: String = ""
     @State private var seciliSiralama: MusteriSiralamaTuru = .sonGorusme
     @State private var phoneShowsCustomerDetail: Bool = false
@@ -191,7 +192,7 @@ struct MusterilerView: View {
             ZStack {
                 bgMain.ignoresSafeArea()
                 if let musteri = seciliMusteri, firebaseManager.musteriler.contains(where: { $0.id == musteri.id }) {
-                    MusteriDetayView(musteri: guvenliBinding(icin: musteri), seciliSiparis: $seciliSiparis, aktifSekme: $aktifSekme)
+                    MusteriDetayView(musteri: guvenliBinding(icin: musteri), seciliSiparis: $seciliSiparis, aktifSekme: $aktifSekme, onOpenOrder: onOpenOrder)
                 } else {
                     VStack(spacing: 15) { Image(systemName: "person.crop.circle.badge.questionmark").font(.system(size: 40)).foregroundColor(.gray.opacity(0.5)); Text(t("Select a customer to view details.", lang: seciliDil)).foregroundColor(.gray) }
                 }
@@ -287,7 +288,8 @@ struct MusterilerView: View {
                 MusteriDetayView(
                     musteri: guvenliBinding(icin: musteri),
                     seciliSiparis: $seciliSiparis,
-                    aktifSekme: $aktifSekme
+                    aktifSekme: $aktifSekme,
+                    onOpenOrder: onOpenOrder
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -538,6 +540,7 @@ struct MusteriDetayView: View {
     @Binding var musteri: Musteri
     @Binding var seciliSiparis: Siparis?
     @Binding var aktifSekme: String
+    var onOpenOrder: (Siparis) -> Void = { _ in }
     @EnvironmentObject var firebaseManager: FirebaseManager
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
@@ -552,9 +555,14 @@ struct MusteriDetayView: View {
     @State private var pendingMusteriPreviousName: String? = nil
     @State private var customerNameDraft: String = ""
     @FocusState private var customerNameFocused: Bool
-    
+    @State private var isEditingCustomerNotes = false
+    @State private var selectedCustomerTab: String = "Orders"
+    @Environment(\.openURL) private var openURL
+
     var musteriSiparisleri: [Siparis] { firebaseManager.siparisler.filter { $0.customerName.lowercased() == musteri.name.lowercased() }.sorted { $0.paymentDate > $1.paymentDate } }
     var toplamHarcama: Double { musteriSiparisleri.reduce(0) { $0 + $1.paidAmount + $1.remainingAmount } }
+    var lastOrderDate: Date? { musteriSiparisleri.first?.paymentDate }
+    var customerSinceDate: Date? { musteriSiparisleri.last?.paymentDate }
     
     var body: some View {
         ScrollView {
@@ -563,20 +571,30 @@ struct MusteriDetayView: View {
 
                 if isPhoneLayout {
                     VStack(spacing: 16) {
+                        customerStatsRow
                         contactInfoCard
-                        customerNotesCard
                         orderHistoryCard
+                        customerNotesCard
+                        customerActivityTabsCard
                     }
                 } else {
-                    HStack(alignment: .top, spacing: 30) {
-                        VStack(spacing: 20) {
-                            contactInfoCard
-                            customerNotesCard
+                    VStack(spacing: 25) {
+                        customerStatsRow
+
+                        HStack(alignment: .top, spacing: 25) {
+                            VStack(spacing: 20) {
+                                contactInfoCard
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+
+                            VStack(spacing: 20) {
+                                orderHistoryCard
+                                customerNotesCard
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
                         }
 
-                        VStack(spacing: 20) {
-                            orderHistoryCard
-                        }
+                        customerActivityTabsCard
                     }
                 }
             }
@@ -618,10 +636,10 @@ struct MusteriDetayView: View {
                         }
                     }
 
-                Text("\(t("Total Spent", lang: seciliDil)): \(seciliParaBirimi)\(toplamHarcama.toCurrencyString()) • \(musteriSiparisleri.count) \(t("Orders", lang: seciliDil))")
-                    .font(.system(size: isPhoneLayout ? 12 : 14, weight: .bold))
-                    .foregroundColor(.green)
-                    .lineLimit(2)
+                Text("\(musteriSiparisleri.count) \(t("Orders", lang: seciliDil)) • \(seciliParaBirimi)\(toplamHarcama.toCurrencyString())")
+                    .font(.system(size: isPhoneLayout ? 12 : 13, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 0)
@@ -793,20 +811,116 @@ struct MusteriDetayView: View {
     }
 
     private var customerNotesCard: some View {
-        DetayKartiSabit(title: t("Customer Notes", lang: seciliDil), iconName: "person.text.rectangle") {
-            TextEditor(text: $musteri.notes)
-                .font(.system(size: 13))
-                .foregroundColor(.primary)
-                .frame(minHeight: isPhoneLayout ? 100 : 120)
-                .padding(8)
-                .background(Color.primary.opacity(0.05))
-                .cornerRadius(8)
-                .onChange(of: musteri.notes) { _, _ in saveMusteriDetailChange() }
+        DetayKartiAksesuarli(title: t("Customer Notes", lang: seciliDil), iconName: "note.text", accessory: {
+            Button(action: {
+                if isEditingCustomerNotes { flushMusteriAutosave() }
+                withAnimation(.easeInOut(duration: 0.15)) { isEditingCustomerNotes.toggle() }
+            }) {
+                Text(isEditingCustomerNotes ? t("Done", lang: seciliDil) : t("Edit", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.10))
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+        }) {
+            if isEditingCustomerNotes {
+                TextEditor(text: $musteri.notes)
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .frame(minHeight: isPhoneLayout ? 100 : 120)
+                    .padding(8)
+                    .background(Color.primary.opacity(0.05))
+                    .cornerRadius(8)
+                    .onChange(of: musteri.notes) { _, _ in saveMusteriDetailChange() }
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 13))
+                        .foregroundColor(.orange)
+                    Text(musteri.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                         ? t("No notes yet. Tap Edit to add a note.", lang: seciliDil)
+                         : musteri.notes)
+                        .font(.system(size: 13))
+                        .foregroundColor(musteri.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(colorScheme == .dark ? Color.orange.opacity(0.12) : Color(red: 1.0, green: 0.97, blue: 0.88))
+                .cornerRadius(10)
+            }
         }
     }
 
+    private var customerStatsRow: some View {
+        let columns: [GridItem] = isPhoneLayout
+            ? [GridItem(.adaptive(minimum: 140), spacing: 12)]
+            : Array(repeating: GridItem(.flexible(), spacing: 14), count: 4)
+        return LazyVGrid(columns: columns, spacing: 14) {
+            statCard(icon: "bag.fill", tint: .green,
+                     label: t("Total Spent", lang: seciliDil),
+                     value: "\(seciliParaBirimi)\(toplamHarcama.toCurrencyString())",
+                     valueColor: .green)
+            statCard(icon: "shippingbox.fill", tint: .blue,
+                     label: t("Total Orders", lang: seciliDil),
+                     value: "\(musteriSiparisleri.count)")
+            statCard(icon: "calendar", tint: .purple,
+                     label: t("Last Order", lang: seciliDil),
+                     value: lastOrderDate.map { $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? "—")
+            statCard(icon: "clock.fill", tint: .orange,
+                     label: t("Customer Since", lang: seciliDil),
+                     value: customerSinceDate.map { $0.formatted(.dateTime.month(.abbreviated).year()) } ?? "—")
+        }
+    }
+
+    private func statCard(icon: String, tint: Color, label: String, value: String, valueColor: Color = .primary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.15)).frame(width: 30, height: 30)
+                Image(systemName: icon).font(.system(size: 13, weight: .semibold)).foregroundColor(tint)
+            }
+            Text(label).font(.system(size: 12, weight: .medium)).foregroundColor(.secondary).lineLimit(1)
+            Text(value).font(.system(size: 16, weight: .bold)).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(12)
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+    }
+
+    @ViewBuilder
+    private func orderStatusBadge(_ siparis: Siparis) -> some View {
+        let s = siparis.status.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = s.lowercased()
+        let isDone = siparis.isDelivered || lowered.contains("complet") || lowered.contains("deliver")
+        let color: Color = isDone ? .green : (siparis.isDispatched ? .blue : .orange)
+        let label = s.isEmpty ? (siparis.isDelivered ? t("Delivered", lang: seciliDil) : t("Pending", lang: seciliDil)) : t(s, lang: seciliDil)
+        Text(label)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(color.opacity(0.15))
+            .cornerRadius(20)
+    }
+
     private var orderHistoryCard: some View {
-        DetayKartiSabit(title: t("Order History", lang: seciliDil), iconName: "clock.arrow.circlepath") {
+        DetayKartiAksesuarli(title: t("Order History", lang: seciliDil), iconName: "clock.arrow.circlepath", accessory: {
+            if !musteriSiparisleri.isEmpty {
+                Button(action: { withAnimation { aktifSekme = "Orders" } }) {
+                    Text(t("View All Orders", lang: seciliDil))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.10))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+        }) {
             if musteriSiparisleri.isEmpty {
                 Text(t("No data available.", lang: seciliDil))
                     .foregroundColor(.gray)
@@ -816,68 +930,326 @@ struct MusteriDetayView: View {
                 VStack(spacing: 12) {
                     ForEach(musteriSiparisleri) { siparis in
                         Button(action: {
-                            withAnimation {
-                                seciliSiparis = siparis
-                                aktifSekme = "Orders"
-                            }
+                            onOpenOrder(siparis)
                         }) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    AsyncImage(url: URL(string: siparis.designLink)) { image in
-                                        image.resizable().scaledToFill()
-                                    } placeholder: {
-                                        Color.gray.opacity(0.2)
-                                    }
-                                    .frame(width: 40, height: 40)
-                                    .cornerRadius(8)
-                                    .clipped()
+                            HStack(spacing: 12) {
+                                AsyncImage(url: URL(string: siparis.designLink)) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Color.gray.opacity(0.2)
+                                }
+                                .frame(width: 48, height: 48)
+                                .cornerRadius(8)
+                                .clipped()
 
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("Untitled design", lang: seciliDil) : siparis.designName)
-                                            .font(.system(size: 13, weight: .bold))
-                                            .lineLimit(1)
-                                        Text(siparis.paymentDate, format: .dateTime.day().month().year())
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("Untitled design", lang: seciliDil) : siparis.designName)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                    if !siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Text("\(t("Order", lang: seciliDil)) #\(siparis.invoiceNumber)")
                                             .font(.system(size: 11))
-                                            .foregroundColor(.gray)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
                                     }
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "calendar").font(.system(size: 9))
+                                        Text(siparis.paymentDate, format: .dateTime.day().month(.abbreviated).year())
+                                            .font(.system(size: 11))
+                                    }
+                                    .foregroundColor(.secondary)
+                                }
 
-                                    Spacer()
+                                Spacer(minLength: 8)
 
+                                VStack(alignment: .trailing, spacing: 6) {
                                     Text("\(seciliParaBirimi)\((siparis.paidAmount + siparis.remainingAmount).toCurrencyString())")
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundColor(.green)
-                                }
-
-                                if !siparis.notes.isEmpty {
-                                    Text(siparis.notes)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .italic()
-                                        .foregroundColor(.gray)
-                                        .padding(8)
-                                        .background(Color.gray.opacity(0.05))
-                                        .cornerRadius(6)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    orderStatusBadge(siparis)
                                 }
                             }
                             .padding(12)
                             .background(Color.primary.opacity(0.03))
-                            .cornerRadius(8)
+                            .cornerRadius(10)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .onHover { hover in
                             #if os(macOS)
-                            if hover {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
+                            if hover { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                             #endif
                         }
                     }
                 }
             }
         }
+    }
+
+    // MARK: - Bottom tabbed section (Orders / Files / Activity)
+
+    private var customerFiles: [ClientFileItem] {
+        musteriSiparisleri.flatMap { $0.clientFiles ?? [] }.sorted { $0.uploadedAt > $1.uploadedAt }
+    }
+
+    private var customerActivity: [(siparis: Siparis, log: OrderHistoryLogItem)] {
+        musteriSiparisleri
+            .flatMap { siparis in (siparis.historyLog ?? []).map { (siparis: siparis, log: $0) } }
+            .sorted { $0.log.createdAt > $1.log.createdAt }
+    }
+
+    // Order-level notes (the order's Notes card content), aggregated for this customer.
+    // NOT the customer-profile note — that lives in the Customer Notes card above.
+    private var customerOrderNotes: [(siparis: Siparis, note: String)] {
+        musteriSiparisleri.compactMap { siparis in
+            let n = siparis.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            return n.isEmpty ? nil : (siparis: siparis, note: n)
+        }
+    }
+
+    private var customerActivityTabsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 26) {
+                ForEach(["Orders", "Files", "Notes", "Activity"], id: \.self) { tab in
+                    let isSelected = selectedCustomerTab == tab
+                    Button(action: { withAnimation(.easeInOut(duration: 0.15)) { selectedCustomerTab = tab } }) {
+                        VStack(spacing: 8) {
+                            Text(t(tab, lang: seciliDil))
+                                .font(.system(size: 14, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? .blue : .secondary)
+                            Rectangle()
+                                .fill(isSelected ? Color.blue : Color.clear)
+                                .frame(height: 2)
+                        }
+                        .fixedSize()
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+
+            Divider()
+
+            Group {
+                switch selectedCustomerTab {
+                case "Files": filesTabContent
+                case "Notes": notesTabContent
+                case "Activity": activityTabContent
+                default: ordersTabContent
+                }
+            }
+            .padding(20)
+        }
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(12)
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+    }
+
+    private var ordersTabContent: some View {
+        Group {
+            if musteriSiparisleri.isEmpty {
+                emptyTabState(icon: "shippingbox", text: t("No orders yet.", lang: seciliDil))
+            } else if isPhoneLayout {
+                VStack(spacing: 10) {
+                    ForEach(musteriSiparisleri) { siparis in
+                        Button(action: { onOpenOrder(siparis) }) {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "—" : siparis.invoiceNumber)
+                                        .font(.system(size: 12, weight: .bold)).foregroundColor(.blue).lineLimit(1)
+                                    Text(siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("Untitled design", lang: seciliDil) : siparis.designName)
+                                        .font(.system(size: 13)).foregroundColor(.primary).lineLimit(1)
+                                    Text(siparis.paymentDate, format: .dateTime.day().month(.abbreviated).year())
+                                        .font(.system(size: 11)).foregroundColor(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                VStack(alignment: .trailing, spacing: 6) {
+                                    Text("\(seciliParaBirimi)\((siparis.paidAmount + siparis.remainingAmount).toCurrencyString())")
+                                        .font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                                    orderStatusBadge(siparis)
+                                }
+                            }
+                            .padding(12).background(Color.primary.opacity(0.03)).cornerRadius(10).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Text(t("Order", lang: seciliDil).uppercased()).frame(width: 130, alignment: .leading)
+                        Text(t("Project", lang: seciliDil).uppercased()).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(t("Date", lang: seciliDil).uppercased()).frame(width: 110, alignment: .leading)
+                        Text(t("Status", lang: seciliDil).uppercased()).frame(width: 120, alignment: .leading)
+                        Text(t("Amount", lang: seciliDil).uppercased()).frame(width: 100, alignment: .trailing)
+                        Image(systemName: "chevron.right").opacity(0).frame(width: 14)
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 10)
+
+                    Divider()
+
+                    ForEach(musteriSiparisleri) { siparis in
+                        Button(action: { onOpenOrder(siparis) }) {
+                            HStack(spacing: 12) {
+                                Text(siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "—" : siparis.invoiceNumber)
+                                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.blue)
+                                    .frame(width: 130, alignment: .leading).lineLimit(1)
+                                Text(siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? t("Untitled design", lang: seciliDil) : siparis.designName)
+                                    .font(.system(size: 13)).foregroundColor(.primary)
+                                    .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                                Text(siparis.paymentDate, format: .dateTime.day().month(.abbreviated).year())
+                                    .font(.system(size: 13)).foregroundColor(.secondary)
+                                    .frame(width: 110, alignment: .leading)
+                                HStack { orderStatusBadge(siparis); Spacer(minLength: 0) }.frame(width: 120, alignment: .leading)
+                                Text("\(seciliParaBirimi)\((siparis.paidAmount + siparis.remainingAmount).toCurrencyString())")
+                                    .font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                                    .frame(width: 100, alignment: .trailing)
+                                Image(systemName: "chevron.right").font(.system(size: 11)).foregroundColor(.secondary).frame(width: 14)
+                            }
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hover in
+                            #if os(macOS)
+                            if hover { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                            #endif
+                        }
+                        Divider()
+                    }
+                }
+            }
+        }
+    }
+
+    private var filesTabContent: some View {
+        Group {
+            if customerFiles.isEmpty {
+                emptyTabState(icon: "doc", text: t("No files yet.", lang: seciliDil))
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(customerFiles) { file in
+                        Button(action: { if let url = URL(string: file.downloadURL) { openURL(url) } }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: fileIconName(file.contentType))
+                                    .font(.system(size: 16)).foregroundColor(.blue)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.blue.opacity(0.10)).cornerRadius(8)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(file.fileName).font(.system(size: 13, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                                    Text("\(fileSizeText(file.fileSize)) • \(file.uploadedAt.formatted(.dateTime.day().month(.abbreviated).year()))")
+                                        .font(.system(size: 11)).foregroundColor(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "arrow.down.circle").font(.system(size: 14)).foregroundColor(.secondary)
+                            }
+                            .padding(12)
+                            .background(Color.primary.opacity(0.03)).cornerRadius(10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var notesTabContent: some View {
+        Group {
+            if customerOrderNotes.isEmpty {
+                emptyTabState(icon: "note.text", text: t("No order notes yet.", lang: seciliDil))
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(customerOrderNotes, id: \.siparis.id) { entry in
+                        Button(action: { onOpenOrder(entry.siparis) }) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "note.text").font(.system(size: 11)).foregroundColor(.blue)
+                                    Text(entry.siparis.invoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                         ? (entry.siparis.designName.isEmpty ? t("Order", lang: seciliDil) : entry.siparis.designName)
+                                         : entry.siparis.invoiceNumber)
+                                        .font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
+                                    Text(entry.siparis.paymentDate, format: .dateTime.day().month(.abbreviated).year())
+                                        .font(.system(size: 11)).foregroundColor(.secondary)
+                                    Spacer(minLength: 0)
+                                }
+                                Text(entry.note)
+                                    .font(.system(size: 13)).foregroundColor(.primary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.03))
+                            .cornerRadius(10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hover in
+                            #if os(macOS)
+                            if hover { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                            #endif
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var activityTabContent: some View {
+        Group {
+            if customerActivity.isEmpty {
+                emptyTabState(icon: "clock", text: t("No activity yet.", lang: seciliDil))
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(customerActivity, id: \.log.id) { entry in
+                        HStack(alignment: .top, spacing: 12) {
+                            Circle().fill(Color.blue.opacity(0.5)).frame(width: 8, height: 8).padding(.top, 5)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(t(entry.log.title, lang: seciliDil))
+                                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.primary)
+                                if !entry.log.oldValue.isEmpty || !entry.log.newValue.isEmpty {
+                                    Text("\(entry.log.oldValue.isEmpty ? "—" : entry.log.oldValue) → \(entry.log.newValue.isEmpty ? "—" : entry.log.newValue)")
+                                        .font(.system(size: 12)).foregroundColor(.secondary).lineLimit(2)
+                                }
+                                Text("\(entry.siparis.invoiceNumber.isEmpty ? entry.siparis.designName : entry.siparis.invoiceNumber) • \(entry.log.createdAt.formatted(.dateTime.day().month(.abbreviated).year().hour().minute()))")
+                                    .font(.system(size: 11)).foregroundColor(.secondary.opacity(0.8))
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private func emptyTabState(icon: String, text: String) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 26)).foregroundColor(.secondary.opacity(0.5))
+            Text(text).font(.system(size: 13)).foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 30)
+    }
+
+    private func fileSizeText(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    private func fileIconName(_ contentType: String) -> String {
+        let ct = contentType.lowercased()
+        if ct.hasPrefix("image") { return "photo" }
+        if ct.contains("pdf") { return "doc.richtext" }
+        if ct.contains("video") { return "film" }
+        if ct.contains("zip") || ct.contains("compressed") { return "doc.zipper" }
+        return "doc"
     }
 
     private func saveMusteriDetailChange(previousName: String? = nil) {
@@ -925,3 +1297,33 @@ struct MusteriDetayView: View {
 }
 
 struct DetayKartiSabit<Content: View>: View { @Environment(\.colorScheme) var colorScheme; let title: String; let iconName: String; let content: Content; init(title: String, iconName: String, @ViewBuilder content: () -> Content) { self.title = title; self.iconName = iconName; self.content = content() }; var body: some View { VStack(alignment: .leading, spacing: 0) { HStack(spacing: 10) { Image(systemName: iconName).foregroundColor(.gray); Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.primary); Spacer() }.padding(20); VStack(alignment: .leading, spacing: 15) { content }.padding(.horizontal, 20).padding(.bottom, 20) }.background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white).cornerRadius(12).shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2) } }
+
+// Same card as DetayKartiSabit but with a trailing accessory view in the header
+// (e.g. "View All Orders" / "Edit" buttons), used by the customer detail cards.
+struct DetayKartiAksesuarli<Content: View, Accessory: View>: View {
+    @Environment(\.colorScheme) var colorScheme
+    let title: String
+    let iconName: String
+    let accessory: Accessory
+    let content: Content
+    init(title: String, iconName: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.iconName = iconName
+        self.accessory = accessory()
+        self.content = content()
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: iconName).foregroundColor(.gray)
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.primary)
+                Spacer()
+                accessory
+            }.padding(20)
+            VStack(alignment: .leading, spacing: 15) { content }.padding(.horizontal, 20).padding(.bottom, 20)
+        }
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(12)
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+    }
+}

@@ -36,9 +36,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -61,7 +66,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -528,6 +537,22 @@ private fun CustomerDetail(
             .sortedByDescending { it.paymentDate }
     }
     val totalSpent = customerOrders.sumOf { it.paidAmount + it.remainingAmount }
+    val lastOrderDate = customerOrders.firstOrNull()?.paymentDate
+    val customerSinceDate = customerOrders.lastOrNull()?.paymentDate
+    val customerFiles = remember(customerOrders) {
+        customerOrders.flatMap { it.clientFiles }.sortedByDescending { it.uploadedAt?.time ?: 0L }
+    }
+    val customerActivity = remember(customerOrders) {
+        customerOrders.flatMap { order -> order.historyLog.map { order to it } }
+            .sortedByDescending { it.second.createdAt?.time ?: 0L }
+    }
+    val customerOrderNotes = remember(customerOrders) {
+        customerOrders.mapNotNull { order -> order.notes.trim().takeIf { it.isNotEmpty() }?.let { order to it } }
+    }
+    var selectedTab by remember(customer.id) { mutableStateOf("Orders") }
+    var isEditingNotes by remember(customer.id) { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    val monthYearFormatter = remember { SimpleDateFormat("MMM yyyy", Locale.getDefault()) }
 
     @Composable
     fun contactCard() {
@@ -555,57 +580,194 @@ private fun CustomerDetail(
     }
 
     @Composable
+    fun statCardsSection() {
+        val specs = listOf(
+            StatSpec(Icons.Filled.ShoppingBag, Color(0xFF34C759), t("Total Spent"), moneyText(currencySymbol, totalSpent), Color(0xFF34C759)),
+            StatSpec(Icons.Filled.Inventory2, StudioBlue, t("Total Orders"), customerOrders.size.toString(), MaterialTheme.colorScheme.onSurface),
+            StatSpec(Icons.Filled.CalendarMonth, Color(0xFFAF52DE), t("Last Order"), lastOrderDate?.let { dateFormatter.format(it) } ?: "—", MaterialTheme.colorScheme.onSurface),
+            StatSpec(Icons.Filled.Schedule, Color(0xFFFF9500), t("Customer Since"), customerSinceDate?.let { monthYearFormatter.format(it) } ?: "—", MaterialTheme.colorScheme.onSurface)
+        )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (maxWidth >= 560.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    specs.forEach { StatCard(Modifier.weight(1f), it) }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    specs.chunked(2).forEach { rowSpecs ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            rowSpecs.forEach { StatCard(Modifier.weight(1f), it) }
+                            if (rowSpecs.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
     fun notesCard() {
-        DetailCard(title = t("Notes")) {
-            OutlinedTextField(
-                value = editable.notes,
-                onValueChange = { editable = editable.copy(notes = it); dirty = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 90.dp),
-                placeholder = { Text(t("Add a note...")) }
-            )
+        DetailCardAction(
+            title = t("Customer Notes"),
+            actionLabel = if (isEditingNotes) t("Done") else t("Edit"),
+            onAction = { isEditingNotes = !isEditingNotes }
+        ) {
+            if (isEditingNotes) {
+                OutlinedTextField(
+                    value = editable.notes,
+                    onValueChange = { editable = editable.copy(notes = it); dirty = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 90.dp),
+                    placeholder = { Text(t("Add a note...")) }
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFFF9500).copy(alpha = 0.12f)
+                ) {
+                    Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Filled.Description, contentDescription = null, tint = Color(0xFFFF9500), modifier = Modifier.size(16.dp))
+                        Text(
+                            editable.notes.trim().ifEmpty { t("No notes yet. Tap Edit to add a note.") },
+                            fontSize = 13.sp,
+                            color = if (editable.notes.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun orderRow(order: StudioOrder) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().clickable { onOpenOrder(order) },
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        order.designName.ifBlank { order.watchRef.ifBlank { t("Untitled design") } },
+                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    if (order.invoiceNumber.isNotBlank()) {
+                        Text("${t("Order")} #${order.invoiceNumber}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                    Text(dateFormatter.format(order.paymentDate), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(moneyText(currencySymbol, order.paidAmount + order.remainingAmount), fontWeight = FontWeight.ExtraBold, color = StudioBlue)
+                    OrderStatusBadge(order)
+                }
+            }
         }
     }
 
     @Composable
     fun orderHistoryCard() {
-        DetailCard(title = "${t("Order History")} (${customerOrders.size})") {
+        DetailCardAction(
+            title = t("Order History"),
+            actionLabel = t("View All Orders"),
+            onAction = { customerOrders.firstOrNull()?.let { onOpenOrder(it) } },
+            showAction = customerOrders.isNotEmpty()
+        ) {
             if (customerOrders.isEmpty()) {
                 Text("-", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                customerOrders.forEach { order ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenOrder(order) },
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                customerOrders.forEach { order -> orderRow(order) }
+            }
+        }
+    }
+
+    @Composable
+    fun activityTabsCard() {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(top = 12.dp, bottom = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(22.dp)
+                ) {
+                    listOf("Orders", "Files", "Notes", "Activity").forEach { tab ->
+                        val sel = selectedTab == tab
+                        Column(
+                            modifier = Modifier.clickable { selectedTab = tab },
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    order.designName.ifBlank { order.watchRef.ifBlank { t("Untitled design") } },
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    dateFormatter.format(order.paymentDate) + " · " + order.status,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            Text(t(tab), fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium, color = if (sel) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Box(modifier = Modifier.fillMaxWidth().height(2.dp).background(if (sel) StudioBlue else Color.Transparent))
+                        }
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(top = 10.dp))
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    when (selectedTab) {
+                        "Files" -> {
+                            if (customerFiles.isEmpty()) emptyTabState(Icons.Filled.Description, t("No files yet."))
+                            else customerFiles.forEach { file ->
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().clickable { if (file.downloadUrl.isNotBlank()) uriHandler.openUri(file.downloadUrl) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                ) {
+                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Surface(shape = RoundedCornerShape(8.dp), color = StudioBlue.copy(alpha = 0.12f), modifier = Modifier.size(36.dp)) {
+                                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Description, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(16.dp)) }
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(file.fileName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${fileSizeText(file.fileSize)} • ${file.uploadedAt?.let { dateFormatter.format(it) } ?: "—"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
                             }
-                            Text(
-                                moneyText(currencySymbol, order.paidAmount + order.remainingAmount),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = StudioBlue
-                            )
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        "Notes" -> {
+                            if (customerOrderNotes.isEmpty()) emptyTabState(Icons.Filled.Description, t("No order notes yet."))
+                            else customerOrderNotes.forEach { (order, note) ->
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().clickable { onOpenOrder(order) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(order.invoiceNumber.ifBlank { order.designName.ifBlank { t("Order") } }, fontWeight = FontWeight.Bold, color = StudioBlue, fontSize = 12.sp)
+                                            Text(dateFormatter.format(order.paymentDate), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text(note, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                        "Activity" -> {
+                            if (customerActivity.isEmpty()) emptyTabState(Icons.Filled.Schedule, t("No activity yet."))
+                            else customerActivity.forEach { (order, log) ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(modifier = Modifier.padding(top = 5.dp).size(8.dp).background(StudioBlue.copy(alpha = 0.5f), CircleShape))
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(t(log.title), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        if (log.oldValue.isNotBlank() || log.newValue.isNotBlank()) {
+                                            Text("${log.oldValue.ifBlank { "—" }} → ${log.newValue.ifBlank { "—" }}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                        }
+                                        Text("${order.invoiceNumber.ifBlank { order.designName }} • ${log.createdAt?.let { dateFormatter.format(it) } ?: "—"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            if (customerOrders.isEmpty()) emptyTabState(Icons.Filled.Inventory2, t("No orders yet."))
+                            else customerOrders.forEach { order -> orderRow(order) }
                         }
                     }
                 }
@@ -683,34 +845,39 @@ private fun CustomerDetail(
                         label = { Text(t("Customer Name")) }
                     )
                     Text(
-                        "${t("Total Spent")}: ${moneyText(currencySymbol, totalSpent)} • ${customerOrders.size} ${t("Orders")}",
-                        color = StudioBlue,
-                        fontWeight = FontWeight.ExtraBold
+                        "${customerOrders.size} ${t("Orders")} • ${moneyText(currencySymbol, totalSpent)}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
                     )
                 }
             }
 
+            statCardsSection()
+
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 if (maxWidth >= 700.dp) {
-                    // Wide detail pane (desktop/tablet): Contact Info + Notes on the left,
-                    // Order History on the right — matching the Mac layout.
+                    // Wide pane: Contact Info on the left, Order History + Customer Notes
+                    // on the right — matching the Mac layout.
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             contactCard()
-                            notesCard()
                         }
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             orderHistoryCard()
+                            notesCard()
                         }
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         contactCard()
-                        notesCard()
                         orderHistoryCard()
+                        notesCard()
                     }
                 }
             }
+
+            activityTabsCard()
 
             Spacer(Modifier.height(20.dp))
         }
@@ -747,6 +914,72 @@ private fun DetailCard(title: String, content: @Composable () -> Unit) {
             content()
         }
     }
+}
+
+private data class StatSpec(val icon: ImageVector, val tint: Color, val label: String, val value: String, val valueColor: Color)
+
+@Composable
+private fun StatCard(modifier: Modifier, spec: StatSpec) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(shape = RoundedCornerShape(8.dp), color = spec.tint.copy(alpha = 0.15f), modifier = Modifier.size(30.dp)) {
+                Box(contentAlignment = Alignment.Center) { Icon(spec.icon, contentDescription = null, tint = spec.tint, modifier = Modifier.size(15.dp)) }
+            }
+            Text(spec.label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(spec.value, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = spec.valueColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun DetailCardAction(title: String, actionLabel: String, onAction: () -> Unit, showAction: Boolean = true, content: @Composable () -> Unit) {
+    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                if (showAction) {
+                    TextButton(onClick = onAction) {
+                        Text(actionLabel, color = StudioBlue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun OrderStatusBadge(order: StudioOrder) {
+    val lang = LocalStudioLanguage.current
+    val s = order.status.trim()
+    val lowered = s.lowercase()
+    val done = order.isDelivered || lowered.contains("complet") || lowered.contains("deliver")
+    val color = when {
+        done -> Color(0xFF34C759)
+        order.isDispatched -> StudioBlue
+        else -> Color(0xFFFF9500)
+    }
+    val label = if (s.isEmpty()) (if (order.isDelivered) studioT("Delivered", lang) else studioT("Pending", lang)) else studioT(s, lang)
+    Surface(shape = RoundedCornerShape(20.dp), color = color.copy(alpha = 0.15f)) {
+        Text(label, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+    }
+}
+
+@Composable
+private fun emptyTabState(icon: ImageVector, text: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(26.dp))
+        Text(text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun fileSizeText(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    var size = bytes.toDouble()
+    var unit = 0
+    while (size >= 1024 && unit < units.size - 1) { size /= 1024; unit++ }
+    return if (unit == 0) "$bytes B" else String.format(Locale.UK, "%.1f %s", size, units[unit])
 }
 
 @Composable

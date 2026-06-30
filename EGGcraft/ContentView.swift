@@ -8404,7 +8404,11 @@ struct ContentView: View {
                 }
             } else if aktifSekme == "Customers" {
                 if canAccessCustomers {
-                    MusterilerView(seciliSiparis: $seciliSiparis, aktifSekme: $aktifSekme, seciliMusteri: $seciliMusteri).frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                    MusterilerView(seciliSiparis: $seciliSiparis, aktifSekme: $aktifSekme, seciliMusteri: $seciliMusteri, onOpenOrder: { order in
+                        handleOrderTap(order)
+                        aktifSekme = "Orders"
+                        orderSelectionShouldScroll = true
+                    }).frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
                 } else {
                     restrictedAccessView(title: t("Customers hidden", lang: seciliDil), message: t("Your current workspace role does not include customer access.", lang: seciliDil))
                 }

@@ -295,6 +295,23 @@ export type OrderOptionItem = {
   paymentDate: Date | null;
 };
 
+export type CustomerOrderFile = {
+  id: string;
+  fileName: string;
+  downloadUrl: string;
+  contentType: string;
+  fileSize: number;
+  uploadedAt: Date | null;
+};
+
+export type CustomerOrderActivity = {
+  id: string;
+  title: string;
+  oldValue: string;
+  newValue: string;
+  createdAt: Date | null;
+};
+
 export type CustomerOrderSummary = {
   id: string;
   customerName: string;
@@ -306,6 +323,11 @@ export type CustomerOrderSummary = {
   remainingAmount: number;
   paymentDate: Date | null;
   dueDate: Date | null;
+  invoiceNumber: string;
+  isDispatched: boolean;
+  isDelivered: boolean;
+  files: CustomerOrderFile[];
+  activity: CustomerOrderActivity[];
 };
 
 export type CustomerDirectoryItem = {
@@ -1271,6 +1293,47 @@ export async function loadWorkspaceOrderOptions(companyId: string, workspace?: W
   });
 }
 
+function parseCustomerOrderFiles(raw: unknown): CustomerOrderFile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const item = entry as Record<string, unknown>;
+      const fileName = stringValue(item.fileName, "");
+      const downloadUrl = firstStringValue(item.downloadURL, item.downloadUrl);
+      if (!fileName && !downloadUrl) return null;
+      return {
+        id: stringValue(item.id, `${index}`),
+        fileName: fileName || "File",
+        downloadUrl,
+        contentType: stringValue(item.contentType, ""),
+        fileSize: numberValue(item.fileSize, 0),
+        uploadedAt: dateValue(item.uploadedAt)
+      };
+    })
+    .filter((item): item is CustomerOrderFile => item !== null);
+}
+
+function parseCustomerOrderActivity(raw: unknown): CustomerOrderActivity[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const item = entry as Record<string, unknown>;
+      const title = stringValue(item.title, "");
+      if (!title) return null;
+      return {
+        id: stringValue(item.id, `${index}`),
+        title,
+        oldValue: stringValue(item.oldValue, ""),
+        newValue: stringValue(item.newValue, ""),
+        createdAt: dateValue(item.createdAt)
+      };
+    })
+    .filter((item): item is CustomerOrderActivity => item !== null)
+    .sort((lhs, rhs) => (rhs.createdAt?.getTime() ?? 0) - (lhs.createdAt?.getTime() ?? 0));
+}
+
 export async function loadWorkspaceCustomers(companyId: string): Promise<CustomerDirectoryItem[]> {
   const [customersSnapshot, ordersSnapshot] = await Promise.all([
     getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId))),
@@ -1305,7 +1368,12 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       paidAmount: numberValue(data.paidAmount, 0),
       remainingAmount: numberValue(data.remainingAmount, 0),
       paymentDate,
-      dueDate
+      dueDate,
+      invoiceNumber: stringValue(data.invoiceNumber, ""),
+      isDispatched: booleanValue(data.isDispatched, false),
+      isDelivered: booleanValue(data.isDelivered, false),
+      files: parseCustomerOrderFiles(data.clientFiles),
+      activity: parseCustomerOrderActivity(data.historyLog)
     };
   });
 
