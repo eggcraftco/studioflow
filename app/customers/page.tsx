@@ -639,11 +639,22 @@ function CustomerDetail({
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const uploadingPhoto = savingInlineField === "Customer photo";
 
+  const [activeTab, setActiveTab] = useState<"Orders" | "Files" | "Notes" | "Activity">("Orders");
+
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (file) void onUploadPhoto(file);
   }
+
+  const orders = customer.orders;
+  const lastOrderDate = orders[0]?.paymentDate ?? null;
+  const customerSinceDate = orders.length > 0 ? orders[orders.length - 1].paymentDate : null;
+  const allFiles = orders.flatMap(order => order.files).slice().sort((a, b) => (b.uploadedAt?.getTime() ?? 0) - (a.uploadedAt?.getTime() ?? 0));
+  const allActivity = orders
+    .flatMap(order => order.activity.map(entry => ({ order, entry })))
+    .sort((a, b) => (b.entry.createdAt?.getTime() ?? 0) - (a.entry.createdAt?.getTime() ?? 0));
+  const orderNotes = orders.filter(order => order.notes.trim().length > 0);
 
   return (
     <div className="customer-detail-scroll">
@@ -688,6 +699,13 @@ function CustomerDetail({
         </div>
       </section>
 
+      <div className="customer-stats-row">
+        <CustomerStatCard emoji="🛍️" tint="#34c759" label={t("Total Spent")} value={canSeeFinance ? money(customer.totalValue, hideNumbers, moneySettings) : "—"} valueClass="positive" />
+        <CustomerStatCard emoji="📦" tint="#2f6df6" label={t("Total Orders")} value={String(customer.orderCount)} />
+        <CustomerStatCard emoji="📅" tint="#af52de" label={t("Last Order")} value={lastOrderDate ? formatDate(lastOrderDate) : "—"} />
+        <CustomerStatCard emoji="🕐" tint="#ff9500" label={t("Customer Since")} value={customerSinceDate ? formatMonthYear(customerSinceDate) : "—"} />
+      </div>
+
       <div className="customer-detail-grid">
         <div className="customer-card-stack">
           <section className="card app-card customer-detail-card">
@@ -702,6 +720,22 @@ function CustomerDetail({
               <InfoRow label="Last Contact" value={formatDate(customer.lastContactDate)} />
             </div>
           </section>
+        </div>
+
+        <div className="customer-card-stack">
+          <section className="card app-card customer-detail-card">
+            <div className="customer-card-head">
+              <CardTitle icon="orders" eyebrow={t("Order History")} title={`${customer.orderCount} ${t("orders")}`} />
+              {orders.length > 0 ? <Link href="/orders" className="customer-view-all">{t("View All Orders")}</Link> : null}
+            </div>
+            <div className="customer-order-list">
+              {orders.length === 0 ? (
+                <p className="muted-copy">{t("No orders found for this customer.")}</p>
+              ) : orders.map(order => (
+                <CustomerOrderRow key={order.id} order={order} canSeeFinance={canSeeFinance} moneySettings={moneySettings} t={t} />
+              ))}
+            </div>
+          </section>
 
           <section className="card app-card customer-detail-card">
             <CardTitle icon="notes" eyebrow={t("Customer Notes")} title={t("Notes")} />
@@ -713,20 +747,139 @@ function CustomerDetail({
             />
           </section>
         </div>
-
-        <section className="card app-card customer-detail-card">
-          <CardTitle icon="orders" eyebrow={t("Order History")} title={`${customer.orderCount} ${t("orders")}`} />
-          <div className="customer-order-list">
-            {customer.orders.length === 0 ? (
-              <p className="muted-copy">{t("No orders found for this customer.")}</p>
-            ) : customer.orders.map(order => (
-              <CustomerOrderRow key={order.id} order={order} canSeeFinance={canSeeFinance} moneySettings={moneySettings} />
-            ))}
-          </div>
-        </section>
       </div>
+
+      <section className="card app-card customer-detail-card customer-tabs-card">
+        <div className="customer-tabs-bar">
+          {(["Orders", "Files", "Notes", "Activity"] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              className={`customer-tab${activeTab === tab ? " is-active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {t(tab)}
+            </button>
+          ))}
+        </div>
+        <div className="customer-tabs-content">
+          {activeTab === "Orders" ? (
+            orders.length === 0 ? <CustomerTabEmpty text={t("No orders yet.")} /> : (
+              <table className="customer-orders-table">
+                <thead>
+                  <tr>
+                    <th>{t("Order")}</th>
+                    <th>{t("Project")}</th>
+                    <th>{t("Date")}</th>
+                    <th>{t("Status")}</th>
+                    <th className="ta-right">{t("Amount")}</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map(order => (
+                    <tr key={order.id} onClick={() => { window.location.href = `/orders?selectedOrderId=${encodeURIComponent(order.id)}`; }}>
+                      <td className="customer-order-link">{order.invoiceNumber || "—"}</td>
+                      <td>{order.designName.trim() || t("Untitled design")}</td>
+                      <td>{formatDate(order.paymentDate)}</td>
+                      <td><CustomerOrderStatusBadge order={order} /></td>
+                      <td className="ta-right">{canSeeFinance ? money(order.paidAmount + order.remainingAmount, hideNumbers, moneySettings) : "—"}</td>
+                      <td className="ta-right customer-table-chevron">›</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : activeTab === "Files" ? (
+            allFiles.length === 0 ? <CustomerTabEmpty text={t("No files yet.")} /> : (
+              <div className="customer-files-list">
+                {allFiles.map(file => (
+                  <a key={file.id + file.downloadUrl} href={file.downloadUrl || undefined} target="_blank" rel="noreferrer" className="customer-file-row">
+                    <span className="customer-file-icon">📄</span>
+                    <span className="customer-file-main">
+                      <strong>{file.fileName}</strong>
+                      <small>{formatFileSize(file.fileSize)} • {formatDate(file.uploadedAt)}</small>
+                    </span>
+                    <span className="customer-file-dl">⤓</span>
+                  </a>
+                ))}
+              </div>
+            )
+          ) : activeTab === "Notes" ? (
+            orderNotes.length === 0 ? <CustomerTabEmpty text={t("No order notes yet.")} /> : (
+              <div className="customer-order-notes-list">
+                {orderNotes.map(order => (
+                  <Link key={order.id} href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`} className="customer-order-note-card">
+                    <span className="customer-order-note-head">
+                      <strong>{order.invoiceNumber || order.designName.trim() || t("Order")}</strong>
+                      <small>{formatDate(order.paymentDate)}</small>
+                    </span>
+                    <span className="customer-order-note-text">{order.notes}</span>
+                  </Link>
+                ))}
+              </div>
+            )
+          ) : (
+            allActivity.length === 0 ? <CustomerTabEmpty text={t("No activity yet.")} /> : (
+              <div className="customer-activity-list">
+                {allActivity.map(({ order, entry }) => (
+                  <div key={order.id + entry.id} className="customer-activity-row">
+                    <span className="customer-activity-dot" aria-hidden="true" />
+                    <span className="customer-activity-main">
+                      <strong>{t(entry.title)}</strong>
+                      {entry.oldValue || entry.newValue ? <small className="customer-activity-change">{entry.oldValue || "—"} → {entry.newValue || "—"}</small> : null}
+                      <small>{(order.invoiceNumber || order.designName)} • {formatDate(entry.createdAt)}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+      </section>
     </div>
   );
+}
+
+function CustomerStatCard({ emoji, tint, label, value, valueClass }: { emoji: string; tint: string; label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="customer-stat-card">
+      <span className="customer-stat-chip" style={{ backgroundColor: `${tint}26`, color: tint }}>{emoji}</span>
+      <span className="customer-stat-label">{label}</span>
+      <span className={`customer-stat-value${valueClass ? ` ${valueClass}` : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function CustomerOrderStatusBadge({ order }: { order: CustomerOrderSummary }) {
+  const status = order.status.trim();
+  const lowered = status.toLowerCase();
+  const done = order.isDelivered || lowered.includes("complet") || lowered.includes("deliver");
+  const tone = done ? "done" : order.isDispatched ? "dispatched" : "pending";
+  const label = status || (order.isDelivered ? "Delivered" : "Pending");
+  return <span className={`customer-status-badge is-${tone}`}>{label}</span>;
+}
+
+function CustomerTabEmpty({ text }: { text: string }) {
+  return <p className="customer-tab-empty">{text}</p>;
+}
+
+function formatMonthYear(date: Date | null): string {
+  if (!date) return "—";
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" }).format(date);
+  } catch {
+    return "—";
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+  return unit === 0 ? `${bytes} B` : `${size.toFixed(1)} ${units[unit]}`;
 }
 
 function CustomerAvatar({ customer, size }: { customer: CustomerDirectoryItem; size: "small" | "large" }) {
@@ -1032,10 +1185,9 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CustomerOrderRow({ order, canSeeFinance, moneySettings }: { order: CustomerOrderSummary; canSeeFinance: boolean; moneySettings: StudioMoneySettings }) {
+function CustomerOrderRow({ order, canSeeFinance, moneySettings, t }: { order: CustomerOrderSummary; canSeeFinance: boolean; moneySettings: StudioMoneySettings; t: (text: string) => string }) {
   const { hideNumbers } = usePricePrivacy();
-  const designName = order.designName.trim() || "Untitled design";
-  const statusLabel = order.status.trim() || "Not Yet";
+  const designName = order.designName.trim() || t("Untitled design");
   return (
     <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`} className="customer-order-row">
       <span className="customer-order-thumb">
@@ -1045,14 +1197,14 @@ function CustomerOrderRow({ order, canSeeFinance, moneySettings }: { order: Cust
         <span className="customer-order-main-line">
           <span>
             <strong title={designName}>{designName}</strong>
-            <small>{formatDate(order.paymentDate)} - due {formatDate(order.dueDate)}</small>
+            {order.invoiceNumber ? <small className="customer-order-ref">{t("Order")} #{order.invoiceNumber}</small> : null}
+            <small>{formatDate(order.paymentDate)}</small>
           </span>
           <span className="customer-order-meta">
-            <span className="status-pill">{statusLabel}</span>
             {canSeeFinance ? <span className="studio-pill">{money(order.paidAmount + order.remainingAmount, hideNumbers, moneySettings)}</span> : null}
+            <CustomerOrderStatusBadge order={order} />
           </span>
         </span>
-        {order.notes ? <span className="customer-order-note">{order.notes}</span> : null}
       </span>
     </Link>
   );
