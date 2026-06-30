@@ -187,6 +187,7 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
     Preview("preview", "cardPreview", "Preview"),
     Summary("summary", "cardSummary", "Order Summary"),
     Customer("customer", "cardCustomer", "Customer & Communication"),
+    InvoiceItems("invoiceItems", "cardCustomer", "Invoice Items"),
     Materials("materials", "cardMaterials", "Materials & Inventory"),
     Priority("priority", "cardPriority", "Priority / Risk"),
     Delivery("delivery", "cardDelivery", "Timeline & Delivery"),
@@ -202,14 +203,14 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
 
     companion object {
         val DefaultColumns: List<List<OrderDetailCardId>> = listOf(
-            listOf(Preview, Summary, Customer),
+            listOf(Preview, Summary, Customer, InvoiceItems),
             listOf(Notes, ClientFiles, Status),
             listOf(Todo, WorkTime, Schedule),
             listOf(Delivery, HistoryLog, Financial),
             listOf(Shipping, Materials, Priority)
         )
         val DefaultOrder: List<OrderDetailCardId> = listOf(
-            Preview, Summary, Customer, Materials, Delivery, Notes, ClientFiles,
+            Preview, Summary, Customer, InvoiceItems, Materials, Delivery, Notes, ClientFiles,
             Priority, Todo, WorkTime, Financial, Status, Shipping, Schedule, HistoryLog
         )
 
@@ -225,6 +226,7 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
                 "preview", "cardpreview" -> Preview
                 "summary", "ordersummary", "cardsummary" -> Summary
                 "customer", "contact", "communication", "customercontact", "customercommunication", "cardcustomer" -> Customer
+                "invoiceitems", "invoiceitem", "items", "lineitems", "cardinvoiceitems" -> InvoiceItems
                 "materials", "inventory", "materialsinventory", "cardmaterials" -> Materials
                 "priority", "risk", "priorityrisk", "cardpriority" -> Priority
                 "delivery", "timeline", "timelinedelivery", "carddelivery" -> Delivery
@@ -336,6 +338,7 @@ data class StudioWorkspaceSettings(
     val selectedDecimalSeparator: String = ".",
     val feePercentage: Double = 3.0,
     val defaultTaxRate: Double = 20.0,
+    val defaultDeliveryTime: Double = 30.0,
     val taxCalculationType: String = "Revenue",
     val taxMilestoneEnabled: Boolean = false,
     val taxMilestoneDate: Double = 0.0,
@@ -382,6 +385,9 @@ data class StudioWorkspaceSettings(
     val financialRemainingItems: List<StudioHeadingItem> = emptyList(),
     val financialShowBaseCost: Boolean = true,
     val financialBaseCostLabel: String = "Cost (Base)",
+    val designNameLabel: String = "Design Name",
+    val priorityCardLabel: String = "Priority",
+    val riskCardLabel: String = "Risk",
     val materialsDefaultChecks: List<String> = listOf("Dial Sourced", "Dial Received", "Watch Received", "Materials Ready"),
     val materialsToggles: List<String> = emptyList(),
     val showStatusNotesSupplier: Boolean = false,
@@ -400,6 +406,8 @@ data class StudioWorkspaceSettings(
     val summaryStep2: String = "Painting",
     val orderListStep1: String = "Design",
     val orderListStep2: String = "Painting",
+    // Customizable heading for the invoice items block (empty → localized "Design Name").
+    val orderItemsHeading: String = "",
     val pdfShowCustomer: Boolean = true,
     val pdfShowContact: Boolean = true,
     val pdfShowPreview: Boolean = true,
@@ -410,6 +418,8 @@ data class StudioWorkspaceSettings(
     val pdfShowFinInternal: Boolean = false,
     val pdfShowStatus: Boolean = true,
     val pdfShowShipping: Boolean = true,
+    val pdfShowAddress: Boolean = true,
+    val pdfShowShippingAddress: Boolean = true,
     val companyNumbers: List<StudioCompanyNumber> = listOf(
         StudioCompanyNumber("VAT Number", ""),
         StudioCompanyNumber("EORI Number", ""),
@@ -830,6 +840,16 @@ data class StudioPaymentEntry(
     val note: String
 )
 
+/** One billable invoice line (gross / VAT-inclusive). When an order has these, their sum
+ *  drives the order total. Mirrors the Swift LineItem and the backend webhook schema. */
+data class StudioLineItem(
+    val id: String,
+    val name: String,
+    val quantity: Double,
+    val unitPrice: Double,
+    val lineTotal: Double
+)
+
 data class StudioScheduleReminder(
     val id: String,
     val title: String,
@@ -868,7 +888,14 @@ data class StudioOrder(
     val emailAddress: String,
     val instagramUsername: String,
     val whatsappNumber: String,
+    val shippingName: String = "",
+    val shippingStreetAddress: String = "",
+    val shippingCity: String = "",
+    val shippingPostalCode: String = "",
+    val shippingCountry: String = "",
+    val shippingPhone: String = "",
     val notes: String,
+    val invoiceNote: String = "",
     val communication: List<String>,
     val trackingNumber: String,
     val courier: String,
@@ -888,13 +915,16 @@ data class StudioOrder(
     val workSessions: List<StudioWorkSession>,
     val historyLog: List<StudioHistoryLogItem>,
     val payments: List<StudioPaymentEntry>,
+    val lineItems: List<StudioLineItem> = emptyList(),
     val invoiceNumber: String,
     val clientFileCount: Int,
     val todoCount: Int,
     val completedTodoCount: Int,
     val workSessionCount: Int,
     val assignedToUid: String,
-    val assignedToEmail: String
+    val assignedToEmail: String,
+    val isDeleted: Boolean = false,
+    val deletedAt: Date? = null
 ) {
     val displayCustomerName: String
         get() {
@@ -909,6 +939,9 @@ data class StudioOrder(
     val isClosed: Boolean get() = status == "Done" || status == "Cancelled"
 
     val orderValue: Double get() = paidAmount + remainingAmount
+
+    val hasLineItems: Boolean get() = lineItems.isNotEmpty()
+    val lineItemsTotal: Double get() = lineItems.sumOf { it.lineTotal }
 
     val netProfit: Double get() = orderValue - watchPurchasePrice - paymentFee - deliveryCost - taxAmount
 
@@ -926,6 +959,7 @@ data class StudioOrder(
             val workSessions = parseWorkSessions(document.get("workSessions"))
             val historyLog = parseHistoryLog(document.get("historyLog"))
             val payments = parsePayments(document.get("payments"))
+            val lineItems = parseLineItems(document.get("lineItems"))
             val customFields = stringMap(document.get("customFields"))
             return StudioOrder(
                 id = document.id,
@@ -953,7 +987,14 @@ data class StudioOrder(
                 emailAddress = document.getString("emailAddress").orEmpty(),
                 instagramUsername = document.getString("instagramUsername").orEmpty(),
                 whatsappNumber = document.getString("whatsappNumber").orEmpty(),
+                shippingName = document.getString("shippingName").orEmpty(),
+                shippingStreetAddress = document.getString("shippingStreetAddress").orEmpty(),
+                shippingCity = document.getString("shippingCity").orEmpty(),
+                shippingPostalCode = document.getString("shippingPostalCode").orEmpty(),
+                shippingCountry = document.getString("shippingCountry").orEmpty(),
+                shippingPhone = document.getString("shippingPhone").orEmpty(),
                 notes = document.getString("notes").orEmpty(),
+                invoiceNote = document.getString("invoiceNote").orEmpty(),
                 communication = stringList(document.get("communication")),
                 trackingNumber = document.getString("trackingNumber").orEmpty(),
                 courier = document.getString("courier").orEmpty().ifEmpty { "Auto Detect" },
@@ -973,15 +1014,71 @@ data class StudioOrder(
                 workSessions = workSessions,
                 historyLog = historyLog,
                 payments = payments,
+                lineItems = lineItems,
                 invoiceNumber = document.getString("invoiceNumber") ?: "",
                 clientFileCount = clientFiles.size,
                 todoCount = todoItems.size,
                 completedTodoCount = todoItems.count { it.isDone },
                 workSessionCount = workSessions.size,
                 assignedToUid = document.getString("assignedToUid").orEmpty(),
-                assignedToEmail = document.getString("assignedToEmail").orEmpty()
+                assignedToEmail = document.getString("assignedToEmail").orEmpty(),
+                isDeleted = document.getBoolean("isDeleted") ?: false,
+                deletedAt = document.getDate("deletedAt")
             )
         }
+    }
+}
+
+/** A workspace customer record from the top-level `musteriler` collection (matches
+ *  the Mac/iPhone and web customer directory). Editable contact details + notes. */
+data class StudioCustomer(
+    val id: String,
+    val companyId: String = "",
+    val name: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val instagram: String = "",
+    val address: String = "",
+    val streetAddress: String = "",
+    val city: String = "",
+    val postalCode: String = "",
+    val country: String = "",
+    // Latest per-order shipping destination — structured + combined line, editable like billing.
+    val shippingAddress: String = "",
+    val shippingStreetAddress: String = "",
+    val shippingCity: String = "",
+    val shippingPostalCode: String = "",
+    val shippingCountry: String = "",
+    val shippingPhone: String = "",
+    val notes: String = "",
+    val profileImageUrl: String = "",
+    val lastContactDate: Date? = null
+) {
+    companion object {
+        fun fromDocument(document: DocumentSnapshot): StudioCustomer = StudioCustomer(
+            id = document.id,
+            companyId = document.getString("companyId").orEmpty(),
+            name = document.getString("name").orEmpty(),
+            email = document.getString("email").orEmpty(),
+            phone = document.getString("phone").orEmpty(),
+            instagram = document.getString("instagram").orEmpty(),
+            address = document.getString("address").orEmpty(),
+            streetAddress = (document.getString("streetAddress")
+                ?: document.getString("addressLine1")
+                ?: document.getString("street")).orEmpty(),
+            city = document.getString("city").orEmpty(),
+            postalCode = document.getString("postalCode").orEmpty(),
+            country = document.getString("country").orEmpty(),
+            shippingAddress = document.getString("shippingAddress").orEmpty(),
+            shippingStreetAddress = document.getString("shippingStreetAddress").orEmpty(),
+            shippingCity = document.getString("shippingCity").orEmpty(),
+            shippingPostalCode = document.getString("shippingPostalCode").orEmpty(),
+            shippingCountry = document.getString("shippingCountry").orEmpty(),
+            shippingPhone = document.getString("shippingPhone").orEmpty(),
+            notes = document.getString("notes").orEmpty(),
+            profileImageUrl = document.getString("profileImageUrl").orEmpty(),
+            lastContactDate = document.getDate("lastContactDate")
+        )
     }
 }
 
@@ -1070,6 +1167,18 @@ private fun parsePayments(value: Any?): List<StudioPaymentEntry> {
             note = stringAny(item["note"], "")
         )
     }.sortedByDescending { it.date?.time ?: 0L }
+}
+
+private fun parseLineItems(value: Any?): List<StudioLineItem> {
+    return mapItems(value).mapIndexed { index, item ->
+        StudioLineItem(
+            id = stringAny(item["id"], "item-$index"),
+            name = stringAny(item["name"], ""),
+            quantity = doubleAny(item["quantity"], 1.0),
+            unitPrice = doubleAny(item["unitPrice"], 0.0),
+            lineTotal = doubleAny(item["lineTotal"], 0.0)
+        )
+    }
 }
 
 private const val SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1"

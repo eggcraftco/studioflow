@@ -805,10 +805,20 @@ class AuthViewModel: ObservableObject {
     @Published var localUnlockMessage: String = ""
 
     private let localUnlockDefaultsKey = "studioflow_require_local_unlock"
+    private let autoLockMinutesDefaultsKey = "studioflow_auto_lock_minutes"
     private var bypassNextLocalUnlockAfterInteractiveSignIn = false
+    private var lastBackgroundedAt: Date?
 
     var isLocalUnlockEnabled: Bool {
         UserDefaults.standard.object(forKey: localUnlockDefaultsKey) as? Bool ?? true
+    }
+
+    // How many minutes NivaDesk may stay in the background before it asks to unlock
+    // again on return. 0 == Immediately; default is 1 minute so a brief device lock
+    // or app switch does not force re-authentication. A cold launch / session
+    // restore always requires unlock regardless of this value.
+    var autoLockMinutes: Int {
+        UserDefaults.standard.object(forKey: autoLockMinutesDefaultsKey) as? Int ?? 1
     }
 
     var isGoogleSignInAvailable: Bool {
@@ -947,6 +957,15 @@ class AuthViewModel: ObservableObject {
                     Task { @MainActor in
                         self?.resolveActiveCompany(for: user)
                     }
+                }
+
+                // Offline / flaky-network safety net: if the bootstrap above stalls on a
+                // hung Firestore read, proceed with cached data after a short delay so the
+                // app never sits on "Preparing your workspace..." forever. (Mirrors the
+                // self-recovery the Android client already has.)
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    self.proceedWithCachedWorkspaceIfStalled(for: user)
                 }
             }
         }
@@ -1320,6 +1339,29 @@ class AuthViewModel: ObservableObject {
         localUnlockMessage = enabled ? "Face ID / device passcode unlock enabled." : "Face ID / device passcode unlock disabled."
         if !enabled {
             isLocalUnlockSatisfied = true
+        }
+    }
+
+    func setAutoLockMinutes(_ minutes: Int) {
+        UserDefaults.standard.set(minutes, forKey: autoLockMinutesDefaultsKey)
+    }
+
+    // Scene lifecycle hooks (called from the app scene). We record when NivaDesk
+    // leaves the foreground and, on return, re-lock if it stayed in the background
+    // at least `autoLockMinutes` minutes. Cold launch locking is handled separately.
+    func appMovedToBackground() {
+        guard isLoggedIn, isLocalUnlockEnabled, isLocalUnlockSatisfied else { return }
+        if lastBackgroundedAt == nil { lastBackgroundedAt = Date() }
+    }
+
+    func appBecameActive() {
+        defer { lastBackgroundedAt = nil }
+        guard isLoggedIn, isLocalUnlockEnabled, isLocalUnlockSatisfied,
+              let since = lastBackgroundedAt else { return }
+        let elapsed = Date().timeIntervalSince(since)
+        if elapsed >= Double(autoLockMinutes) * 60 {
+            isLocalUnlockSatisfied = false
+            localUnlockMessage = ""
         }
     }
 
@@ -2426,7 +2468,28 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    // Offline safety-net resolver: reads ONLY the local cache (never waits on the
+    // network) to find the active workspace, falling back to the personal workspace,
+    // then activates it. Runs if the normal bootstrap hasn't completed in time.
+    private func proceedWithCachedWorkspaceIfStalled(for user: User) {
+        guard isLoggedIn, currentUserId == user.uid, !isWorkspaceReady else { return }
+        db.collection("users").document(user.uid).getDocument(source: .cache) { [weak self] snapshot, _ in
+            Task { @MainActor in
+                guard let self, self.isLoggedIn, self.currentUserId == user.uid, !self.isWorkspaceReady else { return }
+                let cachedActive = (snapshot?.data()?["activeCompanyId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let companyId = (cachedActive?.isEmpty == false) ? cachedActive! : user.uid
+                self.activateCompany(companyId, user: user, message: nil)
+            }
+        }
+    }
+
     private func activateCompany(_ companyId: String, user: User, message: String?) {
+        // Idempotent: the normal bootstrap path and the offline safety-net can both
+        // reach here. If we're already activated for this exact user + workspace, skip
+        // re-attaching listeners.
+        if isWorkspaceReady, currentUserId == user.uid, currentCompanyId == companyId {
+            return
+        }
         let isChangingWorkspace = currentCompanyId != companyId
         if isChangingWorkspace {
             isWorkspaceReady = false
@@ -3245,7 +3308,13 @@ class AuthViewModel: ObservableObject {
                     ]
                 }
 
-                ref.setData(payload, merge: true, completion: completion)
+                // Fire-and-forget: Firestore applies this write to the local cache
+                // immediately and syncs it when back online. Awaiting the server
+                // acknowledgement (via `completion`) blocks app startup forever with no
+                // connection — the user is left stuck on "Preparing your workspace...".
+                // The Android client already does this; mirror it here.
+                ref.setData(payload, merge: true)
+                completion(nil)
                 return
             }
 
@@ -3278,7 +3347,9 @@ class AuthViewModel: ObservableObject {
                 "billingTeamMemberLimit": StudioBillingPlan.demo.entitlements.teamMemberLimit
             ]
 
-            ref.setData(payload, merge: true, completion: completion)
+            // Fire-and-forget (see note above): never block startup on the server ack.
+            ref.setData(payload, merge: true)
+            completion(nil)
         }
     }
 }

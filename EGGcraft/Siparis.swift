@@ -23,6 +23,17 @@ struct PaymentEntry: Identifiable, Codable, Equatable {
     var createdByEmail: String = ""
 }
 
+// One billable line on an order's invoice: a product/service with quantity and price.
+// Prices are gross (VAT-inclusive), so the lines sum toward the same VAT-inclusive order
+// total used everywhere else. `id` is a String to match the backend (crypto.randomUUID()).
+struct LineItem: Identifiable, Codable, Equatable {
+    var id: String = UUID().uuidString
+    var name: String = ""
+    var quantity: Double = 1
+    var unitPrice: Double = 0
+    var lineTotal: Double = 0
+}
+
 
 
 struct OrderToDoItem: Identifiable, Codable, Equatable {
@@ -92,6 +103,18 @@ struct Siparis: Identifiable, Codable {
     var instagramUsername: String
     var whatsappNumber: String
     var notes: String
+    // Per-order customer-facing note shown under "Notes" on the Invoice PDF (optional so
+    // existing orders decode; distinct from the workspace-wide invoiceFooterNote/payment terms).
+    var invoiceNote: String?
+    // Shipping (delivery) address — separate from the customer's billing address.
+    // Populated from WooCommerce / online-store orders, editable per order.
+    // Optional so existing orders without these keys still decode.
+    var shippingName: String?
+    var shippingStreetAddress: String?
+    var shippingCity: String?
+    var shippingPostalCode: String?
+    var shippingCountry: String?
+    var shippingPhone: String?
     var designStatus: String
     var status: String
     var isDispatched: Bool
@@ -119,12 +142,26 @@ struct Siparis: Identifiable, Codable {
     var todoItems: [OrderToDoItem]?
     var workSessions: [OrderWorkSessionItem]?
     var payments: [PaymentEntry]?
+    // Itemized invoice lines. Optional so existing single-design orders still decode; when
+    // present, their sum drives the order total (see lineItemsTotal / hasLineItems).
+    var lineItems: [LineItem]?
     var invoiceNumber: String = ""
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
+    // Trash / soft-delete: when true the order is hidden from all normal views and
+    // lives in the Trash for 30 days before a backend job purges it permanently.
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
     // Computed net profit
     var netKar: Double {
         return (paidAmount + remainingAmount) - watchPurchasePrice - paymentFee - deliveryCost
+    }
+
+    // Itemized billing helpers. When the order has line items their gross sum is the order
+    // total (the user chose "items drive the total"); otherwise the classic paid+remaining total.
+    var hasLineItems: Bool { !(lineItems ?? []).isEmpty }
+    var lineItemsTotal: Double {
+        (lineItems ?? []).reduce(0) { $0 + $1.lineTotal }
     }
 }
 

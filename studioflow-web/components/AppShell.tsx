@@ -85,6 +85,7 @@ const NAV_ITEMS: Array<
   { href: "/orders", label: "Orders", icon: "orders" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
+  { href: "/team-schedule", label: "Team Schedule", icon: "customers" },
   { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/customers", label: "Customers", icon: "customers" },
   { href: "/files", label: "Files", icon: "files" },
@@ -98,6 +99,7 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/orders": "orders",
   "/dashboard": "dashboard",
   "/schedule": "schedule",
+  "/team-schedule": "schedule",
   "/customers": "customers",
   "/messages": "messages",
   "/notes": "notes",
@@ -567,7 +569,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     pathname === "/orders" ||
     pathname.startsWith("/orders/") ||
     pathname === "/customers" ||
+    pathname === "/files" ||
+    pathname === "/export" ||
     pathname === "/schedule" ||
+    pathname === "/team-schedule" ||
     pathname === "/dashboard" ||
     pathname === "/quick-reply" ||
     pathname === "/notes" ||
@@ -1349,9 +1354,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <header className="app-toolbar app-toolbar-native">
             <div className="toolbar-main">
               <Link
-                href={canSeeToolbarFinance ? "/dashboard" : "/orders"}
+                href="/orders"
                 className="toolbar-brand native-brand"
-                aria-label={canSeeToolbarFinance ? "Dashboard" : "Orders"}
+                aria-label="Orders"
               >
                 <span
                   className="native-brand-logo-frame"
@@ -1626,6 +1631,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                     >
                       {t("Account")}
                     </button>
+                    <a
+                      role="menuitem"
+                      href="/"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setAvatarMenuOpen(false)}
+                    >
+                      {t("Visit website")}
+                    </a>
                     <button
                       type="button"
                       role="menuitem"

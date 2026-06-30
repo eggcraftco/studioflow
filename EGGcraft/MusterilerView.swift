@@ -6,6 +6,7 @@ enum MusteriSiralamaTuru { case sonGorusme, enCokSiparis }
 
 struct MusterilerView: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
     @Environment(\.colorScheme) var colorScheme
@@ -18,6 +19,7 @@ struct MusterilerView: View {
     @State private var aramaMetni: String = ""
     @State private var seciliSiralama: MusteriSiralamaTuru = .sonGorusme
     @State private var phoneShowsCustomerDetail: Bool = false
+    @State private var showCustomerLimitAlert: Bool = false
     @AppStorage("ordersSidebarWidth") private var ordersSidebarWidth: Double = 380
     @AppStorage("ordersSidebarVisible") private var isOrdersSidebarVisible: Bool = true
     @State private var temporaryOrdersSidebarWidth: Double?
@@ -106,6 +108,11 @@ struct MusterilerView: View {
                   guncelMusteri != seciliMusteri else { return }
             seciliMusteri = guncelMusteri
         }
+        .alert(t("Plan limit reached", lang: seciliDil), isPresented: $showCustomerLimitAlert) {
+            Button(t("OK", lang: seciliDil), role: .cancel) { }
+        } message: {
+            Text(t("Your current plan has reached its customer limit. Upgrade the workspace plan to add more customers.", lang: seciliDil))
+        }
     }
 
     private var desktopCustomersView: some View {
@@ -142,6 +149,7 @@ struct MusterilerView: View {
                             SolMenuSiralamaButonu(title: t("Recent", lang: seciliDil), isSelected: seciliSiralama == .sonGorusme) { seciliSiralama = .sonGorusme }
                             SolMenuSiralamaButonu(title: t("Most Orders", lang: seciliDil), isSelected: seciliSiralama == .enCokSiparis) { seciliSiralama = .enCokSiparis }
                             Spacer()
+                            addCustomerButton(compact: false)
                         }
                     }.padding(20)
                     Divider().background(Color.primary.opacity(0.1))
@@ -326,6 +334,8 @@ struct MusterilerView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     .menuStyle(.borderlessButton)
+
+                    addCustomerButton(compact: true)
                 }
 
                 HStack(spacing: 10) {
@@ -407,6 +417,46 @@ struct MusterilerView: View {
         )
     }
     private func silMusteri(_ musteri: Musteri) { withAnimation { if seciliMusteri?.id == musteri.id { seciliMusteri = nil }; if let id = musteri.id { firebaseManager.deleteMusteri(id: id) } } }
+
+    private func ekleMusteri() {
+        guard authVM.canCreateMoreCustomers(currentCount: firebaseManager.musteriler.count) else {
+            showCustomerLimitAlert = true
+            return
+        }
+        guard let yeni = firebaseManager.createMusteri(name: t("New Customer", lang: seciliDil)) else { return }
+        withAnimation {
+            seciliMusteri = yeni
+            if isPhoneLayout {
+                phoneShowsCustomerDetail = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func addCustomerButton(compact: Bool) -> some View {
+        Button {
+            ekleMusteri()
+        } label: {
+            if compact {
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                Label(t("Add Customer", lang: seciliDil), systemImage: "person.badge.plus")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+        .buttonStyle(.plain)
+        .help(t("Add Customer", lang: seciliDil))
+    }
 }
 
 struct MusteriKarti: View {
@@ -663,7 +713,44 @@ struct MusteriDetayView: View {
             DetailField(label: t("City", lang: seciliDil), value: customerCityBinding)
             DetailField(label: t("Postal Code", lang: seciliDil), value: customerPostalCodeBinding)
             DetailField(label: t("Country", lang: seciliDil), value: customerCountryBinding)
+            Divider().opacity(0.35)
+            Text(t("Shipping Address", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.gray)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            DetailField(label: t("Street", lang: seciliDil), value: customerShippingStreetBinding)
+            DetailField(label: t("City", lang: seciliDil), value: customerShippingCityBinding)
+            DetailField(label: t("Postal Code", lang: seciliDil), value: customerShippingPostalCodeBinding)
+            DetailField(label: t("Country", lang: seciliDil), value: customerShippingCountryBinding)
+            DetailField(label: t("Shipping Phone", lang: seciliDil), value: customerShippingPhoneBinding)
         }
+    }
+
+    private var customerShippingStreetBinding: Binding<String> {
+        Binding(get: { musteri.shippingStreetAddress ?? "" }, set: { setCustomerShippingField(\.shippingStreetAddress, value: $0) })
+    }
+    private var customerShippingCityBinding: Binding<String> {
+        Binding(get: { musteri.shippingCity ?? "" }, set: { setCustomerShippingField(\.shippingCity, value: $0) })
+    }
+    private var customerShippingPostalCodeBinding: Binding<String> {
+        Binding(get: { musteri.shippingPostalCode ?? "" }, set: { setCustomerShippingField(\.shippingPostalCode, value: $0) })
+    }
+    private var customerShippingCountryBinding: Binding<String> {
+        Binding(get: { musteri.shippingCountry ?? "" }, set: { setCustomerShippingField(\.shippingCountry, value: $0) })
+    }
+    private var customerShippingPhoneBinding: Binding<String> {
+        Binding(get: { musteri.shippingPhone ?? "" }, set: { setCustomerShippingField(\.shippingPhone, value: $0) })
+    }
+
+    // Editing any shipping field saves the customer; the combined shippingAddress line is kept
+    // in sync from the structured parts (mirrors syncAddressFromDetailedFields for billing).
+    private func setCustomerShippingField(_ keyPath: WritableKeyPath<Musteri, String?>, value: String) {
+        musteri[keyPath: keyPath] = value
+        musteri.shippingAddress = [musteri.shippingStreetAddress, musteri.shippingCity, musteri.shippingPostalCode, musteri.shippingCountry]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        saveMusteriDetailChange()
     }
 
     private var customerStreetAddressBinding: Binding<String> {

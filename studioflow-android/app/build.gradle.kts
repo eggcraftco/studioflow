@@ -25,8 +25,8 @@ android {
         applicationId = "uk.co.eggcraft.studioflow"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 6
+        versionName = "0.1.5"
     }
 
     signingConfigs {
@@ -65,6 +65,7 @@ dependencies {
     implementation("com.google.firebase:firebase-functions")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
     implementation("com.android.billingclient:billing-ktx:7.1.1")

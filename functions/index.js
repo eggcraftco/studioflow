@@ -5,6 +5,7 @@ const { beforeUserCreated } = require("firebase-functions/v2/identity");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const archiver = require("archiver");
+const nodemailer = require("nodemailer");
 const { defineSecret } = require("firebase-functions/params");
 
 admin.initializeApp();
@@ -16,6 +17,9 @@ const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
+// Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
+// the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
+const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
 
 const TRACK17_BASE_URL = "https://api.17track.net/track/v2.2";
 const TRACK17_REGISTER_URL = `${TRACK17_BASE_URL}/register`;
@@ -2944,7 +2948,94 @@ function baseSupportPayload(request, companyId, companyData, ticketType, allowed
   };
 }
 
-exports.createSupportTicket = onCall({ region: "europe-west2" }, async (request) => {
+const NIVADESK_SUPPORT_INBOX = "contact@nivadesk.co.uk";
+
+function supportPriorityLabelForEmail(priority) {
+  switch (String(priority || "").toLowerCase()) {
+    case "urgent": return "Urgent";
+    case "high": return "High";
+    case "low": return "Low";
+    default: return "Normal";
+  }
+}
+
+function escapeSupportEmailHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Emails the NivaDesk support inbox (contact@nivadesk.co.uk, Hostinger SMTP) when a
+// customer opens a "Contact NivaDesk Support" ticket, so the team is alerted even
+// when nobody is watching the in-app queue. Best-effort: callers wrap this so a
+// mail failure can never block the ticket from being created.
+async function emailNivadeskSupportForTicket(ticketId, payload = {}) {
+  const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
+  if (!password) {
+    console.warn("emailNivadeskSupportForTicket: NIVADESK_SMTP_PASSWORD secret is not set; skipping email.");
+    return;
+  }
+  const host = String(process.env.NIVADESK_SMTP_HOST || "smtp.hostinger.com").trim();
+  const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
+  const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
+  const to = String(process.env.NIVADESK_SUPPORT_INBOX || NIVADESK_SUPPORT_INBOX).trim();
+
+  const title = String(payload.title || "(no subject)");
+  const message = String(payload.message || "");
+  const companyName = String(payload.companyName || "");
+  const fromName = String(payload.createdByName || "");
+  const fromEmail = String(payload.createdByEmail || "");
+  const category = String(payload.category || "other");
+  const priority = supportPriorityLabelForEmail(payload.priority);
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass: password }
+  });
+
+  const subject = `[NivaDesk Support] ${title}${companyName ? ` — ${companyName}` : ""}`;
+  const text = [
+    `New "Contact NivaDesk Support" ticket`,
+    ``,
+    `Subject:  ${title}`,
+    `Company:  ${companyName || "-"}`,
+    `From:     ${fromName || "-"}${fromEmail ? ` <${fromEmail}>` : ""}`,
+    `Category: ${category}`,
+    `Priority: ${priority}`,
+    `Ticket:   ${ticketId}`,
+    ``,
+    `Message:`,
+    message
+  ].join("\n");
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;color:#111827;line-height:1.5">
+      <h2 style="margin:0 0 12px;font-size:17px">New &ldquo;Contact NivaDesk Support&rdquo; ticket</h2>
+      <table style="border-collapse:collapse;margin-bottom:14px">
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Subject</td><td><strong>${escapeSupportEmailHtml(title)}</strong></td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Company</td><td>${escapeSupportEmailHtml(companyName || "-")}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">From</td><td>${escapeSupportEmailHtml(fromName || "-")}${fromEmail ? ` &lt;${escapeSupportEmailHtml(fromEmail)}&gt;` : ""}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Category</td><td>${escapeSupportEmailHtml(category)}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Priority</td><td>${escapeSupportEmailHtml(priority)}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Ticket</td><td>${escapeSupportEmailHtml(ticketId)}</td></tr>
+      </table>
+      <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">${escapeSupportEmailHtml(message)}</div>
+    </div>`;
+
+  await transporter.sendMail({
+    from: `NivaDesk Support <${user}>`,
+    to,
+    replyTo: fromEmail || undefined,
+    subject,
+    text,
+    html
+  });
+}
+
+exports.createSupportTicket = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in to send a support ticket.");
@@ -2961,6 +3052,9 @@ exports.createSupportTicket = onCall({ region: "europe-west2" }, async (request)
   await ticketRef.set(payload);
   await safeSupportNotification("notifySupportAdminsForTicket(createSupportTicket)", () =>
     notifySupportAdminsForTicket(companyId, ticketRef.id, payload, "new_ticket")
+  );
+  await safeSupportNotification("emailNivadeskSupportForTicket(createSupportTicket)", () =>
+    emailNivadeskSupportForTicket(ticketRef.id, payload)
   );
   return { ok: true, ticketId: ticketRef.id, message: "Ticket sent. We will review it as soon as possible." };
 });
@@ -3751,6 +3845,7 @@ const ORDER_DETAIL_CARD_IDS = [
   "preview",
   "summary",
   "customer",
+  "invoiceItems",
   "materials",
   "priority",
   "delivery",
@@ -3767,7 +3862,7 @@ const ORDER_DETAIL_CARD_IDS = [
 
 const DEFAULT_ORDER_DETAIL_CARD_COLUMNS = [
   ["preview", "summary"],
-  ["customer", "materials", "delivery", "notes", "clientFiles"],
+  ["customer", "invoiceItems", "materials", "delivery", "notes", "clientFiles"],
   ["priority", "todo", "workTime", "financial", "status", "shipping", "schedule", "historyLog"]
 ];
 
@@ -4600,6 +4695,7 @@ const BLOCK_HEADING_FIELDS_BY_CARD = {
   ],
   customer: [
     "customFieldsJSON",
+    "orderItemsHeading",
     "communicationShowTelephone",
     "communicationShowEmail",
     "communicationShowAddress",
@@ -4738,6 +4834,7 @@ function defaultHeadingSettings() {
     summaryStep2: "Painting",
     orderListStep1: "Design",
     orderListStep2: "Painting",
+    orderItemsHeading: "",
     invLabel1: "Dial",
     invLabel2: "Hands",
     invLabel3: "Case",
@@ -4781,6 +4878,7 @@ function blockHeadingSettingsFromData(data = {}) {
     summaryStep2: blockHeadingString(data.summaryStep2, defaults.summaryStep2),
     orderListStep1: blockHeadingString(data.orderListStep1, defaults.orderListStep1),
     orderListStep2: blockHeadingString(data.orderListStep2, defaults.orderListStep2),
+    orderItemsHeading: blockHeadingString(data.orderItemsHeading, defaults.orderItemsHeading),
     invLabel1: blockHeadingString(data.invLabel1, defaults.invLabel1),
     invLabel2: blockHeadingString(data.invLabel2, defaults.invLabel2),
     invLabel3: blockHeadingString(data.invLabel3, defaults.invLabel3),
@@ -4824,6 +4922,7 @@ function blockHeadingUpdatesForCard(cardId, settings = {}) {
   if (allow("summaryStep2")) updates.summaryStep2 = blockHeadingString(settings.summaryStep2, "Painting");
   if (allow("orderListStep1")) updates.orderListStep1 = blockHeadingString(settings.orderListStep1, updates.summaryStep1 || "Design");
   if (allow("orderListStep2")) updates.orderListStep2 = blockHeadingString(settings.orderListStep2, updates.summaryStep2 || "Painting");
+  if (allow("orderItemsHeading")) updates.orderItemsHeading = blockHeadingString(settings.orderItemsHeading, "");
   if (allow("showStatusNotesSupplier")) updates.showStatusNotesSupplier = blockHeadingBoolean(settings.showStatusNotesSupplier, false);
   if (allow("statusNotesSupplierLabel")) updates.statusNotesSupplierLabel = blockHeadingString(settings.statusNotesSupplierLabel, "Notes / Supplier");
 
@@ -5050,7 +5149,9 @@ function personalInterfaceSettingsFromData(data = {}, fallbackData = {}) {
     pdfShowMaterials: booleanSetting("pdfShowMaterials"),
     pdfShowPriority: booleanSetting("pdfShowPriority"),
     pdfShowStatus: booleanSetting("pdfShowStatus"),
-    pdfShowShipping: booleanSetting("pdfShowShipping")
+    pdfShowShipping: booleanSetting("pdfShowShipping"),
+    pdfShowAddress: booleanSetting("pdfShowAddress"),
+    pdfShowShippingAddress: booleanSetting("pdfShowShippingAddress")
   };
 }
 
@@ -5315,7 +5416,7 @@ exports.savePersonalInterfaceSettings = onCall({ region: "europe-west2" }, async
   const updates = { companyId, userId: uid, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: uid };
   if (Object.prototype.hasOwnProperty.call(incoming, "appTheme")) updates.appTheme = cleanPersonalTheme(incoming.appTheme, "System");
   if (Object.prototype.hasOwnProperty.call(incoming, "selectedLanguage")) updates.selectedLanguage = cleanQuickReplyText(incoming.selectedLanguage, 80) || "English";
-  const pdfKeys = ["pdfShowCustomer", "pdfShowContact", "pdfShowPreview", "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"];
+  const pdfKeys = ["pdfShowCustomer", "pdfShowContact", "pdfShowPreview", "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping", "pdfShowAddress", "pdfShowShippingAddress"];
   if (pdfKeys.some((key) => Object.prototype.hasOwnProperty.call(incoming, key))) {
     requireWorkspaceAreaAccess(companyData, uid, "exportData", "PDF Export is not enabled for your workspace account.");
     for (const key of pdfKeys) if (Object.prototype.hasOwnProperty.call(incoming, key)) updates[key] = incoming[key] !== false;
@@ -5601,6 +5702,7 @@ function financialSettingsFromData(data = {}) {
     taxRuleNameRevenue: cleanQuickReplyText(data.taxRuleNameRevenue || "Standard Tax (Services/New)", 120),
     taxRuleNameProfit: cleanQuickReplyText(data.taxRuleNameProfit || "Margin Scheme (2nd Hand)", 120),
     defaultTaxRate: cleanPercentageNumber(data.defaultTaxRate, 20),
+    defaultDeliveryTime: resolveDefaultDeliveryTime(data),
     taxCalculationType: cleanTaxCalculationType(data.taxCalculationType, "Revenue"),
     taxMilestoneEnabled: typeof data.taxMilestoneEnabled === "boolean" ? data.taxMilestoneEnabled : false,
     taxMilestoneDate: cleanTaxMilestoneDate(data.taxMilestoneDate, Date.now() / 1000),
@@ -5673,6 +5775,8 @@ function pdfExportSettingsFromData(data = {}) {
     pdfShowShipping: cleanPdfBoolean(data.pdfShowShipping, true),
     pdfShowMaterials: cleanPdfBoolean(data.pdfShowMaterials, true),
     pdfShowPriority: cleanPdfBoolean(data.pdfShowPriority, true),
+    pdfShowAddress: cleanPdfBoolean(data.pdfShowAddress, true),
+    pdfShowShippingAddress: cleanPdfBoolean(data.pdfShowShippingAddress, true),
     companyNumbers
   };
 }
@@ -5731,6 +5835,7 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
     taxRuleNameRevenue: cleanQuickReplyText(incoming.taxRuleNameRevenue || "Standard Tax (Services/New)", 120),
     taxRuleNameProfit: cleanQuickReplyText(incoming.taxRuleNameProfit || "Margin Scheme (2nd Hand)", 120),
     defaultTaxRate: cleanPercentageNumber(incoming.defaultTaxRate, 20),
+    defaultDeliveryTime: resolveDefaultDeliveryTime(incoming),
     taxCalculationType: cleanTaxCalculationType(incoming.taxCalculationType, "Revenue"),
     taxMilestoneEnabled: typeof incoming.taxMilestoneEnabled === "boolean" ? incoming.taxMilestoneEnabled : false,
     taxMilestoneDate: cleanTaxMilestoneDate(incoming.taxMilestoneDate, Date.now() / 1000),
@@ -5893,6 +5998,496 @@ exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" 
     companyId,
     updatedCount,
     message: `Recalculated ${updatedCount} orders.`
+  };
+});
+
+// Bulk-clear VAT/tax on every order in the workspace. For businesses where VAT
+// does not apply (e.g. exports / not VAT-registered) so they don't have to zero
+// each order by hand. Sets taxAmount/taxRate to 0 and clears taxType.
+exports.clearAllOrdersTax = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidCanEditWorkspaceSettings(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot edit Financial Settings.");
+  }
+  requireWorkspaceAreaAccess(companyData, uid, "financialInfo", "Financial Info is not enabled for your workspace account.");
+
+  const db = admin.firestore();
+  const email = String(request.auth?.token?.email || "");
+  const snapshot = await db.collection("siparisler").where("companyId", "==", companyId).get();
+  let batch = db.batch();
+  let batchCount = 0;
+  let clearedCount = 0;
+
+  async function commitBatchIfNeeded(force = false) {
+    if (batchCount === 0) return;
+    if (!force && batchCount < 400) return;
+    await batch.commit();
+    batch = db.batch();
+    batchCount = 0;
+  }
+
+  for (const orderDoc of snapshot.docs) {
+    const orderData = orderDoc.data() || {};
+    if (roundMoneyValue(orderData.taxAmount) === 0 && cleanTaxRate(orderData.taxRate) === 0) continue;
+    batch.set(orderDoc.ref, {
+      taxAmount: 0,
+      taxRate: 0,
+      taxType: "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: uid,
+      updatedByEmail: email,
+      source: orderData.source || "web"
+    }, { merge: true });
+    batchCount += 1;
+    clearedCount += 1;
+    await commitBatchIfNeeded(false);
+  }
+  await commitBatchIfNeeded(true);
+
+  return {
+    ok: true,
+    companyId,
+    clearedCount,
+    message: `Cleared VAT/tax on ${clearedCount} orders.`
+  };
+});
+
+// Manually fold one order's payment(s) into another (e.g. an installment that the
+// auto-combine split off, or two orders that should be one). The source order's
+// paidAmount + payment entries move onto the target, and the source is soft-deleted
+// (moved to Trash, recoverable) so it isn't double-counted.
+exports.mergeOrderIntoOrder = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireNotificationWorkspaceAccess(request);
+  const access = workspaceMemberAccess(companyData, uid);
+  if (access.orders === false) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot edit orders.");
+  }
+  const data = request.data || {};
+  const sourceId = String(data.sourceOrderId || "").trim();
+  const targetId = String(data.targetOrderId || "").trim();
+  if (!sourceId || !targetId || sourceId === targetId) {
+    throw new HttpsError("invalid-argument", "Choose a different target order to merge into.");
+  }
+
+  const db = admin.firestore();
+  const sourceRef = orderDocRef(sourceId);
+  const targetRef = orderDocRef(targetId);
+  const [sourceSnap, targetSnap] = await Promise.all([sourceRef.get(), targetRef.get()]);
+  if (!sourceSnap.exists || !targetSnap.exists) {
+    throw new HttpsError("not-found", "One of the orders no longer exists.");
+  }
+  const source = sourceSnap.data() || {};
+  const target = targetSnap.data() || {};
+  if (source.companyId !== companyId || target.companyId !== companyId) {
+    throw new HttpsError("permission-denied", "These orders are not in your workspace.");
+  }
+
+  const email = String(request.auth?.token?.email || "");
+  const sourcePaid = roundMoneyValue(source.paidAmount);
+  const sourcePayments = Array.isArray(source.payments) ? source.payments : [];
+  const movedPayments = sourcePayments.length > 0
+    ? sourcePayments
+    : (sourcePaid > 0 ? [{
+        id: crypto.randomUUID(),
+        amount: sourcePaid,
+        date: dateFromFirestore(source.paymentDate, new Date()),
+        method: String(source.paymentMethod || ""),
+        note: `Merged from order ${sourceId}`,
+        createdByUid: "",
+        createdByEmail: ""
+      }] : []);
+  const targetPayments = Array.isArray(target.payments) ? target.payments.slice() : [];
+  const mergedPayments = targetPayments.concat(movedPayments);
+
+  const batch = db.batch();
+  batch.set(targetRef, {
+    paidAmount: roundMoneyValue(target.paidAmount) + sourcePaid,
+    remainingAmount: Math.max(0, roundMoneyValue(target.remainingAmount) - sourcePaid),
+    payments: mergedPayments,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid,
+    updatedByEmail: email
+  }, { merge: true });
+  batch.set(sourceRef, {
+    isDeleted: true,
+    deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+    mergedIntoOrderId: targetId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid,
+    updatedByEmail: email
+  }, { merge: true });
+  await batch.commit();
+
+  return {
+    ok: true,
+    targetOrderId: targetId,
+    mergedAmount: sourcePaid,
+    message: "Order merged. The source order moved to Trash."
+  };
+});
+
+// Multi-select merge: combine several selected orders into one chosen primary.
+// Same financial semantics as mergeOrderIntoOrder (move payments + paidAmount,
+// reduce the primary's remaining, send each source to Trash with a
+// mergedIntoOrderId pointer) but applied to N sources in a single atomic batch.
+// Every platform (Mac/iPhone, Android, Web) calls this so the result is identical.
+exports.mergeOrders = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireNotificationWorkspaceAccess(request);
+  const access = workspaceMemberAccess(companyData, uid);
+  if (access.orders === false) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot edit orders.");
+  }
+  const data = request.data || {};
+  const primaryId = String(data.primaryOrderId || "").trim();
+  const rawSources = Array.isArray(data.sourceOrderIds) ? data.sourceOrderIds : [];
+  const sourceIds = Array.from(new Set(rawSources.map((id) => String(id || "").trim()).filter(Boolean)))
+    .filter((id) => id !== primaryId);
+  if (!primaryId || sourceIds.length === 0) {
+    throw new HttpsError("invalid-argument", "Select a primary order and at least one other order to merge.");
+  }
+  if (sourceIds.length > 50) {
+    throw new HttpsError("invalid-argument", "Too many orders selected to merge at once.");
+  }
+
+  const db = admin.firestore();
+  const primaryRef = orderDocRef(primaryId);
+  const sourceRefs = sourceIds.map((id) => orderDocRef(id));
+  const snaps = await Promise.all([primaryRef.get(), ...sourceRefs.map((ref) => ref.get())]);
+
+  const primarySnap = snaps[0];
+  if (!primarySnap.exists) {
+    throw new HttpsError("not-found", "The primary order no longer exists.");
+  }
+  const primary = primarySnap.data() || {};
+  if (primary.companyId !== companyId) {
+    throw new HttpsError("permission-denied", "These orders are not in your workspace.");
+  }
+
+  const email = String(request.auth?.token?.email || "");
+  let mergedPaid = roundMoneyValue(primary.paidAmount);
+  let mergedPayments = Array.isArray(primary.payments) ? primary.payments.slice() : [];
+  let mergedAmount = 0;
+  let mergedCount = 0;
+
+  const batch = db.batch();
+  for (let i = 0; i < sourceIds.length; i += 1) {
+    const sourceSnap = snaps[i + 1];
+    const sourceRef = sourceRefs[i];
+    const sourceId = sourceIds[i];
+    if (!sourceSnap.exists) continue;
+    const source = sourceSnap.data() || {};
+    if (source.companyId !== companyId) {
+      throw new HttpsError("permission-denied", "These orders are not in your workspace.");
+    }
+    if (source.isDeleted === true) continue;
+
+    const sourcePaid = roundMoneyValue(source.paidAmount);
+    const sourcePayments = Array.isArray(source.payments) ? source.payments : [];
+    const movedPayments = sourcePayments.length > 0
+      ? sourcePayments
+      : (sourcePaid > 0 ? [{
+          id: crypto.randomUUID(),
+          amount: sourcePaid,
+          date: dateFromFirestore(source.paymentDate, new Date()),
+          method: String(source.paymentMethod || ""),
+          note: `Merged from order ${sourceId}`,
+          createdByUid: "",
+          createdByEmail: ""
+        }] : []);
+    mergedPayments = mergedPayments.concat(movedPayments);
+    mergedPaid += sourcePaid;
+    mergedAmount += sourcePaid;
+    mergedCount += 1;
+
+    batch.set(sourceRef, {
+      isDeleted: true,
+      deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      mergedIntoOrderId: primaryId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: uid,
+      updatedByEmail: email
+    }, { merge: true });
+  }
+
+  if (mergedCount === 0) {
+    throw new HttpsError("failed-precondition", "None of the selected orders could be merged.");
+  }
+
+  batch.set(primaryRef, {
+    paidAmount: mergedPaid,
+    remainingAmount: Math.max(0, roundMoneyValue(primary.remainingAmount) - mergedAmount),
+    payments: mergedPayments,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: uid,
+    updatedByEmail: email
+  }, { merge: true });
+
+  await batch.commit();
+
+  return {
+    ok: true,
+    primaryOrderId: primaryId,
+    mergedCount,
+    mergedAmount,
+    message: `${mergedCount} order${mergedCount === 1 ? "" : "s"} merged. The merged orders moved to Trash.`
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Orders CSV export (callable) — one server-side generator shared by web, Mac
+// and Android so every platform produces an identical, date-range-filtered
+// file. Templates: orders (1 row/order), lineItems (1 row/line), payments
+// (1 row/payment), finance (1 row/order, dashboard-parity money columns).
+// Finance visibility mirrors the dashboard: roles without financialInfo cannot
+// export money columns or the inherently-financial payments / finance sheets.
+// ---------------------------------------------------------------------------
+const EXPORT_TEMPLATE_IDS = new Set(["orders", "lineItems", "payments", "finance"]);
+
+function exportNumberValue(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function exportMoneyValue(value) {
+  return roundMoneyValue(exportNumberValue(value)).toFixed(2);
+}
+
+function exportIsoDate(date) {
+  return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+}
+
+// Parse an ISO date (YYYY-MM-DD) into a UTC millisecond boundary. v1 uses UTC
+// calendar days for predictable, timezone-independent ranges.
+function exportRangeMs(value, endOfDay = false) {
+  const t = Date.parse(String(value || ""));
+  if (!Number.isFinite(t)) return null;
+  return endOfDay ? t + 24 * 60 * 60 * 1000 - 1 : t;
+}
+
+function exportCsvCell(value, delimiter) {
+  const text = value === null || value === undefined ? "" : String(value);
+  if (text.includes('"') || text.includes("\n") || text.includes("\r") || text.includes(delimiter)) {
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+  return text;
+}
+
+function buildExportCsv(headerCols, dataRows, options = {}) {
+  const delimiter = options.delimiter === ";" ? ";" : ",";
+  const bom = options.bom !== false;
+  const lines = [headerCols, ...dataRows].map((cols) => cols.map((cell) => exportCsvCell(cell, delimiter)).join(delimiter));
+  return (bom ? "\uFEFF" : "") + lines.join("\r\n");
+}
+
+// Custom expense values are stored as display strings ("1,250.00" or "£1250").
+// Strip the thousands separators + currency symbol before summing.
+function exportFinancialAmount(raw, currency) {
+  let cleaned = String(raw || "").split(",").join("");
+  if (currency) cleaned = cleaned.split(currency).join("");
+  const value = Number(cleaned.trim());
+  return Number.isFinite(value) ? value : 0;
+}
+
+function exportFilenameSlug(name) {
+  const slug = String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return slug || "nivadesk";
+}
+
+exports.exportOrders = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireNotificationWorkspaceAccess(request);
+  requireWorkspaceAreaAccess(companyData, uid, "exportData", "Data export is not enabled for your workspace account.");
+
+  const data = request.data || {};
+  const template = EXPORT_TEMPLATE_IDS.has(String(data.template || "")) ? String(data.template) : "orders";
+  const delimiter = data.delimiter === ";" ? ";" : ",";
+  const bom = data.bom !== false;
+  const includeTrash = data.includeTrash === true;
+
+  // Finance gate — same rule the dashboard uses to hide money from a role.
+  const access = workspaceMemberAccess(companyData, uid);
+  const canSeeFinance = access.financialInfo !== false;
+  if ((template === "finance" || template === "payments") && !canSeeFinance) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot export financial data.");
+  }
+
+  const fromMs = exportRangeMs(data.from, false);
+  const toMs = exportRangeMs(data.to, true);
+
+  const db = admin.firestore();
+  const settingsSnap = await companySettingsDocRef(companyId).get();
+  const settingsData = settingsSnap.exists ? settingsSnap.data() || {} : {};
+  const currency = String(settingsData.selectedCurrency || "");
+  const showBaseCost = settingsData.financialShowBaseCost !== false;
+  const expenseItems = parseHeadingItemsJSON(settingsData.financialExpenseItemsJSON, []);
+
+  const snapshot = await db.collection("siparisler").where("companyId", "==", companyId).get();
+  const orders = [];
+  for (const orderDoc of snapshot.docs) {
+    const orderData = orderDoc.data() || {};
+    if (!includeTrash && orderData.isDeleted === true) continue;
+    const paymentDate = dateFromFirestore(orderData.paymentDate, null);
+    const ms = paymentDate ? paymentDate.getTime() : null;
+    if (fromMs !== null && (ms === null || ms < fromMs)) continue;
+    if (toMs !== null && (ms === null || ms > toMs)) continue;
+    orders.push({ id: orderDoc.id, data: orderData, paymentDate });
+  }
+  orders.sort((a, b) => (a.paymentDate ? a.paymentDate.getTime() : 0) - (b.paymentDate ? b.paymentDate.getTime() : 0));
+
+  let header = [];
+  const rows = [];
+
+  if (template === "lineItems") {
+    header = ["Invoice No", "Payment Date", "Customer", "Item", "Quantity", "Unit Price", "Line Total", "Currency"];
+    if (!canSeeFinance) header = header.filter((h) => !["Unit Price", "Line Total", "Currency"].includes(h));
+    for (const order of orders) {
+      const o = order.data;
+      const lineItems = Array.isArray(o.lineItems) ? o.lineItems : [];
+      const base = [o.invoiceNumber || "", exportIsoDate(order.paymentDate), o.customerName || ""];
+      if (lineItems.length > 0) {
+        for (const li of lineItems) {
+          const row = [...base, li && li.name ? String(li.name) : "", exportNumberValue(li && li.quantity)];
+          if (canSeeFinance) row.push(exportMoneyValue(li && li.unitPrice), exportMoneyValue(li && li.lineTotal), currency);
+          rows.push(row);
+        }
+      } else {
+        // Orders without line items still appear as a single line using the
+        // design name + order total, so the sheet covers every order.
+        const total = exportNumberValue(o.paidAmount) + exportNumberValue(o.remainingAmount);
+        const row = [...base, o.designName || "(order)", 1];
+        if (canSeeFinance) row.push(exportMoneyValue(total), exportMoneyValue(total), currency);
+        rows.push(row);
+      }
+    }
+  } else if (template === "payments") {
+    header = ["Invoice No", "Customer", "Payment Date", "Amount", "Method", "Note", "Recorded By", "Currency"];
+    for (const order of orders) {
+      const o = order.data;
+      const payments = Array.isArray(o.payments) ? o.payments : [];
+      if (payments.length > 0) {
+        for (const p of payments) {
+          rows.push([
+            o.invoiceNumber || "",
+            o.customerName || "",
+            exportIsoDate(dateFromFirestore(p && p.date, order.paymentDate)),
+            exportMoneyValue(p && p.amount),
+            (p && p.method) || "",
+            (p && p.note) || "",
+            (p && p.createdByEmail) || "",
+            currency
+          ]);
+        }
+      } else if (exportNumberValue(o.paidAmount) > 0) {
+        // Legacy orders aggregated their instalments into paidAmount — emit one
+        // synthetic row so reconciliation totals still balance.
+        rows.push([
+          o.invoiceNumber || "",
+          o.customerName || "",
+          exportIsoDate(order.paymentDate),
+          exportMoneyValue(o.paidAmount),
+          o.paymentMethod || "",
+          "(aggregated)",
+          "",
+          currency
+        ]);
+      }
+    }
+  } else if (template === "finance") {
+    header = ["Invoice No", "Payment Date", "Customer", "Sales Total", "Paid", "Outstanding", "Base Cost", "Custom Expenses", "Payment Fee", "Delivery Cost", "Tax Type", "Tax Rate %", "VAT Amount", "Net Profit", "Currency"];
+    for (const order of orders) {
+      const o = order.data;
+      const paid = exportNumberValue(o.paidAmount);
+      const outstanding = exportNumberValue(o.remainingAmount);
+      const salesTotal = paid + outstanding;
+      const baseCost = showBaseCost ? exportNumberValue(o.watchPurchasePrice) : 0;
+      const customFields = o.customFields && typeof o.customFields === "object" ? o.customFields : {};
+      let customExpenses = 0;
+      for (const item of expenseItems) {
+        customExpenses += exportFinancialAmount(customFields[`financialExpense::${item.title}`], currency);
+      }
+      const paymentFee = exportNumberValue(o.paymentFee);
+      const deliveryCost = exportNumberValue(o.deliveryCost);
+      const taxAmount = exportNumberValue(o.taxAmount);
+      // Same formula as the dashboard's adjustedDashboardNetProfit.
+      const netProfit = salesTotal - baseCost - customExpenses - paymentFee - deliveryCost - taxAmount;
+      rows.push([
+        o.invoiceNumber || "",
+        exportIsoDate(order.paymentDate),
+        o.customerName || "",
+        exportMoneyValue(salesTotal),
+        exportMoneyValue(paid),
+        exportMoneyValue(outstanding),
+        exportMoneyValue(baseCost),
+        exportMoneyValue(customExpenses),
+        exportMoneyValue(paymentFee),
+        exportMoneyValue(deliveryCost),
+        o.taxType || "",
+        exportNumberValue(o.taxRate),
+        exportMoneyValue(taxAmount),
+        exportMoneyValue(netProfit),
+        currency
+      ]);
+    }
+  } else {
+    const moneyCols = new Set(["Paid", "Outstanding", "Order Total", "Currency"]);
+    header = ["Invoice No", "Order ID", "Payment Date", "Customer", "Email", "Phone", "Instagram", "Design", "Status", "Design Status", "Priority", "Risk", "Dispatched", "Delivered", "Courier", "Tracking No", "Delivery Days", "Assigned To", "Paid", "Outstanding", "Order Total", "Currency", "Notes"];
+    if (!canSeeFinance) header = header.filter((h) => !moneyCols.has(h));
+    for (const order of orders) {
+      const o = order.data;
+      const row = [
+        o.invoiceNumber || "",
+        order.id,
+        exportIsoDate(order.paymentDate),
+        o.customerName || "",
+        o.emailAddress || "",
+        o.whatsappNumber || "",
+        o.instagramUsername || "",
+        o.designName || "",
+        o.status || "",
+        o.designStatus || "",
+        o.priority || "",
+        o.risk || "",
+        o.isDispatched ? "Yes" : "No",
+        o.isDelivered ? "Yes" : "No",
+        o.courier || "",
+        o.trackingNumber || "",
+        exportNumberValue(o.deliveryTime),
+        o.assignedToEmail || ""
+      ];
+      if (canSeeFinance) {
+        row.push(
+          exportMoneyValue(o.paidAmount),
+          exportMoneyValue(o.remainingAmount),
+          exportMoneyValue(exportNumberValue(o.paidAmount) + exportNumberValue(o.remainingAmount)),
+          currency
+        );
+      }
+      row.push(o.notes || "");
+      rows.push(row);
+    }
+  }
+
+  const csv = buildExportCsv(header, rows, { delimiter, bom });
+  const base64 = Buffer.from(csv, "utf8").toString("base64");
+  // v1 returns the file inline. Guard against the callable 10MB response limit;
+  // v2 will switch large exports to Cloud Storage + a signed download URL.
+  if (base64.length > 8 * 1024 * 1024) {
+    throw new HttpsError("resource-exhausted", "This export is too large to download at once. Please choose a narrower date range.");
+  }
+  const rangeLabel = `${data.from ? String(data.from) : "all"}_${data.to ? String(data.to) : "all"}`;
+  const filename = `${exportFilenameSlug(companyData.name)}-${template}-${rangeLabel}.csv`;
+  return {
+    ok: true,
+    companyId,
+    template,
+    rowCount: rows.length,
+    filename,
+    mimeType: "text/csv;charset=utf-8",
+    base64
   };
 });
 
@@ -6377,6 +6972,7 @@ const BACKUP_STRING_SETTING_KEYS = new Set([
   "summaryStep2",
   "orderListStep1",
   "orderListStep2",
+  "orderItemsHeading",
   "invLabel1",
   "invLabel2",
   "invLabel3",
@@ -7997,7 +8593,9 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
     "statusNotesSupplier",
     "notes",
     "customFields",
-    "specialNotes"
+    "specialNotes",
+    "lineItems",
+    "invoiceNote"
   ]);
 
   const unknownFields = Object.keys(patch).filter((field) => !knownFields.has(field));
@@ -8020,6 +8618,15 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
     setTextUpdate("customerName", "Customer changed", next, 180);
   }
   if (hasOwnField(patch, "designName")) setTextUpdate("designName", "Design changed", patch.designName, 180);
+  if (hasOwnField(patch, "invoiceNote")) {
+    const previous = cleanOrderNotes(orderData.invoiceNote);
+    const next = cleanOrderNotes(patch.invoiceNote);
+    if (previous !== next) {
+      updates.invoiceNote = next;
+      pushHistoryChange(historyEntries, "Invoice note updated", previous ? "Note" : "-", next ? "Note" : "-", uid, email);
+      changed = true;
+    }
+  }
   if (hasOwnField(patch, "assignedToUid")) setTextUpdate("assignedToUid", "Project assignee changed", patch.assignedToUid, 160);
   if (hasOwnField(patch, "assignedToEmail")) setTextUpdate("assignedToEmail", "Project assignee email changed", patch.assignedToEmail, 220);
   if (hasOwnField(patch, "watchRef")) setTextUpdate("watchRef", "Reference changed", patch.watchRef, 180);
@@ -8042,8 +8649,43 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
   if (hasOwnField(patch, "emailAddress")) setTextUpdate("emailAddress", "Email changed", patch.emailAddress, 220);
   if (hasOwnField(patch, "whatsappNumber")) setTextUpdate("whatsappNumber", "Telephone changed", patch.whatsappNumber, 80);
   if (hasOwnField(patch, "instagramUsername")) setTextUpdate("instagramUsername", "Instagram changed", patch.instagramUsername, 120);
+  if (hasOwnField(patch, "shippingName")) setTextUpdate("shippingName", "Shipping recipient changed", patch.shippingName, 180);
+  if (hasOwnField(patch, "shippingStreetAddress")) setTextUpdate("shippingStreetAddress", "Shipping street changed", patch.shippingStreetAddress, 400);
+  if (hasOwnField(patch, "shippingCity")) setTextUpdate("shippingCity", "Shipping city changed", patch.shippingCity, 120);
+  if (hasOwnField(patch, "shippingPostalCode")) setTextUpdate("shippingPostalCode", "Shipping postcode changed", patch.shippingPostalCode, 40);
+  if (hasOwnField(patch, "shippingCountry")) setTextUpdate("shippingCountry", "Shipping country changed", patch.shippingCountry, 120);
+  if (hasOwnField(patch, "shippingPhone")) setTextUpdate("shippingPhone", "Shipping phone changed", patch.shippingPhone, 80);
   if (hasOwnField(patch, "courier")) setTextUpdate("courier", "Courier changed", patch.courier, 120);
   if (hasOwnField(patch, "trackingNumber")) setTextUpdate("trackingNumber", "Tracking number changed", patch.trackingNumber, 160);
+
+  if (hasOwnField(patch, "lineItems")) {
+    const incoming = Array.isArray(patch.lineItems) ? patch.lineItems : [];
+    const sanitized = incoming.map((it) => {
+      const quantity = Math.max(0, Number(it && it.quantity) || 0);
+      const unitPrice = roundLineMoney(it && it.unitPrice);
+      const lineTotal = (it && it.lineTotal != null) ? roundLineMoney(it.lineTotal) : roundLineMoney(quantity * unitPrice);
+      return {
+        id: cleanOrderText(it && it.id, "", 60) || crypto.randomUUID(),
+        name: cleanOrderText(it && it.name, "", 200),
+        quantity,
+        unitPrice,
+        lineTotal
+      };
+    }).filter((it) => it.name || Math.abs(it.lineTotal) > 0.005);
+    const prevJson = JSON.stringify(orderData.lineItems || []);
+    const nextJson = JSON.stringify(sanitized);
+    if (prevJson !== nextJson) {
+      updates.lineItems = sanitized;
+      // Items drive the order total: remaining = total − already paid (the user's chosen rule).
+      if (sanitized.length > 0) {
+        const itemsTotal = roundLineMoney(sanitized.reduce((s, it) => s + it.lineTotal, 0));
+        const paid = Number(orderData.paidAmount) || 0;
+        updates.remainingAmount = Math.max(0, roundLineMoney(itemsTotal - paid));
+      }
+      pushHistoryChange(historyEntries, "Invoice items updated", `${(orderData.lineItems || []).length} items`, `${sanitized.length} items`, uid, email);
+      changed = true;
+    }
+  }
 
   const currentFields = orderData.customFields && typeof orderData.customFields === "object" && !Array.isArray(orderData.customFields)
     ? { ...orderData.customFields }
@@ -9086,6 +9728,16 @@ function cleanCustomerPayload(data = {}, requireName = true) {
   const postalCode = cleanOrderText(data.postalCode || data.postcode || data.zipCode || data.zip, "", 40);
   const country = cleanOrderText(data.country, "", 120);
   const address = cleanOrderText(data.address, "", 1000) || composeCustomerAddressParts(streetAddress, city, postalCode, country);
+  // Shipping (delivery) address — structured + editable, mirroring the billing fields above.
+  const shippingStreetAddress = cleanOrderText(data.shippingStreetAddress, "", 500);
+  const shippingCity = cleanOrderText(data.shippingCity, "", 120);
+  const shippingPostalCode = cleanOrderText(data.shippingPostalCode, "", 40);
+  const shippingCountry = cleanOrderText(data.shippingCountry, "", 120);
+  const shippingPhone = cleanOrderText(data.shippingPhone, "", 80);
+  // Derive the combined line from the structured parts the UI edits; fall back to any
+  // existing combined value when the structured fields are empty (older customers).
+  const shippingAddress = composeCustomerAddressParts(shippingStreetAddress, shippingCity, shippingPostalCode, shippingCountry)
+    || cleanOrderText(data.shippingAddress, "", 1000);
   const payload = {
     name,
     email: cleanOrderText(data.email, "", 220),
@@ -9096,6 +9748,12 @@ function cleanCustomerPayload(data = {}, requireName = true) {
     city,
     postalCode,
     country,
+    shippingAddress,
+    shippingStreetAddress,
+    shippingCity,
+    shippingPostalCode,
+    shippingCountry,
+    shippingPhone,
     notes: cleanOrderNotes(data.notes)
   };
   // Only touch the profile photo when the client explicitly sends it. Contact-field
@@ -12886,14 +13544,108 @@ function wooLineItemsSummary(order) {
     .join(", ");
 }
 
+// Money rounding that preserves sign (unlike roundMoneyValue which clamps negatives to 0),
+// so a discount reconciling line can be negative.
+function roundLineMoney(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+// When the product lines don't sum to the order's grand total (shipping, fees, discounts),
+// append a single reconciling line so the itemized invoice always foots to the real total
+// the customer paid. Mutates and returns the array. Schema matches every client's LineItem.
+function reconcileLineItems(items, total) {
+  if (!Array.isArray(items) || items.length === 0) return items || [];
+  const sum = roundLineMoney(items.reduce((acc, i) => acc + (Number(i.lineTotal) || 0), 0));
+  const diff = roundLineMoney(Number(total) - sum);
+  if (Math.abs(diff) > 0.01) {
+    items.push({
+      id: crypto.randomUUID(),
+      name: diff > 0 ? "Shipping & other" : "Discount",
+      quantity: 1,
+      unitPrice: diff,
+      lineTotal: diff
+    });
+  }
+  return items;
+}
+
+// Structured invoice line items from WooCommerce line_items, using gross (VAT-inclusive)
+// amounts so they sum toward the same VAT-inclusive order total the rest of the app uses.
+// Schema must match every client's LineItem: { id, name, quantity, unitPrice, lineTotal }.
+function wooStructuredLineItems(order) {
+  return wooLineItems(order)
+    .map((item) => {
+      const quantity = Math.max(1, wooNumber(item?.quantity, 1));
+      const lineTotal = roundLineMoney(wooNumber(item?.total, 0) + wooNumber(item?.total_tax, 0));
+      return {
+        id: crypto.randomUUID(),
+        name: cleanWooText(item?.name) || "Product",
+        quantity,
+        unitPrice: roundLineMoney(lineTotal / quantity),
+        lineTotal
+      };
+    })
+    .filter((i) => i.name);
+}
+
 function wooBillingFullName(order) {
   const billing = order?.billing || {};
   const name = [billing.first_name, billing.last_name].map(cleanWooText).filter(Boolean).join(" ");
   return name || cleanWooText(billing.company) || cleanWooText(order?.customer_name) || "WooCommerce Customer";
 }
 
+// A real phone number never contains "@". Some checkouts mis-enter the email into the
+// phone field; treat an email-looking value as no phone so it never lands in a phone field.
+function sanitizePhone(value) {
+  const v = cleanWooText(value);
+  return v.includes("@") ? "" : v;
+}
+
 function wooPhone(order) {
-  return cleanWooText(order?.billing?.phone || order?.shipping?.phone || wooMetaValue(order, ["phone", "telephone", "whatsapp", "WhatsApp"]));
+  return sanitizePhone(order?.billing?.phone || order?.shipping?.phone || wooMetaValue(order, ["phone", "telephone", "whatsapp", "WhatsApp"]));
+}
+
+// Extract a structured address from a WooCommerce billing/shipping object.
+function wooAddressParts(addr) {
+  const a = addr || {};
+  const street = [cleanWooText(a.address_1), cleanWooText(a.address_2)].filter(Boolean).join(", ");
+  const name = [cleanWooText(a.first_name), cleanWooText(a.last_name)].filter(Boolean).join(" ");
+  return {
+    name: name || cleanWooText(a.company),
+    street,
+    city: cleanWooText(a.city),
+    state: cleanWooText(a.state),
+    postalCode: cleanWooText(a.postcode),
+    country: cleanWooText(a.country),
+    phone: sanitizePhone(a.phone)
+  };
+}
+
+// Single-line readable address (for the customer's combined `address` field).
+// Operates on the normalized parts shape from wooAddressParts / shopifyAddressParts.
+function formatAddressParts(p) {
+  const cityLine = [p.city, p.state].filter(Boolean).join(", ");
+  return [p.street, cityLine, p.postalCode, p.country].filter(Boolean).join(", ");
+}
+
+// Seed the payment ledger with the order's initial paid amount, so the "Payments"
+// section shows it just like the manually-entered flow (which records a PaymentEntry).
+// Mirrors the Swift seedInitialPaymentFromPaidIfNeeded: a single entry, only when the
+// paid amount is positive. Returns [] otherwise. Schema must match every client's
+// PaymentEntry: { id, amount, date, method, note, createdByUid, createdByEmail }.
+function seedInitialPayment(amount, date, method) {
+  const rounded = Math.round((Number(amount) || 0) * 100) / 100;
+  if (rounded <= 0.005) return [];
+  return [{
+    id: crypto.randomUUID(),
+    amount: rounded,
+    date,
+    method: cleanWooText(method),
+    note: "",
+    createdByUid: "",
+    createdByEmail: ""
+  }];
 }
 
 function wooCompanyId(req, order) {
@@ -12909,22 +13661,53 @@ function wooOrderDocId(companyId, wooOrderId) {
   return `woo_${wooSafeDocPart(companyId)}_${wooSafeDocPart(wooOrderId)}`;
 }
 
-function mapWooCommerceOrderToSiparis(order, companyId, isNew = true) {
+// Resolves the workspace-configured default delivery time (days) for incoming
+// integration orders. Defaults to 30 (the studio's average turnaround) and is
+// clamped to a sane 1..730 range.
+function resolveDefaultDeliveryTime(settingsData) {
+  const raw = Number(settingsData && settingsData.defaultDeliveryTime);
+  if (!Number.isFinite(raw) || raw <= 0) return 30;
+  return Math.min(Math.max(Math.round(raw), 1), 730);
+}
+
+function mapWooCommerceOrderToSiparis(order, companyId, isNew = true, defaultDeliveryTime = 30) {
   const now = new Date();
   const wooId = cleanWooText(order?.id || order?.number || crypto.randomUUID());
   const orderNumber = cleanWooText(order?.number || order?.id || wooId);
   const status = cleanWooText(order?.status || "new");
   const total = wooNumber(order?.total, 0);
   const createdAt = wooDate(order?.date_paid || order?.date_created || order?.date_created_gmt, now);
-  const deliveryTime = wooNumber(wooMetaValue(order, ["deliveryTime", "delivery_days", "studioflow_delivery_days"]), 45);
+  // Default delivery time comes from the workspace setting (the studio's average
+  // turnaround). An explicit per-order `studioflow_delivery_days` meta still wins
+  // if the store sets one, but generic WooCommerce delivery/shipping metas are
+  // ignored. NOTE: wooMetaValue returns "" (not undefined) for a missing meta, and
+  // wooNumber("") is 0 (a finite number, so it never falls back) — that 0 was the
+  // real reason every incoming order looked far too short. So fall back explicitly.
+  const deliveryMeta = wooMetaValue(order, ["studioflow_delivery_days"]);
+  const deliveryTime = deliveryMeta
+    ? Math.min(Math.max(Math.round(wooNumber(deliveryMeta, defaultDeliveryTime)), 1), 730)
+    : defaultDeliveryTime;
   const lineSummary = wooLineItemsSummary(order);
   const firstItem = wooLineItems(order)[0] || {};
+  // Structured invoice line items (real per-product prices), reconciled to the order total.
+  const lineItems = reconcileLineItems(wooStructuredLineItems(order), total);
   const designName = cleanWooText(wooMetaValue(order, ["designName", "design_name", "Design Name"]) || lineSummary || firstItem?.name || `WooCommerce #${orderNumber}`);
   const watchRef = cleanWooText(wooMetaValue(order, ["watchRef", "watch_ref", "Watch Ref", "watch model"]) || firstItem?.sku || "");
-  const paymentMethod = cleanWooText(order?.payment_method_title || order?.payment_method || "WooCommerce");
+  // The customer's actual payment method (PayPal, card, bank transfer…). Left empty when
+  // the order carries none (e.g. a manually-created order) — we don't substitute "WooCommerce".
+  // The order's source/channel is recorded separately in `communication`.
+  const paymentMethod = cleanWooText(order?.payment_method_title || order?.payment_method || "");
   const customerNote = cleanWooText(order?.customer_note || "");
   const email = cleanWooText(order?.billing?.email || order?.shipping?.email || "");
   const phone = wooPhone(order);
+
+  // Billing goes to the customer record; shipping is per-order (can differ).
+  // WooCommerce sends an empty shipping object when "ship to billing" is used,
+  // so fall back to the billing address in that case.
+  const billingParts = wooAddressParts(order?.billing);
+  const rawShipping = wooAddressParts(order?.shipping);
+  const shippingHasAddress = Boolean(rawShipping.street || rawShipping.city || rawShipping.postalCode);
+  const shippingParts = shippingHasAddress ? rawShipping : billingParts;
 
   const customFields = {
     Source: "WooCommerce",
@@ -12935,7 +13718,9 @@ function mapWooCommerceOrderToSiparis(order, companyId, isNew = true) {
     "WooCommerce Currency": cleanWooText(order?.currency || ""),
     "WooCommerce Total": cleanWooText(order?.total || ""),
     "WooCommerce Created At": cleanWooText(order?.date_created || order?.date_created_gmt || ""),
-    "WooCommerce Products": lineSummary
+    "WooCommerce Products": lineSummary,
+    // Billing address on the order so the invoice's Billing Address block is populated.
+    communicationAddress: formatAddressParts(billingParts)
   };
 
   const mapped = {
@@ -12949,12 +13734,19 @@ function mapWooCommerceOrderToSiparis(order, companyId, isNew = true) {
     watchRef,
     deliveryTime,
     designName,
+    lineItems,
     designLink: cleanWooText(order?.permalink || order?.url || ""),
     communication: ["WooCommerce"],
     emailAddress: email,
     instagramUsername: "",
     whatsappNumber: phone,
     notes: customerNote,
+    shippingName: shippingParts.name || wooBillingFullName(order),
+    shippingStreetAddress: shippingParts.street,
+    shippingCity: shippingParts.city,
+    shippingPostalCode: shippingParts.postalCode,
+    shippingCountry: shippingParts.country,
+    shippingPhone: shippingParts.phone || phone,
     designStatus: "Not Yet",
     status: "Not Yet",
     isDispatched: false,
@@ -12992,9 +13784,69 @@ function mapWooCommerceOrderToSiparis(order, companyId, isNew = true) {
       oldValue: "WooCommerce",
       newValue: `#${orderNumber}`
     }];
+    const seededPayments = seedInitialPayment(total, createdAt, paymentMethod);
+    if (seededPayments.length) mapped.payments = seededPayments;
   }
 
   return mapped;
+}
+
+// Create or update a customer (musteriler) from a WooCommerce order's billing
+// details. Matches by name within the workspace. Only writes non-empty values so
+// a later order never wipes an address the studio already has. Non-transactional
+// (webhook context); failures are swallowed by the caller.
+// Shared by the WooCommerce and Shopify webhooks: mirror an order's billing contact
+// into the workspace customer list. `source` tags the origin ("woocommerce"/"shopify").
+async function upsertIntegrationCustomer(companyId, info, source = "woocommerce") {
+  const name = cleanWooText(info.name);
+  if (!name || name === "WooCommerce Customer" || name === "Shopify Customer" || name === "Website Customer") return;
+
+  const db = admin.firestore();
+  const snap = await db.collection("musteriler")
+    .where("companyId", "==", companyId)
+    .where("name", "==", name)
+    .limit(1)
+    .get();
+
+  const fields = {
+    email: cleanWooText(info.email),
+    phone: cleanWooText(info.phone),
+    address: cleanWooText(info.address),
+    streetAddress: cleanWooText(info.streetAddress),
+    city: cleanWooText(info.city),
+    postalCode: cleanWooText(info.postalCode),
+    country: cleanWooText(info.country),
+    // Latest known per-order shipping destination, structured + combined line, so the
+    // customer screen can show (and edit) where this customer's orders actually ship to.
+    shippingAddress: cleanWooText(info.shippingAddress),
+    shippingStreetAddress: cleanWooText(info.shippingStreetAddress),
+    shippingCity: cleanWooText(info.shippingCity),
+    shippingPostalCode: cleanWooText(info.shippingPostalCode),
+    shippingCountry: cleanWooText(info.shippingCountry),
+    shippingPhone: cleanWooText(info.shippingPhone)
+  };
+
+  if (!snap.empty) {
+    const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp(), source };
+    for (const [key, value] of Object.entries(fields)) {
+      if (value) update[key] = value;
+    }
+    await snap.docs[0].ref.set(update, { merge: true });
+    return;
+  }
+
+  await db.collection("musteriler").doc().set({
+    companyId,
+    name,
+    instagram: "",
+    notes: "",
+    profileImageUrl: "",
+    ...fields,
+    lastContactDate: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    source
+  });
 }
 
 // Constant-time string comparison to avoid timing side channels on secret checks.
@@ -13024,6 +13876,27 @@ exports.getWooCommerceWebhookToken = onCall({ region: "europe-west2" }, async (r
   }
   return { ok: true, companyId, token, deliveryUrl: woocommerceDeliveryUrl(companyId, token) };
 });
+
+// Installment combine: find the single open WooCommerce-sourced order for this
+// customer (same email, not deleted, not delivered, within the window). Returns
+// the doc only when EXACTLY one matches — ambiguous cases fall back to a new order.
+async function findWooMergeCandidate(db, companyId, emailLower, windowMs, now, currentDocId) {
+  if (!emailLower) return null;
+  const snapshot = await db.collection("siparisler").where("companyId", "==", companyId).get();
+  const matches = [];
+  for (const doc of snapshot.docs) {
+    if (doc.id === currentDocId) continue;
+    const o = doc.data() || {};
+    if (o.isDeleted === true || o.isDelivered === true) continue;
+    if (String(o.emailAddress || "").trim().toLowerCase() !== emailLower) continue;
+    const source = (o.customFields && o.customFields.Source) || "";
+    if (String(source) !== "WooCommerce") continue;
+    const paymentDate = dateFromFirestore(o.paymentDate, null);
+    if (!paymentDate || (now.getTime() - paymentDate.getTime()) > windowMs) continue;
+    matches.push(doc);
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
 
 exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
   try {
@@ -13113,8 +13986,93 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       return;
     }
 
-    const mappedOrder = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists);
+    // Installment combine. When this is a brand-new WooCommerce order (no app order
+    // at its own docId), and the workspace takes repeat payments for one item as
+    // separate WooCommerce orders, fold this payment into the customer's single open
+    // WooCommerce order instead of creating a new one. A per-woo-order marker keeps
+    // it idempotent (webhook retries / status updates won't double-count).
+    if (!existing.exists) {
+      const db = admin.firestore();
+      const wooOrderNumber = cleanWooText(order?.number || wooOrderId);
+      const mergeMarkerRef = db.collection("companies").doc(companyId).collection("wooMergedPayments").doc(wooSafeDocPart(wooOrderId));
+      const mergeMarker = await mergeMarkerRef.get();
+      if (mergeMarker.exists) {
+        res.status(200).json({ ok: true, ignored: "already_merged", mergedInto: mergeMarker.data()?.mergedIntoOrderId || "" });
+        return;
+      }
+      const settingsSnap = await companySettingsDocRef(companyId).get();
+      const combineEnabled = settingsSnap.exists ? settingsSnap.data()?.wooCombineInstallments !== false : true;
+      const customerEmail = String(order?.billing?.email || order?.shipping?.email || "").trim().toLowerCase();
+      if (combineEnabled && customerEmail) {
+        const windowMs = 60 * 24 * 60 * 60 * 1000;
+        const candidate = await findWooMergeCandidate(db, companyId, customerEmail, windowMs, new Date(), docId);
+        if (candidate) {
+          const paymentAmount = wooNumber(order?.total, 0);
+          const candidateData = candidate.data() || {};
+          const payments = Array.isArray(candidateData.payments) ? candidateData.payments.slice() : [];
+          payments.push({
+            id: crypto.randomUUID(),
+            amount: paymentAmount,
+            date: new Date(),
+            method: cleanWooText(order?.payment_method_title || order?.payment_method || "WooCommerce"),
+            note: `WooCommerce installment (order #${wooOrderNumber})`,
+            createdByUid: "",
+            createdByEmail: ""
+          });
+          await candidate.ref.set({
+            paidAmount: roundMoneyValue(candidateData.paidAmount) + roundMoneyValue(paymentAmount),
+            remainingAmount: Math.max(0, roundMoneyValue(candidateData.remainingAmount) - roundMoneyValue(paymentAmount)),
+            payments,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: candidateData.source || "woocommerce"
+          }, { merge: true });
+          await mergeMarkerRef.set({
+            mergedIntoOrderId: candidate.id,
+            wooOrderId: String(wooOrderId),
+            amount: paymentAmount,
+            mergedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          await sendPushNotificationToCompany(companyId, {
+            title: "WooCommerce payment received",
+            body: `${cleanWooText(candidateData.customerName || "")}`.trim(),
+            orderId: candidate.id,
+            type: "woocommerce_payment"
+          }).catch(() => {});
+          res.status(200).json({ ok: true, merged: true, mergedInto: candidate.id, orderId: candidate.id });
+          return;
+        }
+      }
+    }
+
+    const wooDefaultDeliveryTime = resolveDefaultDeliveryTime((await companySettingsDocRef(companyId).get()).data());
+    const mappedOrder = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, wooDefaultDeliveryTime);
     await ref.set(mappedOrder, { merge: true });
+
+    // Mirror the billing contact into the workspace's customer list (address,
+    // phone, email). Best-effort: never block the order webhook on this.
+    try {
+      const billing = wooAddressParts(order?.billing);
+      const rawShip = wooAddressParts(order?.shipping);
+      const shipping = (rawShip.street || rawShip.city || rawShip.postalCode) ? rawShip : billing;
+      await upsertIntegrationCustomer(companyId, {
+        name: mappedOrder.customerName,
+        email: mappedOrder.emailAddress,
+        phone: mappedOrder.whatsappNumber,
+        address: formatAddressParts(billing),
+        streetAddress: billing.street,
+        city: billing.city,
+        postalCode: billing.postalCode,
+        country: billing.country,
+        shippingAddress: formatAddressParts(shipping),
+        shippingStreetAddress: shipping.street,
+        shippingCity: shipping.city,
+        shippingPostalCode: shipping.postalCode,
+        shippingCountry: shipping.country,
+        shippingPhone: shipping.phone || mappedOrder.whatsappNumber
+      }, "woocommerce");
+    } catch (error) {
+      console.warn("WooCommerce customer upsert failed:", error?.message || error);
+    }
 
     await sendPushNotificationToCompany(companyId, {
       title: "New WooCommerce order",
@@ -13176,6 +14134,25 @@ function shopifyLineItemsSummary(order) {
     .join(", ");
 }
 
+// Structured invoice line items from Shopify line_items. Shopify `price` is the unit price;
+// any tax / shipping difference is captured by the reconciling line so the invoice foots to
+// total_price. Schema matches every client's LineItem: { id, name, quantity, unitPrice, lineTotal }.
+function shopifyStructuredLineItems(order) {
+  return shopifyLineItems(order)
+    .map((item) => {
+      const quantity = Math.max(1, wooNumber(item?.quantity, 1));
+      const unitPrice = roundLineMoney(wooNumber(item?.price, 0));
+      return {
+        id: crypto.randomUUID(),
+        name: cleanWooText(item?.title || item?.name) || "Product",
+        quantity,
+        unitPrice,
+        lineTotal: roundLineMoney(unitPrice * quantity)
+      };
+    })
+    .filter((i) => i.name);
+}
+
 function shopifyCustomerName(order) {
   const customer = order?.customer || {};
   const customerName = [customer.first_name, customer.last_name].map(cleanWooText).filter(Boolean).join(" ");
@@ -13187,7 +14164,7 @@ function shopifyCustomerName(order) {
 }
 
 function shopifyPhone(order) {
-  return cleanWooText(
+  return sanitizePhone(
     order?.phone ||
     order?.customer?.phone ||
     order?.billing_address?.phone ||
@@ -13196,11 +14173,29 @@ function shopifyPhone(order) {
   );
 }
 
+// Normalize a Shopify address object into the shared parts shape (address1/zip/province).
+function shopifyAddressParts(addr) {
+  const a = addr || {};
+  const street = [cleanWooText(a.address1), cleanWooText(a.address2)].filter(Boolean).join(", ");
+  const name = cleanWooText(a.name)
+    || [cleanWooText(a.first_name), cleanWooText(a.last_name)].filter(Boolean).join(" ");
+  return {
+    name: name || cleanWooText(a.company),
+    street,
+    city: cleanWooText(a.city),
+    state: cleanWooText(a.province),
+    postalCode: cleanWooText(a.zip),
+    country: cleanWooText(a.country),
+    phone: sanitizePhone(a.phone)
+  };
+}
+
 function shopifyPaymentMethod(order) {
   const gateways = Array.isArray(order?.payment_gateway_names)
     ? order.payment_gateway_names.map(cleanWooText).filter(Boolean)
     : [];
-  return cleanWooText(gateways.join(", ") || order?.gateway || "Shopify");
+  // The actual gateway(s) the customer used; empty when none, rather than "Shopify".
+  return cleanWooText(gateways.join(", ") || order?.gateway || "");
 }
 
 function shopifyShippingCost(order) {
@@ -13219,12 +14214,21 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
   const createdAt = wooDate(order?.created_at || order?.processed_at, now);
   const lineSummary = shopifyLineItemsSummary(order);
   const firstItem = shopifyLineItems(order)[0] || {};
+  // Structured invoice line items (real per-product prices), reconciled to total_price.
+  const lineItems = reconcileLineItems(shopifyStructuredLineItems(order), total);
   const designName = cleanWooText(lineSummary || firstItem?.title || firstItem?.name || `Shopify ${orderNumber}`);
   const watchRef = cleanWooText(firstItem?.sku || "");
   const paymentMethod = shopifyPaymentMethod(order);
   const customerNote = cleanWooText(order?.note || "");
   const email = cleanWooText(order?.email || order?.customer?.email || order?.contact_email || "");
   const phone = shopifyPhone(order);
+
+  // Billing goes to the customer record; shipping is per-order (can differ).
+  // Shopify omits shipping_address for digital/no-ship orders, so fall back to billing.
+  const billingParts = shopifyAddressParts(order?.billing_address);
+  const rawShipping = shopifyAddressParts(order?.shipping_address);
+  const shippingHasAddress = Boolean(rawShipping.street || rawShipping.city || rawShipping.postalCode);
+  const shippingParts = shippingHasAddress ? rawShipping : billingParts;
 
   const customFields = {
     Source: "Shopify",
@@ -13235,7 +14239,9 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
     "Shopify Currency": cleanWooText(order?.currency || ""),
     "Shopify Total": cleanWooText(order?.total_price || ""),
     "Shopify Created At": cleanWooText(order?.created_at || ""),
-    "Shopify Products": lineSummary
+    "Shopify Products": lineSummary,
+    // Billing address on the order so the invoice's Billing Address block is populated.
+    communicationAddress: formatAddressParts(billingParts)
   };
 
   const mapped = {
@@ -13249,12 +14255,19 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
     watchRef,
     deliveryTime: 45,
     designName,
+    lineItems,
     designLink: cleanWooText(order?.order_status_url || ""),
     communication: ["Shopify"],
     emailAddress: email,
     instagramUsername: "",
     whatsappNumber: phone,
     notes: customerNote,
+    shippingName: shippingParts.name || shopifyCustomerName(order),
+    shippingStreetAddress: shippingParts.street,
+    shippingCity: shippingParts.city,
+    shippingPostalCode: shippingParts.postalCode,
+    shippingCountry: shippingParts.country,
+    shippingPhone: shippingParts.phone || phone,
     designStatus: "Not Yet",
     status: "Not Yet",
     isDispatched: false,
@@ -13292,6 +14305,8 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
       oldValue: "Shopify",
       newValue: `${orderNumber}`
     }];
+    const seededPayments = seedInitialPayment(total, createdAt, paymentMethod);
+    if (seededPayments.length) mapped.payments = seededPayments;
   }
 
   return mapped;
@@ -13401,6 +14416,32 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     const mappedOrder = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
     await ref.set(mappedOrder, { merge: true });
 
+    // Mirror the billing contact into the workspace's customer list (address,
+    // phone, email). Best-effort: never block the order webhook on this.
+    try {
+      const billing = shopifyAddressParts(order?.billing_address);
+      const rawShip = shopifyAddressParts(order?.shipping_address);
+      const shipping = (rawShip.street || rawShip.city || rawShip.postalCode) ? rawShip : billing;
+      await upsertIntegrationCustomer(companyId, {
+        name: mappedOrder.customerName,
+        email: mappedOrder.emailAddress,
+        phone: mappedOrder.whatsappNumber,
+        address: formatAddressParts(billing),
+        streetAddress: billing.street,
+        city: billing.city,
+        postalCode: billing.postalCode,
+        country: billing.country,
+        shippingAddress: formatAddressParts(shipping),
+        shippingStreetAddress: shipping.street,
+        shippingCity: shipping.city,
+        shippingPostalCode: shipping.postalCode,
+        shippingCountry: shipping.country,
+        shippingPhone: shipping.phone || mappedOrder.whatsappNumber
+      }, "shopify");
+    } catch (error) {
+      console.warn("Shopify customer upsert failed:", error?.message || error);
+    }
+
     await sendPushNotificationToCompany(companyId, {
       title: "New Shopify order",
       body: `${mappedOrder.customerName}: ${mappedOrder.designName}`,
@@ -13469,6 +14510,52 @@ function inboundProductsSummary(payload) {
   return cleanWooText(products);
 }
 
+// Structured invoice line items from a generic inbound payload. Only builds items when the
+// sender provided per-line prices; otherwise returns [] so the single designName line is used.
+// Schema matches every client's LineItem: { id, name, quantity, unitPrice, lineTotal }.
+function inboundStructuredLineItems(payload) {
+  const products = inboundValue(payload, ["products", "items", "lineItems", "line_items"]);
+  if (!Array.isArray(products)) return [];
+  return products
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const name = cleanWooText(item.name || item.title || item.product || "");
+      if (!name) return null;
+      const quantity = Math.max(1, wooNumber(item.quantity ?? item.qty, 1));
+      const unitRaw = item.unitPrice ?? item.price ?? item.unit_price;
+      const totalRaw = item.total ?? item.lineTotal ?? item.amount;
+      const lineTotal = totalRaw != null
+        ? roundLineMoney(wooNumber(totalRaw, 0))
+        : roundLineMoney(wooNumber(unitRaw, 0) * quantity);
+      const unitPrice = unitRaw != null
+        ? roundLineMoney(wooNumber(unitRaw, 0))
+        : roundLineMoney(lineTotal / quantity);
+      return { id: crypto.randomUUID(), name, quantity, unitPrice, lineTotal };
+    })
+    .filter(Boolean);
+}
+
+// Normalize a (possibly nested) address object from a generic inbound payload into the
+// shared parts shape. Accepts many common key spellings since the sender is user-configured.
+function inboundAddressParts(addr) {
+  const a = addr && typeof addr === "object" ? addr : {};
+  const street = [
+    cleanWooText(a.street || a.address1 || a.address_1 || a.line1 || a.address),
+    cleanWooText(a.street2 || a.address2 || a.address_2 || a.line2)
+  ].filter(Boolean).join(", ");
+  const name = cleanWooText(a.name)
+    || [cleanWooText(a.firstName || a.first_name), cleanWooText(a.lastName || a.last_name)].filter(Boolean).join(" ");
+  return {
+    name: name || cleanWooText(a.company),
+    street,
+    city: cleanWooText(a.city || a.town),
+    state: cleanWooText(a.state || a.province || a.region),
+    postalCode: cleanWooText(a.postalCode || a.postcode || a.zip || a.zipCode || a.postal_code),
+    country: cleanWooText(a.country || a.countryCode),
+    phone: sanitizePhone(a.phone || a.telephone || a.mobile)
+  };
+}
+
 function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
   const now = new Date();
   const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]) || crypto.randomUUID());
@@ -13476,14 +14563,28 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
   const total = wooNumber(inboundValue(payload, ["total", "amount", "total_price", "totalPrice", "grandTotal"]), 0);
   const createdAt = wooDate(inboundValue(payload, ["createdAt", "created_at", "date", "orderDate"]), now);
   const productsSummary = inboundProductsSummary(payload);
+  // Structured invoice line items — only when the sender supplied per-line prices; otherwise []
+  // so the single designName line is used. Reconciled to the order total when present.
+  const inboundItems = inboundStructuredLineItems(payload);
+  const lineItems = inboundItems.some((i) => i.lineTotal > 0.005) ? reconcileLineItems(inboundItems, total) : [];
   const designName = cleanWooText(inboundValue(payload, ["designName", "design_name", "title"]) || productsSummary || `Order ${orderNumber}`);
   const customerName = cleanWooText(inboundValue(payload, ["customerName", "customer_name", "name", "fullName", "buyerName"]) || "Website Customer");
   const sourceLabel = cleanWooText(inboundValue(payload, ["source", "platform", "store"]) || "Website");
-  const paymentMethod = cleanWooText(inboundValue(payload, ["paymentMethod", "payment_method", "gateway"]) || sourceLabel);
+  // The actual payment method the customer used; empty when none, rather than the source name.
+  const paymentMethod = cleanWooText(inboundValue(payload, ["paymentMethod", "payment_method", "gateway"]) || "");
   const email = cleanWooText(inboundValue(payload, ["email", "customerEmail", "buyerEmail"]));
-  const phone = cleanWooText(inboundValue(payload, ["phone", "telephone", "whatsapp", "mobile"]));
+  const phone = sanitizePhone(inboundValue(payload, ["phone", "telephone", "whatsapp", "mobile"]));
   const note = cleanWooText(inboundValue(payload, ["note", "notes", "customerNote", "message"]));
   const status = cleanWooText(inboundValue(payload, ["status", "financial_status", "paymentStatus"]));
+
+  // Billing goes to the customer record; shipping is per-order (can differ). Address can
+  // arrive as a nested object or as flat top-level fields, so support both shapes.
+  const rawBilling = inboundValue(payload, ["billing", "billingAddress", "billing_address", "address"]);
+  const billingParts = inboundAddressParts(rawBilling && typeof rawBilling === "object" ? rawBilling : payload);
+  const rawShipping = inboundValue(payload, ["shipping", "shippingAddress", "shipping_address"]);
+  const shippingPartsRaw = inboundAddressParts(rawShipping);
+  const shippingHasAddress = Boolean(shippingPartsRaw.street || shippingPartsRaw.city || shippingPartsRaw.postalCode);
+  const shippingParts = shippingHasAddress ? shippingPartsRaw : billingParts;
 
   const customFields = {
     Source: sourceLabel,
@@ -13493,7 +14594,9 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
     "Payment Method": paymentMethod,
     "Currency": cleanWooText(inboundValue(payload, ["currency"])),
     "Total": String(total),
-    "Products": productsSummary
+    "Products": productsSummary,
+    // Billing address on the order so the invoice's Billing Address block is populated.
+    communicationAddress: formatAddressParts(billingParts)
   };
 
   const mapped = {
@@ -13507,12 +14610,19 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
     watchRef: cleanWooText(inboundValue(payload, ["sku", "ref", "watchRef"])),
     deliveryTime: wooNumber(inboundValue(payload, ["deliveryTime", "delivery_days"]), 45),
     designName,
+    lineItems,
     designLink: cleanWooText(inboundValue(payload, ["orderUrl", "url", "link", "permalink"])),
     communication: [sourceLabel],
     emailAddress: email,
     instagramUsername: cleanWooText(inboundValue(payload, ["instagram", "instagramUsername"])),
     whatsappNumber: phone,
     notes: note,
+    shippingName: shippingParts.name || customerName,
+    shippingStreetAddress: shippingParts.street,
+    shippingCity: shippingParts.city,
+    shippingPostalCode: shippingParts.postalCode,
+    shippingCountry: shippingParts.country,
+    shippingPhone: shippingParts.phone || phone,
     designStatus: "Not Yet",
     status: "Not Yet",
     isDispatched: false,
@@ -13550,6 +14660,8 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
       oldValue: sourceLabel,
       newValue: `${orderNumber}`
     }];
+    const seededPayments = seedInitialPayment(total, createdAt, paymentMethod);
+    if (seededPayments.length) mapped.payments = seededPayments;
   }
 
   return mapped;
@@ -13642,6 +14754,34 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
 
     const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
     await ref.set(mappedOrder, { merge: true });
+
+    // Mirror the billing contact into the workspace's customer list (best-effort).
+    try {
+      const rawBilling = inboundValue(payload, ["billing", "billingAddress", "billing_address", "address"]);
+      const billing = inboundAddressParts(rawBilling && typeof rawBilling === "object" ? rawBilling : payload);
+      const rawShipping = inboundValue(payload, ["shipping", "shippingAddress", "shipping_address"]);
+      const shipParts = inboundAddressParts(rawShipping);
+      const shipping = (shipParts.street || shipParts.city || shipParts.postalCode) ? shipParts : billing;
+      const sourceTag = (cleanWooText(inboundValue(payload, ["source", "platform", "store"])) || "inbound").toLowerCase();
+      await upsertIntegrationCustomer(companyId, {
+        name: mappedOrder.customerName,
+        email: mappedOrder.emailAddress,
+        phone: mappedOrder.whatsappNumber,
+        address: formatAddressParts(billing),
+        streetAddress: billing.street,
+        city: billing.city,
+        postalCode: billing.postalCode,
+        country: billing.country,
+        shippingAddress: formatAddressParts(shipping),
+        shippingStreetAddress: shipping.street,
+        shippingCity: shipping.city,
+        shippingPostalCode: shipping.postalCode,
+        shippingCountry: shipping.country,
+        shippingPhone: shipping.phone || mappedOrder.whatsappNumber
+      }, sourceTag);
+    } catch (error) {
+      console.warn("Inbound customer upsert failed:", error?.message || error);
+    }
 
     await sendPushNotificationToCompany(companyId, {
       title: "New website order",
@@ -18011,6 +19151,38 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
       return;
     }
 
+    // Custom Order landing-page events (/custom-order-management). Anonymous,
+    // aggregate-only: one doc per day in customOrderLandingStats with simple
+    // per-event counters (+ device/source maps on the view). No individual
+    // event rows, no IP, no PII — same privacy model as the daily siteStats.
+    if (body.kind === "landing") {
+      const EVENT_FIELDS = {
+        custom_order_landing_view: "views",
+        custom_order_landing_cta_click: "ctaClicks",
+        custom_order_landing_how_it_works_click: "howItWorksClicks",
+        custom_order_landing_signup_visit: "signupVisits",
+        custom_order_landing_signup_completed: "signupsCompleted"
+      };
+      const landingField = EVENT_FIELDS[String(body.event || "")];
+      if (landingField) {
+        const landingInc = admin.firestore.FieldValue.increment(1);
+        const landingUpdate = {
+          [landingField]: landingInc,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+        // Device + source describe the visiting traffic — recorded on the view.
+        if (landingField === "views") {
+          const landingDevice = ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop";
+          const landingSource = siteStatsFieldKey(String(body.source || "").toLowerCase(), "direct", 40) || "direct";
+          landingUpdate.devices = { [landingDevice]: landingInc };
+          landingUpdate.sources = { [landingSource]: landingInc };
+        }
+        await admin.firestore().collection("customOrderLandingStats").doc(siteStatsDateKey()).set(landingUpdate, { merge: true });
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     const pageKey = siteStatsFieldKey(body.path, "unknown");
     const deviceKey = ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop";
     // Browsers report either "tr" or "tr-TR" — keep only the base language so
@@ -18075,6 +19247,56 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
     console.error("recordSiteVisit error:", error?.message || error);
     res.status(200).json({ ok: false });
   }
+});
+
+// Admin-only aggregation for the /custom-order-management landing page. Reads
+// the daily customOrderLandingStats counters and returns per-day rows + totals
+// + device/source breakdowns. The dashboard derives CTR + conversion rates.
+exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Landing-page statistics are restricted to NivaDesk admins.");
+  }
+
+  const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 400);
+  const dateKeys = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
+  }
+
+  const refs = dateKeys.map((key) => admin.firestore().collection("customOrderLandingStats").doc(key));
+  const snaps = await admin.firestore().getAll(...refs);
+
+  const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  const mergeInto = (target, source) => {
+    for (const [key, value] of Object.entries(source || {})) target[key] = (target[key] || 0) + num(value);
+  };
+
+  const totals = { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0 };
+  const devices = {};
+  const sources = {};
+
+  const daysOut = snaps.map((snap, index) => {
+    const data = snap.exists ? snap.data() : {};
+    const day = {
+      date: dateKeys[index],
+      views: num(data.views),
+      ctaClicks: num(data.ctaClicks),
+      howItWorksClicks: num(data.howItWorksClicks),
+      signupVisits: num(data.signupVisits),
+      signupsCompleted: num(data.signupsCompleted)
+    };
+    totals.views += day.views;
+    totals.ctaClicks += day.ctaClicks;
+    totals.howItWorksClicks += day.howItWorksClicks;
+    totals.signupVisits += day.signupVisits;
+    totals.signupsCompleted += day.signupsCompleted;
+    mergeInto(devices, data.devices);
+    mergeInto(sources, data.sources);
+    return day;
+  });
+
+  return { ok: true, days: daysOut, totals, devices, sources };
 });
 
 exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {

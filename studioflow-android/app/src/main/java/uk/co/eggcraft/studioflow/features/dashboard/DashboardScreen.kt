@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -1149,6 +1150,45 @@ private data class ExtraSpendingGroup(
     val total: Double
 )
 
+private fun extraSpendingCsv(groups: List<ExtraSpendingGroup>, locale: Locale): String {
+    fun esc(value: String): String = "\"" + value.replace("\"", "\"\"") + "\""
+    val df = java.text.SimpleDateFormat("yyyy-MM-dd", locale)
+    val sb = StringBuilder()
+    sb.append("Date,Customer,Design,Reference,Heading,Description,Amount\n")
+    for (group in groups) {
+        for (entry in group.entries) {
+            sb.append(esc(df.format(entry.paymentDate))).append(',')
+            sb.append(esc(entry.customerName)).append(',')
+            sb.append(esc(entry.designName)).append(',')
+            sb.append(esc(entry.watchRef)).append(',')
+            sb.append(esc(entry.heading)).append(',')
+            sb.append(esc(entry.description)).append(',')
+            sb.append(String.format(Locale.UK, "%.2f", entry.amount)).append('\n')
+        }
+    }
+    return sb.toString()
+}
+
+private fun shareExtraSpendingCsv(context: android.content.Context, csv: String, title: String) {
+    // Share an actual .csv file (via FileProvider) rather than raw text in the message
+    // body, matching the Mac/Web "download CSV" behaviour and the order PDF export here.
+    runCatching {
+        val exportDir = java.io.File(context.cacheDir, "exports").apply { mkdirs() }
+        val file = java.io.File(exportDir, "extra_spending_${System.currentTimeMillis()}.csv")
+        file.writeText(csv)
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(android.content.Intent.EXTRA_SUBJECT, title)
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, title))
+    }.onFailure {
+        android.widget.Toast.makeText(context, "CSV export failed.", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExtraSpendingSummarySection(
@@ -1162,6 +1202,7 @@ private fun ExtraSpendingSummarySection(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
+    val context = androidx.compose.ui.platform.LocalContext.current
     var expanded by rememberSaveable { mutableStateOf(false) }
     var scope by rememberSaveable { mutableStateOf(SpendingScope.ThisMonth) }
     var customStartMs by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -1265,6 +1306,12 @@ private fun ExtraSpendingSummarySection(
                 Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Extra Spending Summary", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                        IconButton(
+                            onClick = { shareExtraSpendingCsv(context, extraSpendingCsv(groups, locale), t("Export CSV")) },
+                            enabled = groups.isNotEmpty()
+                        ) {
+                            Icon(Icons.Filled.Share, contentDescription = t("Export CSV"))
+                        }
                         IconButton(onClick = { expanded = false }) { Icon(Icons.Filled.Close, contentDescription = "Close") }
                     }
 

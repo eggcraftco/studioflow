@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CardIconGlyph } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import type { BlockHeadingSettings, HeadingItem } from "@/lib/studioflow/blockHeadings";
@@ -250,13 +250,15 @@ export function OrderListCard({
   assigneeName = "",
   assigneePhotoURL = "",
   showFirstProjectGuideProjectBubble = false,
-  onFirstProjectGuideProjectNext
+  onFirstProjectGuideProjectNext,
+  multiSelected = false,
+  selectionActive = false
 }: {
   order: OrderListCardItem;
   selected: boolean;
   canSeeFinance: boolean;
   canSeeAdvancedFinance: boolean;
-  onSelect?: () => void;
+  onSelect?: (event?: ReactMouseEvent) => void;
   mobileHref?: string;
   blockHeadingSettings?: BlockHeadingSettings | null;
   moneySettings?: StudioMoneySettings;
@@ -265,6 +267,8 @@ export function OrderListCard({
   assigneePhotoURL?: string;
   showFirstProjectGuideProjectBubble?: boolean;
   onFirstProjectGuideProjectNext?: () => void;
+  multiSelected?: boolean;
+  selectionActive?: boolean;
 }) {
   const { hideNumbers } = usePricePrivacy();
   const firstBadgeStep = resolveBadgeStep(blockHeadingSettings, 1);
@@ -428,13 +432,15 @@ export function OrderListCard({
       tabIndex={0}
       className={[
         selected ? "order-list-card selected" : "order-list-card",
+        multiSelected ? "multi-selected" : "",
+        selectionActive ? "selection-active" : "",
         showFirstProjectGuideProjectBubble ? "first-project-guide-target" : ""
       ].filter(Boolean).join(" ")}
       style={showFirstProjectGuideProjectBubble ? {
         outline: "3px solid #2563eb",
         boxShadow: "0 0 0 6px rgba(37, 99, 235, 0.18), 0 18px 45px rgba(37, 99, 235, 0.22)"
       } : undefined}
-      onClick={onSelect}
+      onClick={event => onSelect?.(event)}
       onKeyDown={event => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -442,6 +448,11 @@ export function OrderListCard({
         }
       }}
     >
+      {selectionActive ? (
+        <span className={`order-list-select-indicator${multiSelected ? " checked" : ""}`} aria-hidden="true">
+          {multiSelected ? "✓" : ""}
+        </span>
+      ) : null}
       {content}
       {guideBubble}
     </div>

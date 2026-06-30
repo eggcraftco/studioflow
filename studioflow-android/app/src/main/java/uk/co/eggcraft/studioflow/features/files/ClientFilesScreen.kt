@@ -1,7 +1,9 @@
 package uk.co.eggcraft.studioflow.features.files
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -14,17 +16,27 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +61,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioClientFile
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.features.orders.ClientFilePreviewDialog
@@ -87,10 +100,29 @@ private fun fileBadge(file: StudioClientFile): String {
 private fun dateLabel(date: java.util.Date?): String =
     date?.let { SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(it) } ?: ""
 
+private fun clientFileDisplayName(context: Context, uri: Uri): String {
+    return runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) cursor.getString(index).orEmpty() else ""
+                } else {
+                    ""
+                }
+            }.orEmpty()
+    }.getOrDefault("")
+        .ifBlank { uri.lastPathSegment.orEmpty().substringAfterLast("/") }
+        .ifBlank { "Client file" }
+}
+
 @Composable
 fun ClientFilesScreen(
     state: StudioFlowUiState,
-    onDeleteClientFile: (StudioOrder, String) -> Unit
+    onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit = { _, _, _, _ -> },
+    onRenameClientFile: (StudioOrder, String, String) -> Unit = { _, _, _ -> },
+    onDeleteClientFile: (StudioOrder, String) -> Unit,
+    onOpenOrder: (StudioOrder) -> Unit = {}
 ) {
     val lang = LocalStudioLanguage.current
     val t: (String) -> String = { studioT(it, lang) }
@@ -100,6 +132,11 @@ fun ClientFilesScreen(
     val workspace = state.workspace
     val access = workspace?.memberAccess
     val canDeleteFiles = access?.allows("deleteClientFiles") != false && access?.allows("clientFiles") != false
+    // Upload/rename follow the same gating the order-detail Client Files card uses:
+    // an advanced plan (Pro/Team) plus the clientFiles member-access flag.
+    val planAllowsClientFiles = workspace?.billingPlan == StudioBillingPlan.ProMonthly ||
+        workspace?.billingPlan == StudioBillingPlan.TeamMonthly
+    val canManageClientFiles = planAllowsClientFiles && access?.allows("clientFiles") != false
 
     val groups = remember(state.orders) {
         state.orders
@@ -114,6 +151,27 @@ fun ClientFilesScreen(
     var previewFile by remember { mutableStateOf<StudioClientFile?>(null) }
     var pendingDeleteOrder by remember { mutableStateOf<StudioOrder?>(null) }
     var pendingZipBytes by remember { mutableStateOf<ByteArray?>(null) }
+    // Upload flow: the user picks a target order, then a file. We stash the chosen
+    // order while the system file picker is open so the result can be routed to it.
+    var showOrderPicker by remember { mutableStateOf(false) }
+    var uploadTargetOrder by remember { mutableStateOf<StudioOrder?>(null) }
+    // Rename flow: the order + file currently being renamed (null = dialog closed).
+    var renameTarget by remember { mutableStateOf<Pair<StudioOrder, StudioClientFile>?>(null) }
+
+    val uploadLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        val target = uploadTargetOrder
+        uploadTargetOrder = null
+        if (uri == null || target == null) return@rememberLauncherForActivityResult
+        val fileName = clientFileDisplayName(context, uri)
+        val contentType = context.contentResolver.getType(uri).orEmpty()
+        val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+        if (bytes != null) {
+            onUploadClientFile(target, bytes, fileName, contentType)
+            statusMessage = t("Uploading…")
+        }
+    }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -165,7 +223,7 @@ fun ClientFilesScreen(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -176,6 +234,13 @@ fun ClientFilesScreen(
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    if (canManageClientFiles && state.orders.isNotEmpty()) {
+                        TextButton(onClick = { showOrderPicker = true }) {
+                            Icon(Icons.Filled.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(t("Upload"))
+                        }
                     }
                     if (groups.isNotEmpty()) {
                         TextButton(
@@ -206,12 +271,17 @@ fun ClientFilesScreen(
             items(groups, key = { it.id }) { order ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onOpenOrder(order) }
+                        ) {
                             Text(
                                 if (order.designName.isBlank()) order.displayCustomerName
                                 else "${order.displayCustomerName} · ${order.designName}",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -236,11 +306,20 @@ fun ClientFilesScreen(
                         }
                     }
 
+                    // Divider under the project header to clearly separate the
+                    // project title from its files (mirrors the Mac hub).
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                    )
+
                     order.clientFiles.forEach { file ->
                         ClientFileHubRow(
                             file = file,
                             canDelete = canDeleteFiles,
+                            canRename = canManageClientFiles,
                             onPreview = { previewFile = file },
+                            onRename = { renameTarget = order to file },
                             onDelete = { onDeleteClientFile(order, file.id) }
                         )
                     }
@@ -281,13 +360,99 @@ fun ClientFilesScreen(
             }
         )
     }
+
+    if (showOrderPicker) {
+        val pickableOrders = remember(state.orders) {
+            state.orders.sortedBy { it.displayCustomerName.lowercase() }
+        }
+        AlertDialog(
+            onDismissRequest = { showOrderPicker = false },
+            title = { Text(t("Upload to project"), fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(t("Select project"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    pickableOrders.forEach { order ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    showOrderPicker = false
+                                    uploadTargetOrder = order
+                                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
+                                    uploadLauncher.launch(arrayOf("*/*"))
+                                },
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    if (order.designName.isBlank()) order.displayCustomerName
+                                    else "${order.displayCustomerName} · ${order.designName}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "${order.clientFiles.size} ${t("files")}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showOrderPicker = false }) { Text(t("Cancel")) }
+            }
+        )
+    }
+
+    renameTarget?.let { (order, file) ->
+        var renameText by remember(file.id) { mutableStateOf(file.fileName) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text(t("Rename"), fontWeight = FontWeight.ExtraBold) },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text(t("File name")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = renameText.trim().isNotBlank(),
+                    onClick = {
+                        onRenameClientFile(order, file.id, renameText.trim())
+                        renameTarget = null
+                    }
+                ) { Text(t("Save"), fontWeight = FontWeight.ExtraBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text(t("Cancel")) }
+            }
+        )
+    }
 }
 
 @Composable
 private fun ClientFileHubRow(
     file: StudioClientFile,
     canDelete: Boolean,
+    canRename: Boolean,
     onPreview: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     val lang = LocalStudioLanguage.current
@@ -334,6 +499,11 @@ private fun ClientFileHubRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+        if (canRename) {
+            TextButton(onClick = onRename) {
+                Icon(Icons.Filled.Edit, contentDescription = t("Rename"), modifier = Modifier.size(18.dp))
             }
         }
         if (canDelete) {

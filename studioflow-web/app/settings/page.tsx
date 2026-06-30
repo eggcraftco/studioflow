@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
@@ -11,7 +11,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, functions } from "@/lib/firebase/client";
 import { httpsCallable } from "firebase/functions";
-import { getWooCommerceWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
+import { getWooCommerceWebhookDeliveryUrl, getShopifyWebhookDeliveryUrl, getInboundWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
@@ -48,7 +48,9 @@ import {
 import { workspaceOnboardingPromptSeed, isWorkspaceOnboardingPromptSeed } from "@/lib/studioflow/workspaceOnboarding";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
+import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
+import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
@@ -75,21 +77,25 @@ import {
 } from "@/lib/studioflow/supportTickets";
 
 type SettingsSectionId =
-  | "general"
-  | "theme-branding"
-  | "language-labels"
+  | "profile-security"
+  | "preferences"
+  | "about"
+  | "branding"
   | "workflow"
   | "pdf"
   | "quick-reply"
   | "financial"
   | "woocommerce"
+  | "shopify"
+  | "inbound"
   | "safety-uploads"
   | "data"
-  | "account"
   | "plan-access"
   | "team-access"
-  | "support-tickets"
-  | "about";
+  | "message-settings"
+  | "support-tickets";
+
+type SettingsGroup = "account" | "workspace" | "integrations";
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -97,6 +103,19 @@ type SettingsSection = {
   appKey: string;
   description: string;
   icon: keyof typeof SETTINGS_ICON_PATHS;
+  group: SettingsGroup;
+};
+
+// Backwards-compatible deep links. Older URLs / buttons point at the previous
+// section ids; map them onto the new Account / Workspace structure so existing
+// `?section=...` links and the avatar menu keep landing on the right screen.
+const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
+  general: "profile-security",
+  account: "profile-security",
+  appearance: "preferences",
+  language: "preferences",
+  "theme-branding": "preferences",
+  "language-labels": "preferences"
 };
 
 const SETTINGS_ICON_PATHS = {
@@ -112,22 +131,38 @@ const SETTINGS_ICON_PATHS = {
   account: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 21a8 8 0 0 1 16 0"],
   plan: ["M4 5h16v14H4V5Z", "M4 10h16", "M8 15h3"],
   team: ["M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z", "M3 21a6 6 0 0 1 12 0M14 20a5 5 0 0 1 7-4.5"],
-  about: ["M12 17v-5", "M12 8h.01", "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"]
+  about: ["M12 17v-5", "M12 8h.01", "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"],
+  brand: ["M3 11.5 11.5 3H19a2 2 0 0 1 2 2v6.5L12.5 20a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8Z", "M16 8h.01"],
+  sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"]
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  { id: "general", title: "General", appKey: "General", description: "Appearance, language, profile and security.", icon: "theme" },
-  { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow" },
-  { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf" },
-  { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply" },
-  { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial" },
-  { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart" },
-  { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield" },
-  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data" },
-  { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan" },
-  { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team" },
-  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply" }
+  // Account — personal settings that follow the signed-in user across workspaces.
+  { id: "profile-security", title: "Profile & Security", appKey: "Account", description: "Your name, photo, sign-in email and password.", icon: "account", group: "account" },
+  { id: "preferences", title: "Preferences", appKey: "Preferences", description: "Your personal theme and language.", icon: "sliders", group: "account" },
+  { id: "about", title: "About", appKey: "About", description: "App version and product information.", icon: "about", group: "account" },
+  // Workspace — settings shared by every member of the current workspace.
+  { id: "branding", title: "Branding", appKey: "Branding", description: "Workspace name, logo and subtitle.", icon: "brand", group: "workspace" },
+  { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workspace" },
+  { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "workspace" },
+  { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workspace" },
+  { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "workspace" },
+  { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "workspace" },
+  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "workspace" },
+  { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "workspace" },
+  { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "workspace" },
+  { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "workspace" },
+  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "workspace" },
+  { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart", group: "integrations" },
+  { id: "shopify", title: "Shopify Integration", appKey: "Shopify", description: "Live Shopify orders and webhook setup.", icon: "cart", group: "integrations" },
+  { id: "inbound", title: "Other Platforms", appKey: "Webhook", description: "Connect any store via Zapier, Make or a custom webhook.", icon: "cart", group: "integrations" }
 ];
+
+const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string> = {
+  account: "Account",
+  workspace: "Workspace",
+  integrations: "Integrations"
+};
 
 function formatStorageFromMB(valueMB: number) {
   if (!Number.isFinite(valueMB) || valueMB <= 0) return "0 MB";
@@ -187,6 +222,9 @@ function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
+  // Message Settings only exists on plans with the Messages feature — hidden from
+  // everyone (owners included) otherwise, matching the Messages nav gate and Mac/Android.
+  if (sectionId === "message-settings" && workspace.entitlements.features.messages !== true) return false;
   if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
 
   const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
@@ -198,18 +236,32 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // role without having to also toggle on the broader Settings nav access. Mirrors
   // the Mac / Android behaviour where disabled permissions hide the menu cleanly
   // without surfacing a Firestore "Missing or insufficient permissions" popup.
-  if (sectionId === "general" || sectionId === "account" || sectionId === "about") {
+  // Personal Account screens — visible to any member (including workflow-only)
+  // that has the General settings flag, because they edit their own account.
+  if (
+    sectionId === "profile-security" ||
+    sectionId === "preferences" ||
+    sectionId === "about"
+  ) {
     return allowed("settingsGeneral");
   }
   if (sectionId === "support-tickets") return allowed("settingsSupport");
   if (sectionId === "team-access") return allowed("settingsTeamAccess");
+  // Message Settings — workspace messaging toggles, only meaningful on a plan with
+  // the Messages feature (mirrors the Mac/Android team-access gate).
+  if (sectionId === "message-settings") {
+    return workspace.entitlements.features.messages === true && allowed("settingsMessageSettings");
+  }
 
   if (isWorkflowOnly) {
-    if (sectionId === "theme-branding" || sectionId === "language-labels") return allowed("settingsGeneral");
     if (sectionId === "quick-reply") return allowed("settingsQuickReply");
     if (sectionId === "pdf") return allowed("settingsPdf");
     return false;
   }
+
+  // Workspace branding/identity — shared workspace setting, hidden from
+  // workflow-only members (handled above) like the other workspace sections.
+  if (sectionId === "branding") return allowed("settingsGeneral");
 
   // Explicit per-section gates for non-owner, non-workflow members. Default = false.
   if (sectionId === "workflow") return allowed("settingsWorkflow");
@@ -219,6 +271,8 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");
   if (sectionId === "data") return allowed("settingsData");
   if (sectionId === "woocommerce") return allowed("settingsWorkflow");
+  if (sectionId === "shopify") return allowed("settingsWorkflow");
+  if (sectionId === "inbound") return allowed("settingsWorkflow");
   if (sectionId === "plan-access") return allowed("settingsPlanAccess");
   return false;
 }
@@ -232,7 +286,7 @@ export default function SettingsPage() {
   const [quickReplySettings, setQuickReplySettings] = useState<QuickReplySettings | null>(null);
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [error, setError] = useState("");
   // Mobile drill-in: show the section list first, then the selected section's
@@ -254,8 +308,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requested = params.get("section") as SettingsSectionId | null;
-    if (requested && SETTINGS_SECTIONS.some(section => section.id === requested)) {
+    const rawRequested = params.get("section");
+    if (!rawRequested) return;
+    const requested = (SETTINGS_SECTION_ALIASES[rawRequested] ?? rawRequested) as SettingsSectionId;
+    if (SETTINGS_SECTIONS.some(section => section.id === requested)) {
       setActiveSection(requested);
     }
   }, []);
@@ -330,7 +386,7 @@ export default function SettingsPage() {
     [workspace]
   );
   const selectedSection = useMemo(
-    () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "general") ?? SETTINGS_SECTIONS[0],
+    () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "profile-security") ?? SETTINGS_SECTIONS[0],
     [activeSection, visibleSections]
   );
   const language = settings?.selectedLanguage ?? "English";
@@ -388,24 +444,31 @@ export default function SettingsPage() {
             <p>{t("Choose a section to edit.")}</p>
           </div>
           <div className="settings-section-list">
-            {visibleSections.map(section => {
+            {visibleSections.map((section, index) => {
               const unreadCount = section.id === "support-tickets" ? supportUnreadCount : 0;
+              const showGroupHeading = index === 0 || visibleSections[index - 1].group !== section.group;
               return (
-                <button
-                  key={section.id}
-                  className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
-                  type="button"
-                  onClick={() => selectSection(section.id)}
-                >
-                  <SettingsSectionIcon icon={section.icon} />
-                  <span>
-                    <strong style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      {t(section.title)}
-                      {unreadCount > 0 ? <span style={supportUnreadMenuBadgeStyle}>{unreadCount}</span> : null}
-                    </strong>
-                    <small>{t(section.description)}</small>
-                  </span>
-                </button>
+                <Fragment key={section.id}>
+                  {showGroupHeading ? (
+                    <p className="settings-section-group" role="presentation">
+                      {t(SETTINGS_GROUP_LABELS[section.group])}
+                    </p>
+                  ) : null}
+                  <button
+                    className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
+                    type="button"
+                    onClick={() => selectSection(section.id)}
+                  >
+                    <SettingsSectionIcon icon={section.icon} />
+                    <span>
+                      <strong style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        {t(section.title)}
+                        {unreadCount > 0 ? <span style={supportUnreadMenuBadgeStyle}>{unreadCount}</span> : null}
+                      </strong>
+                      <small>{t(section.description)}</small>
+                    </span>
+                  </button>
+                </Fragment>
               );
             })}
           </div>
@@ -484,20 +547,20 @@ function renderSettingsSection({
   onDataImported: () => Promise<void>;
 }) {
   switch (sectionId) {
-    case "general":
+    case "profile-security":
       return (
-        <GeneralSettingsSection
+        <AccountSection
           workspace={workspace}
           settings={settings}
-          language={language}
           userEmail={userEmail}
           onSaved={onWorkspaceSettingsChange}
+          hideWorkspaceIdentity
         />
       );
-    case "theme-branding":
-      return <ThemeBrandingSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
-    case "language-labels":
-      return <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
+    case "preferences":
+      return <PreferencesSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
+    case "branding":
+      return <WorkspaceBrandingSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
     case "workflow":
       return <WorkflowSettingsSection workspace={workspace} language={language} />;
     case "pdf":
@@ -508,21 +571,136 @@ function renderSettingsSection({
       return <FinancialSettingsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "woocommerce":
       return <WooCommerceIntegrationSection workspace={workspace} language={language} />;
+    case "shopify":
+      return <ShopifyIntegrationSection workspace={workspace} language={language} />;
+    case "inbound":
+      return <InboundWebhookSection workspace={workspace} language={language} />;
     case "safety-uploads":
       return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
       return <DataManagementSection workspace={workspace} counts={counts} userEmail={userEmail} onImported={onDataImported} language={language} />;
-    case "account":
-      return <AccountSection workspace={workspace} settings={settings} userEmail={userEmail} onSaved={onWorkspaceSettingsChange} />;
     case "plan-access":
       return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} language={language} />;
     case "team-access":
       return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} language={language} />;
+    case "message-settings":
+      return <MessageSettingsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
       return <AboutSection workspace={workspace} language={language} />;
   }
+}
+
+function MessageSettingsSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [directMessages, setDirectMessages] = useState(true);
+  const [groupConversations, setGroupConversations] = useState(true);
+  const [attachments, setAttachments] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const current = await getMessageWorkspaceSettings(workspace);
+      setDirectMessages(current.directMessagesEnabled);
+      setGroupConversations(current.groupConversationsEnabled);
+      setAttachments(current.attachmentsEnabled);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load message settings.");
+    } finally {
+      setLoading(false);
+    }
+  }, [workspace]);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
+  async function handleSave() {
+    setSaving(true);
+    setStatus("");
+    setError("");
+    try {
+      const next: StudioMessageWorkspaceSettings = {
+        directMessagesEnabled: directMessages,
+        groupConversationsEnabled: groupConversations,
+        attachmentsEnabled: attachments
+      };
+      await setMessageWorkspaceSettings(workspace, next);
+      setStatus("Message settings saved.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Message settings could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="reply" eyebrow={t("Message Settings")} title={t("Workspace messaging permissions")} />
+        <p className="muted-copy">{t("Control workspace-wide messaging permissions for the team.")}</p>
+        <div className="settings-toggle-stack">
+          <label className="settings-toggle-row">
+            <span>
+              <strong>{t("Allow Direct Messages")}</strong>
+              <small>{t("Team members can start one-to-one conversations.")}</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={directMessages}
+              disabled={!canEdit || saving || loading}
+              onChange={event => setDirectMessages(event.target.checked)}
+            />
+          </label>
+
+          <label className="settings-toggle-row">
+            <span>
+              <strong>{t("Allow Group Conversations")}</strong>
+              <small>{t("Team members can add people and create group chats.")}</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={groupConversations}
+              disabled={!canEdit || saving || loading}
+              onChange={event => setGroupConversations(event.target.checked)}
+            />
+          </label>
+
+          <label className="settings-toggle-row">
+            <span>
+              <strong>{t("Allow File & Image Sending")}</strong>
+              <small>{t("Team members can send images and files in Messages.")}</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={attachments}
+              disabled={!canEdit || saving || loading}
+              onChange={event => setAttachments(event.target.checked)}
+            />
+          </label>
+        </div>
+
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={loading} onClick={() => void loadSettings()}>
+            {t("Reload")}
+          </button>
+          <button className="button" type="button" disabled={!canEdit || saving || loading} onClick={handleSave}>
+            {saving ? t("Saving...") : t("Save")}
+          </button>
+        </div>
+        {!canEdit ? <p className="muted-copy">{t("Only workspace owners or admins can change these settings.")}</p> : null}
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
+        {error ? <p className="layout-error">{error}</p> : null}
+      </section>
+    </div>
+  );
 }
 
 function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS }) {
@@ -535,98 +713,65 @@ function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS 
   );
 }
 
-function GeneralSettingsSection({
+function PreferencesSection({
   workspace,
   settings,
   language,
-  userEmail,
   onSaved
 }: {
   workspace: WorkspaceContext;
   settings: WorkspaceSettingsOverview | null;
   language: string;
-  userEmail: string;
   onSaved: (settings: WorkspaceSettingsOverview) => void;
 }) {
-  type GeneralSubsection = "menu" | "appearance" | "language" | "profile" | "about";
-  const [selected, setSelected] = useState<GeneralSubsection>("menu");
-  const t = (text: string) => studioT(text, settings?.selectedLanguage ?? language ?? "English");
-  const normalizedRole = normalizeWorkspaceRole(workspace.role);
-  const canManageWorkspaceIdentity = normalizedRole === "owner" || normalizedRole === "admin" || normalizedRole === "member";
-  const [personalSettings, setPersonalSettings] = useState<{ appTheme?: string; selectedLanguage?: string }>({});
+  // Personal preferences — theme and language live together on one page so the
+  // Account group stays tidy and each isn't a single-control screen of its own.
+  return (
+    <div className="settings-card-stack">
+      <AppearanceSection workspace={workspace} settings={settings} onSaved={onSaved} />
+      <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onSaved} />
+      <AutoLockSection language={language} />
+    </div>
+  );
+}
+
+function AutoLockSection({ language }: { language: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [minutes, setMinutes] = useState(0);
 
   useEffect(() => {
-    getPersonalInterfaceSettings(workspace)
-      .then(values => setPersonalSettings(values))
-      .catch(() => setPersonalSettings({}));
-  }, [workspace.id]);
-
-  if (selected === "appearance") {
-    return (
-      <div className="settings-card-stack">
-        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
-        <ThemeBrandingSection workspace={workspace} settings={settings} onSaved={onSaved} />
-      </div>
-    );
-  }
-  if (selected === "language") {
-    return (
-      <div className="settings-card-stack">
-        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
-        <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onSaved} />
-      </div>
-    );
-  }
-  if (selected === "profile") {
-    return (
-      <div className="settings-card-stack">
-        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
-        <AccountSection workspace={workspace} settings={settings} userEmail={userEmail} onSaved={onSaved} hideWorkspaceIdentity={!canManageWorkspaceIdentity} />
-      </div>
-    );
-  }
-  if (selected === "about") {
-    return (
-      <div className="settings-card-stack">
-        <button className="button secondary" type="button" onClick={() => setSelected("menu")}>← {t("General")}</button>
-        <AboutSection workspace={workspace} language={language} />
-      </div>
-    );
-  }
+    setMinutes(getAutoLockMinutes());
+  }, []);
 
   return (
     <div className="settings-card-stack">
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="customer" eyebrow={t("Settings")} title={t("General")} />
-        <p className="muted-copy">{t("Manage your personal appearance, language, profile and sign-in security in one place.")}</p>
-        <div className="general-settings-list">
-          <button className="general-settings-row" type="button" onClick={() => setSelected("appearance")}>
-            <span className="general-settings-row__title">{t("Appearance")}</span>
-            <span className="general-settings-row__detail">{personalSettings.appTheme || settings?.appTheme || "System"}</span>
-            <span className="general-settings-row__arrow">›</span>
-          </button>
-          <button className="general-settings-row" type="button" onClick={() => setSelected("language")}>
-            <span className="general-settings-row__title">{t("Language & Region")}</span>
-            <span className="general-settings-row__detail">{personalSettings.selectedLanguage || settings?.selectedLanguage || language || "English"}</span>
-            <span className="general-settings-row__arrow">›</span>
-          </button>
-          <button className="general-settings-row" type="button" onClick={() => setSelected("profile")}>
-            <span className="general-settings-row__title">{t("Profile & Security")}</span>
-            <span className="general-settings-row__detail">{canManageWorkspaceIdentity ? t("Profile, workspace and security") : t("Profile and security")}</span>
-            <span className="general-settings-row__arrow">›</span>
-          </button>
-          <button className="general-settings-row" type="button" onClick={() => setSelected("about")}>
-            <span className="general-settings-row__title">{t("About")}</span>
-            <span className="general-settings-row__detail">NivaDesk</span>
-            <span className="general-settings-row__arrow">›</span>
-          </button>
-        </div>
+      <section className="card app-card">
+        <CardTitle icon="lock" eyebrow={t("Security")} title={t("Auto-lock")} />
+        <p className="muted-copy">{t("Lock NivaDesk after a period of inactivity, then unlock with your password. This applies to this browser only.")}</p>
+        <label className="quick-reply-settings-label">
+          <span>{t("Auto-lock")}</span>
+          <select
+            className="input"
+            value={minutes}
+            onChange={event => {
+              const next = parseInt(event.target.value, 10) || 0;
+              setMinutes(next);
+              setAutoLockMinutes(next);
+            }}
+          >
+            <option value={0}>{t("Off")}</option>
+            <option value={1}>{t("After 1 minute")}</option>
+            <option value={5}>{t("After 5 minutes")}</option>
+            <option value={15}>{t("After 15 minutes")}</option>
+            <option value={60}>{t("After 1 hour")}</option>
+          </select>
+        </label>
       </section>
     </div>
   );
 }
 
-function ThemeBrandingSection({
+function AppearanceSection({
   workspace,
   settings,
   onSaved
@@ -636,18 +781,14 @@ function ThemeBrandingSection({
   onSaved: (settings: WorkspaceSettingsOverview) => void;
 }) {
   const [appTheme, setAppTheme] = useState(settings?.appTheme ?? "System");
-  const [appSubtitle, setAppSubtitle] = useState(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
-  const canEditBranding = canEditWorkspaceSettingsForRole(workspace.role);
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
     setAppTheme(settings?.appTheme ?? "System");
-    setAppSubtitle(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
     setStatus("");
     setError("");
     getPersonalInterfaceSettings(workspace).then(personal => {
@@ -662,12 +803,8 @@ function ThemeBrandingSection({
     setError("");
     try {
       // Theme is ALWAYS personal — each user (owner included) keeps their own
-      // theme across their devices. Workspace branding fields (subtitle) still
-      // route through saveThemeBrandingSettings for owners/admins separately.
+      // theme across their devices.
       const personalResult = await savePersonalInterfaceSettings(workspace, { appTheme });
-      if (!isWorkflowOnly && appSubtitle !== settings?.appSubtitle) {
-        await saveThemeBrandingSettings(workspace, { appSubtitle });
-      }
       const savedTheme = personalResult.settings?.appTheme ?? appTheme;
       onSaved({ ...settings, appTheme: savedTheme });
       setAppTheme(savedTheme);
@@ -679,28 +816,11 @@ function ThemeBrandingSection({
     }
   }
 
-  async function handleSaveBranding() {
-    if (!settings || !canEditBranding) return;
-    setSaving(true);
-    setStatus("");
-    setError("");
-    try {
-      const result = await saveThemeBrandingSettings(workspace, { appSubtitle });
-      const savedSettings = { ...settings, ...(result.settings ?? { appSubtitle }) };
-      onSaved(savedSettings);
-      setAppSubtitle(savedSettings.appSubtitle);
-      setStatus(result.message || "Workspace branding saved.");
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Workspace branding could not be saved.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="dashboard" eyebrow={t("Theme")} title={t("Theme selector")} />
+        <CardTitle icon="dashboard" eyebrow={t("Appearance")} title={t("Theme selector")} />
+        <p className="muted-copy">{t("This theme is personal to your account and synchronises across your devices.")}</p>
         <label className="quick-reply-settings-label">
           <span>{t("Theme")}</span>
           <select
@@ -723,33 +843,282 @@ function ThemeBrandingSection({
             {saving ? t("Saving...") : t("Save Appearance")}
           </button>
         </div>
+        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
+        {error ? <p className="layout-error">{error}</p> : null}
       </section>
+    </div>
+  );
+}
 
-      {canEditBranding ? <section className="card app-card">
-        <CardTitle icon="storage" eyebrow={t("Branding")} title={t("Theme & Branding")} />
+function WorkspaceBrandingSection({
+  workspace,
+  settings,
+  onSaved
+}: {
+  workspace: WorkspaceContext;
+  settings: WorkspaceSettingsOverview | null;
+  onSaved: (settings: WorkspaceSettingsOverview) => void;
+}) {
+  const { user } = useAuth();
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const [companyName, setCompanyName] = useState(workspace.name);
+  const [appSubtitle, setAppSubtitle] = useState(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  const [identityStatus, setIdentityStatus] = useState("");
+  const [identityError, setIdentityError] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [logoStatus, setLogoStatus] = useState("");
+  const [logoError, setLogoError] = useState("");
+  const canEditBranding = canEditWorkspaceSettingsForRole(workspace.role);
+  const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
+  const canEditLogo = canManageWorkspaceLogoForRole(workspace.role);
+  const canUploadLogo = Boolean(workspace.entitlements.features.workspace_logo_upload);
+  const requirePolicy = settings?.uploadSafetyRequirePolicyAcceptance ?? true;
+  const maxSizeMB = settings?.uploadSafetyMaxFileSizeMB ?? 10;
+  const logoUrl = settings?.appLogoUrl?.trim() ?? "";
+  const language = settings?.selectedLanguage ?? "English";
+  const t = (text: string) => studioT(text, language);
+
+  useEffect(() => {
+    setCompanyName(workspace.name);
+  }, [workspace.name]);
+
+  useEffect(() => {
+    setAppSubtitle(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
+    setIdentityStatus("");
+    setIdentityError("");
+  }, [settings?.appSubtitle]);
+
+  useEffect(() => {
+    setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
+  }, [workspace.id]);
+
+  async function handleSaveIdentity() {
+    if (!settings) return;
+    setSavingIdentity(true);
+    setIdentityStatus("");
+    setIdentityError("");
+    try {
+      // Workspace name routes through the shared profile saver (the member's own
+      // display name is passed unchanged); the subtitle routes through branding.
+      if (canEditCompanyName && companyName.trim() !== workspace.name) {
+        await saveAccountProfile(workspace, { displayName: workspace.currentMemberDisplayName, companyName });
+      }
+      let nextSettings = settings;
+      if (canEditBranding && appSubtitle !== settings.appSubtitle) {
+        const result = await saveThemeBrandingSettings(workspace, { appSubtitle });
+        nextSettings = { ...settings, ...(result.settings ?? { appSubtitle }) };
+        setAppSubtitle(nextSettings.appSubtitle);
+      }
+      onSaved(nextSettings);
+      setIdentityStatus(t("Workspace branding saved."));
+    } catch (saveError) {
+      setIdentityError(saveError instanceof Error ? saveError.message : t("Workspace branding could not be saved."));
+    } finally {
+      setSavingIdentity(false);
+    }
+  }
+
+  async function saveLogoResult(result: { message?: string; settings?: { appLogoUrl?: string } }) {
+    if (!settings) return;
+    const nextSettings = { ...settings, ...(result.settings ?? {}) };
+    onSaved(nextSettings);
+    setLogoStatus(result.message || t("Workspace logo saved."));
+  }
+
+  async function uploadLogo(file: File, acceptedPolicy: boolean) {
+    if (!settings || !user) return;
+    setUploadingLogo(true);
+    setLogoStatus("");
+    setLogoError("");
+    try {
+      const result = await uploadWorkspaceLogo({
+        workspace,
+        file,
+        user: { uid: user.uid, email: user.email, displayName: user.displayName },
+        policyAccepted: acceptedPolicy,
+        maxSizeMB
+      });
+      await saveLogoResult(result);
+      setPendingLogoFile(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    } catch (uploadError) {
+      setLogoError(uploadError instanceof Error ? uploadError.message : t("Workspace logo could not be uploaded."));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  function handleLogoFile(file: File | undefined) {
+    if (!file) return;
+    if (!settings) {
+      setLogoError(t("Workspace settings are still loading."));
+      return;
+    }
+    if (!canEditLogo) {
+      setLogoError(t("Your workspace role cannot edit Workspace Logo."));
+      return;
+    }
+    if (requirePolicy && !policyAccepted) {
+      setPendingLogoFile(file);
+      setLogoStatus("");
+      setLogoError("");
+      return;
+    }
+    void uploadLogo(file, policyAccepted || !requirePolicy);
+  }
+
+  function openLogoPicker() {
+    setLogoStatus("");
+    setLogoError("");
+    if (!settings) {
+      setLogoError(t("Workspace settings are still loading."));
+      return;
+    }
+    if (!canEditLogo) {
+      setLogoError(t("Your workspace role cannot edit Workspace Logo."));
+      return;
+    }
+    logoInputRef.current?.click();
+  }
+
+  async function handleAcceptPolicyAndUpload() {
+    if (!pendingLogoFile) return;
+    window.localStorage.setItem(uploadSafetyAcceptanceKey(workspace.id), "accepted");
+    setPolicyAccepted(true);
+    const file = pendingLogoFile;
+    setPendingLogoFile(null);
+    await uploadLogo(file, true);
+  }
+
+  async function handleRemoveLogo() {
+    if (!settings) return;
+    setUploadingLogo(true);
+    setLogoStatus("");
+    setLogoError("");
+    try {
+      const result = await saveWorkspaceLogoUrl(workspace, "");
+      await saveLogoResult(result);
+    } catch (removeError) {
+      setLogoError(removeError instanceof Error ? removeError.message : t("Workspace logo could not be removed."));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="storage" eyebrow={t("Branding")} title={t("Workspace name & subtitle")} />
+        <p className="muted-copy">{t("These details are shared by everyone in this workspace and appear in the app header.")}</p>
+        <label className="quick-reply-settings-label">
+          <span>{t("Company / Studio Name")}</span>
+          <input
+            className="input"
+            value={companyName}
+            disabled={!canEditCompanyName || savingIdentity || !settings}
+            placeholder={t("My Studio")}
+            onChange={event => {
+              setCompanyName(event.target.value);
+              setIdentityStatus("");
+              setIdentityError("");
+            }}
+          />
+        </label>
+        {!canEditCompanyName ? <p className="muted-copy">{t("Company / Studio Name can only be changed by the workspace owner.")}</p> : null}
         <label className="quick-reply-settings-label">
           <span>{t("Brand Subtitle")}</span>
           <input
             className="input"
             value={appSubtitle}
-            disabled={!canEditBranding || saving || !settings}
+            disabled={!canEditBranding || savingIdentity || !settings}
             placeholder="Bespoke Hand-Painted Dials"
             onChange={event => {
               setAppSubtitle(event.target.value);
-              setStatus("");
-              setError("");
+              setIdentityStatus("");
+              setIdentityError("");
             }}
           />
         </label>
-        <p className="muted-copy">{t("Workspace logo is managed from Account > Workspace Logo.")}</p>
         <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEditBranding || saving || !settings} onClick={handleSaveBranding}>
-            {saving ? t("Saving...") : t("Save Theme & Branding")}
+          <button
+            className="button"
+            type="button"
+            disabled={savingIdentity || !settings || (!canEditCompanyName && !canEditBranding)}
+            onClick={handleSaveIdentity}
+          >
+            {savingIdentity ? t("Saving...") : t("Save Branding")}
           </button>
         </div>
-        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
-      </section> : null}
+        {identityStatus ? <p className="success-copy">{studioT(identityStatus, language)}</p> : null}
+        {identityError ? <p className="layout-error">{identityError}</p> : null}
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="storage" eyebrow={t("Workspace Logo")} title={t("Upload or replace only")} />
+        <div className="workspace-logo-row workspace-logo-editor">
+          {logoUrl ? (
+            <img src={logoUrl} alt={`${workspace.name} logo`} />
+          ) : (
+            <div className="workspace-logo-placeholder">
+              <span className="workspace-studio-fallback workspace-studio-fallback-preview" aria-label={t("Studio")}>
+                <span className="workspace-studio-mark" aria-hidden="true" />
+                <span className="workspace-studio-text">{t("Studio")}</span>
+              </span>
+            </div>
+          )}
+          <div className="workspace-logo-copy">
+            <strong>{logoUrl ? t("Workspace logo is set") : t("No logo uploaded yet")}</strong>
+            <p className="muted-copy">{t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.")}</p>
+            <div className="workspace-logo-actions">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept={WORKSPACE_LOGO_ACCEPT}
+                className="visually-hidden-file"
+                onClick={event => {
+                  event.currentTarget.value = "";
+                }}
+                onChange={event => handleLogoFile(event.currentTarget.files?.[0])}
+              />
+              <button
+                className="button"
+                type="button"
+                disabled={uploadingLogo || !settings}
+                onClick={openLogoPicker}
+              >
+                {uploadingLogo ? t("Uploading...") : logoUrl ? t("Replace Logo") : t("Upload Logo")}
+              </button>
+              {logoUrl ? (
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={!canEditLogo || uploadingLogo || !settings}
+                  onClick={handleRemoveLogo}
+                >
+                  {t("Remove Logo")}
+                </button>
+              ) : null}
+            </div>
+            {!canUploadLogo ? <p className="muted-copy">{t("Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.")}</p> : null}
+            {!canEditLogo ? <p className="muted-copy">{t("Your current workspace role cannot edit Workspace Logo.")}</p> : null}
+            {logoStatus ? <p className="success-copy">{studioT(logoStatus, language)}</p> : null}
+            {logoError ? <p className="layout-error">{logoError}</p> : null}
+          </div>
+        </div>
+        {pendingLogoFile ? (
+          <div className="workspace-logo-policy">
+            <strong>{t("Upload Policy")}</strong>
+            <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
+            <div className="workspace-logo-actions">
+              <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
+              <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>{t("I Agree and Upload")}</button>
+            </div>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }
@@ -1371,7 +1740,9 @@ const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
   "pdfShowStatus" |
   "pdfShowShipping" |
   "pdfShowMaterials" |
-  "pdfShowPriority"
+  "pdfShowPriority" |
+  "pdfShowAddress" |
+  "pdfShowShippingAddress"
 >, string]> = [
   ["pdfShowCustomer", "Customer & Design"],
   ["pdfShowContact", "Contact & Notes"],
@@ -1382,7 +1753,9 @@ const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
   ["pdfShowPaymentMethod", "Payment Method"],
   ["pdfShowFinInternal", "Internal Financials"],
   ["pdfShowStatus", "Production Status"],
-  ["pdfShowShipping", "Shipping & Tracking"]
+  ["pdfShowShipping", "Shipping & Tracking"],
+  ["pdfShowAddress", "Billing Address"],
+  ["pdfShowShippingAddress", "Shipping Address"]
 ];
 
 function PdfExportSettingsSection({
@@ -1465,7 +1838,9 @@ function PdfExportSettingsSection({
             pdfShowStatus: draft.pdfShowStatus,
             pdfShowShipping: draft.pdfShowShipping,
             pdfShowMaterials: draft.pdfShowMaterials,
-            pdfShowPriority: draft.pdfShowPriority
+            pdfShowPriority: draft.pdfShowPriority,
+            pdfShowAddress: draft.pdfShowAddress,
+            pdfShowShippingAddress: draft.pdfShowShippingAddress
           })
         : await savePdfExportSettings(workspace, {
             pdfShowCustomer: draft.pdfShowCustomer,
@@ -1478,6 +1853,8 @@ function PdfExportSettingsSection({
             pdfShowShipping: draft.pdfShowShipping,
             pdfShowMaterials: draft.pdfShowMaterials,
             pdfShowPriority: draft.pdfShowPriority,
+            pdfShowAddress: draft.pdfShowAddress,
+            pdfShowShippingAddress: draft.pdfShowShippingAddress,
             companyNumbers: draft.companyNumbers
           });
       const savedSettings = { ...draft, ...(result.settings ?? {}) };
@@ -2221,6 +2598,10 @@ function AccountSection({
   const t = (text: string) => studioT(text, accountLanguage);
   const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
   const googlePhotoUrl = user?.providerData.find(provider => provider.providerId === "google.com")?.photoURL?.trim() ?? "";
+  // OAuth-only accounts (Google / Apple, no password provider) can't change their
+  // sign-in email — it's owned by the provider. Lock the field for them.
+  const accountProviderIds = user?.providerData.map(provider => provider.providerId) ?? [];
+  const isOAuthOnlyAccount = accountProviderIds.length > 0 && !accountProviderIds.includes("password");
   const accountInitials = (displayName || accountEmail || userEmail || "NivaDesk")
     .split(/[\s@._-]+/)
     .filter(Boolean)
@@ -2474,7 +2855,7 @@ function AccountSection({
   return (
     <div className="settings-card-stack">
       <section className="card app-card account-profile-card">
-        <CardTitle icon="customer" eyebrow={t("General")} title={t("Profile & Security")} />
+        <CardTitle icon="customer" eyebrow={t("Account")} title={t("Profile & Security")} />
         <div className="account-profile-panel">
           <div className="account-avatar-preview">
             {accountPhotoUrl ? (
@@ -2514,28 +2895,43 @@ function AccountSection({
         <div className="account-profile-fields">
           <label className="quick-reply-settings-label">
             {t("Email")}
-            <div className="settings-inline-row">
-              <input
-                className="input"
-                value={emailDraft}
-                disabled={savingEmail}
-                placeholder="name@example.com"
-                type="email"
-                onChange={event => setEmailDraft(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === "Enter") void handleChangeEmail();
-                }}
-              />
-              <button
-                className="button secondary"
-                type="button"
-                disabled={savingEmail || emailDraft.trim().toLowerCase() === accountEmail.trim().toLowerCase()}
-                onClick={() => void handleChangeEmail()}
-              >
-                {savingEmail ? t("Changing...") : t("Change Email")}
-              </button>
-            </div>
-            <span className="muted-copy">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
+            {isOAuthOnlyAccount ? (
+              <>
+                <input
+                  className="input"
+                  value={accountEmail}
+                  disabled
+                  readOnly
+                  type="email"
+                />
+                <span className="muted-copy">{t("Your sign-in email is managed by Google or Apple and can't be changed here.")}</span>
+              </>
+            ) : (
+              <>
+                <div className="settings-inline-row">
+                  <input
+                    className="input"
+                    value={emailDraft}
+                    disabled={savingEmail}
+                    placeholder="name@example.com"
+                    type="email"
+                    onChange={event => setEmailDraft(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === "Enter") void handleChangeEmail();
+                    }}
+                  />
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={savingEmail || emailDraft.trim().toLowerCase() === accountEmail.trim().toLowerCase()}
+                    onClick={() => void handleChangeEmail()}
+                  >
+                    {savingEmail ? t("Changing...") : t("Change Email")}
+                  </button>
+                </div>
+                <span className="muted-copy">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
+              </>
+            )}
           </label>
           <label className="quick-reply-settings-label">
             {t("Your Name")}
@@ -2763,6 +3159,7 @@ function FinancialSettingsSection({
   const [draft, setDraft] = useState<WorkspaceSettingsOverview | null>(settings);
   const [saving, setSaving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [clearingTax, setClearingTax] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
@@ -2787,7 +3184,7 @@ function FinancialSettingsSection({
     setError("");
   }
 
-  function updateNumber(key: "feePercentage" | "defaultTaxRate" | "taxMilestoneDate" | "corporationTaxRate", value: number) {
+  function updateNumber(key: "feePercentage" | "defaultTaxRate" | "defaultDeliveryTime" | "taxMilestoneDate" | "corporationTaxRate", value: number) {
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
@@ -2812,6 +3209,7 @@ function FinancialSettingsSection({
         taxRuleNameRevenue: draft.taxRuleNameRevenue,
         taxRuleNameProfit: draft.taxRuleNameProfit,
         defaultTaxRate: draft.defaultTaxRate,
+        defaultDeliveryTime: draft.defaultDeliveryTime,
         taxCalculationType: draft.taxCalculationType,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
         taxMilestoneDate: draft.taxMilestoneDate,
@@ -2845,6 +3243,7 @@ function FinancialSettingsSection({
         taxRuleNameRevenue: draft.taxRuleNameRevenue,
         taxRuleNameProfit: draft.taxRuleNameProfit,
         defaultTaxRate: draft.defaultTaxRate,
+        defaultDeliveryTime: draft.defaultDeliveryTime,
         taxCalculationType: draft.taxCalculationType,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
         taxMilestoneDate: draft.taxMilestoneDate,
@@ -2861,6 +3260,23 @@ function FinancialSettingsSection({
       setError(recalculateError instanceof Error ? recalculateError.message : t("Existing projects could not be recalculated."));
     } finally {
       setRecalculating(false);
+    }
+  }
+
+  async function handleClearTax() {
+    if (!workspace) return;
+    const confirmed = window.confirm(t("Set VAT/tax to 0 on ALL orders? Use this when VAT does not apply (e.g. you sell abroad / are not VAT-registered). This cannot be undone."));
+    if (!confirmed) return;
+    setClearingTax(true);
+    setError("");
+    setStatus("");
+    try {
+      const result = await clearAllOrdersTax(workspace);
+      setStatus(result.message || t("VAT removed from all orders."));
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : t("VAT could not be removed."));
+    } finally {
+      setClearingTax(false);
     }
   }
 
@@ -2983,6 +3399,20 @@ function FinancialSettingsSection({
           </label>
 
           <label className="financial-settings-row wide-control">
+            <span>{t("Default delivery time for new orders (days)")}</span>
+            <input
+              className="input financial-control"
+              type="number"
+              min="1"
+              max="730"
+              step="1"
+              value={draft.defaultDeliveryTime}
+              disabled={!canEdit || saving}
+              onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
+            />
+          </label>
+
+          <label className="financial-settings-row wide-control">
             <span>{t("Calculate Tax On")}</span>
             <select
               className="input financial-control"
@@ -3074,6 +3504,10 @@ function FinancialSettingsSection({
           <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
             <span aria-hidden="true">↻</span>
             {recalculating ? t("Recalculating...") : t("Recalculate Taxes for Past Orders")}
+          </button>
+          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
+            <span aria-hidden="true">⊘</span>
+            {clearingTax ? t("Removing VAT...") : t("Remove VAT from all orders")}
           </button>
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
@@ -3168,6 +3602,185 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
         <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
+      </section>
+    </div>
+  );
+}
+
+function ShopifyIntegrationSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [copyStatus, setCopyStatus] = useState("");
+  const companyId = workspace.id.trim();
+  // The signed Delivery URL (with this workspace's webhook token) is loaded from the backend
+  // so the copied URL authenticates with the webhook.
+  const [deliveryUrl, setDeliveryUrl] = useState("");
+  const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  useEffect(() => {
+    if (!companyId) {
+      setDeliveryUrl("");
+      return;
+    }
+    let active = true;
+    setDeliveryUrlLoading(true);
+    getShopifyWebhookDeliveryUrl(companyId)
+      .then((url) => {
+        if (active) setDeliveryUrl(url);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setDeliveryUrlLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
+
+  async function copyText(value: string, label: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyStatus(`${label} ${t("copied.")}`);
+    } catch {
+      setCopyStatus(t("Copy failed. Select the value and copy it manually."));
+    }
+    window.setTimeout(() => setCopyStatus(""), 1600);
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="orders" eyebrow={t("Shopify Integration")} title={t("Connect Shopify")} />
+        <div className="quick-reply-settings-info">
+          <strong>{t("Website orders can flow into this workspace.")}</strong>
+          <p>{t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders appear in Orders and Schedule automatically.")}</p>
+        </div>
+        {!companyId ? (
+          <p className="layout-error">{t("Company ID is not available yet. Sign in or reconnect your workspace first.")}</p>
+        ) : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="docText" eyebrow={t("Copy Setup Details")} title={t("Webhook values")} />
+        <CopyableIntegrationValue
+          title={t("Your Company ID")}
+          value={companyId || t("Unavailable")}
+          buttonTitle={t("Copy Company ID")}
+          canCopy={Boolean(companyId)}
+          onCopy={() => copyText(companyId, t("Company ID"))}
+        />
+        <CopyableIntegrationValue
+          title={t("Delivery URL with Company ID")}
+          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
+          buttonTitle={t("Copy Delivery URL")}
+          canCopy={Boolean(deliveryUrl)}
+          onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
+        />
+        {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="checklist" eyebrow={t("What you need to do")} title={t("Shopify webhook steps")} />
+        <div className="settings-rule-list">
+          <IntegrationInfoRow number="1" title={t("Open Shopify webhooks")} detail={t("In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).")} />
+          <IntegrationInfoRow number="2" title={t("Create an order webhook")} detail={t("Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.")} />
+          <IntegrationInfoRow number="3" title={t("Paste the Delivery URL")} detail={t("Paste the copied Delivery URL as the webhook URL and save it.")} />
+          <IntegrationInfoRow number="4" title={t("Place a test order")} detail={t("Place a paid test order in your store; it appears in Orders within seconds.")} />
+        </div>
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
+        <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
+      </section>
+    </div>
+  );
+}
+
+function InboundWebhookSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [copyStatus, setCopyStatus] = useState("");
+  const companyId = workspace.id.trim();
+  const [deliveryUrl, setDeliveryUrl] = useState("");
+  const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  useEffect(() => {
+    if (!companyId) {
+      setDeliveryUrl("");
+      return;
+    }
+    let active = true;
+    setDeliveryUrlLoading(true);
+    getInboundWebhookDeliveryUrl(companyId)
+      .then((url) => {
+        if (active) setDeliveryUrl(url);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setDeliveryUrlLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
+
+  async function copyText(value: string, label: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyStatus(`${label} ${t("copied.")}`);
+    } catch {
+      setCopyStatus(t("Copy failed. Select the value and copy it manually."));
+    }
+    window.setTimeout(() => setCopyStatus(""), 1600);
+  }
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="orders" eyebrow={t("Other Platforms")} title={t("Connect any store with one webhook")} />
+        <div className="quick-reply-settings-info">
+          <strong>{t("Orders from almost any platform can flow into this workspace.")}</strong>
+          <p>{t("Use Zapier, Make or your own site to POST each new order to the Delivery URL below. It works with Wix, Squarespace, Etsy, BigCommerce, custom sites and more. Orders appear in Orders and Schedule automatically.")}</p>
+        </div>
+        {!companyId ? (
+          <p className="layout-error">{t("Company ID is not available yet. Sign in or reconnect your workspace first.")}</p>
+        ) : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="docText" eyebrow={t("Copy Setup Details")} title={t("Webhook values")} />
+        <CopyableIntegrationValue
+          title={t("Your Company ID")}
+          value={companyId || t("Unavailable")}
+          buttonTitle={t("Copy Company ID")}
+          canCopy={Boolean(companyId)}
+          onCopy={() => copyText(companyId, t("Company ID"))}
+        />
+        <CopyableIntegrationValue
+          title={t("Delivery URL with Company ID")}
+          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
+          buttonTitle={t("Copy Delivery URL")}
+          canCopy={Boolean(deliveryUrl)}
+          onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
+        />
+        {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="checklist" eyebrow={t("What you need to do")} title={t("Connection steps")} />
+        <div className="settings-rule-list">
+          <IntegrationInfoRow number="1" title={t("Pick a connection method")} detail={t("Most platforms connect through Zapier or Make (a 'Webhooks → POST' action). Developers can also POST directly from their own site.")} />
+          <IntegrationInfoRow number="2" title={t("Send the order as JSON")} detail={t("POST a JSON body to the Delivery URL on each new order. At minimum include orderId. Common fields: orderId, orderNumber, customerName, email, phone, total, currency, products, note, source.")} />
+          <IntegrationInfoRow number="3" title={t("Order appears automatically")} detail={t("Each posted order is added to Orders and Schedule, tagged with the source you send.")} />
+        </div>
+        <pre style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, overflowX: "auto", fontSize: 12, lineHeight: 1.5, margin: "10px 0 0", color: "var(--text)" }}>{`{
+  "orderId": "1001",
+  "customerName": "Jane Doe",
+  "email": "jane@example.com",
+  "total": 120.50,
+  "currency": "GBP",
+  "products": "Custom dial x1",
+  "source": "Wix"
+}`}</pre>
       </section>
     </div>
   );

@@ -15,6 +15,7 @@
 		B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = B4382D372F9D879F004BB413 /* FirebaseStorage */; };
 		B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = B440FCAB2FA291B3007D3DED /* FirebaseFunctions */; };
 		B45DF6162FB8FDAB00C59217 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */; };
+		B4A9C5010000000000000001 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = B4A9C5010000000000000002 /* FirebaseAppCheck */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -132,6 +133,7 @@
 				B42E74B32FA431BC00B96FEA /* GoogleSignInSwift in Frameworks */,
 				B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */,
 				B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */,
+				B4A9C5010000000000000001 /* FirebaseAppCheck in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -225,6 +227,7 @@
 				B42E74B02FA431BC00B96FEA /* GoogleSignIn */,
 				B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */,
 				B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */,
+				B4A9C5010000000000000002 /* FirebaseAppCheck */,
 			);
 			productName = EGGcraft;
 			productReference = B4382CE22F9A845F004BB413 /* EGGcraft.app */;
@@ -368,7 +371,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ClientFileShareExtension/Info.plist;
@@ -401,7 +404,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ClientFileShareExtension/Info.plist;
@@ -551,7 +554,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -612,7 +615,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -670,7 +673,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
@@ -702,7 +705,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
@@ -824,6 +827,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		B4A9C5010000000000000002 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

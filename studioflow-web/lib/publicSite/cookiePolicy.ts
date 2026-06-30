@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const COOKIE_POLICY_LAST_UPDATED = "13 May 2026";
+export const COOKIE_POLICY_LAST_UPDATED = "16 June 2026";
 
 export const COOKIE_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -78,6 +78,13 @@ export const COOKIE_POLICY_SECTIONS: PrivacyPolicySection[] = [
         paragraphs: [
           "May be set by providers that help with authentication, payments, analytics, support, error monitoring, hosting, or embedded content.",
           "Consent: depends on the purpose. Non-essential third-party cookies usually require consent."
+        ]
+      },
+      {
+        title: "Bot-protection cookies (reCAPTCHA)",
+        paragraphs: [
+          "We use Google reCAPTCHA and Firebase App Check to protect sign-up, sign-in and our APIs from automated abuse. reCAPTCHA may set cookies and collect device, browser and usage information, which is sent to Google to distinguish genuine users from bots.",
+          "These are used for security and fraud prevention. Your use of reCAPTCHA is subject to the Google Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms)."
         ]
       }
     ]
@@ -490,7 +497,7 @@ const COOKIE_POLICY_DRAFTS: Partial<Record<StudioLanguage, LocalizedCookiePolicy
     ],
     sectionSummaries: [
       "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Вопросы о cookies или приватности: contact@nivadesk.co.uk.",
-      "Cookies — небольшие текстовые файлы в браузере или устройстве. Эта политика также охватывает local storage, session storage, пиксели, теги, SDK, идентификаторы устройств и похожие технологии.",
+      "Cookies: небольшие текстовые файлы в браузере или устройстве. Эта политика также охватывает local storage, session storage, пиксели, теги, SDK, идентификаторы устройств и похожие технологии.",
       "Мы можем использовать их для сохранения входа, языка и workspace, защиты доступа, предотвращения мошенничества, платежей, анализа использования, улучшения performance, диагностики ошибок и разрешенного маркетингового измерения.",
       "NivaDesk может использовать необходимые, preference, analytics, performance, marketing и third-party cookies. Необязательные cookies могут требовать согласия по местному закону.",
       "Необходимые cookies нужны для безопасности, входа, аккаунта, сессий, checkout, записей согласия и разрешений workspace. При блокировке части NivaDesk могут работать неправильно.",

@@ -6,17 +6,23 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>production</string>
 	<key>aps-environment</key>
-	<string>development</string>
+	<string>production</string>
 	<key>com.apple.developer.aps-environment</key>
-	<string>development</string>
+	<string>production</string>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.uk.co.eggcraft.studioflow</string>
 	</array>
 	<key>com.apple.security.personal-information.calendars</key>
-	<true/>
-	<key>com.apple.security.personal-information.reminders</key>
 	<true/>
 	<key>keychain-access-groups</key>
 	<array>

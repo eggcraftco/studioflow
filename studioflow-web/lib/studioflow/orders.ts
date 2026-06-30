@@ -34,6 +34,7 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
   details?: {
     customerName?: string;
     designName?: string;
+    invoiceNote?: string;
     assignedToUid?: string;
     assignedToEmail?: string;
     watchRef?: string;
@@ -43,6 +44,12 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     instagramUsername?: string;
     tiktokUsername?: string;
     address?: string;
+    shippingName?: string;
+    shippingStreetAddress?: string;
+    shippingCity?: string;
+    shippingPostalCode?: string;
+    shippingCountry?: string;
+    shippingPhone?: string;
     communication?: string[];
     customerNotes?: string;
     paymentDate?: string;
@@ -68,6 +75,7 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     notes?: string;
     customFields?: Record<string, string>;
     specialNotes?: Record<string, string>;
+    lineItems?: { id: string; name: string; quantity: number; unitPrice: number; lineTotal: number }[];
   };
   finance?: {
     orderValue?: number;
@@ -82,6 +90,10 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     fullPaymentReceived?: boolean;
     recordPayment?: { amount: number; method?: string; note?: string };
     deletePaymentId?: string;
+    // Per-order amounts for the workspace's custom Extra Spending / Remaining
+    // headings, keyed by heading title. Mirrors the Mac/iPhone/Android editors.
+    financialExpenseValues?: Record<string, number>;
+    financialRemainingValues?: Record<string, number>;
   };
   todo?: {
     action: "add" | "toggle" | "delete" | "update" | "move" | "reorder";
@@ -292,6 +304,79 @@ export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: s
   } catch (error) {
     throw new Error(friendlyDeleteOrderError(error));
   }
+}
+
+export async function restoreOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot restore orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "restoreWebOrder");
+    const response = await callable({ companyId: workspace.id, orderId });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not restore the order.");
+    }
+    return response.data;
+  }, "Restoring order from cloud.");
+}
+
+export type MergeOrderResult = {
+  ok?: boolean;
+  targetOrderId?: string;
+  mergedAmount?: number;
+  message?: string;
+};
+
+export async function mergeOrderIntoOrder(
+  workspace: WorkspaceContext,
+  sourceOrderId: string,
+  targetOrderId: string
+): Promise<MergeOrderResult> {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot merge orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, MergeOrderResult>(functions, "mergeOrderIntoOrder");
+    const response = await callable({
+      companyId: workspace.id,
+      sourceOrderId,
+      targetOrderId
+    });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not merge the order.");
+    }
+    return response.data || {};
+  }, "Merging order in cloud.");
+}
+
+export type MergeOrdersResult = {
+  ok?: boolean;
+  primaryOrderId?: string;
+  mergedCount?: number;
+  mergedAmount?: number;
+  message?: string;
+};
+
+export async function mergeOrders(
+  workspace: WorkspaceContext,
+  primaryOrderId: string,
+  sourceOrderIds: string[]
+): Promise<MergeOrdersResult> {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot merge orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, MergeOrdersResult>(functions, "mergeOrders");
+    const response = await callable({
+      companyId: workspace.id,
+      primaryOrderId,
+      sourceOrderIds
+    });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not merge the selected orders.");
+    }
+    return response.data || {};
+  }, "Merging orders in cloud.");
 }
 
 export async function uploadOrderPreviewImage({

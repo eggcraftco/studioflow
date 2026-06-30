@@ -53,7 +53,8 @@ fun LoginScreen(
     errorMessage: String,
     onSignIn: (String, String) -> Unit,
     onRegister: (String, String, String, String) -> Unit = { _, _, _, _ -> },
-    onGoogleSignIn: () -> Unit
+    onGoogleSignIn: () -> Unit,
+    onAppleSignIn: () -> Unit = {}
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -114,6 +115,22 @@ fun LoginScreen(
                     GoogleGLogo()
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(t("Continue with Google"), fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onAppleSignIn,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    enabled = !signingIn,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color.Black,
+                        contentColor = Color.White
+                    )
+                ) {
+                    AppleLogo()
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(t("Continue with Apple"), fontWeight = FontWeight.Bold)
                 }
                 if (!showEmailForm) {
                     Row(
@@ -254,6 +271,16 @@ fun LoginScreen(
 private fun GoogleGLogo(logoSize: androidx.compose.ui.unit.Dp = 18.dp) {
     Image(
         painter = painterResource(id = uk.co.eggcraft.studioflow.R.drawable.ic_google_g),
+        contentDescription = null,
+        modifier = Modifier.size(logoSize)
+    )
+}
+
+// Apple logo mark for the "Continue with Apple" button.
+@Composable
+private fun AppleLogo(logoSize: androidx.compose.ui.unit.Dp = 18.dp) {
+    Image(
+        painter = painterResource(id = uk.co.eggcraft.studioflow.R.drawable.ic_apple_logo),
         contentDescription = null,
         modifier = Modifier.size(logoSize)
     )

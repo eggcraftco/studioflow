@@ -39,6 +39,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inventory2
@@ -73,7 +80,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
@@ -295,6 +305,27 @@ fun ScheduleScreen(
                         }
                     }
                 }
+                Box(modifier = Modifier.weight(1f)) {
+                    ScheduleControl(
+                        label = viewMode.label,
+                        icon = Icons.Filled.DateRange,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { viewMenuOpen = true }
+                    )
+                    DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
+                        ScheduleViewMode.menuOptions.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item.label, fontWeight = FontWeight.Bold) },
+                                onClick = {
+                                    viewMode = item
+                                    anchorToCurrentDate = true
+                                    rangeOffset = 0
+                                    viewMenuOpen = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
         if (searchOpen) {
@@ -322,27 +353,19 @@ fun ScheduleScreen(
             }
         }
         item {
-            Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.weight(1f)) {
-                    ScheduleControl(
-                        label = viewMode.label,
-                        icon = Icons.Filled.DateRange,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { viewMenuOpen = true }
-                    )
-                    DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
-                        ScheduleViewMode.menuOptions.forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.label, fontWeight = FontWeight.Bold) },
-                                onClick = {
-                                    viewMode = item
-                                    anchorToCurrentDate = true
-                                    rangeOffset = 0
-                                    viewMenuOpen = false
-                                }
-                            )
-                        }
+            Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ArrowButton(Icons.Filled.ArrowBackIosNew) { rangeOffset -= 1 }
+                ArrowButton(Icons.AutoMirrored.Filled.ArrowForwardIos) { rangeOffset += 1 }
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    onClick = {
+                        anchorToCurrentDate = true
+                        rangeOffset = 0
                     }
+                ) {
+                    Text(range.title, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -358,7 +381,7 @@ fun ScheduleScreen(
                                 searchOpen = true
                             }
                         },
-                        modifier = Modifier.size(54.dp)
+                        modifier = Modifier.size(52.dp)
                     ) {
                         Icon(
                             if (searchOpen && searchText.isNotBlank()) Icons.Filled.Close else Icons.Filled.Search,
@@ -370,101 +393,20 @@ fun ScheduleScreen(
             }
         }
         item {
-            Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                ArrowButton(Icons.Filled.ArrowBackIosNew) { rangeOffset -= 1 }
-                ArrowButton(Icons.AutoMirrored.Filled.ArrowForwardIos) { rangeOffset += 1 }
-                Surface(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = {
-                        anchorToCurrentDate = true
-                        rangeOffset = 0
-                    }
-                ) {
-                    Text(range.title, modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-                }
-            }
+            ScheduleAgendaHint(modifier = Modifier.padding(horizontal = 16.dp))
         }
-        item {
-            Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { zoom = (zoom - 0.15).coerceAtLeast(0.45) }, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Filled.Remove, contentDescription = "Zoom out", tint = StudioBlue)
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("${(zoom * 100).toInt()}%", fontWeight = FontWeight.ExtraBold)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        IconButton(onClick = { zoom = (zoom + 0.15).coerceAtMost(2.20) }, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Filled.Add, contentDescription = "Zoom in", tint = StudioBlue)
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(onClick = { zoom = 1.0 }, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Reset zoom", tint = StudioBlue)
-                        }
-                    }
-                }
+        if (visibleOrders.isEmpty()) {
+            item {
+                ScheduleAgendaEmpty(modifier = Modifier.padding(horizontal = 16.dp, vertical = 28.dp))
             }
-        }
-        item {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ScheduleViewMode.menuOptions.forEach { item ->
-                    ScheduleQuickAction(
-                        label = item.label,
-                        active = anchorToCurrentDate && viewMode == item && rangeOffset == 0
-                    ) {
-                        viewMode = item
-                        anchorToCurrentDate = true
-                        rangeOffset = 0
-                    }
-                }
-            }
-        }
-        item {
-            Surface(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Text(
-                    text = "${visibleOrders.size} scheduled orders shown · ${visibleOrders.count { orderIsLate(it) }} late · ${visibleOrders.count { orderIsReadyToShip(it) }} ready to ship",
-                    modifier = Modifier.padding(14.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold
+        } else {
+            items(visibleOrders, key = { it.id }) { order ->
+                ScheduleAgendaCard(
+                    order = order,
+                    onClick = { uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.setPendingOrderRoute(order.id) },
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
-        }
-        item {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val dayCount = when {
-                    maxWidth >= 1100.dp -> 7
-                    maxWidth >= 720.dp -> 4
-                    else -> 2
-                }
-                ScheduleGrid(
-                    range = range,
-                    zoom = zoom,
-                    visibleDayCount = dayCount.coerceAtMost(viewMode.dayCount),
-                    canEditSchedule = canEditSchedule,
-                    onMoveOrder = { order, days -> moveScheduleOrder(order, days, onUpdateOrderFields) }
-                )
-            }
-        }
-        item {
-            ScheduleBoardSummary(
-                columns = remember(visibleOrders) { scheduleBoardColumns(visibleOrders) },
-                canEditSchedule = canEditSchedule,
-                onMoveOrder = { order, days -> moveScheduleOrder(order, days, onUpdateOrderFields) },
-                onResizeTrailing = { order, days -> resizeScheduleOrderTrailing(order, days, onUpdateOrderFields) },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
         }
         item {
             Row(
@@ -493,6 +435,397 @@ fun ScheduleScreen(
         }
     }
 }
+
+// ===== Team Schedule (member × day) — mirrors the Mac/web layout =====
+
+private fun teamMemberInitials(name: String): String {
+    val parts = name.trim().split(" ").filter { it.isNotBlank() }.take(2)
+    val letters = parts.mapNotNull { it.firstOrNull()?.toString() }.joinToString("")
+    return letters.ifBlank { "?" }.uppercase()
+}
+
+@Composable
+private fun TeamAvatar(name: String, size: Dp) {
+    Box(
+        modifier = Modifier.size(size).clip(CircleShape).background(StudioBlue.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(teamMemberInitials(name), color = StudioBlue, fontSize = (size.value * 0.34f).sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun TeamCard(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp), content = content)
+    }
+}
+
+@Composable
+fun TeamScheduleScreen(
+    state: StudioFlowUiState,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
+    val teamPlan = state.workspace?.billingPlan == uk.co.eggcraft.studioflow.data.model.StudioBillingPlan.TeamMonthly
+
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
+            Text("Team Schedule".let { t("Team Schedule") }, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+            Text(t("See each team member's assigned work."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        }
+
+        if (!teamPlan) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(40.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Filled.Groups, contentDescription = null, tint = Color(0xFFD12EF2), modifier = Modifier.size(44.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(t("Team Schedule"), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(t("Team Schedule is part of the Team plan. Upgrade to see assigned work across your whole team."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            return@Column
+        }
+
+        var rangeOffset by rememberSaveable { mutableIntStateOf(0) }
+        var statusFilter by rememberSaveable { mutableStateOf(ScheduleStatusFilter.All) }
+        var sortMode by rememberSaveable { mutableStateOf(ScheduleSortMode.Smart) }
+        var viewMode by rememberSaveable { mutableStateOf(ScheduleViewMode.Weekly) }
+        var anchorToCurrentDate by rememberSaveable { mutableStateOf(false) }
+        var searchText by rememberSaveable { mutableStateOf("") }
+        var selectedOrderId by remember { mutableStateOf<String?>(null) }
+        var hiddenMemberIds by remember { mutableStateOf(setOf<String>()) }
+        var membersLimit by rememberSaveable { mutableIntStateOf(8) }
+        var statusMenuOpen by remember { mutableStateOf(false) }
+        var sortMenuOpen by remember { mutableStateOf(false) }
+        var viewMenuOpen by remember { mutableStateOf(false) }
+        var fStatusMenuOpen by remember { mutableStateOf(false) }
+        var fSortMenuOpen by remember { mutableStateOf(false) }
+
+        val visibleOrders = remember(state.orders, statusFilter, sortMode, searchText) {
+            scheduleVisibleOrders(state.orders, statusFilter, sortMode, searchText)
+        }
+        val range = remember(visibleOrders, rangeOffset, viewMode, anchorToCurrentDate, locale) {
+            ScheduleRange.from(visibleOrders, rangeOffset, viewMode, if (anchorToCurrentDate) Date() else null, locale)
+        }
+        val members = state.teamMembers
+        val visibleMembers = members.filter { it.id !in hiddenMemberIds }
+        fun ordersFor(memberId: String) = visibleOrders.filter { it.assignedToUid.trim() == memberId && timelineMetrics(it, range) != null }
+        val unassigned = visibleOrders.filter { it.assignedToUid.isBlank() && timelineMetrics(it, range) != null }
+        fun memberActive(memberId: String) = state.orders.count { it.assignedToUid.trim() == memberId && !it.isClosed }
+        fun memberLate(memberId: String) = state.orders.count { it.assignedToUid.trim() == memberId && orderIsLate(it) }
+        val maxActive = (members.maxOfOrNull { memberActive(it.id) } ?: 1).coerceAtLeast(1)
+        val totalActive = members.sumOf { memberActive(it.id) }
+        val upcoming = state.orders.filter { !it.isClosed }.sortedBy { deliveryDueDate(it) }.take(7)
+        val selectedOrder = state.orders.firstOrNull { it.id == selectedOrderId }
+
+        val baseDayWidth = scheduleTimelineBaseDayWidth(range.days.size)
+        val dayWidth = baseDayWidth.coerceAtLeast(18.0).dp
+        val timelineWidth = dayWidth * range.days.size.toFloat()
+
+        @Composable
+        fun ControlsRow(modifier: Modifier = Modifier) {
+            Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    ScheduleControl(label = if (statusFilter == ScheduleStatusFilter.All) t("Filter by Status") else statusFilter.label, icon = Icons.Outlined.FilterList, modifier = Modifier.fillMaxWidth(), onClick = { statusMenuOpen = true })
+                    DropdownMenu(expanded = statusMenuOpen, onDismissRequest = { statusMenuOpen = false }) {
+                        ScheduleStatusFilter.values().forEach { item ->
+                            DropdownMenuItem(text = { Text(item.menuLabel(state.orders), fontWeight = FontWeight.Bold) }, onClick = { statusFilter = item; anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek; rangeOffset = 0; statusMenuOpen = false })
+                        }
+                    }
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    ScheduleControl(label = sortMode.label, icon = Icons.Outlined.AutoAwesome, modifier = Modifier.fillMaxWidth(), onClick = { sortMenuOpen = true })
+                    DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                        ScheduleSortMode.values().forEach { item -> DropdownMenuItem(text = { Text(item.label, fontWeight = FontWeight.Bold) }, onClick = { sortMode = item; sortMenuOpen = false }) }
+                    }
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    ScheduleControl(label = viewMode.label, icon = Icons.Filled.DateRange, modifier = Modifier.fillMaxWidth(), onClick = { viewMenuOpen = true })
+                    DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
+                        ScheduleViewMode.menuOptions.forEach { item -> DropdownMenuItem(text = { Text(item.label, fontWeight = FontWeight.Bold) }, onClick = { viewMode = item; anchorToCurrentDate = true; rangeOffset = 0; viewMenuOpen = false }) }
+                    }
+                }
+            }
+        }
+
+        @Composable
+        fun RangeRow(modifier: Modifier = Modifier) {
+            Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ArrowButton(Icons.Filled.ArrowBackIosNew) { rangeOffset -= 1 }
+                ArrowButton(Icons.AutoMirrored.Filled.ArrowForwardIos) { rangeOffset += 1 }
+                Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { anchorToCurrentDate = true; rangeOffset = 0 }) {
+                    Text(range.title, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
+        @Composable
+        fun WorkloadCard() {
+            TeamCard {
+                Text(t("Workload"), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                members.forEach { member ->
+                    val count = memberActive(member.id)
+                    val late = memberLate(member.id)
+                    Column(modifier = Modifier.padding(vertical = 5.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TeamAvatar(member.label, 20.dp)
+                            Text(member.label, modifier = Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("$count", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(999.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))) {
+                            Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(fraction = (count.toFloat() / maxActive).coerceIn(0.05f, 1f)).clip(RoundedCornerShape(999.dp)).background(if (late > 0) StudioWarningOrange else StudioBlue))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(t("Total active work"), modifier = Modifier.weight(1f), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$totalActive", fontSize = 12.5.sp, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+
+        @Composable
+        fun UpcomingCard() {
+            TeamCard {
+                Text(t("Upcoming"), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.height(6.dp))
+                if (upcoming.isEmpty()) {
+                    Text(t("No upcoming work."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else upcoming.forEachIndexed { i, order ->
+                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
+                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { selectedOrderId = order.id }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(scheduleColor(order)))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(order.displayCustomerName, fontSize = 12.5.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val assignee = members.firstOrNull { it.id == order.assignedToUid }?.label ?: t("Unassigned")
+                            Text(assignee, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (timelineCountdownText(order).isNotBlank()) Text(timelineCountdownText(order), fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold, color = if (orderIsLate(order)) StudioWarningOrange else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        @Composable
+        fun SelectedCard() {
+            TeamCard {
+                Text(t("Selected Item"), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                val order = selectedOrder
+                if (order == null) {
+                    Text(t("Select a job to see its details."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(modifier = Modifier.width(5.dp).height(38.dp).clip(RoundedCornerShape(3.dp)).background(scheduleColor(order)))
+                        Column {
+                            Text(order.displayCustomerName, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            if (order.designName.isNotBlank()) Text(order.designName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    @Composable fun DetailRow(label: String, value: String, tint: Color) {
+                        Row(modifier = Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, modifier = Modifier.weight(1f), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(value, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    DetailRow(t("Status"), scheduleStatusLabel(order), statusColorForScheduleValue(scheduleStatusLabel(order)))
+                    DetailRow(t("Schedule"), "${scheduleDateFormatter(locale).format(orderStartDate(order))} → ${scheduleDateFormatter(locale).format(deliveryDueDate(order))}", MaterialTheme.colorScheme.onSurface)
+                    if (timelineCountdownText(order).isNotBlank()) DetailRow(t("Due"), timelineCountdownText(order), if (orderIsLate(order)) StudioWarningOrange else MaterialTheme.colorScheme.onSurface)
+                    DetailRow(t("Assigned to"), members.firstOrNull { it.id == order.assignedToUid }?.label ?: t("Unassigned"), MaterialTheme.colorScheme.onSurface)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), color = StudioBlue, onClick = { uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.setPendingOrderRoute(order.id) }) {
+                        Text(t("Open Order"), modifier = Modifier.padding(vertical = 9.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 12.5.sp)
+                    }
+                }
+            }
+        }
+
+        @Composable
+        fun MembersFilterCard() {
+            val filtersActive = statusFilter != ScheduleStatusFilter.All || sortMode != ScheduleSortMode.Smart || hiddenMemberIds.isNotEmpty() || searchText.isNotBlank()
+            TeamCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(t("Filters"), modifier = Modifier.weight(1f), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                    if (filtersActive) Text(t("Clear all"), modifier = Modifier.clickable { statusFilter = ScheduleStatusFilter.All; sortMode = ScheduleSortMode.Smart; hiddenMemberIds = emptySet(); searchText = "" }, color = StudioBlue, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(t("Status"), fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(4.dp))
+                Box {
+                    ScheduleControl(label = if (statusFilter == ScheduleStatusFilter.All) t("Filter by Status") else statusFilter.label, icon = Icons.Outlined.FilterList, modifier = Modifier.fillMaxWidth(), onClick = { fStatusMenuOpen = true })
+                    DropdownMenu(expanded = fStatusMenuOpen, onDismissRequest = { fStatusMenuOpen = false }) {
+                        ScheduleStatusFilter.values().forEach { item -> DropdownMenuItem(text = { Text(item.menuLabel(state.orders), fontWeight = FontWeight.Bold) }, onClick = { statusFilter = item; anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek; rangeOffset = 0; fStatusMenuOpen = false }) }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(t("Sort"), fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(4.dp))
+                Box {
+                    ScheduleControl(label = sortMode.label, icon = Icons.Outlined.AutoAwesome, modifier = Modifier.fillMaxWidth(), onClick = { fSortMenuOpen = true })
+                    DropdownMenu(expanded = fSortMenuOpen, onDismissRequest = { fSortMenuOpen = false }) {
+                        ScheduleSortMode.values().forEach { item -> DropdownMenuItem(text = { Text(item.label, fontWeight = FontWeight.Bold) }, onClick = { sortMode = item; fSortMenuOpen = false }) }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(t("Members"), modifier = Modifier.weight(1f), fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (hiddenMemberIds.isNotEmpty()) Text(t("All"), modifier = Modifier.clickable { hiddenMemberIds = emptySet() }, color = StudioBlue, fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                members.take(membersLimit).forEach { member ->
+                    val on = member.id !in hiddenMemberIds
+                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { hiddenMemberIds = if (on) hiddenMemberIds + member.id else hiddenMemberIds - member.id }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(if (on) Icons.Filled.CheckCircle else Icons.Outlined.Circle, contentDescription = null, tint = if (on) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                        TeamAvatar(member.label, 20.dp)
+                        Text(member.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (members.size > membersLimit) {
+                    Surface(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), shape = RoundedCornerShape(9.dp), color = StudioBlue.copy(alpha = 0.08f), onClick = { membersLimit += 8 }) {
+                        Text("${t("Load more")} (${members.size - membersLimit})", modifier = Modifier.padding(vertical = 7.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = StudioBlue, fontWeight = FontWeight.ExtraBold, fontSize = 11.5.sp)
+                    }
+                }
+            }
+        }
+
+        @Composable
+        fun MemberGrid(modifier: Modifier = Modifier) {
+            val hScroll = rememberScrollState()
+            val labelW = 190.dp
+            Surface(modifier = modifier.fillMaxSize(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    // header
+                    Row {
+                        Box(modifier = Modifier.width(labelW).height(56.dp).background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.CenterStart) {
+                            Text(range.title, modifier = Modifier.padding(horizontal = 12.dp), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Row(modifier = Modifier.horizontalScroll(hScroll)) {
+                            range.days.forEach { day ->
+                                val today = isSameScheduleDay(day.date, Date())
+                                Column(modifier = Modifier.width(dayWidth).height(56.dp).background(if (today) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    Text(day.weekday, color = if (today) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text(day.day, color = if (today) StudioBlue else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
+                    val rows: List<Pair<StudioTeamMemberRow, List<StudioOrder>>> = visibleMembers.map { StudioTeamMemberRow(it) to ordersFor(it.id) } + if (unassigned.isNotEmpty()) listOf(StudioTeamMemberRow(null) to unassigned) else emptyList()
+                    rows.forEach { (rowMember, list) ->
+                        val rowH = (maxOf(1, list.size) * 64).dp
+                        Row(modifier = Modifier.height(rowH)) {
+                            Column(modifier = Modifier.width(labelW).fillMaxHeight().padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (rowMember.member != null) TeamAvatar(rowMember.member.label, 28.dp) else Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) { Text("?", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold) }
+                                    Column {
+                                        Text(rowMember.member?.label ?: t("Unassigned"), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        if (rowMember.member != null) Text("${memberActive(rowMember.member.id)} ${t("jobs")}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                            Box(modifier = Modifier.horizontalScroll(hScroll).width(timelineWidth).fillMaxHeight()) {
+                                list.forEachIndexed { i, order ->
+                                    val metrics = timelineMetrics(order, range) ?: return@forEachIndexed
+                                    val barX = dayWidth * metrics.offsetDays.toFloat()
+                                    val barW = (dayWidth * metrics.durationDays.toFloat()) - 6.dp
+                                    val tone = statusColorForScheduleValue(scheduleStatusLabel(order))
+                                    Surface(
+                                        modifier = Modifier.offset(x = barX, y = (i * 64 + 6).dp).width(barW.coerceAtLeast(120.dp)).height(52.dp).clickable { selectedOrderId = order.id },
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = scheduleColor(order).copy(alpha = 0.16f),
+                                        border = androidx.compose.foundation.BorderStroke(if (order.id == selectedOrderId) 2.dp else 1.dp, if (order.id == selectedOrderId) StudioBlue else scheduleColor(order).copy(alpha = 0.5f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+                                            Text(order.displayCustomerName, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(scheduleStatusLabel(order), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = tone, maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
+                    }
+                }
+            }
+        }
+
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val wide = maxWidth >= 840.dp
+            if (wide) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        ControlsRow(Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(10.dp))
+                        RangeRow(Modifier.fillMaxWidth())
+                    }
+                    Row(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Column(modifier = Modifier.width(248.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            MembersFilterCard()
+                        }
+                        MemberGrid(modifier = Modifier.weight(1f).padding(bottom = 16.dp))
+                        Column(modifier = Modifier.width(300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            UpcomingCard()
+                            SelectedCard()
+                            WorkloadCard()
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item { ControlsRow(Modifier.fillMaxWidth()) }
+                    item { RangeRow(Modifier.fillMaxWidth()) }
+                    visibleMembers.forEach { member ->
+                        val list = ordersFor(member.id)
+                        item(key = "head-${member.id}") {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                TeamAvatar(member.label, 34.dp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(member.label, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(member.roleLabel, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                                }
+                                Text("${list.size} ${t("jobs")}", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (list.isEmpty()) {
+                            item(key = "empty-${member.id}") { Text(t("No assigned work in this range."), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
+                        } else items(list, key = { "${member.id}-${it.id}" }) { order ->
+                            ScheduleAgendaCard(order = order, onClick = { uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.setPendingOrderRoute(order.id) })
+                        }
+                    }
+                    if (unassigned.isNotEmpty()) {
+                        item(key = "head-unassigned") {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) { Text("?", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                Text(t("Unassigned"), modifier = Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                                Text("${unassigned.size} ${t("jobs")}", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        items(unassigned, key = { "unassigned-${it.id}" }) { order ->
+                            ScheduleAgendaCard(order = order, onClick = { uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.setPendingOrderRoute(order.id) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class StudioTeamMemberRow(val member: uk.co.eggcraft.studioflow.data.model.StudioTeamMember?)
 
 @Composable
 private fun ScheduleDesktopTimelineScreen(
@@ -758,6 +1091,104 @@ private fun SchedulePlanNotice() {
     }
 }
 
+// Phone-friendly vertical agenda. The wide drag-and-drop Gantt timeline is hard to
+// use on a narrow phone, so on phone we show each scheduled order as a tappable card
+// (tap opens the order detail) and point power users to the web / Mac app.
+@Composable
+private fun ScheduleAgendaCard(
+    order: StudioOrder,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
+    val tint = scheduleColor(order)
+    val statusTone = statusColorForScheduleValue(scheduleStatusLabel(order))
+    val countdown = timelineCountdownText(order)
+    val late = orderIsLate(order)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.width(5.dp).height(46.dp).clip(RoundedCornerShape(3.dp)).background(tint))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(order.displayCustomerName, modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Surface(shape = RoundedCornerShape(999.dp), color = statusTone.copy(alpha = 0.14f)) {
+                        Text(scheduleStatusLabel(order), modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), color = statusTone, fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    }
+                }
+                if (order.designName.isNotBlank()) {
+                    Text(order.designName, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    Text(
+                        "${scheduleDateFormatter(locale).format(orderStartDate(order))} → ${scheduleDateFormatter(locale).format(deliveryDueDate(order))}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                    if (countdown.isNotBlank()) {
+                        Icon(if (late) Icons.Filled.Warning else Icons.Filled.Schedule, contentDescription = null, tint = if (late) StudioWarningOrange else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                        Text(countdown, color = if (late) StudioWarningOrange else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    }
+                }
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(13.dp))
+        }
+    }
+}
+
+@Composable
+private fun ScheduleAgendaHint(modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = StudioBlue.copy(alpha = 0.06f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, StudioBlue.copy(alpha = 0.18f))
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Surface(shape = RoundedCornerShape(8.dp), color = StudioBlue.copy(alpha = 0.12f)) {
+                Icon(Icons.Filled.Info, contentDescription = null, tint = StudioBlue, modifier = Modifier.padding(6.dp).size(20.dp))
+            }
+            Text(
+                t("This is a quick agenda view. Open NivaDesk on a bigger screen for the full drag-and-drop timeline."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleAgendaEmpty(modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(34.dp))
+        Text(t("No orders in this schedule range."), fontWeight = FontWeight.ExtraBold)
+        Text(t("Use the arrows, filters or search to find scheduled work."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 @Composable
 private fun ScheduleTimelineBoard(
     range: ScheduleRange,
@@ -868,6 +1299,15 @@ private fun ScheduleTimelineDayHeader(range: ScheduleRange, dayWidth: Dp) {
     }
 }
 
+// Grab / grabbing / resize cursors for pointer devices (Chromebook, DeX, tablet
+// + mouse) so dragging an order on the timeline feels like the Mac/web: open
+// hand on hover, closed hand while moving, left–right arrows on the resize edges.
+@Composable
+private fun rememberSchedulePointerIcon(type: Int): PointerIcon {
+    val context = LocalContext.current
+    return remember(context, type) { PointerIcon(android.view.PointerIcon.getSystemIcon(context, type)) }
+}
+
 @Composable
 private fun ScheduleTimelineRow(
     order: StudioOrder,
@@ -892,6 +1332,9 @@ private fun ScheduleTimelineRow(
     val maxWidth = timelineWidth - blockX - 7.dp
     val blockWidth = maxOf(132.dp, minOf(rawWidth, maxWidth))
     var moveOffset by remember(order.id) { mutableFloatStateOf(0f) }
+    var isMoving by remember(order.id) { mutableStateOf(false) }
+    val grabIcon = rememberSchedulePointerIcon(android.view.PointerIcon.TYPE_GRAB)
+    val grabbingIcon = rememberSchedulePointerIcon(android.view.PointerIcon.TYPE_GRABBING)
 
     Box(
         modifier = Modifier
@@ -919,15 +1362,19 @@ private fun ScheduleTimelineRow(
                 .offset(x = blockX, y = 8.dp)
                 .width(blockWidth)
                 .height(52.dp)
+                .then(if (canEditSchedule) Modifier.pointerHoverIcon(if (isMoving) grabbingIcon else grabIcon) else Modifier)
                 .pointerInput(order.id, canEditSchedule, dayWidth) {
                     if (!canEditSchedule) return@pointerInput
                     var dragTotal = 0f
                     detectHorizontalDragGestures(
+                        onDragStart = { isMoving = true },
                         onDragCancel = {
+                            isMoving = false
                             dragTotal = 0f
                             moveOffset = 0f
                         },
                         onDragEnd = {
+                            isMoving = false
                             val deltaDays = (dragTotal / dayWidth.toPx()).roundToInt().coerceIn(-365, 365)
                             if (deltaDays != 0) onMoveOrder(order, deltaDays)
                             dragTotal = 0f
@@ -1005,10 +1452,12 @@ private fun ScheduleResizeHandle(
         Spacer(modifier = Modifier.width(1.dp))
         return
     }
+    val resizeIcon = rememberSchedulePointerIcon(android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW)
     Box(
         modifier = Modifier
             .width(18.dp)
             .height(52.dp)
+            .pointerHoverIcon(resizeIcon)
             .pointerInput(dayWidth) {
                 var dragTotal = 0f
                 detectHorizontalDragGestures(
@@ -1033,12 +1482,9 @@ private fun ScheduleResizeHandle(
 private fun ScheduleTimelineThumbnail(order: StudioOrder) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val previewUrl = remember(order.id, order.designLink, order.clientFiles) {
-        order.designLink.trim().ifBlank {
-            order.clientFiles.firstOrNull {
-                isScheduleClientImage(it.contentType, it.fileName) && it.downloadUrl.isNotBlank()
-            }?.downloadUrl.orEmpty()
-        }
+    // Preview is only the dedicated preview image (designLink), like Mac/Web.
+    val previewUrl = remember(order.id, order.designLink) {
+        order.designLink.trim()
     }
     var bitmap by remember(previewUrl) { mutableStateOf<android.graphics.Bitmap?>(null) }
     androidx.compose.runtime.LaunchedEffect(previewUrl) {

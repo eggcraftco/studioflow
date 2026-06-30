@@ -17,7 +17,8 @@ export function OrderQuickFilterBar({
   onFilterChange,
   onSortModeChange,
   filters = ORDER_QUICK_FILTERS,
-  language = "English"
+  language = "English",
+  deletedCount = 0
 }: {
   orders: FilterableOrder[];
   filter: OrderQuickFilterId;
@@ -26,10 +27,12 @@ export function OrderQuickFilterBar({
   onSortModeChange: (sortMode: OrderSortMode) => void;
   filters?: typeof ORDER_QUICK_FILTERS;
   language?: string | null;
+  deletedCount?: number;
 }) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const selectedFilter = filters.find(item => item.id === filter) ?? filters[0] ?? ORDER_QUICK_FILTERS[0];
-  const selectedCount = quickFilterCount(orders, filter);
+  const countFor = (id: OrderQuickFilterId) => id === "trash" ? deletedCount : quickFilterCount(orders, id);
+  const selectedCount = countFor(filter);
   const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
@@ -104,7 +107,7 @@ export function OrderQuickFilterBar({
               >
                 <span className="order-filter-menu-icon">{filter === item.id ? "✓" : filterIcon(item.id)}</span>
                 <span>{t(item.label)}</span>
-                <span className="order-filter-menu-count">({quickFilterCount(orders, item.id)})</span>
+                <span className="order-filter-menu-count">({countFor(item.id)})</span>
               </button>
             ))}
           </div>

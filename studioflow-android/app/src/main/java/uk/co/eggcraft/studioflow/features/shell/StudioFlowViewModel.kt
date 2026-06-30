@@ -31,6 +31,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings
+import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
@@ -54,6 +55,8 @@ data class StudioFlowUiState(
     val availableWorkspaces: List<StudioWorkspaceOption> = emptyList(),
     val workspaceSettings: StudioWorkspaceSettings = StudioWorkspaceSettings(),
     val orders: List<StudioOrder> = emptyList(),
+    val deletedOrders: List<StudioOrder> = emptyList(),
+    val customers: List<StudioCustomer> = emptyList(),
     val teamMembers: List<StudioTeamMember> = emptyList(),
     val joinRequests: List<StudioJoinRequest> = emptyList(),
     val customRoles: List<StudioCustomRole> = emptyList(),
@@ -201,6 +204,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
     private var workspaceJob: Job? = null
     private var liveWorkspaceJob: Job? = null
     private var ordersJob: Job? = null
+    private var customersJob: Job? = null
     private var teamJob: Job? = null
     private var joinRequestsJob: Job? = null
     private var settingsJob: Job? = null
@@ -220,6 +224,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             repository.authState().collect { user ->
                 workspaceJob?.cancel()
                 ordersJob?.cancel()
+                customersJob?.cancel()
                 liveWorkspaceJob?.cancel()
                 teamJob?.cancel()
                 joinRequestsJob?.cancel()
@@ -315,6 +320,27 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    fun signInWithApple(activity: android.app.Activity) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(signingIn = true, errorMessage = "") }
+            runCatching { repository.signInWithApple(activity) }
+                .onFailure { error ->
+                    val message = error.message ?: "Could not sign in with Apple."
+                    // The user simply closing the Apple web sheet is not an error to surface.
+                    val cancelled = message.contains("canceled", ignoreCase = true) ||
+                        message.contains("cancelled", ignoreCase = true) ||
+                        message.contains("WEB_CONTEXT_CANCELED", ignoreCase = true)
+                    mutableState.update {
+                        it.copy(
+                            signingIn = false,
+                            loading = false,
+                            errorMessage = if (cancelled) "" else message
+                        )
+                    }
+                }
+        }
+    }
+
     fun signOut() {
         repository.signOut()
     }
@@ -336,6 +362,88 @@ class StudioFlowViewModel @JvmOverloads constructor(
             runCatching { repository.updateOrderFields(workspace, order, payload) }
                 .onFailure { error ->
                     mutableState.update { it.copy(errorMessage = error.message ?: "Could not update project.") }
+                }
+        }
+    }
+
+    fun restoreOrder(order: StudioOrder) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
+            runCatching { repository.restoreOrder(workspace, order) }
+                .onSuccess { mutableState.update { it.copy(settingsMessage = "Order restored.") } }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not restore this order.") }
+                }
+        }
+    }
+
+    fun updateCustomer(customer: StudioCustomer) {
+        val workspace = mutableState.value.workspace ?: return
+        // Autosave — stay quiet on success so per-field edits don't spam status.
+        viewModelScope.launch {
+            runCatching { repository.updateCustomer(workspace.id, customer) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not save the customer.") }
+                }
+        }
+    }
+
+    fun createCustomer(
+        name: String,
+        email: String,
+        phone: String,
+        instagram: String,
+        streetAddress: String,
+        city: String,
+        postalCode: String,
+        country: String,
+        notes: String
+    ) {
+        val workspace = mutableState.value.workspace ?: return
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
+            runCatching {
+                repository.createCustomer(
+                    companyId = workspace.id,
+                    name = name,
+                    email = email,
+                    phone = phone,
+                    instagram = instagram,
+                    streetAddress = streetAddress,
+                    city = city,
+                    postalCode = postalCode,
+                    country = country,
+                    notes = notes
+                )
+            }
+                .onSuccess { message -> mutableState.update { it.copy(settingsMessage = message) } }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not create the customer.") }
+                }
+        }
+    }
+
+    fun uploadCustomerPhoto(customer: StudioCustomer, bytes: ByteArray, contentType: String) {
+        val workspace = mutableState.value.workspace ?: return
+        val user = mutableState.value.user ?: return
+        viewModelScope.launch {
+            runCatching { repository.uploadCustomerImage(workspace, user, customer, bytes, contentType) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not upload the customer photo.") }
+                }
+        }
+    }
+
+    fun deleteCustomer(customerId: String) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
+            runCatching { repository.deleteCustomer(workspace.id, customerId) }
+                .onSuccess { mutableState.update { it.copy(settingsMessage = "Customer deleted.") } }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not delete the customer.") }
                 }
         }
     }
@@ -1703,6 +1811,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     private fun observeWorkspace(workspace: StudioWorkspace, user: FirebaseUser) {
         ordersJob?.cancel()
+        customersJob?.cancel()
         teamJob?.cancel()
         joinRequestsJob?.cancel()
         settingsJob?.cancel()
@@ -1823,7 +1932,18 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
                 .collect { orders ->
-                    mutableState.update { it.copy(orders = orders, errorMessage = "") }
+                    // Split active vs trashed so every consumer of `orders` excludes
+                    // soft-deleted orders automatically; the Trash view uses deletedOrders.
+                    val active = orders.filter { !it.isDeleted }
+                    val deleted = orders.filter { it.isDeleted }.sortedByDescending { it.deletedAt?.time ?: 0L }
+                    mutableState.update { it.copy(orders = active, deletedOrders = deleted, errorMessage = "") }
+                }
+        }
+        customersJob = viewModelScope.launch {
+            repository.customersFlow(workspace)
+                .catch { /* customer directory is best-effort; ignore listener errors */ }
+                .collect { customers ->
+                    mutableState.update { it.copy(customers = customers) }
                 }
         }
         if (workspace.isOwner) {

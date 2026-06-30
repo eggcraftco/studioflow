@@ -33,6 +33,8 @@ import {
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
   deleteOrderFromWeb,
+  mergeOrders,
+  restoreOrderFromWeb,
   requestWorkflowOrderDeletionFromWeb,
   updateOrderFromWeb
 } from "@/lib/studioflow/orders";
@@ -118,6 +120,7 @@ export default function OrdersPage() {
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [deletedOrders, setDeletedOrders] = useState<OrderListItem[]>([]);
   const ordersCountRef = useRef(0);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -137,6 +140,11 @@ export default function OrdersPage() {
   const [orderContextMenu, setOrderContextMenu] = useState<{ orderId: string; x: number; y: number } | null>(null);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
+  const lastSelectedOrderIdRef = useRef<string | null>(null);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergePrimaryId, setMergePrimaryId] = useState("");
+  const [mergingOrders, setMergingOrders] = useState(false);
   const [showOrderStatusBadges, setShowOrderStatusBadges] = useState(true);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-orders-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
 
@@ -245,9 +253,13 @@ export default function OrdersPage() {
       : orders,
     [orders, user, workspace]
   );
+  useEffect(() => {
+    if (!workspace) return;
+    loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
+  }, [orderFilter, workspace, user]);
   const filteredOrders = useMemo(
-    () => filterAndSortOrders(visibleOrders, orderSearch, orderFilter, orderSortMode),
-    [orderFilter, orderSearch, orderSortMode, visibleOrders]
+    () => filterAndSortOrders(orderFilter === "trash" ? deletedOrders : visibleOrders, orderSearch, orderFilter, orderSortMode),
+    [orderFilter, orderSearch, orderSortMode, visibleOrders, deletedOrders]
   );
   useEffect(() => {
     ordersCountRef.current = orders.length;
@@ -300,6 +312,20 @@ export default function OrdersPage() {
     };
   }, [orderContextMenu]);
 
+  useEffect(() => {
+    setSelectedOrderIds(current => {
+      if (current.size === 0) return current;
+      const validIds = new Set(orders.map(order => order.id));
+      const next = new Set([...current].filter(id => validIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [orders]);
+
+  useEffect(() => {
+    setSelectedOrderIds(new Set());
+    lastSelectedOrderIdRef.current = null;
+  }, [orderFilter]);
+
   async function refreshSelectedOrder() {
     if (!workspace || !selectedOrderId || !user) return;
     const uid = user.uid;
@@ -328,9 +354,168 @@ export default function OrdersPage() {
   function openOrderContextMenu(event: MouseEvent, order: OrderListItem) {
     event.preventDefault();
     event.stopPropagation();
-    setSelectedOrderId(order.id);
+    if (selectedOrderIds.size === 0) {
+      setSelectedOrderId(order.id);
+    }
     const nextPosition = contextMenuPosition(event.clientX, event.clientY);
     setOrderContextMenu({ orderId: order.id, ...nextPosition });
+  }
+
+  function toggleOrderSelection(orderId: string) {
+    setSelectedOrderIds(current => {
+      const next = new Set(current);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+    lastSelectedOrderIdRef.current = orderId;
+  }
+
+  function selectOrderForBulk(orderId: string) {
+    setSelectedOrderIds(current => {
+      const next = new Set(current);
+      next.add(orderId);
+      return next;
+    });
+    lastSelectedOrderIdRef.current = orderId;
+    setOrderContextMenu(null);
+  }
+
+  function deselectOrderForBulk(orderId: string) {
+    setSelectedOrderIds(current => {
+      if (!current.has(orderId)) return current;
+      const next = new Set(current);
+      next.delete(orderId);
+      return next;
+    });
+    if (lastSelectedOrderIdRef.current === orderId) lastSelectedOrderIdRef.current = null;
+    setOrderContextMenu(null);
+  }
+
+  function clearOrderSelection() {
+    setSelectedOrderIds(new Set());
+    lastSelectedOrderIdRef.current = null;
+    setOrderContextMenu(null);
+  }
+
+  function extendOrderSelection(orderId: string) {
+    const ids = filteredOrders.map(item => item.id);
+    const targetIndex = ids.indexOf(orderId);
+    if (targetIndex < 0) {
+      toggleOrderSelection(orderId);
+      return;
+    }
+    const anchor = lastSelectedOrderIdRef.current;
+    const anchorIndex = anchor ? ids.indexOf(anchor) : -1;
+    const startIndex = anchorIndex < 0 ? targetIndex : anchorIndex;
+    const from = Math.min(startIndex, targetIndex);
+    const to = Math.max(startIndex, targetIndex);
+    setSelectedOrderIds(current => {
+      const next = new Set(current);
+      for (let index = from; index <= to; index += 1) next.add(ids[index]);
+      return next;
+    });
+    lastSelectedOrderIdRef.current = orderId;
+  }
+
+  function handleOrderCardClick(order: OrderListItem, event?: MouseEvent) {
+    if (event?.shiftKey) {
+      event.preventDefault();
+      extendOrderSelection(order.id);
+      return;
+    }
+    if (event && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      toggleOrderSelection(order.id);
+      return;
+    }
+    if (selectedOrderIds.size > 0) {
+      toggleOrderSelection(order.id);
+      return;
+    }
+    setSelectedOrderId(order.id);
+  }
+
+  async function deleteSelectedOrders() {
+    if (!workspace || !user) return;
+    const uid = user.uid;
+    const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
+      || (workspace.memberAccess.assignedProjectsOnly === true
+        && workspace.memberAccess.manageProjectAssignments !== true);
+    if (requiresOwnerApproval || !canDeleteOrdersForRole(workspace.role)) {
+      setOrderActionError("Your workspace role cannot delete the selected orders.");
+      return;
+    }
+    const idSet = new Set(selectedOrderIds);
+    const targets = orders.filter(order => idSet.has(order.id));
+    if (targets.length === 0) {
+      clearOrderSelection();
+      return;
+    }
+    const confirmed = window.confirm(
+      `Move ${targets.length} order${targets.length === 1 ? "" : "s"} to Trash? You can restore them for 30 days.`
+    );
+    if (!confirmed) return;
+
+    setOrderContextMenu(null);
+    setOrderActionError(null);
+    setOrderActionStatus(`Moving ${targets.length} order${targets.length === 1 ? "" : "s"} to Trash...`);
+
+    const remaining = orders.filter(order => !idSet.has(order.id));
+    setOrders(remaining);
+    setSelectedOrderIds(new Set());
+    lastSelectedOrderIdRef.current = null;
+    if (idSet.has(selectedOrderId)) {
+      setSelectedOrder(null);
+      setSelectedOrderId(remaining[0]?.id || "");
+    }
+
+    try {
+      await Promise.all(targets.map(order => deleteOrderFromWeb(workspace, order.id)));
+      setOrderActionStatus(`${targets.length} order${targets.length === 1 ? "" : "s"} moved to Trash.`);
+    } catch (deleteError) {
+      setOrderActionStatus(null);
+      setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete the selected orders.");
+      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+    }
+  }
+
+  function openMergeSelectedModal() {
+    setOrderContextMenu(null);
+    if (selectedOrderIds.size < 2) return;
+    const firstId = [...selectedOrderIds].find(id => orders.some(order => order.id === id)) ?? "";
+    setMergePrimaryId(current => (current && selectedOrderIds.has(current) ? current : firstId));
+    setMergeModalOpen(true);
+  }
+
+  async function confirmMergeSelected() {
+    if (!workspace || !user) return;
+    const uid = user.uid;
+    const idList = [...selectedOrderIds].filter(id => orders.some(order => order.id === id));
+    const primaryId = mergePrimaryId && idList.includes(mergePrimaryId) ? mergePrimaryId : idList[0] || "";
+    const sourceIds = idList.filter(id => id !== primaryId);
+    if (!primaryId || sourceIds.length === 0) {
+      setMergeModalOpen(false);
+      return;
+    }
+
+    setMergingOrders(true);
+    setOrderActionError(null);
+    try {
+      const result = await mergeOrders(workspace, primaryId, sourceIds);
+      const mergedSet = new Set(sourceIds);
+      setOrders(current => current.filter(order => !mergedSet.has(order.id)));
+      setSelectedOrderIds(new Set());
+      lastSelectedOrderIdRef.current = null;
+      setMergeModalOpen(false);
+      setSelectedOrderId(primaryId);
+      setOrderActionStatus(result.message || "Orders merged.");
+      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+    } catch (mergeError) {
+      setOrderActionError(mergeError instanceof Error ? mergeError.message : "Could not merge the selected orders.");
+    } finally {
+      setMergingOrders(false);
+    }
   }
 
   function optimisticStatusPatch(orderId: string, status: string) {
@@ -403,12 +588,12 @@ export default function OrdersPage() {
       setOrderActionError("Your workspace role cannot delete orders.");
       return;
     }
-    const confirmed = window.confirm(`Delete "${order.customerName.trim() || "New Project"}"? This cannot be undone.`);
+    const confirmed = window.confirm(`Move "${order.customerName.trim() || "New Project"}" to Trash? You can restore it for 30 days.`);
     if (!confirmed) return;
 
     setOrderContextMenu(null);
     setOrderActionError(null);
-    setOrderActionStatus("Deleting order...");
+    setOrderActionStatus("Moving order to Trash...");
     const nextOrders = orders.filter(item => item.id !== order.id);
     setOrders(nextOrders);
     if (selectedOrderId === order.id) {
@@ -418,11 +603,27 @@ export default function OrdersPage() {
 
     try {
       await deleteOrderFromWeb(workspace, order.id);
-      setOrderActionStatus("Order deleted.");
+      setOrderActionStatus("Order moved to Trash.");
     } catch (deleteError) {
       setOrderActionStatus(null);
       setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete this order.");
       loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+    }
+  }
+
+  async function handleRestoreOrder(order: OrderListItem) {
+    if (!workspace) return;
+    setOrderActionError(null);
+    setOrderActionStatus("Restoring order...");
+    setDeletedOrders(current => current.filter(item => item.id !== order.id));
+    try {
+      await restoreOrderFromWeb(workspace, order.id);
+      setOrderActionStatus("Order restored.");
+      loadRecentOrders(workspace.id, workspace, user?.uid ?? "").then(setOrders).catch(() => undefined);
+    } catch (restoreError) {
+      setOrderActionStatus(null);
+      setOrderActionError(restoreError instanceof Error ? restoreError.message : "Could not restore this order.");
+      loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
     }
   }
 
@@ -493,6 +694,12 @@ export default function OrdersPage() {
   }
 
   const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
+  const selectionActive = selectedOrderIds.size > 0;
+  const contextOrderSelected = contextOrder ? selectedOrderIds.has(contextOrder.id) : false;
+  const mergeCandidates = mergeModalOpen ? orders.filter(order => selectedOrderIds.has(order.id)) : [];
+  const effectiveMergePrimaryId = mergePrimaryId && selectedOrderIds.has(mergePrimaryId)
+    ? mergePrimaryId
+    : (mergeCandidates[0]?.id ?? "");
   const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
   const canRequestOrderDeletion = workspace
     ? normalizeWorkspaceRole(workspace.role) === "workflow"
@@ -524,6 +731,15 @@ export default function OrdersPage() {
             <div className="sidebar-toolbar-actions">
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
               <button
+                type="button"
+                className="studio-pill"
+                onClick={() => router.push("/export")}
+                style={{ cursor: "pointer", border: "none" }}
+                title={t("Export orders to CSV")}
+              >
+                {t("Export")}
+              </button>
+              <button
                 className="sidebar-toggle-button"
                 type="button"
                 title={sidebar.collapsed ? t("Expand order list") : t("Collapse order list")}
@@ -551,6 +767,7 @@ export default function OrdersPage() {
               onFilterChange={setOrderFilter}
               onSortModeChange={setOrderSortMode}
               language={language}
+              deletedCount={deletedOrders.length}
             />
           </div>
 
@@ -568,6 +785,27 @@ export default function OrdersPage() {
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
           ) : null}
 
+          {orderFilter === "trash" ? (
+            <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
+          ) : null}
+          {selectionActive ? (
+            <div className="orders-selection-bar">
+              <span>{`${selectedOrderIds.size} ${t("selected")}`}</span>
+              <div className="orders-selection-bar-actions">
+                <button type="button" onClick={clearOrderSelection}>{t("Clear")}</button>
+                {canDeleteOrders && selectedOrderIds.size >= 2 ? (
+                  <button type="button" onClick={openMergeSelectedModal}>
+                    {`${t("Merge")} (${selectedOrderIds.size})`}
+                  </button>
+                ) : null}
+                {canDeleteOrders ? (
+                  <button type="button" className="danger" onClick={() => void deleteSelectedOrders()}>
+                    {`${t("Delete")} (${selectedOrderIds.size})`}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="orders-list">
             {filteredOrders.map(order => (
               <div
@@ -587,8 +825,15 @@ export default function OrdersPage() {
                   assigneePhotoURL={assigneePhotoForOrder(order)}
                   showFirstProjectGuideProjectBubble={firstProjectGuide?.step === 2 && firstProjectGuide.orderId === order.id}
                   onFirstProjectGuideProjectNext={() => setFirstProjectGuideState({ step: 3, orderId: order.id, completed: false })}
-                  onSelect={() => setSelectedOrderId(order.id)}
+                  onSelect={event => handleOrderCardClick(order, event)}
+                  multiSelected={selectedOrderIds.has(order.id)}
+                  selectionActive={selectionActive}
                 />
+                {orderFilter === "trash" ? (
+                  <button type="button" className="button secondary" style={{ margin: "4px 14px 10px", fontSize: 12 }} onClick={() => handleRestoreOrder(order)}>
+                    ↩ {t("Restore")}
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -610,6 +855,15 @@ export default function OrdersPage() {
                   {t("Open Customer")}
                 </a>
               ) : null}
+              <button
+                role="menuitem"
+                type="button"
+                className="order-list-context-row"
+                onClick={() => (contextOrderSelected ? deselectOrderForBulk(contextOrder.id) : selectOrderForBulk(contextOrder.id))}
+              >
+                <span aria-hidden="true">{contextOrderSelected ? "−" : "☑"}</span>
+                {contextOrderSelected ? t("Deselect") : t("Select")}
+              </button>
               <button
                 role="menuitem"
                 type="button"
@@ -671,6 +925,39 @@ export default function OrdersPage() {
                 {t("Cancel Order")}
               </button>
               <div className="order-list-context-divider" />
+              {selectionActive && canDeleteOrders ? (
+                <>
+                  {selectedOrderIds.size >= 2 ? (
+                    <button
+                      role="menuitem"
+                      type="button"
+                      className="order-list-context-row"
+                      onClick={openMergeSelectedModal}
+                    >
+                      <span aria-hidden="true">⊕</span>
+                      {`${t("Merge Selected")} (${selectedOrderIds.size})`}
+                    </button>
+                  ) : null}
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="order-list-context-row"
+                    onClick={clearOrderSelection}
+                  >
+                    <span aria-hidden="true">○</span>
+                    {t("Clear Selection")}
+                  </button>
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="order-list-context-row danger"
+                    onClick={() => void deleteSelectedOrders()}
+                  >
+                    <span aria-hidden="true">⌫</span>
+                    {`${t("Delete")} (${selectedOrderIds.size})`}
+                  </button>
+                </>
+              ) : null}
               <button
                 role="menuitem"
                 type="button"
@@ -681,6 +968,80 @@ export default function OrdersPage() {
                 <span aria-hidden="true">⌫</span>
                 {canRequestOrderDeletion ? "Request Deletion" : t("Delete")}
               </button>
+            </div>
+          ) : null}
+
+          {mergeModalOpen ? (
+            <div
+              className="modal-backdrop"
+              role="presentation"
+              onMouseDown={() => { if (!mergingOrders) setMergeModalOpen(false); }}
+            >
+              <section
+                className="card"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="merge-selected-title"
+                onMouseDown={event => event.stopPropagation()}
+                style={{ width: "min(540px, 94vw)", display: "flex", flexDirection: "column", gap: 16 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <h2 id="merge-selected-title" style={{ margin: 0, fontSize: 18 }}>{t("Merge selected orders")}</h2>
+                  <button
+                    type="button"
+                    className="toolbar-icon-button"
+                    onClick={() => { if (!mergingOrders) setMergeModalOpen(false); }}
+                    aria-label={t("Close")}
+                    disabled={mergingOrders}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <p className="muted-copy" style={{ margin: 0 }}>
+                  {t("Pick the main order to keep. The other selected orders' payments move into it, then they move to Trash.")}
+                </p>
+
+                <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {mergeCandidates.map(candidate => {
+                    const isPrimary = candidate.id === effectiveMergePrimaryId;
+                    return (
+                      <button
+                        type="button"
+                        key={candidate.id}
+                        onClick={() => setMergePrimaryId(candidate.id)}
+                        style={{
+                          textAlign: "left",
+                          border: isPrimary ? "2px solid #2563eb" : "1px solid var(--border)",
+                          borderRadius: 10,
+                          padding: "10px 12px",
+                          background: isPrimary ? "rgba(37, 99, 235, 0.08)" : "transparent",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10
+                        }}
+                      >
+                        <span aria-hidden="true" style={{ color: isPrimary ? "#2563eb" : "var(--muted)", fontSize: 16 }}>{isPrimary ? "●" : "○"}</span>
+                        <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
+                          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.customerName.trim() || "New Project"}</strong>
+                          <span className="muted-copy" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(candidate.designName || "").trim() || "—"}</span>
+                        </span>
+                        {isPrimary ? <span style={{ color: "#2563eb", fontWeight: 700, fontSize: 12 }}>{t("Main")}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {orderActionError ? <p className="orders-sidebar-error" style={{ margin: 0 }}>{orderActionError}</p> : null}
+
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  <button type="button" className="button secondary" disabled={mergingOrders} onClick={() => setMergeModalOpen(false)}>{t("Cancel")}</button>
+                  <button type="button" className="button" disabled={mergingOrders || mergeCandidates.length < 2} onClick={() => void confirmMergeSelected()}>
+                    {mergingOrders ? t("Merging…") : `${t("Merge")} (${mergeCandidates.length})`}
+                  </button>
+                </div>
+              </section>
             </div>
           ) : null}
         </aside>
@@ -735,6 +1096,7 @@ export default function OrdersPage() {
               onFilterChange={setOrderFilter}
               onSortModeChange={setOrderSortMode}
               language={language}
+              deletedCount={deletedOrders.length}
             />
             <button
               className={mobileSearchOpen ? "orders-mobile-search-toggle is-active" : "orders-mobile-search-toggle"}
@@ -758,6 +1120,9 @@ export default function OrdersPage() {
             </label>
           ) : null}
 
+          {orderFilter === "trash" ? (
+            <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
+          ) : null}
           <div className="orders-list">
             {filteredOrders.map(order => (
               <OrderListCard

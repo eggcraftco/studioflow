@@ -9,7 +9,8 @@ export type OrderQuickFilterId =
   | "lateOrders"
   | "unpaidBalance"
   | "readyToShip"
-  | "completed";
+  | "completed"
+  | "trash";
 
 export type FilterableOrder = {
   customerName: string;
@@ -42,7 +43,8 @@ export const ORDER_QUICK_FILTERS: Array<{ id: OrderQuickFilterId; label: string 
   { id: "lateOrders", label: "Late Orders" },
   { id: "unpaidBalance", label: "Unpaid Balance" },
   { id: "readyToShip", label: "Ready to Ship" },
-  { id: "completed", label: "Completed" }
+  { id: "completed", label: "Completed" },
+  { id: "trash", label: "Trash" }
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -204,6 +206,8 @@ export function orderMatchesQuickFilter(order: FilterableOrder, filter: OrderQui
       return orderIsReadyToShip(order);
     case "completed":
       return orderIsCompleted(order);
+    case "trash":
+      return true;
   }
 }
 

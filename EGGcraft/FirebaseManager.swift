@@ -892,6 +892,9 @@ struct StudioActivityNotification: Identifiable, Codable, Equatable {
 class FirebaseManager: ObservableObject {
     
     @Published var siparisler: [Siparis] = []
+    // Soft-deleted orders (Trash). Kept separate so every existing consumer of
+    // `siparisler` automatically excludes trashed orders with no extra filtering.
+    @Published var deletedSiparisler: [Siparis] = []
     @Published var musteriler: [Musteri] = []
 
     // Tracks orders the user is actively editing locally. While an order is within
@@ -951,6 +954,7 @@ class FirebaseManager: ObservableObject {
     private var supportTicketsListenerRegistration: ListenerRegistration?
     private var messageThreadsListenerRegistration: ListenerRegistration?
     private var personalInterfaceListenerRegistration: ListenerRegistration?
+    private var companySettingsListenerRegistration: ListenerRegistration?
     private var personalInterfaceListenerKey: String = ""
     private var messageThreadsListenerCompanyId: String = ""
     private var messageItemsListenerRegistration: ListenerRegistration?
@@ -1184,6 +1188,7 @@ class FirebaseManager: ObservableObject {
         refreshOfflineStatusMessage()
         startMessageThreadsRealtime(companyId: cleanCompanyId)
         startPersonalInterfaceRealtime(companyId: cleanCompanyId)
+        startCompanySettingsSync(companyId: cleanCompanyId)
 
         fetchSiparisler()
         fetchMusteriler()
@@ -1218,6 +1223,68 @@ class FirebaseManager: ObservableObject {
         messageUnreadCount = 0
         locallyReadMessageThreadReadTimes.removeAll()
         updateHistoryFlags()
+    }
+
+    /// App-wide live sync of the workspace FINANCIAL settings into UserDefaults so
+    /// the Dashboard and per-order profit/tax math (which read them via @AppStorage)
+    /// always reflect the live workspace value. These used to refresh only while the
+    /// Settings screen was open, so Mac/iPhone could show a stale value (e.g.
+    /// Corporation Tax) that web/Android — reading the live setting — did not.
+    private func startCompanySettingsSync(companyId: String) {
+        companySettingsListenerRegistration?.remove()
+        let cleanId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanId.isEmpty else { return }
+        companySettingsListenerRegistration = Firestore.firestore()
+            .collection("companySettings")
+            .document(cleanId)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Company settings sync listener error: \(error)")
+                    return
+                }
+                guard let data = snapshot?.data() else { return }
+                let defaults = UserDefaults.standard
+
+                // Only write when the value actually changed, so an unrelated
+                // companySettings edit doesn't needlessly churn @AppStorage/the UI.
+                func applyBool(_ key: String) {
+                    if let value = data[key] as? Bool, defaults.bool(forKey: key) != value {
+                        defaults.set(value, forKey: key)
+                    }
+                }
+                func applyString(_ key: String, transform: (String) -> String = { $0 }) {
+                    if let value = data[key] as? String {
+                        let resolved = transform(value)
+                        if defaults.string(forKey: key) != resolved { defaults.set(resolved, forKey: key) }
+                    }
+                }
+                func applyDouble(_ key: String, clampPercent: Bool) {
+                    let raw: Double?
+                    if let value = data[key] as? Double { raw = value }
+                    else if let value = data[key] as? NSNumber { raw = value.doubleValue }
+                    else { raw = nil }
+                    if let raw {
+                        let resolved = clampPercent ? min(max(raw, 0), 100) : raw
+                        if defaults.double(forKey: key) != resolved { defaults.set(resolved, forKey: key) }
+                    }
+                }
+
+                // Financial settings that drive the Dashboard cards + per-order math.
+                applyBool("corporationTaxEnabled")
+                applyDouble("corporationTaxRate", clampPercent: true)
+                applyDouble("defaultTaxRate", clampPercent: true)
+                applyDouble("feePercentage", clampPercent: true)
+                applyString("taxCalculationType") { $0 == "Profit" ? "Profit" : "Revenue" }
+                applyBool("taxMilestoneEnabled")
+                applyDouble("taxMilestoneDate", clampPercent: false)
+                applyString("taxRuleNameRevenue")
+                applyString("taxRuleNameProfit")
+                applyBool("financialShowBaseCost")
+                applyString("financialBaseCostLabel")
+                applyString("priorityCardLabel")
+                applyString("riskCardLabel")
+                applyString("designNameLabel")
+            }
     }
 
     func fetchSiparisler() {
@@ -1268,7 +1335,10 @@ class FirebaseManager: ObservableObject {
                     self.activeOrderEditTimestamps = self.activeOrderEditTimestamps.filter {
                         now.timeIntervalSince($0.value) < self.activeOrderEditGrace
                     }
-                    self.siparisler = merged.sorted(by: { $0.paymentDate > $1.paymentDate })
+                    let sortedAll = merged.sorted(by: { $0.paymentDate > $1.paymentDate })
+                    self.siparisler = sortedAll.filter { !$0.isDeleted }
+                    self.deletedSiparisler = sortedAll.filter { $0.isDeleted }
+                        .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
                     self.handleServerSnapshotAcknowledgement(querySnapshot?.metadata)
                     self.saveOfflineCache()
                 }
@@ -1343,6 +1413,18 @@ class FirebaseManager: ObservableObject {
             siparis.clientFiles = firestoreArray(data["clientFiles"], as: [ClientFileItem].self) ?? []
             siparis.todoItems = firestoreArray(data["todoItems"], as: [OrderToDoItem].self) ?? []
             siparis.workSessions = firestoreArray(data["workSessions"], as: [OrderWorkSessionItem].self) ?? []
+            siparis.payments = firestoreArray(data["payments"], as: [PaymentEntry].self) ?? []
+            siparis.lineItems = firestoreArray(data["lineItems"], as: [LineItem].self) ?? []
+            siparis.invoiceNote = data["invoiceNote"] as? String
+            siparis.shippingName = data["shippingName"] as? String
+            siparis.shippingStreetAddress = data["shippingStreetAddress"] as? String
+            siparis.shippingCity = data["shippingCity"] as? String
+            siparis.shippingPostalCode = data["shippingPostalCode"] as? String
+            siparis.shippingCountry = data["shippingCountry"] as? String
+            siparis.shippingPhone = data["shippingPhone"] as? String
+            siparis.invoiceNumber = stringValue(data["invoiceNumber"])
+            siparis.isDeleted = boolValue(data["isDeleted"])
+            siparis.deletedAt = (data["deletedAt"] as? Timestamp)?.dateValue()
             siparis.assignedToUid = stringValue(data["assignedToUid"])
             siparis.assignedToEmail = stringValue(data["assignedToEmail"])
             print("Recovered order document with app-compatible defaults: \(document.documentID). Decode fallback reason: \(error.localizedDescription)")
@@ -2045,6 +2127,45 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    /// Renames a client file via the `renameClientFile` cloud function (same path the web app uses),
+    /// then updates the local order copy so the change reflects immediately.
+    func renameClientFile(orderId: String, fileId: String, newFileName: String, completion: ((Bool) -> Void)? = nil) {
+        let trimmed = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !currentCompanyId.isEmpty, !orderId.isEmpty, !fileId.isEmpty, !trimmed.isEmpty else {
+            completion?(false)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("renameClientFile")
+            .call([
+                "companyId": currentCompanyId,
+                "orderId": orderId,
+                "fileId": fileId,
+                "fileName": trimmed
+            ]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self?.lastUploadSafetyMessage = "Rename failed: \(error.localizedDescription)"
+                        completion?(false)
+                        return
+                    }
+                    if let self,
+                       var order = self.siparisler.first(where: { $0.id == orderId }),
+                       var files = order.clientFiles,
+                       let idx = files.firstIndex(where: { $0.id.uuidString == fileId }) {
+                        files[idx].fileName = trimmed
+                        order.clientFiles = files
+                        self.upsertLocalSiparis(order)
+                    }
+                    completion?(true)
+                }
+            }
+        #else
+        completion?(false)
+        #endif
+    }
+
     func requestWorkflowOrderDeletion(_ siparis: Siparis, completion: ((String) -> Void)? = nil) {
         guard let id = siparis.id, !currentCompanyId.isEmpty else { return }
         #if canImport(FirebaseFunctions)
@@ -2084,20 +2205,45 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+    // Soft-delete: move the order to the Trash (isDeleted=true) instead of a hard
+    // delete. It disappears from all normal views and can be restored for 30 days.
     func deleteSiparis(_ siparis: Siparis) {
         guard let id = siparis.id else { return }
         registerAction(.deletedSiparis(siparis))
         removeLocalSiparis(id: id)
-        registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "delete", title: siparis.customerName)
-        db.collection("siparisler").document(id).delete()
+        registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "update", title: siparis.customerName)
+        db.collection("siparisler").document(id).updateData([
+            "isDeleted": true,
+            "deletedAt": FieldValue.serverTimestamp(),
+            "deletedBy": Auth.auth().currentUser?.uid ?? ""
+        ])
     }
 
     func deleteSiparis(id: String) {
         if let siparis = siparisler.first(where: { $0.id == id }) {
             deleteSiparis(siparis)
         } else {
-            db.collection("siparisler").document(id).delete()
+            db.collection("siparisler").document(id).updateData([
+                "isDeleted": true,
+                "deletedAt": FieldValue.serverTimestamp(),
+                "deletedBy": Auth.auth().currentUser?.uid ?? ""
+            ])
         }
+    }
+
+    // Bring a trashed order back to life.
+    func restoreTrashedSiparis(_ siparis: Siparis) {
+        guard let id = siparis.id else { return }
+        db.collection("siparisler").document(id).updateData([
+            "isDeleted": false,
+            "deletedAt": FieldValue.delete()
+        ])
+    }
+
+    // Permanently remove a trashed order now (skips the 30-day grace).
+    func permanentlyDeleteSiparis(_ siparis: Siparis) {
+        guard let id = siparis.id else { return }
+        db.collection("siparisler").document(id).delete()
     }
     
     func addMusteri(_ musteri: Musteri) {
@@ -2131,6 +2277,29 @@ class FirebaseManager: ObservableObject {
             registerOfflineWriteIfNeeded(collection: "musteriler", documentId: id, action: "update", title: guncelMusteri.name)
             syncMusteriBilgileriniSiparislere(guncelMusteri, oncekiIsim: oncekiIsim)
         } catch { print("Hata: \(error)") }
+    }
+
+    /// Creates a brand-new customer document, saves it, inserts it locally and returns it
+    /// (mirrors `addSiparis`). Returns nil if the workspace is not configured.
+    func createMusteri(name: String = "New Customer") -> Musteri? {
+        guard !currentCompanyId.isEmpty else { print("Company ID is not configured."); return nil }
+        let ref = db.collection("musteriler").document()
+        var yeniMusteri = Musteri(
+            id: ref.documentID,
+            companyId: currentCompanyId,
+            name: name,
+            lastContactDate: Date()
+        )
+        yeniMusteri.syncAddressFromDetailedFields()
+        do {
+            try ref.setData(from: yeniMusteri)
+            upsertLocalMusteri(yeniMusteri)
+            registerOfflineWriteIfNeeded(collection: "musteriler", documentId: ref.documentID, action: "add", title: yeniMusteri.name)
+            return yeniMusteri
+        } catch {
+            print("Hata: \(error)")
+            return nil
+        }
     }
 
     private func musteriAnahtari(_ value: String) -> String {
@@ -3032,11 +3201,13 @@ class FirebaseManager: ObservableObject {
         supportTicketsListenerRegistration?.remove()
         messageThreadsListenerRegistration?.remove()
         personalInterfaceListenerRegistration?.remove()
+        companySettingsListenerRegistration?.remove()
         listenerRegistration = nil
         musteriListenerRegistration = nil
         supportTicketsListenerRegistration = nil
         messageThreadsListenerRegistration = nil
         personalInterfaceListenerRegistration = nil
+        companySettingsListenerRegistration = nil
         personalInterfaceListenerKey = ""
         messageThreadsListenerCompanyId = ""
         messageItemsListenerRegistration = nil
@@ -3385,7 +3556,7 @@ class FirebaseManager: ObservableObject {
             .collection("notifications")
             .document(cleanNotificationId)
             .setData([
-                "readBy.\(uid)": FieldValue.serverTimestamp(),
+                "readBy": [uid: FieldValue.serverTimestamp()],
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
         #endif
@@ -3439,7 +3610,7 @@ class FirebaseManager: ObservableObject {
                 .collection("notifications")
                 .document(item.id)
             batch.setData([
-                "readBy.\(uid)": FieldValue.serverTimestamp(),
+                "readBy": [uid: FieldValue.serverTimestamp()],
                 "updatedAt": FieldValue.serverTimestamp()
             ], forDocument: ref, merge: true)
         }

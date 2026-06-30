@@ -1,28 +1,56 @@
 package uk.co.eggcraft.studioflow.features.customers
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import android.content.Context
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,40 +60,194 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
+import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.features.shell.SectionHeader
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
+import uk.co.eggcraft.studioflow.language.studioT
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
+private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+
+private fun moneyText(symbol: String, value: Double): String =
+    symbol + String.format(Locale.UK, "%,.2f", value)
+
+private fun customerKey(name: String): String = name.trim().lowercase(Locale.UK)
+
 @Composable
-fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val customers = remember(state.orders) { customersFromOrders(state.orders) }
+fun CustomersScreen(
+    state: StudioFlowUiState,
+    focusedCustomerName: String = "",
+    onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
+    onUpdateCustomer: (StudioCustomer) -> Unit = {},
+    onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit = { _, _, _ -> },
+    onDeleteCustomer: (String) -> Unit = {},
+    onOpenOrder: (StudioOrder) -> Unit = {}
+) {
+    var selectedCustomerId by rememberSaveable { mutableStateOf<String?>(null) }
     var searchText by rememberSaveable { mutableStateOf("") }
+    var sortByOrders by rememberSaveable { mutableStateOf(false) }
+
     LaunchedEffect(focusedCustomerName) {
-        if (focusedCustomerName.isNotBlank()) {
-            searchText = focusedCustomerName
-        }
+        if (focusedCustomerName.isNotBlank()) searchText = focusedCustomerName
     }
-    val visibleCustomers = remember(customers, searchText) {
-        val query = searchText.trim().lowercase(Locale.UK)
-        if (query.isBlank()) {
-            customers
-        } else {
-            customers.filter { customer ->
-                customer.name.lowercase(Locale.UK).contains(query) ||
-                    customer.designs.any { it.lowercase(Locale.UK).contains(query) }
+
+    val lang = LocalStudioLanguage.current
+    val t: (String) -> String = { studioT(it, lang) }
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val panePrefs = remember { context.getSharedPreferences("studio_customer_pane", Context.MODE_PRIVATE) }
+    // Resizable list-pane width, persisted locally — mirrors the Mac sidebar's drag-to-resize.
+    var listPaneWidth by rememberSaveable { mutableStateOf(panePrefs.getFloat("width", 340f)) }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth >= 900.dp
+        val selected = state.customers.firstOrNull { it.id == selectedCustomerId }
+
+        if (isWide) {
+            // Master-detail (like the Mac/iPhone wide layout): customer list on the left, the
+            // selected customer's detail on the right. Auto-select the first so it's not empty.
+            val paneCustomer = selected ?: state.customers.firstOrNull()
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.width(listPaneWidth.dp).fillMaxHeight()) {
+                    CustomerListView(
+                        state = state,
+                        searchText = searchText,
+                        onSearchChange = { searchText = it },
+                        sortByOrders = sortByOrders,
+                        onToggleSort = { sortByOrders = it },
+                        onCreateCustomer = onCreateCustomer,
+                        onOpen = { selectedCustomerId = it.id }
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(10.dp)
+                        .fillMaxHeight()
+                        .draggable(
+                            orientation = Orientation.Horizontal,
+                            state = rememberDraggableState { delta ->
+                                val deltaDp = with(density) { delta.toDp().value }
+                                listPaneWidth = (listPaneWidth + deltaDp).coerceIn(260f, 520f)
+                            },
+                            onDragStopped = { panePrefs.edit().putFloat("width", listPaneWidth).apply() }
+                        )
+                        .pointerInput(Unit) {
+                            detectTapGestures(onDoubleTap = {
+                                listPaneWidth = 340f
+                                panePrefs.edit().putFloat("width", 340f).apply()
+                            })
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    if (paneCustomer != null) {
+                        CustomerDetail(
+                            customer = paneCustomer,
+                            orders = state.orders,
+                            currencySymbol = state.workspaceSettings.selectedCurrency,
+                            onBack = { selectedCustomerId = null },
+                            showBack = false,
+                            onUpdateCustomer = onUpdateCustomer,
+                            onUploadCustomerPhoto = onUploadCustomerPhoto,
+                            onDelete = {
+                                onDeleteCustomer(paneCustomer.id)
+                                selectedCustomerId = null
+                            },
+                            onOpenOrder = onOpenOrder
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                t("Select a customer to view details."),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
+        } else if (selected != null) {
+            CustomerDetail(
+                customer = selected,
+                orders = state.orders,
+                currencySymbol = state.workspaceSettings.selectedCurrency,
+                onBack = { selectedCustomerId = null },
+                onUpdateCustomer = onUpdateCustomer,
+                onUploadCustomerPhoto = onUploadCustomerPhoto,
+                onDelete = {
+                    onDeleteCustomer(selected.id)
+                    selectedCustomerId = null
+                },
+                onOpenOrder = onOpenOrder
+            )
+        } else {
+            CustomerListView(
+                state = state,
+                searchText = searchText,
+                onSearchChange = { searchText = it },
+                sortByOrders = sortByOrders,
+                onToggleSort = { sortByOrders = it },
+                onCreateCustomer = onCreateCustomer,
+                onOpen = { selectedCustomerId = it.id }
+            )
         }
     }
+}
+
+@Composable
+private fun CustomerListView(
+    state: StudioFlowUiState,
+    searchText: String,
+    onSearchChange: (String) -> Unit,
+    sortByOrders: Boolean,
+    onToggleSort: (Boolean) -> Unit,
+    onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
+    onOpen: (StudioCustomer) -> Unit
+) {
+    val lang = LocalStudioLanguage.current
+    val t: (String) -> String = { studioT(it, lang) }
+    var showCreate by remember { mutableStateOf(false) }
+
+    val orderCountByName = remember(state.orders) {
+        state.orders.groupingBy { customerKey(it.customerName) }.eachCount()
+    }
+    val visible = remember(state.customers, searchText, sortByOrders, orderCountByName) {
+        val query = searchText.trim().lowercase(Locale.UK)
+        val filtered = if (query.isBlank()) state.customers else state.customers.filter { c ->
+            c.name.lowercase(Locale.UK).contains(query) ||
+                c.email.lowercase(Locale.UK).contains(query) ||
+                c.phone.lowercase(Locale.UK).contains(query) ||
+                c.instagram.lowercase(Locale.UK).contains(query) ||
+                c.address.lowercase(Locale.UK).contains(query)
+        }
+        if (sortByOrders) {
+            filtered.sortedByDescending { orderCountByName[customerKey(it.name)] ?: 0 }
+        } else {
+            filtered.sortedByDescending { it.lastContactDate?.time ?: 0L }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,50 +255,189 @@ fun CustomersScreen(state: StudioFlowUiState, focusedCustomerName: String = "") 
     ) {
         SectionHeader(
             title = t("Customers"),
-            subtitle = "${visibleCustomers.size} ${t("customers")}",
-            trailingIcon = Icons.Filled.Tune
+            subtitle = "${visible.size} ${t("customers")}",
+            trailingIcon = Icons.Filled.People
         )
-        OutlinedTextField(
-            value = searchText,
-            onValueChange = { searchText = it },
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
-            singleLine = true,
-            shape = RoundedCornerShape(14.dp),
-            placeholder = { Text(t("Search...")) }
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = onSearchChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                placeholder = { Text(t("Search...")) }
+            )
+            var sortMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { sortMenuOpen = true }) {
+                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = t("Sort"))
+                }
+                DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(t("Recent")) },
+                        onClick = { onToggleSort(false); sortMenuOpen = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(t("Most Orders")) },
+                        onClick = { onToggleSort(true); sortMenuOpen = false }
+                    )
+                }
+            }
+            IconButton(onClick = { showCreate = true }) {
+                Icon(Icons.Filled.Add, contentDescription = t("Add Customer"), tint = StudioBlue)
+            }
+        }
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .padding(top = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(visibleCustomers, key = { it.name }) { customer ->
-                CustomerRow(customer = customer)
+            items(visible, key = { it.id }) { customer ->
+                CustomerRow(
+                    customer = customer,
+                    designs = designTitlesFor(customer, state.orders, t),
+                    onClick = { onOpen(customer) }
+                )
             }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
-        Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), shadowElevation = 4.dp) {
-            Row(
+    }
+
+    if (showCreate) {
+        CreateCustomerDialog(
+            onDismiss = { showCreate = false },
+            onCreate = { name, email, phone, instagram, street, city, postalCode, country, notes ->
+                onCreateCustomer(name, email, phone, instagram, street, city, postalCode, country, notes)
+                showCreate = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun CreateCustomerDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, String, String, String, String, String, String, String, String) -> Unit
+) {
+    val lang = LocalStudioLanguage.current
+    val t: (String) -> String = { studioT(it, lang) }
+
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var instagram by remember { mutableStateOf("") }
+    var street by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var postalCode by remember { mutableStateOf("") }
+    var country by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+
+    val canSave = name.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("New Customer"), fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Filled.People, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${visibleCustomers.size} ${t("Customers")}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                CustomerField(t("Customer Name"), name) { name = it }
+                if (name.isBlank()) {
+                    Text(
+                        t("Name is required"),
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
+                CustomerField(t("Email"), email) { email = it }
+                CustomerField(t("WhatsApp"), phone) { phone = it }
+                CustomerField(t("Instagram"), instagram) { instagram = it }
+                CustomerField(t("Street"), street) { street = it }
+                CustomerField(t("City"), city) { city = it }
+                CustomerField(t("Postal Code"), postalCode) { postalCode = it }
+                CustomerField(t("Country"), country) { country = it }
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 80.dp),
+                    label = { Text(t("Notes")) },
+                    placeholder = { Text(t("Add a note...")) }
+                )
             }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSave,
+                onClick = {
+                    onCreate(
+                        name.trim(), email.trim(), phone.trim(), instagram.trim(),
+                        street.trim(), city.trim(), postalCode.trim(), country.trim(), notes.trim()
+                    )
+                }
+            ) { Text(t("Add"), fontWeight = FontWeight.ExtraBold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(t("Cancel")) }
+        }
+    )
+}
+
+private fun designTitlesFor(customer: StudioCustomer, orders: List<StudioOrder>, t: (String) -> String): String {
+    val key = customerKey(customer.name)
+    if (key.isBlank()) return "-"
+    val matched = orders.filter { customerKey(it.customerName) == key }
+        .sortedByDescending { it.paymentDate }
+    val titles = matched.take(3).map { it.designName.ifBlank { t("Untitled design") } }
+    val extra = if (matched.size > titles.size) " +${matched.size - titles.size}" else ""
+    return if (titles.isEmpty()) "-" else titles.joinToString(" · ") + extra
+}
+
+@Composable
+private fun CustomerAvatar(customer: StudioCustomer, size: Dp, textSize: TextUnit) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(StudioBlue.copy(alpha = 0.16f)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (customer.profileImageUrl.isNotBlank()) {
+            AsyncImage(
+                model = customer.profileImageUrl,
+                contentDescription = customer.name,
+                modifier = Modifier.fillMaxSize().clip(CircleShape)
+            )
+        } else {
+            Text(
+                text = customer.name.trim().take(1).uppercase(Locale.UK).ifBlank { "?" },
+                color = StudioBlue,
+                fontSize = textSize,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
     }
 }
 
 @Composable
-private fun CustomerRow(customer: CustomerSummary) {
+private fun CustomerRow(customer: StudioCustomer, designs: String, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp
@@ -126,36 +447,24 @@ private fun CustomerRow(customer: CustomerSummary) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .background(StudioBlue.copy(alpha = 0.16f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = customer.name.take(1).uppercase(Locale.UK),
-                    color = StudioBlue,
-                    fontSize = 23.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
+            CustomerAvatar(customer, size = 56.dp, textSize = 22.sp)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = customer.name,
+                    text = customer.name.ifBlank { "—" },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    text = customer.designs.joinToString(" · ").ifBlank { "-" },
+                    text = designs,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = customer.lastDate?.let { dateFormatter.format(it) } ?: "-",
+                    text = customer.lastContactDate?.let { dateFormatter.format(it) } ?: "-",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -165,24 +474,307 @@ private fun CustomerRow(customer: CustomerSummary) {
     }
 }
 
-private data class CustomerSummary(
-    val name: String,
-    val designs: List<String>,
-    val lastDate: Date?
-)
+@Composable
+private fun CustomerDetail(
+    customer: StudioCustomer,
+    orders: List<StudioOrder>,
+    currencySymbol: String,
+    onBack: () -> Unit,
+    showBack: Boolean = true,
+    onUpdateCustomer: (StudioCustomer) -> Unit,
+    onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
+    onDelete: () -> Unit,
+    onOpenOrder: (StudioOrder) -> Unit
+) {
+    val lang = LocalStudioLanguage.current
+    val t: (String) -> String = { studioT(it, lang) }
+    val context = LocalContext.current
 
-private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.UK)
+    var editable by remember(customer.id) { mutableStateOf(customer) }
+    var dirty by remember(customer.id) { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var uploadingPhoto by remember(customer.id) { mutableStateOf(false) }
 
-private fun customersFromOrders(orders: List<StudioOrder>): List<CustomerSummary> {
-    return orders
-        .filter { order -> !order.displayCustomerName.equals("New Project", ignoreCase = true) }
-        .groupBy { it.displayCustomerName }
-        .map { (name, grouped) ->
-            CustomerSummary(
-                name = name,
-                designs = grouped.map { it.designName.ifBlank { it.watchRef } }.filter { it.isNotBlank() }.distinct().take(3),
-                lastDate = grouped.maxByOrNull { it.paymentDate }?.paymentDate
+    // When a new photo URL arrives from the cloud (after upload, or a change on another
+    // device) reflect it on the avatar without disturbing in-progress text edits.
+    LaunchedEffect(customer.profileImageUrl) {
+        if (customer.profileImageUrl != editable.profileImageUrl) {
+            editable = editable.copy(profileImageUrl = customer.profileImageUrl)
+            uploadingPhoto = false
+        }
+    }
+
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val contentType = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+            if (bytes != null) {
+                uploadingPhoto = true
+                onUploadCustomerPhoto(editable, bytes, contentType)
+            }
+        }
+    }
+
+    // Debounced autosave (mirrors the Mac/iPhone customer detail autosave).
+    LaunchedEffect(editable, dirty) {
+        if (!dirty) return@LaunchedEffect
+        delay(700)
+        onUpdateCustomer(editable)
+    }
+
+    val customerOrders = remember(orders, customer.name) {
+        val key = customerKey(customer.name)
+        orders.filter { customerKey(it.customerName) == key }
+            .sortedByDescending { it.paymentDate }
+    }
+    val totalSpent = customerOrders.sumOf { it.paidAmount + it.remainingAmount }
+
+    @Composable
+    fun contactCard() {
+        DetailCard(title = t("Contact Info")) {
+            CustomerField(t("Email"), editable.email) { editable = editable.copy(email = it); dirty = true }
+            CustomerField(t("WhatsApp"), editable.phone) { editable = editable.copy(phone = it); dirty = true }
+            CustomerField(t("Instagram"), editable.instagram) { editable = editable.copy(instagram = it); dirty = true }
+            CustomerField(t("Street"), editable.streetAddress) { editable = editable.copy(streetAddress = it); dirty = true }
+            CustomerField(t("City"), editable.city) { editable = editable.copy(city = it); dirty = true }
+            CustomerField(t("Postal Code"), editable.postalCode) { editable = editable.copy(postalCode = it); dirty = true }
+            CustomerField(t("Country"), editable.country) { editable = editable.copy(country = it); dirty = true }
+            Text(
+                t("Shipping Address"),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            CustomerField(t("Street"), editable.shippingStreetAddress) { editable = editable.copy(shippingStreetAddress = it); dirty = true }
+            CustomerField(t("City"), editable.shippingCity) { editable = editable.copy(shippingCity = it); dirty = true }
+            CustomerField(t("Postal Code"), editable.shippingPostalCode) { editable = editable.copy(shippingPostalCode = it); dirty = true }
+            CustomerField(t("Country"), editable.shippingCountry) { editable = editable.copy(shippingCountry = it); dirty = true }
+            CustomerField(t("Shipping Phone"), editable.shippingPhone) { editable = editable.copy(shippingPhone = it); dirty = true }
+        }
+    }
+
+    @Composable
+    fun notesCard() {
+        DetailCard(title = t("Notes")) {
+            OutlinedTextField(
+                value = editable.notes,
+                onValueChange = { editable = editable.copy(notes = it); dirty = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 90.dp),
+                placeholder = { Text(t("Add a note...")) }
             )
         }
-        .sortedBy { it.name.lowercase(Locale.UK) }
+    }
+
+    @Composable
+    fun orderHistoryCard() {
+        DetailCard(title = "${t("Order History")} (${customerOrders.size})") {
+            if (customerOrders.isEmpty()) {
+                Text("-", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                customerOrders.forEach { order ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenOrder(order) },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    order.designName.ifBlank { order.watchRef.ifBlank { t("Untitled design") } },
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    dateFormatter.format(order.paymentDate) + " · " + order.status,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                moneyText(currencySymbol, order.paidAmount + order.remainingAmount),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = StudioBlue
+                            )
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (showBack) {
+                TextButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(t("Customers"), fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { confirmDelete = true }) {
+                Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(
+                    modifier = Modifier.clickable(enabled = !uploadingPhoto) { pickPhoto.launch("image/*") },
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    CustomerAvatar(editable, size = 64.dp, textSize = 26.sp)
+                    Surface(
+                        shape = CircleShape,
+                        color = StudioBlue,
+                        modifier = Modifier.size(22.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (uploadingPhoto) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 2.dp,
+                                    color = androidx.compose.ui.graphics.Color.White
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Filled.PhotoCamera,
+                                    contentDescription = t("Change customer photo"),
+                                    tint = androidx.compose.ui.graphics.Color.White,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(
+                        value = editable.name,
+                        onValueChange = { editable = editable.copy(name = it); dirty = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.ExtraBold),
+                        label = { Text(t("Customer Name")) }
+                    )
+                    Text(
+                        "${t("Total Spent")}: ${moneyText(currencySymbol, totalSpent)} • ${customerOrders.size} ${t("Orders")}",
+                        color = StudioBlue,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (maxWidth >= 700.dp) {
+                    // Wide detail pane (desktop/tablet): Contact Info + Notes on the left,
+                    // Order History on the right — matching the Mac layout.
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            contactCard()
+                            notesCard()
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            orderHistoryCard()
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        contactCard()
+                        notesCard()
+                        orderHistoryCard()
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(t("Delete")) },
+            text = { Text("${t("Delete")} ${customer.name}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) { Text(t("Delete"), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(t("Cancel")) }
+            }
+        )
+    }
 }
+
+@Composable
+private fun DetailCard(title: String, content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun CustomerField(label: String, value: String, onChange: (String) -> Unit) {
+    // Label on the left + filled value box, matching the Mac/iPhone customer detail.
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(104.dp)
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier
+                .weight(1f)
+                .background(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+        )
+    }
+}
+

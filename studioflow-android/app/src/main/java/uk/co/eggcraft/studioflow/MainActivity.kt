@@ -9,6 +9,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.google.firebase.FirebaseApp
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowApp
 import uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
 import uk.co.eggcraft.studioflow.services.StudioMessagingService
@@ -22,6 +25,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Firebase App Check (Play Integrity): attaches an attestation token to
+        // Firebase requests so bot/scripted traffic can be rejected once
+        // enforcement is enabled. Best-effort — never block app startup on it.
+        try {
+            FirebaseApp.initializeApp(this)
+            FirebaseAppCheck.getInstance()
+                .installAppCheckProviderFactory(PlayIntegrityAppCheckProviderFactory.getInstance())
+        } catch (_: Exception) {
+        }
         StudioMessagingService.ensureChannel(this)
         requestNotificationPermissionIfNeeded()
         handleStudioIntent(intent)

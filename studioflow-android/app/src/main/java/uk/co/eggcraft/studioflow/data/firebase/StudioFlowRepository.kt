@@ -22,6 +22,7 @@ import uk.co.eggcraft.studioflow.data.model.QuickReplyTemplateItem
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCompanyNumber
+import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
@@ -116,6 +117,22 @@ class StudioFlowRepository(
     suspend fun signInWithGoogleIdToken(idToken: String) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).await()
+        recordSignupPlatformIfNewAccount()
+    }
+
+    // Sign in with Apple via Firebase's OAuth web flow (apple.com provider). Lets
+    // users who created their account with Apple on iPhone / web sign in on Android.
+    suspend fun signInWithApple(activity: android.app.Activity) {
+        val provider = com.google.firebase.auth.OAuthProvider.newBuilder("apple.com")
+            .setScopes(listOf("email", "name"))
+            .build()
+        // If the flow was already started (e.g. activity recreated), finish that one.
+        val pending = auth.pendingAuthResult
+        if (pending != null) {
+            pending.await()
+        } else {
+            auth.startActivityForSignInWithProvider(activity, provider).await()
+        }
         recordSignupPlatformIfNewAccount()
     }
 
@@ -362,7 +379,7 @@ class StudioFlowRepository(
         val personalInterfaceKeys = listOf(
             "appTheme", "selectedLanguage",
             "pdfShowCustomer", "pdfShowContact", "pdfShowPreview",
-            "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"
+            "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping", "pdfShowAddress", "pdfShowShippingAddress"
         )
 
         fun emit() {
@@ -467,6 +484,128 @@ class StudioFlowRepository(
                 trySend(orders)
             }
         awaitClose { registration.remove() }
+    }
+
+    // Customers live in the top-level `musteriler` collection (same as Mac/iPhone
+    // and web), scoped by companyId.
+    fun customersFlow(workspace: StudioWorkspace): Flow<List<StudioCustomer>> = callbackFlow {
+        val registration = db.collection("musteriler")
+            .whereEqualTo("companyId", workspace.id)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val customers = snapshot?.documents
+                    ?.map { StudioCustomer.fromDocument(it) }
+                    .orEmpty()
+                trySend(customers)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    private fun customerCallablePayload(companyId: String, customer: StudioCustomer): Map<String, Any?> = mapOf(
+        "companyId" to companyId,
+        "customerId" to customer.id,
+        "name" to customer.name,
+        "email" to customer.email,
+        "phone" to customer.phone,
+        "instagram" to customer.instagram,
+        "address" to customer.address,
+        "streetAddress" to customer.streetAddress,
+        "city" to customer.city,
+        "postalCode" to customer.postalCode,
+        "country" to customer.country,
+        "shippingAddress" to customer.shippingAddress,
+        "shippingStreetAddress" to customer.shippingStreetAddress,
+        "shippingCity" to customer.shippingCity,
+        "shippingPostalCode" to customer.shippingPostalCode,
+        "shippingCountry" to customer.shippingCountry,
+        "shippingPhone" to customer.shippingPhone,
+        "notes" to customer.notes
+    )
+
+    suspend fun updateCustomer(companyId: String, customer: StudioCustomer) {
+        // Note: the profile photo is intentionally omitted here so contact-field autosave
+        // never overwrites an avatar set on another device (the backend merges the doc).
+        functions.getHttpsCallable("updateWebCustomer")
+            .call(customerCallablePayload(companyId, customer))
+            .await()
+    }
+
+    // Creates a brand-new customer via the same callable the web uses. The customerId
+    // key is omitted (no id yet — Firestore mints one); the payload otherwise mirrors
+    // the contact fields the update callable sends.
+    suspend fun createCustomer(
+        companyId: String,
+        name: String,
+        email: String,
+        phone: String,
+        instagram: String,
+        streetAddress: String,
+        city: String,
+        postalCode: String,
+        country: String,
+        notes: String
+    ): String {
+        val result = functions.getHttpsCallable("createWebCustomer")
+            .call(
+                mapOf(
+                    "companyId" to companyId,
+                    "name" to name,
+                    "email" to email,
+                    "phone" to phone,
+                    "instagram" to instagram,
+                    "address" to "",
+                    "streetAddress" to streetAddress,
+                    "city" to city,
+                    "postalCode" to postalCode,
+                    "country" to country,
+                    "notes" to notes
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("message") as? String ?: "Customer created."
+    }
+
+    // Uploads a new customer photo and persists it via the same callable, sending the
+    // full contact fields alongside profileImageUrl so the merge keeps everything else.
+    suspend fun uploadCustomerImage(
+        workspace: StudioWorkspace,
+        user: FirebaseUser,
+        customer: StudioCustomer,
+        bytes: ByteArray,
+        contentType: String
+    ): String {
+        requireImageBytes(bytes, 10, "Choose a customer photo under 10 MB.")
+        val cleanType = cleanImageContentType(contentType)
+        val extension = extensionForImageContentType(cleanType)
+        val uploadedAt = java.time.Instant.now().toString()
+        val ref = storage.reference.child("companies/${workspace.id}/design_images/android_customer_${System.currentTimeMillis()}.$extension")
+        val metadata = StorageMetadata.Builder()
+            .setContentType(cleanType)
+            .setCustomMetadata("companyId", workspace.id)
+            .setCustomMetadata("uploadedByUid", user.uid)
+            .setCustomMetadata("uploadedByEmail", user.email.orEmpty().ifBlank { "unknown" })
+            .setCustomMetadata("source", "customer_photo")
+            .setCustomMetadata("orderId", "")
+            .setCustomMetadata("uploadedAt", uploadedAt)
+            .setCustomMetadata("fileType", cleanType)
+            .setCustomMetadata("fileSize", bytes.size.toString())
+            .build()
+        ref.putBytes(bytes, metadata).await()
+        val url = ref.downloadUrl.await().toString()
+        functions.getHttpsCallable("updateWebCustomer")
+            .call(customerCallablePayload(workspace.id, customer) + mapOf("profileImageUrl" to url))
+            .await()
+        return url
+    }
+
+    suspend fun deleteCustomer(companyId: String, customerId: String) {
+        functions.getHttpsCallable("deleteWebCustomer")
+            .call(mapOf("companyId" to companyId, "customerId" to customerId))
+            .await()
     }
 
     fun teamAccessFlow(workspaceId: String): Flow<StudioTeamAccessSnapshot> = callbackFlow {
@@ -585,6 +724,12 @@ class StudioFlowRepository(
             .await()
     }
 
+    suspend fun restoreOrder(workspace: StudioWorkspace, order: StudioOrder) {
+        functions.getHttpsCallable("restoreWebOrder")
+            .call(mapOf("companyId" to workspace.id, "orderId" to order.id))
+            .await()
+    }
+
     suspend fun reviewWorkflowOrderDeletion(workspace: StudioWorkspace, orderId: String, approve: Boolean) {
         val callable = if (approve) "approveWorkflowOrderDeletion" else "rejectWorkflowOrderDeletion"
         functions.getHttpsCallable(callable)
@@ -610,6 +755,22 @@ class StudioFlowRepository(
     // webhook token), minting the token on first use. Owner-only on the backend.
     suspend fun getWooCommerceWebhookDeliveryUrl(workspace: StudioWorkspace): String {
         val result = functions.getHttpsCallable("getWooCommerceWebhookToken")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("deliveryUrl") as? String ?: ""
+    }
+
+    suspend fun getShopifyWebhookDeliveryUrl(workspace: StudioWorkspace): String {
+        val result = functions.getHttpsCallable("getShopifyWebhookToken")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("deliveryUrl") as? String ?: ""
+    }
+
+    suspend fun getInboundWebhookDeliveryUrl(workspace: StudioWorkspace): String {
+        val result = functions.getHttpsCallable("getInboundWebhookToken")
             .call(mapOf("companyId" to workspace.id))
             .await()
         val data = result.data as? Map<*, *>
@@ -854,7 +1015,7 @@ class StudioFlowRepository(
         return listOf(
             "appTheme", "selectedLanguage",
             "pdfShowCustomer", "pdfShowContact", "pdfShowPreview",
-            "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"
+            "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping", "pdfShowAddress", "pdfShowShippingAddress"
         ).mapNotNull { key ->
             values[key]?.let { key to it }
         }.toMap()
@@ -889,12 +1050,12 @@ class StudioFlowRepository(
                 .await()
             return
         }
-        val personalInterfaceKeys = setOf("personalAppTheme", "personalSelectedLanguage", "personalPdfShowCustomer", "personalPdfShowContact", "personalPdfShowPreview", "personalPdfShowMaterials", "personalPdfShowPriority", "personalPdfShowStatus", "personalPdfShowShipping")
+        val personalInterfaceKeys = setOf("personalAppTheme", "personalSelectedLanguage", "personalPdfShowCustomer", "personalPdfShowContact", "personalPdfShowPreview", "personalPdfShowMaterials", "personalPdfShowPriority", "personalPdfShowStatus", "personalPdfShowShipping", "personalPdfShowAddress", "personalPdfShowShippingAddress")
         if (updates.keys.any { it in personalInterfaceKeys }) {
             val mapped = updates.mapKeys { (key, _) -> when (key) {
                 "personalAppTheme" -> "appTheme"; "personalSelectedLanguage" -> "selectedLanguage"
                 "personalPdfShowCustomer" -> "pdfShowCustomer"; "personalPdfShowContact" -> "pdfShowContact"; "personalPdfShowPreview" -> "pdfShowPreview"
-                "personalPdfShowMaterials" -> "pdfShowMaterials"; "personalPdfShowPriority" -> "pdfShowPriority"; "personalPdfShowStatus" -> "pdfShowStatus"; "personalPdfShowShipping" -> "pdfShowShipping"
+                "personalPdfShowMaterials" -> "pdfShowMaterials"; "personalPdfShowPriority" -> "pdfShowPriority"; "personalPdfShowStatus" -> "pdfShowStatus"; "personalPdfShowShipping" -> "pdfShowShipping"; "personalPdfShowAddress" -> "pdfShowAddress"; "personalPdfShowShippingAddress" -> "pdfShowShippingAddress"
                 else -> key
             } }
             functions.getHttpsCallable("savePersonalInterfaceSettings").call(mapOf("companyId" to workspace.id, "settings" to mapped)).await()
@@ -2238,6 +2399,7 @@ private fun workspaceSettings(
         selectedDecimalSeparator = stringValue(data["seciliOndalik"], fallback.selectedDecimalSeparator),
         feePercentage = doubleValue(data["feePercentage"], fallback.feePercentage).coerceIn(0.0, 100.0),
         defaultTaxRate = doubleValue(data["defaultTaxRate"], fallback.defaultTaxRate).coerceIn(0.0, 100.0),
+        defaultDeliveryTime = doubleValue(data["defaultDeliveryTime"], fallback.defaultDeliveryTime).coerceIn(1.0, 730.0),
         taxCalculationType = stringValue(data["taxCalculationType"], fallback.taxCalculationType).let {
             if (it.equals("Profit", ignoreCase = true)) "Profit" else "Revenue"
         },
@@ -2290,6 +2452,9 @@ private fun workspaceSettings(
         ).filter { isUsableFinancialTitle(it.title, "Pending") },
         financialShowBaseCost = boolValue(data["financialShowBaseCost"], fallback.financialShowBaseCost),
         financialBaseCostLabel = stringValue(data["financialBaseCostLabel"], fallback.financialBaseCostLabel),
+        designNameLabel = stringValue(data["designNameLabel"], fallback.designNameLabel),
+        priorityCardLabel = stringValue(data["priorityCardLabel"], fallback.priorityCardLabel),
+        riskCardLabel = stringValue(data["riskCardLabel"], fallback.riskCardLabel),
         materialsDefaultChecks = jsonTitleList(data["materialsDefaultChecksJSON"], materialCheckFallback.ifEmpty { fallback.materialsDefaultChecks }),
         materialsToggles = jsonTitleList(data["materialsTogglesJSON"], fallback.materialsToggles),
         showStatusNotesSupplier = boolValue(data["showStatusNotesSupplier"], fallback.showStatusNotesSupplier),
@@ -2301,6 +2466,7 @@ private fun workspaceSettings(
         summaryStep2 = stringValue(data["summaryStep2"], fallback.summaryStep2),
         orderListStep1 = stringValue(data["orderListStep1"], fallback.orderListStep1),
         orderListStep2 = stringValue(data["orderListStep2"], fallback.orderListStep2),
+        orderItemsHeading = stringValue(data["orderItemsHeading"], fallback.orderItemsHeading),
         pdfShowCustomer = boolValue(data["pdfShowCustomer"], fallback.pdfShowCustomer),
         pdfShowContact = boolValue(data["pdfShowContact"], fallback.pdfShowContact),
         pdfShowPreview = boolValue(data["pdfShowPreview"], fallback.pdfShowPreview),
@@ -2311,6 +2477,8 @@ private fun workspaceSettings(
         pdfShowFinInternal = boolValue(data["pdfShowFinInternal"], fallback.pdfShowFinInternal),
         pdfShowStatus = boolValue(data["pdfShowStatus"], fallback.pdfShowStatus),
         pdfShowShipping = boolValue(data["pdfShowShipping"], fallback.pdfShowShipping),
+        pdfShowAddress = boolValue(data["pdfShowAddress"], fallback.pdfShowAddress),
+        pdfShowShippingAddress = boolValue(data["pdfShowShippingAddress"], fallback.pdfShowShippingAddress),
         companyNumbers = jsonCompanyNumbers(data["companyNumbersJSON"], fallback.companyNumbers),
         showCardPreview = boolValue(data["showCardPreview"], fallback.showCardPreview),
         showCardSummary = boolValue(data["showCardSummary"], fallback.showCardSummary),

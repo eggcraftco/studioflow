@@ -9,6 +9,8 @@ import android.net.NetworkRequest
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -44,6 +46,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.automirrored.filled.Note
@@ -51,6 +56,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -112,6 +118,7 @@ import uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
+import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
@@ -132,6 +139,7 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Dashboard("Dashboard", Icons.Filled.Dashboard, "dashboard"),
     Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
+    TeamSchedule("Team Schedule", Icons.Filled.Groups, "schedule"),
     Customers("Customers", Icons.Filled.People, "customers"),
     Files("Files", Icons.Filled.Folder, "clientFiles"),
     Messages("Messages", Icons.AutoMirrored.Filled.Chat, "messages"),
@@ -176,6 +184,11 @@ fun StudioFlowMainScreen(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit,
     onDeleteOrder: (StudioOrder) -> Unit,
+    onRestoreOrder: (StudioOrder) -> Unit,
+    onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
+    onUpdateCustomer: (StudioCustomer) -> Unit,
+    onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
+    onDeleteCustomer: (String) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
     googlePlanOffers: List<StudioGooglePlanOffer> = emptyList(),
@@ -261,6 +274,7 @@ fun StudioFlowMainScreen(
         StudioSection.Orders,
         StudioSection.Dashboard,
         StudioSection.Schedule,
+        StudioSection.TeamSchedule,
         StudioSection.Notes,
         StudioSection.Customers,
         StudioSection.Files,
@@ -442,11 +456,28 @@ fun StudioFlowMainScreen(
                     onRenameClientFile = onRenameClientFile,
                     onDeleteClientFile = onDeleteClientFile,
                     onDeleteOrder = onDeleteOrder,
+                    onRestoreOrder = onRestoreOrder,
                     focusedCustomerName = focusedCustomerName,
                     onOpenCustomerFromOrder = { order ->
                         focusedCustomerName = order.displayCustomerName
                         settingsStartKey = null
                         section = StudioSection.Customers
+                    },
+                    onCreateCustomer = onCreateCustomer,
+                    onUpdateCustomer = onUpdateCustomer,
+                    onUploadCustomerPhoto = onUploadCustomerPhoto,
+                    onDeleteCustomer = onDeleteCustomer,
+                    onOpenOrderFromFiles = { order ->
+                        // Open the tapped project's order detail (mirrors the Mac
+                        // hub). Reuse the existing pending-order route OrdersScreen
+                        // consumes on entry; card = "" so it opens at the top
+                        // instead of jumping to the shipping card.
+                        order.id?.let {
+                            uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
+                                .setPendingOrderRoute(it, card = "")
+                        }
+                        settingsStartKey = null
+                        section = StudioSection.Orders
                     },
                     settingsInitialSectionKey = settingsStartKey,
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
@@ -566,11 +597,28 @@ fun StudioFlowMainScreen(
                     onRenameClientFile = onRenameClientFile,
                     onDeleteClientFile = onDeleteClientFile,
                     onDeleteOrder = onDeleteOrder,
+                    onRestoreOrder = onRestoreOrder,
                     focusedCustomerName = focusedCustomerName,
                     onOpenCustomerFromOrder = { order ->
                         focusedCustomerName = order.displayCustomerName
                         settingsStartKey = null
                         section = StudioSection.Customers
+                    },
+                    onCreateCustomer = onCreateCustomer,
+                    onUpdateCustomer = onUpdateCustomer,
+                    onUploadCustomerPhoto = onUploadCustomerPhoto,
+                    onDeleteCustomer = onDeleteCustomer,
+                    onOpenOrderFromFiles = { order ->
+                        // Open the tapped project's order detail (mirrors the Mac
+                        // hub). Reuse the existing pending-order route OrdersScreen
+                        // consumes on entry; card = "" so it opens at the top
+                        // instead of jumping to the shipping card.
+                        order.id?.let {
+                            uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
+                                .setPendingOrderRoute(it, card = "")
+                        }
+                        settingsStartKey = null
+                        section = StudioSection.Orders
                     },
                     settingsInitialSectionKey = settingsStartKey,
                     onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
@@ -1160,8 +1208,14 @@ private fun StudioSectionContent(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit,
     onDeleteOrder: (StudioOrder) -> Unit,
+    onRestoreOrder: (StudioOrder) -> Unit,
     focusedCustomerName: String,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
+    onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
+    onUpdateCustomer: (StudioCustomer) -> Unit,
+    onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
+    onDeleteCustomer: (String) -> Unit,
+    onOpenOrderFromFiles: (StudioOrder) -> Unit,
     settingsInitialSectionKey: String?,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onUpdateWorkspaceBillingPlan: (StudioBillingPlan) -> Unit,
@@ -1258,6 +1312,7 @@ private fun StudioSectionContent(
                 onRenameClientFile = onRenameClientFile,
                 onDeleteClientFile = onDeleteClientFile,
                 onDeleteOrder = onDeleteOrder,
+                onRestoreOrder = onRestoreOrder,
                 onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
             )
@@ -1269,10 +1324,25 @@ private fun StudioSectionContent(
                 onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
             )
-            StudioSection.Customers -> CustomersScreen(state = state, focusedCustomerName = focusedCustomerName)
+            StudioSection.TeamSchedule -> uk.co.eggcraft.studioflow.features.schedule.TeamScheduleScreen(
+                state = state,
+                onUpdateOrderFields = onUpdateOrderFields
+            )
+            StudioSection.Customers -> CustomersScreen(
+                state = state,
+                focusedCustomerName = focusedCustomerName,
+                onCreateCustomer = onCreateCustomer,
+                onUpdateCustomer = onUpdateCustomer,
+                onUploadCustomerPhoto = onUploadCustomerPhoto,
+                onDeleteCustomer = onDeleteCustomer,
+                onOpenOrder = onOpenOrderFromFiles
+            )
             StudioSection.Files -> uk.co.eggcraft.studioflow.features.files.ClientFilesScreen(
                 state = state,
-                onDeleteClientFile = onDeleteClientFile
+                onUploadClientFile = onUploadClientFile,
+                onRenameClientFile = onRenameClientFile,
+                onDeleteClientFile = onDeleteClientFile,
+                onOpenOrder = onOpenOrderFromFiles
             )
             StudioSection.Notifications -> uk.co.eggcraft.studioflow.features.notifications.NotificationsScreen(
                 state = state,
@@ -1405,11 +1475,17 @@ private fun StudioLargeTopBar(
     val yearNet = remember(orders) { orders.netForCurrentYear() }
 
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
-        Row(
+        // Two rows like the Mac app: header (logo/metrics/actions) on top, the
+        // section navigation on its own full-width row below so it never gets
+        // squeezed into a narrow horizontally-scrolling strip.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -1440,26 +1516,7 @@ private fun StudioLargeTopBar(
                     compact = compact
                 )
             }
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                sections.forEach { item ->
-                    TopNavItem(
-                        section = item,
-                        selected = item == selectedSection,
-                        badgeCount = when (item) {
-                            StudioSection.Notifications -> notificationUnreadCount
-                            StudioSection.Messages -> messageUnreadCount
-                            else -> 0
-                        },
-                        onClick = { onSelectSection(item) }
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.weight(1f))
             HeaderPrivacyButton(
                 hideSensitiveNumbers = hideSensitiveNumbers,
                 onToggle = onToggleSensitiveNumbers,
@@ -1511,6 +1568,28 @@ private fun StudioLargeTopBar(
                     )
                 }
             }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            sections.forEach { item ->
+                TopNavItem(
+                    section = item,
+                    selected = item == selectedSection,
+                    badgeCount = when (item) {
+                        StudioSection.Notifications -> notificationUnreadCount
+                        StudioSection.Messages -> messageUnreadCount
+                        else -> 0
+                    },
+                    onClick = { onSelectSection(item) }
+                )
+            }
+        }
         }
     }
 }
@@ -1755,9 +1834,9 @@ private fun cloudTone(state: HeaderCloudState): Color {
 
 private fun cloudIcon(state: HeaderCloudState): ImageVector {
     return when (state) {
-        HeaderCloudState.Offline -> Icons.Filled.CloudOff
-        HeaderCloudState.Saving -> Icons.Filled.CloudUpload
-        HeaderCloudState.Saved -> Icons.Filled.CloudDone
+        HeaderCloudState.Offline -> Icons.Outlined.CloudOff
+        HeaderCloudState.Saving -> Icons.Outlined.CloudUpload
+        HeaderCloudState.Saved -> Icons.Outlined.CloudDone
         HeaderCloudState.Error -> Icons.Filled.Error
         HeaderCloudState.Connecting -> Icons.Filled.Sync
     }
@@ -2227,13 +2306,16 @@ private fun HeaderIconButton(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(
-        shape = CircleShape,
-        color = container,
-        border = BorderStroke(1.dp, border),
-        shadowElevation = 1.dp
+    // Flat, crisp circle: a shadowElevation + border + CircleShape combo can leave a
+    // faint seam on the outer ring, so we draw the border on a clipped Box instead.
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(container)
+            .border(1.dp, border, CircleShape)
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.size(size)) {
+        IconButton(onClick = onClick, modifier = Modifier.fillMaxSize()) {
             Icon(
                 icon,
                 contentDescription = contentDescription,
@@ -2328,5 +2410,5 @@ fun SearchBarLike(text: String = "Search...") {
 private fun mainScreenIsNivaDeskAdmin(): Boolean {
     val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
         ?.trim()?.lowercase() ?: return false
-    return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
+    return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com" || email == "contact@eggcraft.co.uk"
 }

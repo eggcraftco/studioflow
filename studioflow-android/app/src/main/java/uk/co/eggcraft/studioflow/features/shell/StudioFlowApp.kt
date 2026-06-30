@@ -58,8 +58,11 @@ import uk.co.eggcraft.studioflow.R
 import uk.co.eggcraft.studioflow.features.auth.LoginScreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
-private const val LocalSecurityPrefs = "studioflow_android_local_security"
-private const val RequireLocalUnlockKey = "studioflow_require_local_unlock"
+internal const val LocalSecurityPrefs = "studioflow_android_local_security"
+internal const val RequireLocalUnlockKey = "studioflow_require_local_unlock"
+// Per-device auto-lock interval in minutes (0 == Immediately). How long NivaDesk may
+// stay in the background before it asks to unlock again on return.
+internal const val AutoLockMinutesKey = "studioflow_auto_lock_minutes"
 
 // Set by MainActivity.onUserLeaveHint() when the user genuinely leaves the app
 // (home / recents / call). It is NOT set when we launch an in-app activity such as
@@ -73,6 +76,16 @@ object AppLockGuard {
     // will be skipped so returning from that activity does not show the lock.
     @Volatile
     var suppressNextLock: Boolean = false
+
+    // Mirror of the per-device auto-lock setting (minutes; 0 == Immediately) so the
+    // lifecycle observer can read the current value without recomposition.
+    @Volatile
+    var autoLockMinutes: Int = 1
+
+    // elapsedRealtime() captured when the app last genuinely left the foreground, or
+    // 0L when there is no pending background timestamp to evaluate.
+    @Volatile
+    var backgroundedAt: Long = 0L
 
     fun suppressNextLockOnce() {
         suppressNextLock = true
@@ -215,6 +228,10 @@ private fun StudioFlowAppContent(
         }
     }
 
+    LaunchedEffect(Unit) {
+        AppLockGuard.autoLockMinutes = securityPrefs.getInt(AutoLockMinutesKey, 1)
+    }
+
     LaunchedEffect(state.signingIn) {
         if (state.signingIn) {
             signInWasInteractive = true
@@ -279,17 +296,31 @@ private fun StudioFlowAppContent(
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshPersonalInterfaceSettings()
             }
+            if (event == Lifecycle.Event.ON_START && state.user != null && requireDeviceUnlock) {
+                // Returning to the foreground: re-lock only if we stayed in the
+                // background at least the chosen auto-lock interval (0 == Immediately).
+                // A cold launch has no pending timestamp and is locked separately.
+                val since = AppLockGuard.backgroundedAt
+                if (since != 0L) {
+                    val elapsed = android.os.SystemClock.elapsedRealtime() - since
+                    if (elapsed >= AppLockGuard.autoLockMinutes.toLong() * 60_000L) {
+                        localUnlockSatisfied = false
+                        localUnlockMessage = ""
+                    }
+                    AppLockGuard.backgroundedAt = 0L
+                }
+            }
             if (event == Lifecycle.Event.ON_STOP && state.user != null && requireDeviceUnlock) {
-                // Only re-lock when the user actually left the app (home/recents/call)
-                // or the screen turned off — NOT when we opened an in-app activity such
-                // as the file picker (which would otherwise lock on every file add).
+                // Only arm the auto-lock timer when the user actually left the app
+                // (home/recents/call) or the screen turned off — NOT when we opened an
+                // in-app activity such as the file picker (which would otherwise lock on
+                // every file add). The actual re-lock decision happens on ON_START.
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                 val screenOff = powerManager?.isInteractive == false
                 val suppress = AppLockGuard.suppressNextLock
                 AppLockGuard.suppressNextLock = false
                 if (!suppress && (AppLockGuard.userLeft || screenOff)) {
-                    localUnlockSatisfied = false
-                    localUnlockMessage = ""
+                    AppLockGuard.backgroundedAt = android.os.SystemClock.elapsedRealtime()
                 }
                 AppLockGuard.userLeft = false
             }
@@ -314,7 +345,12 @@ private fun StudioFlowAppContent(
             errorMessage = state.errorMessage,
             onSignIn = viewModel::signIn,
             onRegister = viewModel::register,
-            onGoogleSignIn = { startGoogleSignIn() }
+            onGoogleSignIn = { startGoogleSignIn() },
+            onAppleSignIn = {
+                val act = context.findActivity()
+                if (act != null) viewModel.signInWithApple(act)
+                else viewModel.failExternalSignIn("Could not start Apple Sign-In on this device.")
+            }
         )
         requireDeviceUnlock && !localUnlockSatisfied -> LocalUnlockScreen(
             message = localUnlockMessage,
@@ -343,6 +379,11 @@ private fun StudioFlowAppContent(
             onRenameClientFile = viewModel::renameClientFile,
             onDeleteClientFile = viewModel::deleteClientFile,
             onDeleteOrder = viewModel::deleteOrder,
+            onRestoreOrder = viewModel::restoreOrder,
+            onCreateCustomer = viewModel::createCustomer,
+            onUpdateCustomer = viewModel::updateCustomer,
+            onUploadCustomerPhoto = viewModel::uploadCustomerPhoto,
+            onDeleteCustomer = viewModel::deleteCustomer,
             onUpdateWorkspaceSettings = viewModel::updateWorkspaceSettings,
             onUpdateWorkspaceBillingPlan = viewModel::updateWorkspaceBillingPlan,
             googlePlanOffers = viewModel.googlePlanOffers.collectAsStateWithLifecycle().value,

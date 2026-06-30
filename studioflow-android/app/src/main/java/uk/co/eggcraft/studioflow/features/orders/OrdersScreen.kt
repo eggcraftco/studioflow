@@ -7,7 +7,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -109,6 +115,7 @@ fun OrdersScreen(
     onRenameClientFile: (StudioOrder, String, String) -> Unit,
     onDeleteClientFile: (StudioOrder, String) -> Unit,
     onDeleteOrder: (StudioOrder) -> Unit,
+    onRestoreOrder: (StudioOrder) -> Unit = {},
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
 ) {
@@ -197,10 +204,11 @@ fun OrdersScreen(
         currentUserEmail
     ) {
         val query = searchText.trim()
+        val sourceOrders = if (selectedFilter == OrderFilter.Trash) state.deletedOrders else state.orders
         val searched = if (query.isBlank()) {
-            state.orders
+            sourceOrders
         } else {
-            state.orders.filter { order -> orderSearchMatches(order, state.teamMembers, query) }
+            sourceOrders.filter { order -> orderSearchMatches(order, state.teamMembers, query) }
         }
         selectedSortMode.sort(searched.filter { order ->
             selectedFilter.matches(order, currentUserId, currentUserEmail)
@@ -251,6 +259,7 @@ fun OrdersScreen(
                                 selectedOrderIds + order.id
                             }
                         },
+                        onClearSelection = { selectedOrderIds = emptySet() },
                         onAssignOrder = onAssignOrder,
                         onUpdateOrderFields = onUpdateOrderFields,
                         onDeleteOrder = { order ->
@@ -328,6 +337,7 @@ fun OrdersScreen(
                         currentUserId = state.user?.uid.orEmpty(),
                         onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                         showBack = false,
+                        allOrders = state.orders,
                         modifier = Modifier.weight(1f)
                     )
                 } else {
@@ -336,25 +346,37 @@ fun OrdersScreen(
             }
         } else if (selectedOrder != null) {
             androidx.activity.compose.BackHandler(enabled = true) { selectedOrderId = null }
-            OrderDetailScreen(
-                order = selectedOrder,
-                workspace = workspace,
-                workspaceSettings = state.workspaceSettings,
-                teamMembers = state.teamMembers,
-                statusOptions = state.workspaceSettings.activeStatuses,
-                onBack = { selectedOrderId = null },
-                onAssignOrder = onAssignOrder,
-                onUpdateOrderFields = onUpdateOrderFields,
-                onSaveOrderCardLayout = onSaveOrderCardLayout,
-                onResetOrderCardLayout = onResetOrderCardLayout,
-                onUploadClientFile = onUploadClientFile,
-                onUploadPreviewImage = onUploadPreviewImage,
-                onRefreshLiveTracking = onRefreshLiveTracking,
-                onRenameClientFile = onRenameClientFile,
-                onDeleteClientFile = onDeleteClientFile,
-                currentUserId = state.user?.uid.orEmpty(),
-                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (selectedOrder.isDeleted) {
+                    Surface(color = StudioWarningOrange.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(t("Items in Trash are permanently deleted after 30 days."), modifier = Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            TextButton(onClick = { onRestoreOrder(selectedOrder); selectedOrderId = null }) { Text(t("Restore"), fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+                OrderDetailScreen(
+                    order = selectedOrder,
+                    workspace = workspace,
+                    workspaceSettings = state.workspaceSettings,
+                    teamMembers = state.teamMembers,
+                    statusOptions = state.workspaceSettings.activeStatuses,
+                    onBack = { selectedOrderId = null },
+                    onAssignOrder = onAssignOrder,
+                    onUpdateOrderFields = onUpdateOrderFields,
+                    onSaveOrderCardLayout = onSaveOrderCardLayout,
+                    onResetOrderCardLayout = onResetOrderCardLayout,
+                    onUploadClientFile = onUploadClientFile,
+                    onUploadPreviewImage = onUploadPreviewImage,
+                    onRefreshLiveTracking = onRefreshLiveTracking,
+                    onRenameClientFile = onRenameClientFile,
+                    onDeleteClientFile = onDeleteClientFile,
+                    currentUserId = state.user?.uid.orEmpty(),
+                    onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                    allOrders = state.orders,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         } else {
             OrderListPane(
                 state = state,
@@ -377,6 +399,7 @@ fun OrdersScreen(
                         selectedOrderIds + order.id
                     }
                 },
+                onClearSelection = { selectedOrderIds = emptySet() },
                 onAssignOrder = onAssignOrder,
                 onUpdateOrderFields = onUpdateOrderFields,
                 onDeleteOrder = { order ->
@@ -409,6 +432,7 @@ private fun OrderListPane(
     onOpenOrder: (StudioOrder) -> Unit,
     selectedOrderIds: Set<String>,
     onToggleOrderSelection: (StudioOrder) -> Unit,
+    onClearSelection: () -> Unit,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     onDeleteOrder: (StudioOrder) -> Unit,
@@ -546,7 +570,7 @@ private fun OrderListPane(
                                 },
                                 text = {
                                     Text(
-                                        filter.menuLabel(state.orders, state.user?.uid.orEmpty(), state.user?.email.orEmpty()),
+                                        filter.menuLabel(if (filter == OrderFilter.Trash) state.deletedOrders else state.orders, state.user?.uid.orEmpty(), state.user?.email.orEmpty()),
                                         fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold
                                     )
                                 },
@@ -581,6 +605,171 @@ private fun OrderListPane(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
         }
+
+        val mergeScope = rememberCoroutineScope()
+        var showMergeDialog by remember { mutableStateOf(false) }
+        var mergePrimaryId by remember { mutableStateOf<String?>(null) }
+        var merging by remember { mutableStateOf(false) }
+        var mergeError by remember { mutableStateOf<String?>(null) }
+        var showBulkDeleteConfirm by remember { mutableStateOf(false) }
+        val selectedOrders = visibleOrders.filter { it.id in selectedOrderIds }
+        val canBulkEdit = canDeleteOrderFromList(state.workspace)
+
+        if (selectedOrderIds.isNotEmpty()) {
+            Surface(
+                color = StudioBlue.copy(alpha = 0.10f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, StudioBlue.copy(alpha = 0.30f)),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${selectedOrderIds.size} ${t("selected")}",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = onClearSelection) { Text(t("Clear")) }
+                    if (canBulkEdit && selectedOrderIds.size >= 2) {
+                        TextButton(onClick = {
+                            mergePrimaryId = selectedOrders.firstOrNull()?.id
+                            mergeError = null
+                            showMergeDialog = true
+                        }) { Text("${t("Merge")} (${selectedOrderIds.size})", fontWeight = FontWeight.Bold) }
+                    }
+                    if (canBulkEdit) {
+                        TextButton(onClick = { showBulkDeleteConfirm = true }) {
+                            Text("${t("Delete")} (${selectedOrderIds.size})", color = StudioRed, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showMergeDialog) {
+            val primaryId = mergePrimaryId ?: selectedOrders.firstOrNull()?.id
+            AlertDialog(
+                onDismissRequest = { if (!merging) showMergeDialog = false },
+                title = { Text(t("Merge selected orders")) },
+                text = {
+                    Column {
+                        Text(
+                            t("Pick the main order to keep. The other selected orders' payments move into it, then they move to Trash."),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = 320.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            selectedOrders.forEach { candidate ->
+                                val isPrimary = primaryId == candidate.id
+                                Surface(
+                                    color = if (isPrimary) StudioBlue.copy(alpha = 0.10f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(
+                                        if (isPrimary) 2.dp else 1.dp,
+                                        if (isPrimary) StudioBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 3.dp)
+                                        .clickable { mergePrimaryId = candidate.id }
+                                ) {
+                                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            if (isPrimary) "●" else "○",
+                                            color = if (isPrimary) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 16.sp
+                                        )
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(candidate.customerName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                            Text(
+                                                candidate.designName.ifBlank { "—" },
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (isPrimary) Text(t("Main"), color = StudioBlue, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                        mergeError?.let { msg ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(msg, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val primary = mergePrimaryId ?: selectedOrders.firstOrNull()?.id
+                            val sourceIds = if (primary != null) selectedOrders.map { it.id }.filter { it != primary } else emptyList()
+                            if (primary != null && sourceIds.isNotEmpty() && !merging) {
+                                merging = true
+                                mergeError = null
+                                mergeScope.launch {
+                                    try {
+                                        com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                                            .getHttpsCallable("mergeOrders")
+                                            .call(
+                                                mapOf(
+                                                    "companyId" to (state.workspace?.id ?: ""),
+                                                    "primaryOrderId" to primary,
+                                                    "sourceOrderIds" to sourceIds
+                                                )
+                                            )
+                                            .await()
+                                        merging = false
+                                        showMergeDialog = false
+                                        onClearSelection()
+                                    } catch (e: Exception) {
+                                        merging = false
+                                        mergeError = e.localizedMessage ?: "Could not merge the selected orders."
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !merging && selectedOrders.size >= 2
+                    ) {
+                        Text(if (merging) t("Merging…") else t("Merge"), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showMergeDialog = false }, enabled = !merging) {
+                        Text(t("Cancel"))
+                    }
+                }
+            )
+        }
+
+        if (showBulkDeleteConfirm) {
+            AlertDialog(
+                onDismissRequest = { showBulkDeleteConfirm = false },
+                title = { Text(t("Delete")) },
+                text = { Text("Move ${selectedOrderIds.size} orders to Trash?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showBulkDeleteConfirm = false
+                        selectedOrders.forEach { onDeleteOrder(it) }
+                        onClearSelection()
+                    }) { Text(t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showBulkDeleteConfirm = false }) { Text(t("Cancel")) }
+                }
+            )
+        }
+
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
@@ -654,6 +843,7 @@ internal fun OrderListSidebarPane(
         onToggleOrderSelection = { order ->
             selectedOrderIds = if (order.id in selectedOrderIds) selectedOrderIds - order.id else selectedOrderIds + order.id
         },
+        onClearSelection = { selectedOrderIds = emptySet() },
         onAssignOrder = onAssignOrder,
         onUpdateOrderFields = onUpdateOrderFields,
         onDeleteOrder = onDeleteOrder,
@@ -1075,7 +1265,9 @@ private fun OrderListCard(
                                 text = moneyAmount(order.paidAmount, hideSensitiveNumbers),
                                 color = if (order.status == "Cancelled") MaterialTheme.colorScheme.onSurfaceVariant else StudioGreen,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = if (compact) 17.sp else 19.sp
+                                fontSize = if (compact) 17.sp else 19.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -1327,12 +1519,10 @@ private fun OrderSelectionDot(selected: Boolean) {
 private fun PreviewBox(order: StudioOrder, compact: Boolean = false) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val previewUrl = remember(order.id, order.designLink, order.clientFiles) {
-        order.designLink.trim().ifBlank {
-            order.clientFiles.firstOrNull {
-                isClientFileImage(it.contentType, it.fileName) && it.downloadUrl.isNotBlank()
-            }?.downloadUrl.orEmpty()
-        }
+    // The preview image is ONLY the dedicated preview (stored in designLink), matching
+    // Mac and Web. Do not fall back to Client File images — those are not the preview.
+    val previewUrl = remember(order.id, order.designLink) {
+        order.designLink.trim()
     }
     var bitmap by remember(previewUrl) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -1604,7 +1794,8 @@ private enum class OrderFilter(val label: String, val key: String) {
     LateOrders("Late Orders", "lateOrders"),
     UnpaidBalance("Unpaid Balance", "unpaidBalance"),
     ReadyToShip("Ready to Ship", "readyToShip"),
-    Completed("Completed", "completed");
+    Completed("Completed", "completed"),
+    Trash("Trash", "trash");
 
     fun matches(order: StudioOrder, currentUserId: String = "", currentUserEmail: String = ""): Boolean {
         return when (this) {
@@ -1617,6 +1808,7 @@ private enum class OrderFilter(val label: String, val key: String) {
             UnpaidBalance -> orderHasUnpaidBalance(order)
             ReadyToShip -> orderIsReadyToShip(order)
             Completed -> orderIsCompleted(order)
+            Trash -> true
         }
     }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { openCookiePreferences } from "@/lib/cookieConsent";
 import { usePathname, useRouter } from "next/navigation";
@@ -9,6 +10,9 @@ import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
+import { clearLandingAttribution, getLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
+import { GoogleAdsTag } from "@/components/GoogleAdsTag";
+import { fireGoogleAdsSignupConversion } from "@/lib/googleAds";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import {
   PLAN_ENTITLEMENTS,
@@ -311,6 +315,7 @@ const ORDER_CARDS: OrderCardInfo[] = [
   { titleKey: "orderCard.preview", detailKey: "orderCard.preview.detail", icon: "photo" },
   { titleKey: "orderCard.summary", detailKey: "orderCard.summary.detail", icon: "docText" },
   { titleKey: "orderCard.customer", detailKey: "orderCard.customer.detail", icon: "customer" },
+  { titleKey: "orderCard.invoiceItems", detailKey: "orderCard.invoiceItems.detail", icon: "docText" },
   { titleKey: "orderCard.materials", detailKey: "orderCard.materials.detail", icon: "shippingBox" },
   { titleKey: "orderCard.priority", detailKey: "orderCard.priority.detail", icon: "warningTriangle" },
   { titleKey: "orderCard.delivery", detailKey: "orderCard.delivery.detail", icon: "calendarClock" },
@@ -628,6 +633,12 @@ const FAQ_GROUPS: FaqGroup[] = [
     ]
   },
   {
+    categoryKey: "faq.cat.integrations",
+    items: [
+      { titleKey: "faq.q24.title", bodyKey: "faq.q24.body" }
+    ]
+  },
+  {
     categoryKey: "faq.cat.gpt",
     items: [
       { titleKey: "faq.q12.title", bodyKey: "faq.q12.body" },
@@ -650,7 +661,8 @@ const FAQ_GROUPS: FaqGroup[] = [
       { titleKey: "faq.q19.title", bodyKey: "faq.q19.body" },
       { titleKey: "faq.q20.title", bodyKey: "faq.q20.body" },
       { titleKey: "faq.q21.title", bodyKey: "faq.q21.body" },
-      { titleKey: "faq.q22.title", bodyKey: "faq.q22.body" }
+      { titleKey: "faq.q22.title", bodyKey: "faq.q22.body" },
+      { titleKey: "faq.q23.title", bodyKey: "faq.q23.body" }
     ]
   }
 ];
@@ -806,7 +818,7 @@ function PublicLanguageSelector() {
   );
 }
 
-function PublicHeader() {
+export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean } = {}) {
   const { user } = useAuth();
   const { t } = usePublicSiteLanguage();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -826,7 +838,7 @@ function PublicHeader() {
         </nav>
 
         <div className="public-header-actions">
-          <span className="public-header-lang-desktop"><PublicLanguageSelector /></span>
+          {hideLanguage ? null : <span className="public-header-lang-desktop"><PublicLanguageSelector /></span>}
           <Link href={user ? "/dashboard" : "/login"} className="public-button ghost public-header-login-desktop">
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
@@ -856,7 +868,7 @@ function PublicHeader() {
           <Link href={user ? "/dashboard" : "/login"} onClick={closeMenu}>
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
-          <div className="public-header-mobile-lang"><PublicLanguageSelector /></div>
+          {hideLanguage ? null : <div className="public-header-mobile-lang"><PublicLanguageSelector /></div>}
         </div>
       ) : null}
     </header>
@@ -872,7 +884,6 @@ function PublicFooter() {
           <img className="public-footer-logo" src="/brand/nivadesk-logo.png" alt={t("brand.full")} />
           <p>{t("brand.footerDescription")}</p>
           <div className="public-footer-contact">
-            <span>{t("footer.company")}</span>
             <a href="mailto:contact@nivadesk.co.uk">contact@nivadesk.co.uk</a>
           </div>
         </div>
@@ -911,6 +922,23 @@ function PublicFooter() {
         </div>
         <div className="public-footer-meta">
           <span>{t("footer.rights")}</span>
+          <span className="public-footer-recaptcha">
+            {(() => {
+              const parts = t("footer.recaptcha.text").split(/\{privacy\}|\{terms\}/);
+              return (
+                <>
+                  {parts[0]}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">{t("footer.recaptcha.privacy")}</a>
+                  {parts[1] ?? " "}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">{t("footer.recaptcha.terms")}</a>
+                  {parts[2] ?? ""}
+                </>
+              );
+            })()}
+          </span>
+          <span className="public-footer-legal">
+            EGGCRAFT LIMITED · Registered in England and Wales No. 16566512 · VAT GB 514512621 · 141 Randolph Avenue, London W9 1DN, United Kingdom
+          </span>
         </div>
       </div>
     </footer>
@@ -925,6 +953,7 @@ function PublicShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="public-site" dir={dir}>
       <SiteVisitBeacon />
+      <GoogleAdsTag />
       <PublicHeader />
       <main>{children}</main>
       <PublicFooter />
@@ -943,7 +972,7 @@ function PublicShell({ children }: { children: ReactNode }) {
 const HERO_CHIPS: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
   { key: "heroChip.orders", icon: <path d="M4 5h12M4 9h12M4 13h8" /> },
   { key: "heroChip.files", icon: <path d="M3 6l1.5-2h4l1 1.5H17v9H3V6z" /> },
-  { key: "heroChip.finance", icon: <path d="M7 4h6M7 7h6M11 4c-3 0-3 5 0 5s3 4 0 4H7" /> },
+  { key: "heroChip.finance", icon: <><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><circle cx="10" cy="10" r="2" /><path d="M5 8.5v3M15 8.5v3" /></> },
   { key: "heroChip.notes", icon: <path d="M5 3h10v14H5zM7 7h6M7 10h6M7 13h4" /> },
   { key: "heroChip.chatgpt", icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> },
   { key: "heroChip.team", icon: <path d="M7 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13 9a2 2 0 100-4M3 16c0-2.2 1.8-4 4-4s4 1.8 4 4M12 12c2 0 4 1.4 4 4" /> }
@@ -968,8 +997,33 @@ function HeroFeatureChips() {
   );
 }
 
+// Pick a currency symbol matching the visitor's region for the decorative hero badge:
+// US/Americas → $, continental Europe → €, UK and everywhere else → £. Uses the browser
+// timezone (a good proxy for physical location), falling back to the language region.
+function heroCurrencySymbol(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (tz.startsWith("America/")) return "$";
+    if (["Europe/London", "Europe/Belfast", "Europe/Guernsey", "Europe/Jersey", "Europe/Isle_of_Man"].includes(tz)) return "£";
+    if (tz.startsWith("Europe/")) return "€";
+  } catch {
+    // ignore: fall through to the language region / default
+  }
+  if (typeof navigator !== "undefined") {
+    const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
+    if (region === "US") return "$";
+    if (region === "GB") return "£";
+  }
+  return "£";
+}
+
 function ProductScene() {
   const { t } = usePublicSiteLanguage();
+  // Default to £ for the server render; resolve the visitor's symbol after hydration.
+  const [currencySymbol, setCurrencySymbol] = useState("£");
+  useEffect(() => {
+    setCurrencySymbol(heroCurrencySymbol());
+  }, []);
   return (
     <div className="public-hero-visual" aria-hidden="true">
       <div className="hero-app-shot">
@@ -984,9 +1038,9 @@ function ProductScene() {
       </div>
       <div className="hero-float hero-float-received">
         <span className="hero-float-icon" data-tone="green">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 5h5M8 8h5M11 5c-3 0-3 5 0 5s3 4 0 4H8" /></svg>
+          <span className="hero-float-currency">{currencySymbol}</span>
         </span>
-        <div><strong>{t("heroFloat.receivedTitle")}</strong><span>{t("heroFloat.receivedSub")}</span></div>
+        <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
       </div>
       <div className="hero-float hero-float-chatgpt">
         <span className="hero-float-icon" data-tone="violet">
@@ -1078,9 +1132,9 @@ function OrderCardTitleGrid() {
   return (
     <div className="public-order-card-system" ref={assembleRef}>
       <div className="public-order-card-grid" aria-label={t("orderCards.aria")}>
-        {ORDER_CARDS.map((card, index) => {
+        {ORDER_CARDS.flatMap((card, index) => {
           const isSelected = selectedCardIndex === index;
-          return (
+          const nodes: ReactNode[] = [
             <div className="public-order-card-slot" key={card.titleKey}>
               <article
                 className="public-order-card-chip"
@@ -1102,7 +1156,20 @@ function OrderCardTitleGrid() {
                 </button>
               </article>
             </div>
-          );
+          ];
+          // Phone only (CSS-controlled): show the tapped card's description as a
+          // full-width strip right after the row it belongs to, so the two
+          // side-by-side cards stay in place and never reflow.
+          const isRowEnd = index % 2 === 1 || index === ORDER_CARDS.length - 1;
+          const selectedRow = Math.floor(selectedCardIndex / 2);
+          if (isRowEnd && Math.floor(index / 2) === selectedRow) {
+            nodes.push(
+              <p className="public-order-card-inline-detail" key="inline-detail">
+                {t(selectedCard.detailKey)}
+              </p>
+            );
+          }
+          return nodes;
         })}
       </div>
       <aside className="public-order-card-panel" id="public-order-card-detail-panel">
@@ -1428,6 +1495,12 @@ function ScrollStoryShowcase() {
   );
 }
 
+const WORKFLOW_VISUALS: { tone: string; icon: ReactNode }[] = [
+  { tone: "sage", icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7h5M7.5 10h5M7.5 13h3" /></> },
+  { tone: "sky", icon: <path d="M3 7l1.8-2.2h5l1.5 2H21v11H3z" /> },
+  { tone: "gold", icon: <path d="M4 16V9M9 16V4M14 16v-5M3.5 18.5h13" /> }
+];
+
 function FeatureWorkflowPanel() {
   const { t } = usePublicSiteLanguage();
   return (
@@ -1438,11 +1511,15 @@ function FeatureWorkflowPanel() {
           <h2>{t("workflow.title")}</h2>
         </div>
         <div className="public-workflow-grid">
-          {FEATURE_GROUPS.map(group => (
+          {FEATURE_GROUPS.map((group, index) => (
             <article key={group.titleKey}>
-              <span />
-              <h3>{t(group.titleKey)}</h3>
-              <p>{t(group.bodyKey)}</p>
+              <span className="public-workflow-icon" data-tone={WORKFLOW_VISUALS[index]?.tone ?? "sage"}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{WORKFLOW_VISUALS[index]?.icon}</svg>
+              </span>
+              <div className="public-workflow-text">
+                <h3>{t(group.titleKey)}</h3>
+                <p>{t(group.bodyKey)}</p>
+              </div>
             </article>
           ))}
         </div>
@@ -1450,6 +1527,13 @@ function FeatureWorkflowPanel() {
     </section>
   );
 }
+
+const FEATURE_DEEP_CHIP_KEYS: PublicSiteTranslationKey[] = [
+  "featuresDeep.chip.orders",
+  "featuresDeep.chip.files",
+  "featuresDeep.chip.team",
+  "featuresDeep.chip.export"
+];
 
 function FeatureDeepDiveSection() {
   const { t } = usePublicSiteLanguage();
@@ -1462,37 +1546,30 @@ function FeatureDeepDiveSection() {
             {t("featuresDeep.eyebrow")}
           </span>
           <h2>
-            {t("featuresDeep.titleA")} <span className="hero-accent">{t("featuresDeep.titleAccent1")}</span> {t("featuresDeep.titleB")} <span className="hero-accent">{t("featuresDeep.titleAccent2")}</span>
+            {t("featuresDeep.tourTitleA")} <span className="hero-accent">{t("featuresDeep.tourTitleAccent")}</span>
           </h2>
-          <p>{t("featuresDeep.body")}</p>
-          <nav className="public-features-nav" aria-label={t("featuresDeep.eyebrow")}>
-            {FEATURE_DEEP_DIVES.map(item => (
-              <a className="public-features-nav-pill" href={`#feature-${item.id}`} key={item.id}>
-                <span className="public-features-nav-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{item.navIcon}</svg>
-                </span>
-                <span className="public-features-nav-label">{t(item.navKey)}</span>
-                <span className="public-features-nav-chevron" aria-hidden="true">›</span>
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="public-features-deep-list">
-          {FEATURE_DEEP_DIVES.map((item, index) => (
-            <article id={`feature-${item.id}`} data-tone={item.tone} key={item.titleKey}>
-              <div className="public-features-deep-head">
-                <span className="public-features-deep-index">{String(index + 1).padStart(2, "0")}</span>
-                <span className="public-features-deep-icon">
+          <p>{t("featuresDeep.tourBody")}</p>
+          <div className="public-features-chips">
+            {FEATURE_DEEP_DIVES.map((item, index) => (
+              <a className="public-features-chip" data-tone={item.tone} href={`#feature-${item.id}`} key={item.id}>
+                <span className="public-features-chip-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
                 </span>
-                <div className="public-features-deep-titles">
-                  <h3>{t(item.titleKey)}</h3>
-                  <p>{t(item.bodyKey)}</p>
-                </div>
+                <span className="public-features-chip-label">{t(FEATURE_DEEP_CHIP_KEYS[index])}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+        <div className="public-features-deep-list">
+          {FEATURE_DEEP_DIVES.map(item => (
+            <article id={`feature-${item.id}`} data-tone={item.tone} key={item.titleKey}>
+              <span className="public-features-deep-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+              </span>
+              <div className="public-features-deep-titles">
+                <h3>{t(item.titleKey)}</h3>
+                <p>{t(item.bodyKey)}</p>
               </div>
-              <ul>
-                {item.bulletKeys.map(bulletKey => <li key={bulletKey}>{t(bulletKey)}</li>)}
-              </ul>
             </article>
           ))}
         </div>
@@ -1500,6 +1577,35 @@ function FeatureDeepDiveSection() {
     </section>
   );
 }
+
+// Per-feature icon + colour tone for the compact mobile matrix, kept parallel
+// to PLAN_FEATURE_BRIDGE (same order/length). Desktop hides these via CSS, so
+// the computer view is untouched; only the phone layout renders the chips.
+const FI = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
+const PLAN_FEATURE_ICONS: { icon: React.ReactNode; tone: string }[] = [
+  { tone: "sage", icon: FI("M9 5h6M9 5a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a2 2 0 0 0-2-2M9 11h6M9 15h4") },
+  { tone: "blue", icon: FI("M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.85M16.5 4.15a4 4 0 0 1 0 7.7") },
+  { tone: "violet", icon: FI("M8 4h6l4 4v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM13 4v5h5") },
+  { tone: "amber", icon: FI("M12 3l1.8 4.6L18.5 9l-3.7 3 1.3 4.8L12 14.5 7.9 16.8 9.2 12 5.5 9l4.7-1.4Z") },
+  { tone: "teal", icon: FI("M5 20V10M12 20V4M19 20v-7") },
+  { tone: "rose", icon: FI("M12 3v10m0 0l4-4m-4 4l-4-4M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2") },
+  { tone: "blue", icon: FI("M4 6a1 1 0 0 1 1-1h6l2 2h6a1 1 0 0 1 1 1v3H4ZM4 11h17v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z") },
+  { tone: "sage", icon: FI("M4 18l5-5 3 3 7-8M16 8h3v3") },
+  { tone: "violet", icon: FI("M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.6 0-.8-.7-1.4-.7-2.2 0-.6.5-1.2 1.2-1.2H16a4 4 0 0 0 4-4c0-4.4-3.6-7-8-7ZM7.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM11 8.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM15.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z") },
+  { tone: "amber", icon: FI("M4 7a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z") },
+  { tone: "teal", icon: FI("M5 7c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3ZM5 7v10c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3") },
+  { tone: "rose", icon: FI("M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1H4Z") },
+  { tone: "amber", icon: FI("M13 3L5 13h6l-1 8 8-10h-6l1-8Z") },
+  { tone: "sage", icon: FI("M9 12l2 2 4-4M12 3l7 3v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3Z") },
+  { tone: "blue", icon: FI("M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.85") },
+  { tone: "violet", icon: FI("M14 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M18 8v6M21 11h-6") },
+  { tone: "teal", icon: FI("M4 20V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v14M14 20v-9a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v9M3 20h18M7 9h3M7 13h3M17 14h0") },
+  { tone: "rose", icon: FI("M5 11l5 5L20 6M3 13l1 1") }
+];
 
 function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
   const { t } = usePublicSiteLanguage();
@@ -1519,19 +1625,30 @@ function PlanFeatureBridgeSection({ compact = false }: { compact?: boolean }) {
               </div>
               {PLAN_ORDER.map(planKey => {
                 const copy = PUBLIC_PLAN_COPY[planKey];
+                const popular = planKey === "pro_monthly";
                 return (
-                  <div className="public-plan-matrix-plan-head" role="columnheader" key={planKey}>
+                  <div
+                    className={popular ? "public-plan-matrix-plan-head popular" : "public-plan-matrix-plan-head"}
+                    role="columnheader"
+                    key={planKey}
+                  >
+                    {popular ? <span className="public-plan-matrix-pop" aria-hidden="true">{t("planBridge.popular")}</span> : null}
                     <strong>{t(copy.shortNameKey)}</strong>
                     <small>{t(copy.priceLabelKey)}</small>
                   </div>
                 );
               })}
             </div>
-            {PLAN_FEATURE_BRIDGE.map(item => (
+            {PLAN_FEATURE_BRIDGE.map((item, index) => (
               <div className="public-plan-matrix-row" role="row" key={item.titleKey}>
                 <div className="public-plan-matrix-feature" role="cell">
-                  <strong>{t(item.titleKey)}</strong>
-                  <span>{t(item.bodyKey)}</span>
+                  <span className={`public-plan-matrix-ficon tone-${PLAN_FEATURE_ICONS[index]?.tone ?? "sage"}`} aria-hidden="true">
+                    {PLAN_FEATURE_ICONS[index]?.icon}
+                  </span>
+                  <span className="public-plan-matrix-ftext">
+                    <strong>{t(item.titleKey)}</strong>
+                    <span>{t(item.bodyKey)}</span>
+                  </span>
                 </div>
                 {PLAN_ORDER.map(planKey => {
                   const included = item.planKeys.includes(planKey);
@@ -1759,7 +1876,7 @@ function ChatGPTAppShowcase() {
   ];
   const stats: { label: PublicSiteTranslationKey; value: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
     { label: "chatgptApp.resultMetric1Label", value: "chatgptApp.resultMetric1Value", tone: "clock", icon: <><circle cx="10" cy="10" r="6.4" /><path d="M10 6.4V10l2.6 1.6" /></> },
-    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", tone: "money", icon: <path d="M8 5.5h5M8 8.5h5M11 5.5c-3 0-3 5 0 5s3 4 0 4H8" /> },
+    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", tone: "money", icon: <><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><circle cx="10" cy="10" r="2" /><path d="M5 8.5v3M15 8.5v3" /></> },
     { label: "chatgptApp.resultMetric3Label", value: "chatgptApp.resultMetric3Value", tone: "lock", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
   ];
   const trust: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
@@ -1867,26 +1984,218 @@ function PlatformLogo({ kind }: { kind: PlatformKind }) {
   );
 }
 
+const APP_STORE_URL = "https://apps.apple.com/app/id6765475980";
+
+function AppStoreBadge() {
+  return (
+    <a
+      href={APP_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="public-appstore-btn"
+      aria-label="Download NivaDesk on the App Store"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+        <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 8.02 7.36c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.51 4.04zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+      </svg>
+      <span className="public-appstore-btn-text">
+        <small>Download on the</small>
+        <strong>App Store</strong>
+      </span>
+    </a>
+  );
+}
+
+function AppStoreDownload() {
+  const { t } = usePublicSiteLanguage();
+  const [qrOpen, setQrOpen] = useState(false);
+  useEffect(() => {
+    if (!qrOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQrOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [qrOpen]);
+  return (
+    <>
+      <div className="public-appstore-download">
+        <AppStoreBadge />
+        <button type="button" className="public-appstore-qr-trigger" onClick={() => setQrOpen(true)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5z" />
+            <path d="M14 3h7v7h-7V3zm2 2v3h3V5h-3z" />
+            <path d="M3 14h7v7H3v-7zm2 2v3h3v-3H5z" />
+            <path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z" />
+          </svg>
+          {t("platform.apple.scan")}
+        </button>
+      </div>
+      {qrOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setQrOpen(false)}>
+              <div
+                className="public-qr-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("platform.apple.qrAlt")}
+                onClick={event => event.stopPropagation()}
+              >
+                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                <img src="/appstore-qr.png" alt={t("platform.apple.qrAlt")} width={220} height={220} />
+                <p>{t("platform.apple.scanHint")}</p>
+                <AppStoreBadge />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=uk.co.eggcraft.studioflow";
+
+function PlayStoreBadge() {
+  return (
+    <a
+      href={PLAY_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="public-appstore-btn"
+      aria-label="Get NivaDesk on Google Play"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+        <path d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z" />
+      </svg>
+      <span className="public-appstore-btn-text">
+        <small>Get it on</small>
+        <strong>Google Play</strong>
+      </span>
+    </a>
+  );
+}
+
+function PlayStoreDownload() {
+  const { t } = usePublicSiteLanguage();
+  const [qrOpen, setQrOpen] = useState(false);
+  useEffect(() => {
+    if (!qrOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQrOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [qrOpen]);
+  return (
+    <>
+      <div className="public-appstore-download">
+        <PlayStoreBadge />
+        <button type="button" className="public-appstore-qr-trigger" onClick={() => setQrOpen(true)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5z" />
+            <path d="M14 3h7v7h-7V3zm2 2v3h3V5h-3z" />
+            <path d="M3 14h7v7H3v-7zm2 2v3h3v-3H5z" />
+            <path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z" />
+          </svg>
+          {t("platform.android.scan")}
+        </button>
+      </div>
+      {qrOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setQrOpen(false)}>
+              <div
+                className="public-qr-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("platform.android.qrAlt")}
+                onClick={event => event.stopPropagation()}
+              >
+                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                <img src="/playstore-qr.png" alt={t("platform.android.qrAlt")} width={220} height={220} />
+                <p>{t("platform.android.scanHint")}</p>
+                <PlayStoreBadge />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+function WebPortalLinks() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <div className="public-web-links">
+      <Link href="/signup" className="public-button">{t("cta.startFree")}</Link>
+      <Link href="/login" className="public-button ghost">{t("cta.login")}</Link>
+    </div>
+  );
+}
+
+function PlatformHintBanner({ kind, text }: { kind: "android" | "windows"; text: string }) {
+  return (
+    <div className="public-platform-hint" data-hint={kind}>
+      {kind === "android" ? (
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 7 9 6 9-6" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      )}
+      <span>{text}</span>
+    </div>
+  );
+}
+
 function PlatformNote() {
   const { t } = usePublicSiteLanguage();
   return (
     <section className="public-section public-section-soft public-scroll-reveal">
       <div className="public-shell public-platform-panel">
-        <div>
+        <div className="public-platform-intro">
           <span className="public-eyebrow">{t("platform.eyebrow")}</span>
           <h2>{t("platform.title")}</h2>
+          <p>{t("platform.subtitle")}</p>
         </div>
         <div className="public-platform-grid public-scroll-stagger" aria-label={t("platform.gridAria")}>
           {PLATFORM_CARDS.map(platform => (
             <article className="public-platform-card" data-platform={platform.kind} key={platform.kind}>
-              <span className="public-platform-logo">
-                <PlatformLogo kind={platform.kind} />
-              </span>
-              <div>
-                <span>{t(platform.statusKey)}</span>
-                <h3>{t(platform.nameKey)}</h3>
-                <p>{t(platform.detailKey)}</p>
+              <div className="public-platform-card-head">
+                <span className="public-platform-logo">
+                  <PlatformLogo kind={platform.kind} />
+                </span>
+                <span className="public-platform-status">{t(platform.statusKey)}</span>
               </div>
+              <h3>{t(platform.nameKey)}</h3>
+              <p>{t(platform.detailKey)}</p>
+              {platform.kind === "apple" ? <AppStoreDownload /> : null}
+              {platform.kind === "web" ? <WebPortalLinks /> : null}
+              {platform.kind === "android" ? <PlayStoreDownload /> : null}
+              {platform.kind === "windows" ? <PlatformHintBanner kind="windows" text={t("platform.windows.hint")} /> : null}
             </article>
           ))}
         </div>
@@ -1965,11 +2274,39 @@ export function PublicFeaturesPage() {
     const { t } = usePublicSiteLanguage();
     return (
       <>
-        <section className="public-page-hero">
+        <section className="public-page-hero public-features-hero">
           <div className="public-shell">
-            <span className="public-eyebrow">{t("featuresPage.eyebrow")}</span>
-            <h1>{t("featuresPage.title")}</h1>
-            <p>{t("featuresPage.body")}</p>
+            <div className="public-features-hero-top">
+              <div className="public-features-hero-copy">
+                <span className="public-eyebrow public-features-hero-eyebrow">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5l1.4 4 4 1.4-4 1.4L10 13.3 8.6 9.3l-4-1.4 4-1.4zM15.5 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg>
+                  {t("featuresPage.eyebrow")}
+                </span>
+                <h1>{t("featuresPage.title")}</h1>
+                <p>{t("featuresPage.body")}</p>
+              </div>
+              <div className="public-features-hero-shot">
+                <img src="/schedule.webp" alt={t("schedule.imageAlt")} loading="lazy" />
+              </div>
+            </div>
+            <div className="public-features-hero-strip">
+              {[
+                { key: "s1", tone: "trend", title: "schedule.f1.title" as PublicSiteTranslationKey, body: "schedule.f1.body" as PublicSiteTranslationKey, icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
+                { key: "s2", tone: "calendar", title: "schedule.f2.title" as PublicSiteTranslationKey, body: "schedule.f2.body" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="8" height="11" rx="2" /><rect x="8" y="6.5" width="8" height="11" rx="2" /></> },
+                { key: "s3", tone: "team", title: "featuresPage.glance.title" as PublicSiteTranslationKey, body: "featuresPage.glance.body" as PublicSiteTranslationKey, icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> },
+                { key: "s4", tone: "team", title: "schedule.team.title" as PublicSiteTranslationKey, body: "schedule.team.body" as PublicSiteTranslationKey, icon: <><rect x="3.5" y="4.5" width="13" height="11" rx="2" /><path d="M3.5 8.5h13M8 8.5v7M12 8.5v7" /></> }
+              ].map(item => (
+                <div className="public-features-hero-strip-item" key={item.key}>
+                  <span className="public-features-hero-strip-icon" data-tone={item.tone}>
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                  </span>
+                  <div>
+                    <strong>{t(item.title)}</strong>
+                    <span>{t(item.body)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -1990,6 +2327,32 @@ export function PublicFeaturesPage() {
                 bodyKey="section.flow.body"
               />
               <OrderCardTitleGrid />
+            </div>
+          </div>
+        </section>
+
+        <section className="public-section">
+          <div className="public-shell">
+            <SectionHeader
+              eyebrowKey="featuresPage.invoice.eyebrow"
+              titleKey="featuresPage.invoice.title"
+              bodyKey="featuresPage.invoice.body"
+            />
+            <div className="public-features-hero-strip">
+              {[
+                { key: "inv1", tone: "trend", label: "featuresPage.invoice.p1" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7.5h5M7.5 10.5h5M7.5 13h3" /></> },
+                { key: "inv2", tone: "calendar", label: "featuresPage.invoice.p2" as PublicSiteTranslationKey, icon: <path d="M4 16l1-3 8-8 2.5 2.5-8 8H4zM12 5l2.5 2.5" /> },
+                { key: "inv3", tone: "team", label: "featuresPage.invoice.p3" as PublicSiteTranslationKey, icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> }
+              ].map(item => (
+                <div className="public-features-hero-strip-item" key={item.key}>
+                  <span className="public-features-hero-strip-icon" data-tone={item.tone}>
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                  </span>
+                  <div>
+                    <strong>{t(item.label)}</strong>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -2153,6 +2516,13 @@ function signupErrorMessage(error: unknown, t: (key: PublicSiteTranslationKey) =
   if (/weak-password/i.test(raw)) return t("signup.error.weakPassword");
   if (/invalid-email/i.test(raw)) return t("signup.error.invalidEmail");
   if (/network|offline/i.test(raw)) return t("signup.error.network");
+  // Disposable/blocked email domain (Auth blocking function).
+  if (/disposable|permanent email/i.test(raw)) return t("signup.error.disposableEmail");
+  // Blocking/Cloud Function errors arrive wrapped as a JSON envelope
+  // ("...returned an error: {\"error\":{\"message\":\"...\"}} (auth/internal-error)").
+  // Surface the inner human message instead of the raw Firebase string.
+  const inner = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  if (inner && inner[1]) return inner[1];
   return raw || t("signup.error.generic");
 }
 
@@ -2170,10 +2540,29 @@ export function PublicSignupPage() {
     const [accepted, setAccepted] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Silent bot traps: an invisible field real users never see/fill, and the
+    // moment the form first mounted (to reject instant automated submissions).
+    const [honeypot, setHoneypot] = useState("");
+    const [formStartedAt] = useState(() => Date.now());
+
+    // Count a signup-page visit only when the visitor arrived from the
+    // /custom-order-management landing page (attribution marker or referrer).
+    useEffect(() => {
+      const fromLanding = getLandingAttribution() !== null ||
+        (typeof document !== "undefined" && document.referrer.includes("/custom-order-management"));
+      if (fromLanding) trackLandingEvent("custom_order_landing_signup_visit");
+    }, []);
 
     async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
       event.preventDefault();
       setError(null);
+
+      // Bot traps: either tripping means an automated submission; reject quietly.
+      if (honeypot.trim() !== "" || Date.now() - formStartedAt < 1500) {
+        setError(t("signup.error.generic"));
+        return;
+      }
+
       const cleanFullName = fullName.trim();
       const cleanWorkspaceName = workspaceName.trim();
       const cleanEmail = email.trim();
@@ -2201,7 +2590,7 @@ export function PublicSignupPage() {
         let currentUser = auth.currentUser;
         if (!currentUser) {
           const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-          // Non-blocking email verification — standard account-security hygiene.
+          // Non-blocking email verification: standard account-security hygiene.
           void sendEmailVerification(credential.user, { url: "https://nivadesk.app/login" }).catch(() => undefined);
           currentUser = credential.user;
         }
@@ -2217,6 +2606,13 @@ export function PublicSignupPage() {
           fullName: cleanFullName,
           workspaceName: cleanWorkspaceName
         });
+        // Credit the completed signup to the landing page if this visitor came
+        // from it, then clear the marker so it is counted at most once.
+        if (getLandingAttribution() !== null) {
+          trackLandingEvent("custom_order_landing_signup_completed");
+          fireGoogleAdsSignupConversion();
+          clearLandingAttribution();
+        }
         router.replace("/dashboard");
       } catch (signupError) {
         setError(signupErrorMessage(signupError, t));
@@ -2259,6 +2655,20 @@ export function PublicSignupPage() {
           </div>
 
           <form className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
+            {/* Honeypot: off-screen field hidden from real users. Bots that
+                auto-fill every input trip it and are rejected. */}
+            <div className="public-signup-hp" aria-hidden="true">
+              <label htmlFor="nd-company-url">Company website</label>
+              <input
+                id="nd-company-url"
+                name="company_url"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={honeypot}
+                onChange={event => setHoneypot(event.target.value)}
+              />
+            </div>
             <span className="public-eyebrow">{t("signup.form.eyebrow")}</span>
             <h2>{t("signup.form.title")}</h2>
             <p>{t("signup.form.body")}</p>

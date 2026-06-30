@@ -610,6 +610,7 @@ enum KartTipi: String, Codable, Equatable, Identifiable {
     case workTime = "workTime"
     case todo = "todo"
     case customerNotes = "customerNotes", materials = "materials", priority = "priority"
+    case invoiceItems = "invoiceItems"
     var id: String { self.rawValue }
 }
 
@@ -750,7 +751,8 @@ struct SiparisDetayView: View {
     var hideFinancialForWorkflow: Bool = false
     @EnvironmentObject var firebaseManager: FirebaseManager
     @EnvironmentObject var authVM: AuthViewModel
-    
+    @Environment(\.dismiss) private var dismiss
+
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
     @AppStorage("seciliOndalik") private var seciliOndalik: String = "."
@@ -1041,7 +1043,7 @@ struct SiparisDetayView: View {
     private func compactVisibleWorkspaceCardsIntoFirstThreeColumns() {
         #if os(macOS)
         let preferredOrder: [KartTipi] = [
-            .preview, .summary, .customer, .delivery, .materials, .priority,
+            .preview, .summary, .customer, .invoiceItems, .delivery, .materials, .priority,
             .notes, .clientFiles, .todo, .workTime,
             .financial, .status, .shipping, .schedule, .historyLog, .customerNotes
         ]
@@ -1113,6 +1115,7 @@ struct SiparisDetayView: View {
         case .workTime: return "cardWorkTime"
         case .materials: return "cardMaterials"
         case .priority: return "cardPriority"
+        case .invoiceItems: return "cardCustomer"
         case .communication, .customerNotes: return nil
         }
     }
@@ -1176,6 +1179,14 @@ struct SiparisDetayView: View {
     @State private var followedTeamProfileLastSnapshotJSON: String = ""
     @State private var workspaceProfilesCloudListener: ListenerRegistration?
     @State private var isApplyingWorkspaceProfilesFromCloud: Bool = false
+    // Multi-device card-profile sync guards. A freshly-opened device must not
+    // push its locally-cached (possibly stale) layout to the cloud before the
+    // workspace listener has delivered the latest state at least once — that is
+    // what made two Macs flip each other back to an old card profile. The
+    // settle-gate enforces "load the current version before you may write it",
+    // and the content signature skips no-op/echo re-uploads of unchanged data.
+    @State private var hasSyncedWorkspaceCloudOnce: Bool = false
+    @State private var lastSyncedOwnProfileContent: String = ""
     @State private var activeWorkspaceLayoutOrderKey: String = ""
     @State private var activeWorkspaceLayoutIsIndependent: Bool = false
     @State private var iPadWorkspaceZoomScale: CGFloat = 1.0
@@ -1232,7 +1243,7 @@ struct SiparisDetayView: View {
     
     @State private var kartYerlesimi: [[KartTipi]] = [
         [.preview, .summary],
-        [.customer, .materials, .delivery, .notes, .clientFiles],
+        [.customer, .invoiceItems, .materials, .delivery, .notes, .clientFiles],
         [.priority, .todo, .workTime, .financial, .status, .shipping, .schedule, .historyLog, .customerNotes]
     ]
     @State private var kartYukseklikleri: [String: Double] = [:]
@@ -1254,6 +1265,8 @@ struct SiparisDetayView: View {
     @AppStorage("showCardCustomerNotes") private var showCardCustomerNotes = false
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true
+    @AppStorage("showCardInvoiceItems") private var showCardInvoiceItems = true
+    @State private var showInvoiceFooterEditor = false
     @AppStorage("showCardSchedule") private var showCardSchedule = true
     @AppStorage("showCardHistoryLog") private var showCardHistoryLog = true
     @AppStorage("showCardClientFiles") private var showCardClientFiles = true
@@ -1332,13 +1345,18 @@ struct SiparisDetayView: View {
     @AppStorage("financialRemainingItemsJSON") private var financialRemainingItemsJSON: String = ""
     @AppStorage("financialShowBaseCost") private var financialShowBaseCost: Bool = true
     @AppStorage("financialBaseCostLabel") private var financialBaseCostLabel: String = "Cost (Base)"
+    @AppStorage("priorityCardLabel") private var priorityCardLabel: String = "Priority"
+    @AppStorage("riskCardLabel") private var riskCardLabel: String = "Risk"
+    @AppStorage("designNameLabel") private var designNameLabel: String = "Design Name"
     @AppStorage("summaryStep1") private var summaryStep1 = "Design"
     @AppStorage("summaryStep2") private var summaryStep2 = "Painting"
     
         @AppStorage("orderListStep1") private var orderListStep1 = "Design"
     @AppStorage("orderListStep2") private var orderListStep2 = "Painting"
-    
-@AppStorage("pdfShowCustomer") private var pdfShowCustomer = true; @AppStorage("pdfShowContact") private var pdfShowContact = true; @AppStorage("pdfShowPreview") private var pdfShowPreview = true; @AppStorage("pdfShowFinCustomer") private var pdfShowFinCustomer = true; @AppStorage("pdfShowPaymentMethod") private var pdfShowPaymentMethod = true; @AppStorage("pdfShowFinInternal") private var pdfShowFinInternal = false; @AppStorage("pdfShowStatus") private var pdfShowStatus = true; @AppStorage("pdfShowShipping") private var pdfShowShipping = true
+    // Customizable heading for the invoice items block (empty → localized "Design Name").
+    @AppStorage("orderItemsHeading") private var orderItemsHeading = ""
+
+@AppStorage("pdfShowCustomer") private var pdfShowCustomer = true; @AppStorage("pdfShowContact") private var pdfShowContact = true; @AppStorage("pdfShowPreview") private var pdfShowPreview = true; @AppStorage("pdfShowFinCustomer") private var pdfShowFinCustomer = true; @AppStorage("pdfShowPaymentMethod") private var pdfShowPaymentMethod = true; @AppStorage("pdfShowFinInternal") private var pdfShowFinInternal = false; @AppStorage("pdfShowStatus") private var pdfShowStatus = true; @AppStorage("pdfShowShipping") private var pdfShowShipping = true; @AppStorage("pdfShowAddress") private var pdfShowAddress = true; @AppStorage("pdfShowShippingAddress") private var pdfShowShippingAddress = true
     @AppStorage("pdfShowMaterials") private var pdfShowMaterials = true
     @AppStorage("pdfShowPriority") private var pdfShowPriority: Bool = true
     
@@ -1759,6 +1777,7 @@ struct SiparisDetayView: View {
             } label: {
                 Label(t("Invoice PDF", lang: seciliDil), systemImage: "doc.text.fill")
             }
+
         } label: {
             if isPhoneLayout {
                 Image(systemName: "ellipsis.circle.fill")
@@ -1845,6 +1864,8 @@ struct SiparisDetayView: View {
             .frame(width: 0, height: 0)
             .onChange(of: siparis.customerName) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.customerName = oldValue }) }
             .onChange(of: siparis.designName) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.designName = oldValue }) }
+            .onChange(of: siparis.lineItems) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.lineItems = oldValue }) }
+            .onChange(of: siparis.invoiceNote) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.invoiceNote = oldValue }) }
             .onChange(of: siparis.emailAddress) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.emailAddress = oldValue }) }
             .onChange(of: siparis.whatsappNumber) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.whatsappNumber = oldValue }) }
             .onChange(of: siparis.instagramUsername) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.instagramUsername = oldValue }) }
@@ -1972,6 +1993,8 @@ struct SiparisDetayView: View {
                 summaryStep2: $summaryStep2,
                 orderListStep1: $orderListStep1,
                 orderListStep2: $orderListStep2,
+                orderItemsHeading: $orderItemsHeading,
+                companyNumbersJSON: $companyNumbersJSON,
                 invLabel1: $invLabel1,
                 invLabel2: $invLabel2,
                 invLabel3: $invLabel3,
@@ -2320,6 +2343,7 @@ struct SiparisDetayView: View {
             .preview,
             .summary,
             .customer,
+            .invoiceItems,
             .materials,
             .priority,
             .delivery,
@@ -2372,6 +2396,7 @@ struct SiparisDetayView: View {
         case .customerNotes: return t("Customer Notes", lang: seciliDil)
         case .materials: return t("Materials & Inventory", lang: seciliDil)
         case .priority: return t("Priority / Risk", lang: seciliDil)
+        case .invoiceItems: return resolvedItemsHeading
         }
     }
 
@@ -2394,6 +2419,7 @@ struct SiparisDetayView: View {
         case .customerNotes: return "person.text.rectangle"
         case .materials: return "shippingbox.circle.fill"
         case .priority: return "exclamationmark.triangle.fill"
+        case .invoiceItems: return "list.bullet.rectangle"
         }
     }
 
@@ -2420,6 +2446,7 @@ struct SiparisDetayView: View {
         case .customerNotes: return .cyan
         case .materials: return studioWarningOrange
         case .priority: return .red
+        case .invoiceItems: return .green
         }
     }
 
@@ -2693,6 +2720,7 @@ struct SiparisDetayView: View {
         case .customerNotes: return !(seciliMusteri?.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .materials: return siparis.invBool1 || siparis.invBool2 || siparis.invBool3 || siparis.invBool4 || !siparis.invNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .priority: return siparis.priority != "Normal" || siparis.risk != "None"
+        case .invoiceItems: return siparis.hasLineItems
         }
     }
 
@@ -2747,6 +2775,8 @@ struct SiparisDetayView: View {
             return "\(checks.filter { $0 }.count)/4 " + t("ready", lang: seciliDil)
         case .priority:
             return t(siparis.priority, lang: seciliDil) + (siparis.risk == "None" ? "" : " • " + t(siparis.risk, lang: seciliDil))
+        case .invoiceItems:
+            return privacyCurrency(siparis.lineItemsTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)
         }
     }
 
@@ -3219,6 +3249,7 @@ struct SiparisDetayView: View {
         case .customerNotes: return false
         case .materials: return showCardMaterials
         case .priority: return showCardPriority
+        case .invoiceItems: return showCardInvoiceItems
         }
     }
 
@@ -3242,6 +3273,7 @@ struct SiparisDetayView: View {
             case .customerNotes: showCardCustomerNotes = visible
             case .materials: showCardMaterials = visible
             case .priority: showCardPriority = visible
+            case .invoiceItems: showCardInvoiceItems = visible
             }
             yenileCalismaAlaniHitbox(delay: 0.01)
             persistWorkspaceCustomizationChange()
@@ -3365,7 +3397,8 @@ struct SiparisDetayView: View {
                 KartTipi.workTime.rawValue: showCardWorkTime,
                 KartTipi.customerNotes.rawValue: showCardCustomerNotes,
                 KartTipi.materials.rawValue: showCardMaterials,
-                KartTipi.priority.rawValue: showCardPriority
+                KartTipi.priority.rawValue: showCardPriority,
+                KartTipi.invoiceItems.rawValue: showCardInvoiceItems
             ]
         )
     }
@@ -3443,10 +3476,26 @@ struct SiparisDetayView: View {
     }
 
     private func ensureRequiredCardsInCurrentLayout() {
+        ensureInvoiceItemsCardInCurrentLayout()
         ensureClientFilesCardInCurrentLayout()
         ensureToDoCardInCurrentLayout()
         ensureWorkTimeCardInCurrentLayout()
         ensureHistoryLogCardInCurrentLayout()
+    }
+
+    private func ensureInvoiceItemsCardInCurrentLayout() {
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        let allCards = kartYerlesimi.flatMap { $0 }
+        guard !allCards.contains(.invoiceItems) else { return }
+
+        if let col = kartYerlesimi.firstIndex(where: { $0.contains(.customer) }),
+           let idx = kartYerlesimi[col].firstIndex(of: .customer) {
+            kartYerlesimi[col].insert(.invoiceItems, at: min(idx + 1, kartYerlesimi[col].count))
+        } else {
+            let targetColumn = min(1, kartYerlesimi.count - 1)
+            kartYerlesimi[targetColumn].append(.invoiceItems)
+        }
     }
 
     private func applyWorkspaceLayout(_ snapshot: WorkspaceLayoutSnapshot) {
@@ -3469,6 +3518,7 @@ struct SiparisDetayView: View {
         showCardCustomerNotes = snapshot.visibility[KartTipi.customerNotes.rawValue] ?? false
         showCardMaterials = snapshot.visibility[KartTipi.materials.rawValue] ?? true
         showCardPriority = snapshot.visibility[KartTipi.priority.rawValue] ?? true
+        showCardInvoiceItems = snapshot.visibility[KartTipi.invoiceItems.rawValue] ?? true
 
         kartYerlesimi = snapshot.kartYerlesimi.isEmpty ? kartYerlesimi : snapshot.kartYerlesimi
         while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
@@ -3517,6 +3567,12 @@ struct SiparisDetayView: View {
                     print("Workspace profiles listener error: \(error)")
                     return
                 }
+
+                // We have now heard from the cloud at least once this session, so
+                // it is safe to let local edits propagate back up. Until this fires,
+                // any auto-save during onAppear is suppressed so a freshly-opened
+                // device can't overwrite a newer layout another device just wrote.
+                hasSyncedWorkspaceCloudOnce = true
 
                 guard let data = snapshot?.data() else {
                     if !workspaceProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
@@ -3582,6 +3638,9 @@ struct SiparisDetayView: View {
                     saveWorkspaceSettingsToCloud(sharedWorkspaceSnapshotJSON: sharedWorkspaceSnapshotJSON)
                 }
 
+                // Record the cloud-synced own-profile content so a later auto-save
+                // of the same layout is recognised as a no-op and skipped.
+                lastSyncedOwnProfileContent = currentOwnProfileContentSignature()
                 isApplyingWorkspaceProfilesFromCloud = false
             }
     }
@@ -3623,7 +3682,10 @@ struct SiparisDetayView: View {
     }
 
     private func writeWorkspaceSettingsDirectlyToCloud(_ data: [String: Any]) {
-        guard !data.isEmpty else { return }
+        // Settle-gate: don't push the shared layout/profiles before this view has
+        // loaded the latest cloud state, so a just-opened device can't overwrite a
+        // newer layout another device wrote while this one was still loading.
+        guard !data.isEmpty, hasSyncedWorkspaceCloudOnce else { return }
 
         Firestore.firestore()
             .collection("companySettings")
@@ -3641,12 +3703,31 @@ struct SiparisDetayView: View {
         return payload
     }
 
+    // Identity of the current user's card profile that actually affects what is
+    // shown (the live snapshot + saved profile slots), ignoring volatile fields
+    // like updatedAt. Used to detect and skip no-op re-uploads.
+    private func currentOwnProfileContentSignature() -> String {
+        guard let profile = currentWorkspaceUserProfile() else { return "" }
+        let savedJSON = (try? JSONEncoder().encode(profile.savedProfiles))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        return profile.snapshotJSON + "\u{1}" + savedJSON
+    }
+
     private func saveCurrentWorkspaceUserProfileToCloud() {
         #if canImport(FirebaseFunctions)
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !companyId.isEmpty,
               let profile = currentWorkspaceUserProfile(),
               let profilePayload = workspaceUserProfilePayload(profile) else { return }
+
+        // Settle-gate: never push before we have loaded the latest cloud state.
+        guard hasSyncedWorkspaceCloudOnce else { return }
+
+        // Content-version arbitration: skip re-uploading a profile we already hold
+        // from the cloud (an echo / stale appear-time re-save). A genuine edit
+        // changes the snapshot or the saved profiles, so it still goes through.
+        let signature = currentOwnProfileContentSignature()
+        guard signature != lastSyncedOwnProfileContent else { return }
 
         let payload: [String: Any] = [
             "companyId": companyId,
@@ -3659,6 +3740,10 @@ struct SiparisDetayView: View {
                 if let error {
                     DispatchQueue.main.async {
                         workspaceStatusMessage = t("Card profile could not be saved", lang: seciliDil) + ": " + error.localizedDescription
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        lastSyncedOwnProfileContent = signature
                     }
                 }
             }
@@ -4509,6 +4594,17 @@ struct SiparisDetayView: View {
             kaydetKartYerlesimi()
         }
 
+        if !tumKartlar.contains(.invoiceItems) {
+            if let col = kartYerlesimi.firstIndex(where: { $0.contains(.customer) }),
+               let idx = kartYerlesimi[col].firstIndex(of: .customer) {
+                kartYerlesimi[col].insert(.invoiceItems, at: min(idx + 1, kartYerlesimi[col].count))
+            } else {
+                let hedef = min(1, kartYerlesimi.count - 1)
+                kartYerlesimi[hedef].append(.invoiceItems)
+            }
+            kaydetKartYerlesimi()
+        }
+
         if !tumKartlar.contains(.priority) {
             let hedef = min(2, kartYerlesimi.count - 1)
             kartYerlesimi[hedef].insert(.priority, at: 0)
@@ -4694,6 +4790,7 @@ struct SiparisDetayView: View {
             case .customerNotes: customerNotesKarti(colIndex: colIndex)
             case .materials: materialsKarti(colIndex: colIndex)
             case .priority: priorityKarti(colIndex: colIndex)
+            case .invoiceItems: invoiceItemsKarti(colIndex: colIndex)
             }
         }
     }
@@ -7102,15 +7199,19 @@ struct SiparisDetayView: View {
             onColorChange: { setKartColor(kart: .priority, color: $0) }
         ) {
             PriorityMenuField(
-                label: lt("Priority"),
+                label: t(priorityCardLabel, lang: seciliDil),
                 value: $siparis.priority,
-                options: ["Low", "Normal", "High", "Urgent"]
+                options: ["Low", "Normal", "High", "Urgent"],
+                editableLabelRaw: canEditOrderDetails ? priorityCardLabel : nil,
+                onLabelCommit: canEditOrderDetails ? { renamePriorityCardLabel(to: $0) } : nil
             )
 
             StatusMenuField(
-                label: t("Risk", lang: seciliDil),
+                label: t(riskCardLabel, lang: seciliDil),
                 value: $siparis.risk,
-                options: ["None", "Waiting", "Blocked", "Overdue"]
+                options: ["None", "Waiting", "Blocked", "Overdue"],
+                editableLabelRaw: canEditOrderDetails ? riskCardLabel : nil,
+                onLabelCommit: canEditOrderDetails ? { renameRiskCardLabel(to: $0) } : nil
             )
 
             if siparis.risk != "None" {
@@ -7160,12 +7261,39 @@ struct SiparisDetayView: View {
         }
     }
 
+    private func renameMaterialDefaultCheck(at index: Int, to newName: String) {
+        var labels = materialsDefaultCheckLabels
+        guard labels.indices.contains(index) else { return }
+        let cleaned = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        labels[index] = cleaned
+        // Mirror the Edit Block Headings sheet: full list in the JSON + the first
+        // four mirrored into invLabel1…4 (used by the invoice / PDF export).
+        let padded = labels.padding(to: 4, with: "Item")
+        invLabel1 = padded[0]; invLabel2 = padded[1]; invLabel3 = padded[2]; invLabel4 = padded[3]
+        if let data = try? JSONEncoder().encode(labels.map { CustomStepDTO(title: $0) }),
+           let json = String(data: data, encoding: .utf8) {
+            materialsDefaultChecksJSON = json
+        }
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+        Firestore.firestore().collection("companySettings").document(companyId).setData([
+            "materialsDefaultChecksJSON": materialsDefaultChecksJSON,
+            "invLabel1": invLabel1,
+            "invLabel2": invLabel2,
+            "invLabel3": invLabel3,
+            "invLabel4": invLabel4
+        ], merge: true)
+    }
+
     private func materialsKarti(colIndex: Int) -> some View {
         DetayKarti(title: t("Materials & Inventory", lang: seciliDil), iconName: cardHeaderIcon(for: .materials), kartTipi: .materials, yukseklik: bindingYukseklik(for: .materials), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .materials), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.materials, false) }, onColorChange: { setKartColor(kart: .materials, color: $0) }, onEditHeadings: { headingEditorTarget = .materials }) {
             ForEach(Array(materialsDefaultCheckLabels.enumerated()), id: \.offset) { index, label in
                 YesNoField(
                     label: t(label, lang: seciliDil),
-                    value: materialDefaultCheckBinding(index: index, title: label)
+                    value: materialDefaultCheckBinding(index: index, title: label),
+                    editableLabelRaw: canEditOrderDetails ? label : nil,
+                    onLabelCommit: canEditOrderDetails ? { renameMaterialDefaultCheck(at: index, to: $0) } : nil
                 )
             }
             if !materialsTogglesList.isEmpty {
@@ -8655,6 +8783,209 @@ struct SiparisDetayView: View {
         .cornerRadius(12)
     }
 
+    // Fixed heading for the Invoice Items card (not user-customizable), like the other cards.
+    private var resolvedItemsHeading: String {
+        t("Invoice Items", lang: seciliDil)
+    }
+
+    // Keep each row's lineTotal = qty × unitPrice, then drive the order total from the items
+    // (the user chose "items drive the total"): remaining = total − already paid.
+    private func recomputeTotalFromLineItems() {
+        guard siparis.hasLineItems else { return }
+        var items = siparis.lineItems ?? []
+        for i in items.indices {
+            items[i].lineTotal = ((items[i].quantity * items[i].unitPrice) * 100).rounded() / 100
+        }
+        siparis.lineItems = items
+        siparis.remainingAmount = max(0, siparis.lineItemsTotal - siparis.paidAmount)
+    }
+
+    private func addLineItem() {
+        var items = siparis.lineItems ?? []
+        items.append(LineItem(name: "", quantity: 1, unitPrice: 0, lineTotal: 0))
+        siparis.lineItems = items
+    }
+
+    private func removeLineItem(at index: Int) {
+        var items = siparis.lineItems ?? []
+        guard items.indices.contains(index) else { return }
+        items.remove(at: index)
+        siparis.lineItems = items.isEmpty ? nil : items
+        recomputeTotalFromLineItems()
+    }
+
+    @ViewBuilder
+    private var lineItemsEditor: some View {
+        let items = siparis.lineItems ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            if !items.isEmpty {
+                HStack {
+                    Text(t("Total", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(privacyCurrency(siparis.lineItemsTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.green)
+                }
+            }
+
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, _ in
+                LineItemRow(
+                    item: Binding<LineItem>(
+                        get: {
+                            let arr = siparis.lineItems ?? []
+                            return arr.indices.contains(index) ? arr[index] : LineItem()
+                        },
+                        set: { newValue in
+                            var arr = siparis.lineItems ?? []
+                            guard arr.indices.contains(index) else { return }
+                            arr[index] = newValue
+                            siparis.lineItems = arr
+                        }
+                    ),
+                    currencySymbol: seciliParaBirimi,
+                    nameLabel: t("Item", lang: seciliDil),
+                    qtyLabel: t("Qty", lang: seciliDil),
+                    onChange: { recomputeTotalFromLineItems() },
+                    onDelete: { removeLineItem(at: index) }
+                )
+            }
+
+            Button(action: { addLineItem() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                    Text(t("Add Item", lang: seciliDil))
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 2)
+    }
+
+    // One editable invoice line: name, quantity × unit price, computed line total, delete.
+    private struct LineItemRow: View {
+        @Binding var item: LineItem
+        let currencySymbol: String
+        let nameLabel: String
+        let qtyLabel: String
+        var onChange: () -> Void
+        var onDelete: () -> Void
+
+        private var formattedLineTotal: String {
+            let total = ((item.quantity * item.unitPrice) * 100).rounded() / 100
+            return currencySymbol + String(format: "%.2f", total)
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    TextField(nameLabel, text: $item.name)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: item.name) { _, _ in onChange() }
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                }
+                HStack(spacing: 8) {
+                    Text(qtyLabel).font(.system(size: 11)).foregroundColor(.gray)
+                    TextField("1", value: $item.quantity, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 50)
+                        .onChange(of: item.quantity) { _, _ in onChange() }
+                    Text("×").foregroundColor(.gray)
+                    Text(currencySymbol).font(.system(size: 12)).foregroundColor(.gray)
+                    TextField("0", value: $item.unitPrice, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 74)
+                        .onChange(of: item.unitPrice) { _, _ in onChange() }
+                    Spacer()
+                    Text(formattedLineTotal)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.green)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func invoiceItemsKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: resolvedItemsHeading,
+            iconName: cardHeaderIcon(for: .invoiceItems),
+            kartTipi: .invoiceItems,
+            yukseklik: bindingYukseklik(for: .invoiceItems),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .invoiceItems),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.invoiceItems, false) },
+            onColorChange: { setKartColor(kart: .invoiceItems, color: $0) },
+            onEditHeadings: { headingEditorTarget = .invoiceItems },
+            onExportInvoice: { exportToInvoicePDF() }
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                lineItemsEditor
+                invoiceFooterEditor
+                Button(action: { exportToInvoicePDF() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.text.fill")
+                        Text(t("Invoice PDF", lang: seciliDil))
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var invoiceFooterEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: { withAnimation { showInvoiceFooterEditor.toggle() } }) {
+                HStack(spacing: 8) {
+                    Image(systemName: showInvoiceFooterEditor ? "minus.circle.fill" : "plus.circle.fill")
+                        .foregroundColor(.blue)
+                    Text(t("Invoice Note", lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            }
+            .buttonStyle(.plain)
+
+            if showInvoiceFooterEditor {
+                TextEditor(text: Binding(
+                    get: { siparis.invoiceNote ?? "" },
+                    set: { siparis.invoiceNote = $0 }
+                ))
+                .font(.system(size: 12))
+                .frame(minHeight: 70)
+                .padding(6)
+                .background(Color.primary.opacity(0.05))
+                .cornerRadius(8)
+            }
+        }
+        .onAppear { if !(siparis.invoiceNote ?? "").isEmpty { showInvoiceFooterEditor = true } }
+        // Auto-expand when the note arrives (e.g. synced live from another device) so
+        // the user sees it instead of a collapsed "+ Invoice Note" row.
+        .onChange(of: siparis.invoiceNote) { _, newValue in
+            if !(newValue ?? "").isEmpty { showInvoiceFooterEditor = true }
+        }
+    }
+
     private func customerKarti(colIndex: Int) -> some View {
         let matchingMusteri = firebaseManager.musteriler.first(where: { $0.name.lowercased() == siparis.customerName.lowercased() })
 
@@ -8677,7 +9008,7 @@ struct SiparisDetayView: View {
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 CommitDetailField(label: t("Customer Name", lang: seciliDil), value: $siparis.customerName, emptyFallback: "New Project")
-                DetailField(label: t("Design Name", lang: seciliDil), value: $siparis.designName)
+                DetailField(label: t(designNameLabel, lang: seciliDil), value: $siparis.designName, editableLabelRaw: canEditOrderDetails ? designNameLabel : nil, onLabelCommit: canEditOrderDetails ? { renameDesignNameLabel(to: $0) } : nil)
 
                 ForEach(customFieldsList, id: \.id) { field in
                     DetailField(
@@ -9537,7 +9868,21 @@ struct SiparisDetayView: View {
             Divider().background(Color.primary.opacity(0.1))
 
             if financialShowBaseCost || isBasicFinancialLimited {
-                CurrencyField(label: t(financialBaseCostLabel, lang: seciliDil), value: $siparis.watchPurchasePrice, isCost: true, sembol: seciliParaBirimi, ondalik: seciliOndalik)
+                CurrencyField(
+                    label: t(financialBaseCostLabel, lang: seciliDil),
+                    value: $siparis.watchPurchasePrice,
+                    isCost: true,
+                    sembol: seciliParaBirimi,
+                    ondalik: seciliOndalik,
+                    editableLabelRaw: canEditOrderDetails ? financialBaseCostLabel : nil,
+                    onLabelCommit: canEditOrderDetails ? { newValue in
+                        financialBaseCostLabel = newValue
+                        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !companyId.isEmpty else { return }
+                        Firestore.firestore().collection("companySettings").document(companyId)
+                            .setData(["financialBaseCostLabel": newValue], merge: true)
+                    } : nil
+                )
                     .onChange(of: siparis.watchPurchasePrice) { _, _ in otomatikKesintiHesapla() }
             }
 
@@ -9684,16 +10029,59 @@ struct SiparisDetayView: View {
         }
     }
     private func getCurrencyIcon() -> String { switch seciliParaBirimi { case "£": return "sterlingsign.circle.fill"; case "$", "A$", "C$": return "dollarsign.circle.fill"; case "€": return "eurosign.circle.fill"; case "₺": return "turkishlirasign.circle.fill"; case "¥": return "yensign.circle.fill"; case "CHF": return "francsign.circle.fill"; default: return "banknote.fill" } }
+    private func syncCardLabel(key: String, value: String) {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+        Firestore.firestore().collection("companySettings").document(companyId).setData([key: value], merge: true)
+    }
+
+    private func renamePriorityCardLabel(to newName: String) {
+        let cleaned = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        priorityCardLabel = cleaned
+        syncCardLabel(key: "priorityCardLabel", value: cleaned)
+    }
+
+    private func renameRiskCardLabel(to newName: String) {
+        let cleaned = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        riskCardLabel = cleaned
+        syncCardLabel(key: "riskCardLabel", value: cleaned)
+    }
+
+    private func renameDesignNameLabel(to newName: String) {
+        let cleaned = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        designNameLabel = cleaned
+        syncCardLabel(key: "designNameLabel", value: cleaned)
+    }
+
+    private func renameStatusStep(at index: Int, to newName: String) {
+        var steps = decodedSteps
+        guard steps.indices.contains(index) else { return }
+        let cleaned = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        // Keep the step's id so per-order status values (keyed by id) survive the rename.
+        steps[index] = CustomStepDTO(id: steps[index].id, title: cleaned)
+        if let data = try? JSONEncoder().encode(steps), let json = String(data: data, encoding: .utf8) {
+            customStepsJSON = json
+        }
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else { return }
+        Firestore.firestore().collection("companySettings").document(companyId)
+            .setData(["customStepsJSON": customStepsJSON], merge: true)
+    }
+
     private func statusKarti(colIndex: Int) -> some View {
     DetayKarti(title: t("Production Status", lang: seciliDil), iconName: cardHeaderIcon(for: .status), kartTipi: .status, yukseklik: bindingYukseklik(for: .status), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .status), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.status, false) }, onColorChange: { setKartColor(kart: .status, color: $0) }, onEditHeadings: { headingEditorTarget = .status }) {
         ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in
             if index == 0 {
-                StatusMenuField(label: step.title, value: $siparis.designStatus, options: userStatuses)
+                StatusMenuField(label: step.title, value: $siparis.designStatus, options: userStatuses, editableLabelRaw: canEditOrderDetails ? step.title : nil, onLabelCommit: canEditOrderDetails ? { renameStatusStep(at: index, to: $0) } : nil)
                     .onChange(of: siparis.designStatus) { _, islem in
                         if islem == "Cancelled" { withAnimation { siparis.status = "Cancelled" } }
                     }
             } else if index == 1 {
-                StatusMenuField(label: step.title, value: $siparis.status, options: userStatuses)
+                StatusMenuField(label: step.title, value: $siparis.status, options: userStatuses, editableLabelRaw: canEditOrderDetails ? step.title : nil, onLabelCommit: canEditOrderDetails ? { renameStatusStep(at: index, to: $0) } : nil)
                     .onChange(of: siparis.status) { _, boyaDurumu in
                         if boyaDurumu == "In Progress" || boyaDurumu == "Done" { withAnimation { siparis.designStatus = "Done" } }
                     }
@@ -9705,7 +10093,7 @@ struct SiparisDetayView: View {
                         current[statusStepStorageKey(for: step)] = newValue
                         siparis.extraStatuses = current
                     }
-                ), options: userStatuses)
+                ), options: userStatuses, editableLabelRaw: canEditOrderDetails ? step.title : nil, onLabelCommit: canEditOrderDetails ? { renameStatusStep(at: index, to: $0) } : nil)
             }
         }
         if !customTogglesList.isEmpty {
@@ -10236,6 +10624,25 @@ struct SiparisDetayView: View {
             onHide: { setCardVisibleWithUndo(.shipping, false) },
             onColorChange: { setKartColor(kart: .shipping, color: $0) }
         ) {
+            Text(t("Shipping Address", lang: seciliDil))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            DetailField(label: t("Recipient", lang: seciliDil), value: Binding(get: { siparis.shippingName ?? "" }, set: { siparis.shippingName = $0 }))
+                .onChange(of: siparis.shippingName) { _, _ in firebaseManager.updateSiparis(siparis) }
+            DetailField(label: t("Street", lang: seciliDil), value: Binding(get: { siparis.shippingStreetAddress ?? "" }, set: { siparis.shippingStreetAddress = $0 }))
+                .onChange(of: siparis.shippingStreetAddress) { _, _ in firebaseManager.updateSiparis(siparis) }
+            DetailField(label: t("City", lang: seciliDil), value: Binding(get: { siparis.shippingCity ?? "" }, set: { siparis.shippingCity = $0 }))
+                .onChange(of: siparis.shippingCity) { _, _ in firebaseManager.updateSiparis(siparis) }
+            DetailField(label: t("Postcode", lang: seciliDil), value: Binding(get: { siparis.shippingPostalCode ?? "" }, set: { siparis.shippingPostalCode = $0 }))
+                .onChange(of: siparis.shippingPostalCode) { _, _ in firebaseManager.updateSiparis(siparis) }
+            DetailField(label: t("Country", lang: seciliDil), value: Binding(get: { siparis.shippingCountry ?? "" }, set: { siparis.shippingCountry = $0 }))
+                .onChange(of: siparis.shippingCountry) { _, _ in firebaseManager.updateSiparis(siparis) }
+            DetailField(label: t("Shipping Phone", lang: seciliDil), value: Binding(get: { siparis.shippingPhone ?? "" }, set: { siparis.shippingPhone = $0 }))
+                .onChange(of: siparis.shippingPhone) { _, _ in firebaseManager.updateSiparis(siparis) }
+
+            Divider().background(Color.primary.opacity(0.1))
+
             YesNoField(label: t("Dispatched", lang: seciliDil), value: $siparis.isDispatched)
                 .onChange(of: siparis.isDispatched) { _, isDispatched in
                     if isDispatched && siparis.status != "Cancelled" {
@@ -10360,6 +10767,8 @@ struct SiparisDetayView: View {
             showPaymentMethod: pdfShowPaymentMethod,
             showMaterials: pdfShowMaterials,
             showPriority: pdfShowPriority,
+            showAddress: pdfShowAddress,
+            showShippingAddress: pdfShowShippingAddress,
             seciliDil: seciliDil,
             taxNameRev: taxRuleNameRevenue,
             taxNamePro: taxRuleNameProfit,
@@ -10445,7 +10854,9 @@ struct SiparisDetayView: View {
             sembol: seciliParaBirimi,
             ondalik: seciliOndalik,
             seciliDil: seciliDil,
-            footerNote: invoiceFooterNote
+            footerNote: invoiceFooterNote,
+            showAddress: pdfShowAddress,
+            showShippingAddress: pdfShowShippingAddress
         )
 
         let safeName = safePDFFileName("Invoice_\(siparis.invoiceNumber)")
@@ -11394,6 +11805,84 @@ struct BosKolonDropDelegate: DropDelegate {
 }
 
 
+// Card colour swatches for the card options menu (English keys → SwiftUI colour, localized via t()).
+private let cardColorSwatches: [(String, Color)] = [
+    ("Default", .gray), ("Red", .red), ("Orange", .orange), ("Yellow", .yellow),
+    ("Green", .green), ("Blue", .blue), ("Purple", .purple), ("Pink", .pink)
+]
+
+// A clean, native-feeling macOS menu row: icon + label, full-width, subtle hover highlight.
+private struct CardMenuRow: View {
+    let title: String
+    let systemImage: String
+    var destructive: Bool = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13))
+                    .frame(width: 18, alignment: .center)
+                Text(title)
+                    .font(.system(size: 13))
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(destructive ? .red : .primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(hovering ? Color.primary.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
+// A colour swatch (real colour dot) with a selection ring; "Default" shows as an empty ring.
+private struct CardColorSwatch: View {
+    let color: Color
+    var isDefault: Bool = false
+    let isSelected: Bool
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if isDefault {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.55), lineWidth: 1.5)
+                        .frame(width: 19, height: 19)
+                } else {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 19, height: 19)
+                        .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+                }
+                if isSelected {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.85), lineWidth: 2)
+                        .frame(width: 25, height: 25)
+                }
+            }
+            .frame(width: 27, height: 27)
+            .scaleEffect(hovering ? 1.12 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: hovering)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
 struct DetayKarti<Content: View>: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -11424,6 +11913,7 @@ struct DetayKarti<Content: View>: View {
     var onHide: () -> Void
     var onColorChange: (String) -> Void
     var onEditHeadings: (() -> Void)? = nil
+    var onExportInvoice: (() -> Void)? = nil
     var onExport: (() -> Void)? = nil
     var onQuickAdd: (() -> Void)? = nil
     var quickAddTooltip: String? = nil
@@ -11443,7 +11933,7 @@ struct DetayKarti<Content: View>: View {
     private let altTutamacAlani: Double = 16
     private let guvenlikPayi: Double = 18
     
-    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, forceLayoutUnlocked: Bool = false, guideHighlightActive: Bool = false, guideOptionsHighlightActive: Bool = false, guideOptionsBubbleActive: Bool = false, onGuideOptionsDone: (() -> Void)? = nil, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExport: (() -> Void)? = nil, onQuickAdd: (() -> Void)? = nil, quickAddTooltip: String? = nil, @ViewBuilder content: () -> Content) {
+    init(title: String, iconName: String, kartTipi: KartTipi, yukseklik: Binding<Double?>, sutunGenisligi: Binding<Double>, draggedKart: Binding<KartTipi?>, uiTetikleyici: Bool, kartRengi: String, minimumHeightOverride: Double? = nil, autoAdjustHeightOnContentChange: Bool = true, forceLayoutUnlocked: Bool = false, guideHighlightActive: Bool = false, guideOptionsHighlightActive: Bool = false, guideOptionsBubbleActive: Bool = false, onGuideOptionsDone: (() -> Void)? = nil, onHeightChangeEnd: @escaping () -> Void, onWidthChangeEnd: @escaping () -> Void, onHide: @escaping () -> Void, onColorChange: @escaping (String) -> Void, onEditHeadings: (() -> Void)? = nil, onExportInvoice: (() -> Void)? = nil, onExport: (() -> Void)? = nil, onQuickAdd: (() -> Void)? = nil, quickAddTooltip: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.iconName = iconName
         self.kartTipi = kartTipi
@@ -11464,6 +11954,7 @@ struct DetayKarti<Content: View>: View {
         self.onHide = onHide
         self.onColorChange = onColorChange
         self.onEditHeadings = onEditHeadings
+        self.onExportInvoice = onExportInvoice
         self.onExport = onExport
         self.onQuickAdd = onQuickAdd
         self.quickAddTooltip = quickAddTooltip
@@ -11549,6 +12040,7 @@ struct DetayKarti<Content: View>: View {
         case .priority: return 240
         case .communication: return 220
         case .historyLog: return 240
+        case .invoiceItems: return 240
         }
     }
 
@@ -11655,6 +12147,14 @@ struct DetayKarti<Content: View>: View {
                 onEditHeadings()
             } label: {
                 Label(t("Edit Block Headings", lang: seciliDil), systemImage: "textformat")
+            }
+        }
+
+        if let onExportInvoice {
+            Button {
+                onExportInvoice()
+            } label: {
+                Label(t("Invoice PDF", lang: seciliDil), systemImage: "doc.text.fill")
             }
         }
 
@@ -11887,11 +12387,7 @@ struct DetayKarti<Content: View>: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showCardOptionsPopover, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 10) {
-                kartContextMenuActions
-            }
-            .padding(12)
-            .frame(width: 260, alignment: .leading)
+            macCardOptionsMenu
         }
         #else
         Menu {
@@ -11902,6 +12398,71 @@ struct DetayKarti<Content: View>: View {
         .menuStyle(.borderlessButton)
         #endif
     }
+
+    #if os(macOS)
+    @ViewBuilder
+    private var macCardOptionsMenu: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            CardMenuRow(title: t("Hide Block", lang: seciliDil), systemImage: "eye.slash", destructive: true) {
+                showCardOptionsPopover = false
+                withAnimation(.snappy) { onHide() }
+            }
+            if let onEditHeadings {
+                CardMenuRow(title: t("Edit Block Headings", lang: seciliDil), systemImage: "textformat") {
+                    showCardOptionsPopover = false
+                    onEditHeadings()
+                }
+            }
+            if let onExportInvoice {
+                CardMenuRow(title: t("Invoice PDF", lang: seciliDil), systemImage: "doc.text") {
+                    showCardOptionsPopover = false
+                    onExportInvoice()
+                }
+            }
+            if let onExport {
+                CardMenuRow(title: t("Export", lang: seciliDil), systemImage: "square.and.arrow.up") {
+                    showCardOptionsPopover = false
+                    onExport()
+                }
+            }
+
+            if canCustomizeThisCard {
+                Divider().padding(.horizontal, 6).padding(.top, 5).padding(.bottom, 6)
+                Text(t("Card Colour", lang: seciliDil))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+                HStack(spacing: 6) {
+                    ForEach(cardColorSwatches, id: \.0) { pair in
+                        CardColorSwatch(
+                            color: pair.1,
+                            isDefault: pair.0 == "Default",
+                            isSelected: kartRengi == t(pair.0, lang: seciliDil),
+                            help: t(pair.0, lang: seciliDil)
+                        ) {
+                            onColorChange(t(pair.0, lang: seciliDil))
+                            showCardOptionsPopover = false
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 4)
+            } else {
+                Divider().padding(.horizontal, 6).padding(.vertical, 6)
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lock.fill").font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(t("Card moving, resizing and colours are available from NivaDesk Lite.", lang: seciliDil))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 10).padding(.bottom, 8)
+            }
+        }
+        .padding(6)
+        .frame(width: 290)
+    }
+    #endif
 
     @ViewBuilder
     private var cardOptionsGuideFloatingCallout: some View {
@@ -12257,6 +12818,33 @@ struct OrderInvoicePDFView: View {
     var ondalik: String
     var seciliDil: String
     var footerNote: String
+    var showAddress: Bool = true
+    var showShippingAddress: Bool = true
+    var itemsHeading: String = ""
+
+    // Column header for the items table — customizable per workspace, else "Description".
+    private var resolvedItemsColumnHeading: String {
+        let h = itemsHeading.trimmingCharacters(in: .whitespacesAndNewlines)
+        return h.isEmpty ? t("Description", lang: seciliDil) : h
+    }
+    private func qtyText(_ q: Double) -> String {
+        q.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(q)) : String(format: "%.2f", q)
+    }
+
+    private var billingAddressText: String {
+        let a = siparis.customFields?["communicationAddress"] ?? siparis.customFields?["Address"] ?? ""
+        return a.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var shippingAddressText: String {
+        [siparis.shippingStreetAddress, siparis.shippingCity, siparis.shippingPostalCode, siparis.shippingCountry]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+    private var shippingRecipient: String {
+        let n = siparis.shippingName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return n.isEmpty ? siparis.customerName : n
+    }
 
     private var orderValue: Double { siparis.paidAmount + siparis.remainingAmount }
     private var isMarginScheme: Bool { siparis.taxType == "Profit" }
@@ -12298,21 +12886,50 @@ struct OrderInvoicePDFView: View {
                 }
             }
             Divider()
-            VStack(alignment: .leading, spacing: 4) {
-                Text(t("BILL TO", lang: seciliDil).uppercased()).font(.system(size: 10, weight: .bold)).foregroundColor(.gray).tracking(1)
-                Text(siparis.customerName.isEmpty ? "-" : siparis.customerName).font(.system(size: 13, weight: .semibold))
-                if !siparis.emailAddress.isEmpty { Text(siparis.emailAddress).font(.system(size: 11)).foregroundColor(.gray) }
+            HStack(alignment: .top, spacing: 40) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("BILL TO", lang: seciliDil).uppercased()).font(.system(size: 10, weight: .bold)).foregroundColor(.gray).tracking(1)
+                    Text(siparis.customerName.isEmpty ? "-" : siparis.customerName).font(.system(size: 13, weight: .semibold))
+                    if showAddress, !billingAddressText.isEmpty { Text(billingAddressText).font(.system(size: 11)).foregroundColor(.gray).fixedSize(horizontal: false, vertical: true) }
+                    if !siparis.emailAddress.isEmpty { Text(siparis.emailAddress).font(.system(size: 11)).foregroundColor(.gray) }
+                    if showAddress, !siparis.whatsappNumber.isEmpty { Text(siparis.whatsappNumber).font(.system(size: 11)).foregroundColor(.gray) }
+                }
+                if showShippingAddress, !shippingAddressText.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(t("SHIP TO", lang: seciliDil).uppercased()).font(.system(size: 10, weight: .bold)).foregroundColor(.gray).tracking(1)
+                        Text(shippingRecipient.isEmpty ? "-" : shippingRecipient).font(.system(size: 13, weight: .semibold))
+                        Text(shippingAddressText).font(.system(size: 11)).foregroundColor(.gray).fixedSize(horizontal: false, vertical: true)
+                        if let sp = siparis.shippingPhone, !sp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Text(sp).font(.system(size: 11)).foregroundColor(.gray) }
+                    }
+                }
+                Spacer()
             }
             VStack(spacing: 0) {
-                HStack { Text(t("Description", lang: seciliDil)).font(.system(size: 11, weight: .bold)); Spacer(); Text(t("Amount", lang: seciliDil)).font(.system(size: 11, weight: .bold)) }
+                HStack { Text(resolvedItemsColumnHeading).font(.system(size: 11, weight: .bold)); Spacer(); Text(t("Amount", lang: seciliDil)).font(.system(size: 11, weight: .bold)) }
                     .padding(.vertical, 9).padding(.horizontal, 12).background(Color.black.opacity(0.06))
-                HStack {
-                    Text(siparis.designName.isEmpty ? (siparis.customerName.isEmpty ? t("Order", lang: seciliDil) : siparis.customerName) : siparis.designName)
-                        .font(.system(size: 12, weight: .semibold))
-                    Spacer()
-                    Text(money(subtotal)).font(.system(size: 12))
-                }.padding(.vertical, 11).padding(.horizontal, 12)
-                Divider()
+                if siparis.hasLineItems {
+                    ForEach(Array((siparis.lineItems ?? []).enumerated()), id: \.element.id) { _, item in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name.isEmpty ? "-" : item.name).font(.system(size: 12, weight: .semibold))
+                                if item.quantity != 1 {
+                                    Text("\(qtyText(item.quantity)) × \(money(item.unitPrice))").font(.system(size: 10)).foregroundColor(.gray)
+                                }
+                            }
+                            Spacer()
+                            Text(money(item.lineTotal)).font(.system(size: 12))
+                        }.padding(.vertical, 9).padding(.horizontal, 12)
+                        Divider()
+                    }
+                } else {
+                    HStack {
+                        Text(siparis.designName.isEmpty ? (siparis.customerName.isEmpty ? t("Order", lang: seciliDil) : siparis.customerName) : siparis.designName)
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        Text(money(subtotal)).font(.system(size: 12))
+                    }.padding(.vertical, 11).padding(.horizontal, 12)
+                    Divider()
+                }
             }
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.black.opacity(0.08), lineWidth: 1))
             HStack {
@@ -12334,6 +12951,19 @@ struct OrderInvoicePDFView: View {
                 }.frame(width: 270)
             }
             Spacer()
+            if let note = siparis.invoiceNote, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "note.text").font(.system(size: 11))
+                        Text(t("Notes", lang: seciliDil)).font(.system(size: 11, weight: .bold))
+                    }.foregroundColor(.gray)
+                    Text(note).font(.system(size: 11)).foregroundColor(.primary).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.black.opacity(0.12), lineWidth: 1))
+                .padding(.bottom, 8)
+            }
             if !footerNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Divider()
                 Text(footerNote).font(.system(size: 10)).foregroundColor(.gray).fixedSize(horizontal: false, vertical: true)
@@ -12344,14 +12974,14 @@ struct OrderInvoicePDFView: View {
     }
 }
 
-struct OrderPDFView: View { let siparis: Siparis; var previewImage: PlatformImage?; var logoImage: PlatformImage?; var appSubtitle: String; var decodedSteps: [CustomStepDTO]; var sembol: String; var ondalik: String; var showCustomer: Bool; var showContact: Bool; var showPreview: Bool; var showFinCustomer: Bool; var showFinInternal: Bool; var showStatus: Bool; var showShipping: Bool; var showPaymentMethod: Bool; var showMaterials: Bool; var showPriority: Bool; var seciliDil: String; var taxNameRev: String; var taxNamePro: String; var corporationTaxEnabled: Bool = false; var corporationTaxRate: Double = 19.0; var invLbl1: String; var invLbl2: String; var invLbl3: String; var invLbl4: String; var customFieldsList: [CustomStepDTO]; var customTogglesList: [CustomStepDTO]; var body: some View { VStack(alignment: .leading, spacing: 20) { HStack(alignment: .center) { VStack(alignment: .leading, spacing: 4) { if let logo = logoImage { Image(platformImage: logo).resizable().scaledToFit().frame(height: 50) }; Text(appSubtitle).font(.system(size: 12)).foregroundColor(.gray) }; Spacer(); Text(t("JOB SHEET", lang: seciliDil)).font(.system(size: 28, weight: .bold)).foregroundColor(.gray.opacity(0.3)) }.padding(.bottom, 10); Divider().padding(.bottom, 10); HStack(alignment: .top, spacing: 30) { VStack(alignment: .leading, spacing: 25) { if showCustomer { VStack(alignment: .leading, spacing: 12) { Text(t("Customer & Design", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Customer Name", lang: seciliDil) + ":", value: siparis.customerName); pdfRow(title: t("Design Name", lang: seciliDil) + ":", value: siparis.designName.isEmpty ? "-" : siparis.designName); ForEach(customFieldsList, id: \.id) { field in pdfRow(title: t(field.title, lang: seciliDil) + ":", value: siparis.customFields?[field.title] ?? "-") }; pdfRow(title: t("Placed On", lang: seciliDil) + ":", value: siparis.paymentDate.formatted(date: .abbreviated, time: .omitted)) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPriority { VStack(alignment: .leading, spacing: 12) { Text(t("Priority / Risk", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Priority", lang: seciliDil) + ":", value: t(siparis.priority, lang: seciliDil)); pdfRow(title: t("Risk", lang: seciliDil) + ":", value: t(siparis.risk, lang: seciliDil)); if siparis.risk != "None" && siparis.riskReason != "-" {
+struct OrderPDFView: View { let siparis: Siparis; var previewImage: PlatformImage?; var logoImage: PlatformImage?; var appSubtitle: String; var decodedSteps: [CustomStepDTO]; var sembol: String; var ondalik: String; var showCustomer: Bool; var showContact: Bool; var showPreview: Bool; var showFinCustomer: Bool; var showFinInternal: Bool; var showStatus: Bool; var showShipping: Bool; var showPaymentMethod: Bool; var showMaterials: Bool; var showPriority: Bool; var showAddress: Bool; var showShippingAddress: Bool; var seciliDil: String; var taxNameRev: String; var taxNamePro: String; var corporationTaxEnabled: Bool = false; var corporationTaxRate: Double = 19.0; var invLbl1: String; var invLbl2: String; var invLbl3: String; var invLbl4: String; var customFieldsList: [CustomStepDTO]; var customTogglesList: [CustomStepDTO]; var body: some View { VStack(alignment: .leading, spacing: 20) { HStack(alignment: .center) { VStack(alignment: .leading, spacing: 4) { if let logo = logoImage { Image(platformImage: logo).resizable().scaledToFit().frame(height: 50) }; Text(appSubtitle).font(.system(size: 12)).foregroundColor(.gray) }; Spacer(); Text(t("JOB SHEET", lang: seciliDil)).font(.system(size: 28, weight: .bold)).foregroundColor(.gray.opacity(0.3)) }.padding(.bottom, 10); Divider().padding(.bottom, 10); HStack(alignment: .top, spacing: 30) { VStack(alignment: .leading, spacing: 25) { if showCustomer { VStack(alignment: .leading, spacing: 12) { Text(t("Customer & Design", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Customer Name", lang: seciliDil) + ":", value: siparis.customerName); pdfRow(title: t("Design Name", lang: seciliDil) + ":", value: siparis.designName.isEmpty ? "-" : siparis.designName); ForEach(Array((siparis.lineItems ?? []).enumerated()), id: \.element.id) { _, item in pdfRow(title: (item.name.isEmpty ? "-" : item.name), value: item.quantity != 1 ? "× " + (item.quantity.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(item.quantity)) : String(format: "%.2f", item.quantity)) : "") }; ForEach(customFieldsList, id: \.id) { field in pdfRow(title: t(field.title, lang: seciliDil) + ":", value: siparis.customFields?[field.title] ?? "-") }; pdfRow(title: t("Placed On", lang: seciliDil) + ":", value: siparis.paymentDate.formatted(date: .abbreviated, time: .omitted)) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPriority { VStack(alignment: .leading, spacing: 12) { Text(t("Priority / Risk", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Priority", lang: seciliDil) + ":", value: t(siparis.priority, lang: seciliDil)); pdfRow(title: t("Risk", lang: seciliDil) + ":", value: t(siparis.risk, lang: seciliDil)); if siparis.risk != "None" && siparis.riskReason != "-" {
                     pdfRow(title: t("Reason", lang: seciliDil) + ":", value: t(siparis.riskReason, lang: seciliDil))
                     if siparis.riskReason == "Other",
                        let otherNote = siparis.customFields?["riskOtherNote"],
                        !otherNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         pdfRow(title: t("Other Note", lang: seciliDil) + ":", value: otherNote)
                     }
-                } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showMaterials { VStack(alignment: .leading, spacing: 12) { Text(t("Materials & Inventory", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: invLbl1 + ":", value: t(siparis.invBool1 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl2 + ":", value: t(siparis.invBool2 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl3 + ":", value: t(siparis.invBool3 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl4 + ":", value: t(siparis.invBool4 ? "Yes" : "No", lang: seciliDil)); if !siparis.invNotes.isEmpty { Divider().padding(.vertical, 4); Text(t("Notes / Supplier", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.invNotes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showContact { VStack(alignment: .leading, spacing: 12) { Text(t("Contact & Notes", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Email", lang: seciliDil) + ":", value: siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress); Divider().padding(.vertical, 4); Text(t("Special Notes", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.notes.isEmpty ? t("No special notes provided.", lang: seciliDil) : siparis.notes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPreview { VStack(alignment: .leading, spacing: 12) { Text(t("Preview", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); if let nsImage = previewImage { Image(platformImage: nsImage).resizable().scaledToFit().frame(maxHeight: 200, alignment: .leading).cornerRadius(8) } else { Text(t("No preview image provided.", lang: seciliDil)).font(.system(size: 12)).padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } } } }.frame(maxWidth: .infinity); VStack(alignment: .leading, spacing: 25) { if showFinCustomer || showFinInternal { VStack(alignment: .leading, spacing: 12) { Text(t("Financial Info", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { if showFinCustomer { pdfRow(title: t("Paid", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: ondalik))", valueColor: .green); pdfRow(title: t("Remaining", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.remainingAmount, ondalik: ondalik))", valueColor: studioWarningOrange); if showPaymentMethod { pdfRow(title: t("Payment Method", lang: seciliDil) + ":", value: t(siparis.paymentMethod, lang: seciliDil)) } }; if showFinCustomer && showFinInternal { Divider().padding(.vertical, 2) }; if showFinInternal { pdfRow(title: t("Platform Fee", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paymentFee, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Watch Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.watchPurchasePrice, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Shipping Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.deliveryCost, ondalik: ondalik))", valueColor: .red); let displayTaxType = siparis.taxType == "Revenue" ? taxNameRev : taxNamePro; pdfRow(title: t("Tax Amount", lang: seciliDil) + " (" + displayTaxType + "):", value: "\(sembol)\(formatFiyat(siparis.taxAmount, ondalik: ondalik))", valueColor: .red); Divider().padding(.vertical, 2); pdfRow(title: t(corporationTaxEnabled ? "Profit after VAT" : "Final Profit", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.netKar - siparis.taxAmount, ondalik: ondalik))", valueColor: corporationTaxEnabled ? .primary : .green); if corporationTaxEnabled { let profitAfterVat = siparis.netKar - siparis.taxAmount; let ct = max(0, profitAfterVat) * corporationTaxRate / 100.0; pdfRow(title: t("Corporation Tax", lang: seciliDil) + " (\(Int(corporationTaxRate))%):", value: "\(sembol)\(formatFiyat(ct, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Net Profit (after CT)", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(profitAfterVat - ct, ondalik: ondalik))", valueColor: .green) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showStatus { VStack(alignment: .leading, spacing: 12) { Text(t("Production Status", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Delivery Time", lang: seciliDil) + ":", value: "\(siparis.deliveryTime) \(t("days", lang: seciliDil))"); ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in if index == 0 { pdfRow(title: "\(step.title):", value: t(siparis.designStatus, lang: seciliDil)) } else if index == 1 { pdfRow(title: "\(step.title):", value: t(siparis.status, lang: seciliDil)) } else { pdfRow(title: "\(step.title):", value: t(siparis.extraStatuses?[step.title] ?? "Not Yet", lang: seciliDil)) } }; if !customTogglesList.isEmpty { Divider().padding(.vertical, 2); ForEach(customTogglesList, id: \.id) { toggle in pdfRow(title: t(toggle.title, lang: seciliDil) + ":", value: t((siparis.customToggles?[toggle.title] == true) ? "Yes" : "No", lang: seciliDil)) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showShipping { VStack(alignment: .leading, spacing: 12) { Text(t("Shipping & Tracking", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Dispatched", lang: seciliDil) + ":", value: t(siparis.isDispatched ? "Yes" : "No", lang: seciliDil)); pdfRow(title: t("Courier", lang: seciliDil) + ":", value: siparis.courier.isEmpty ? "-" : siparis.courier); pdfRow(title: t("Tracking No.", lang: seciliDil) + ":", value: siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } } }.frame(maxWidth: .infinity) }; Spacer(); Divider(); Text(t("Generated automatically from NivaDesk", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray).frame(maxWidth: .infinity, alignment: .center).padding(.top, 5) }.padding(40).frame(width: 595, height: 842).background(Color.white) }
+                } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showMaterials { VStack(alignment: .leading, spacing: 12) { Text(t("Materials & Inventory", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: invLbl1 + ":", value: t(siparis.invBool1 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl2 + ":", value: t(siparis.invBool2 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl3 + ":", value: t(siparis.invBool3 ? "Yes" : "No", lang: seciliDil)); pdfRow(title: invLbl4 + ":", value: t(siparis.invBool4 ? "Yes" : "No", lang: seciliDil)); if !siparis.invNotes.isEmpty { Divider().padding(.vertical, 4); Text(t("Notes / Supplier", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.invNotes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) } }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showContact { VStack(alignment: .leading, spacing: 12) { Text(t("Contact & Notes", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Email", lang: seciliDil) + ":", value: siparis.emailAddress.isEmpty ? "-" : siparis.emailAddress); Divider().padding(.vertical, 4); Text(t("Special Notes", lang: seciliDil) + ":").font(.system(size: 12, weight: .bold)); Text(siparis.notes.isEmpty ? t("No special notes provided.", lang: seciliDil) : siparis.notes).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showAddress { VStack(alignment: .leading, spacing: 12) { Text(t("Billing Address", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Address", lang: seciliDil) + ":", value: (siparis.customFields?["communicationAddress"].flatMap { $0.isEmpty ? nil : $0 } ?? siparis.customFields?["Address"].flatMap { $0.isEmpty ? nil : $0 }) ?? "-"); pdfRow(title: t("Telephone", lang: seciliDil) + ":", value: siparis.whatsappNumber.isEmpty ? "-" : siparis.whatsappNumber) }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showPreview { VStack(alignment: .leading, spacing: 12) { Text(t("Preview", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); if let nsImage = previewImage { Image(platformImage: nsImage).resizable().scaledToFit().frame(maxHeight: 200, alignment: .leading).cornerRadius(8) } else { Text(t("No preview image provided.", lang: seciliDil)).font(.system(size: 12)).padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } } } }.frame(maxWidth: .infinity); VStack(alignment: .leading, spacing: 25) { if showFinCustomer || showFinInternal { VStack(alignment: .leading, spacing: 12) { Text(t("Financial Info", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { if showFinCustomer { pdfRow(title: t("Paid", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: ondalik))", valueColor: .green); pdfRow(title: t("Remaining", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.remainingAmount, ondalik: ondalik))", valueColor: studioWarningOrange); if showPaymentMethod { pdfRow(title: t("Payment Method", lang: seciliDil) + ":", value: t(siparis.paymentMethod, lang: seciliDil)) } }; if showFinCustomer && showFinInternal { Divider().padding(.vertical, 2) }; if showFinInternal { pdfRow(title: t("Platform Fee", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.paymentFee, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Watch Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.watchPurchasePrice, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Shipping Cost", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.deliveryCost, ondalik: ondalik))", valueColor: .red); let displayTaxType = siparis.taxType == "Revenue" ? taxNameRev : taxNamePro; pdfRow(title: t("Tax Amount", lang: seciliDil) + " (" + displayTaxType + "):", value: "\(sembol)\(formatFiyat(siparis.taxAmount, ondalik: ondalik))", valueColor: .red); Divider().padding(.vertical, 2); pdfRow(title: t(corporationTaxEnabled ? "Profit after VAT" : "Final Profit", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(siparis.netKar - siparis.taxAmount, ondalik: ondalik))", valueColor: corporationTaxEnabled ? .primary : .green); if corporationTaxEnabled { let profitAfterVat = siparis.netKar - siparis.taxAmount; let ct = max(0, profitAfterVat) * corporationTaxRate / 100.0; pdfRow(title: t("Corporation Tax", lang: seciliDil) + " (\(Int(corporationTaxRate))%):", value: "\(sembol)\(formatFiyat(ct, ondalik: ondalik))", valueColor: .red); pdfRow(title: t("Net Profit (after CT)", lang: seciliDil) + ":", value: "\(sembol)\(formatFiyat(profitAfterVat - ct, ondalik: ondalik))", valueColor: .green) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showStatus { VStack(alignment: .leading, spacing: 12) { Text(t("Production Status", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Delivery Time", lang: seciliDil) + ":", value: "\(siparis.deliveryTime) \(t("days", lang: seciliDil))"); ForEach(Array(decodedSteps.enumerated()), id: \.element.id) { index, step in if index == 0 { pdfRow(title: "\(step.title):", value: t(siparis.designStatus, lang: seciliDil)) } else if index == 1 { pdfRow(title: "\(step.title):", value: t(siparis.status, lang: seciliDil)) } else { pdfRow(title: "\(step.title):", value: t(siparis.extraStatuses?[step.title] ?? "Not Yet", lang: seciliDil)) } }; if !customTogglesList.isEmpty { Divider().padding(.vertical, 2); ForEach(customTogglesList, id: \.id) { toggle in pdfRow(title: t(toggle.title, lang: seciliDil) + ":", value: t((siparis.customToggles?[toggle.title] == true) ? "Yes" : "No", lang: seciliDil)) } } }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showShipping { VStack(alignment: .leading, spacing: 12) { Text(t("Shipping & Tracking", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Dispatched", lang: seciliDil) + ":", value: t(siparis.isDispatched ? "Yes" : "No", lang: seciliDil)); pdfRow(title: t("Courier", lang: seciliDil) + ":", value: siparis.courier.isEmpty ? "-" : siparis.courier); pdfRow(title: t("Tracking No.", lang: seciliDil) + ":", value: siparis.trackingNumber.isEmpty ? "-" : siparis.trackingNumber) }.padding(15).background(Color.black.opacity(0.04)).cornerRadius(8) } }; if showShippingAddress { VStack(alignment: .leading, spacing: 12) { Text(t("Shipping Address", lang: seciliDil).uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(.gray).tracking(1); VStack(alignment: .leading, spacing: 10) { pdfRow(title: t("Recipient", lang: seciliDil) + ":", value: (siparis.shippingName?.isEmpty == false) ? siparis.shippingName! : siparis.customerName); pdfRow(title: t("Address", lang: seciliDil) + ":", value: { let s = [siparis.shippingStreetAddress, siparis.shippingCity, siparis.shippingPostalCode, siparis.shippingCountry].compactMap { ($0?.isEmpty == false) ? $0 : nil }.joined(separator: ", "); return s.isEmpty ? "-" : s }()); pdfRow(title: t("Shipping Phone", lang: seciliDil) + ":", value: (siparis.shippingPhone?.isEmpty == false) ? siparis.shippingPhone! : "-") }.padding(15).frame(maxWidth: .infinity, alignment: .leading).background(Color.black.opacity(0.04)).cornerRadius(8) } } }.frame(maxWidth: .infinity) }; Spacer(); Divider(); Text(t("Generated automatically from NivaDesk", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray).frame(maxWidth: .infinity, alignment: .center).padding(.top, 5) }.padding(40).frame(width: 595, height: 842).background(Color.white) }
     private func pdfRow(title: String, value: String, valueColor: Color = .primary) -> some View { HStack(alignment: .top, spacing: 5) { Text(title).font(.system(size: 12, weight: .bold)).frame(width: 115, alignment: .leading); Text(value).font(.system(size: 12)).foregroundColor(valueColor).frame(maxWidth: .infinity, alignment: .leading) } }
 }
 
@@ -12715,6 +13345,8 @@ struct BlockHeadingsEditorSheet: View {
     @Binding var summaryStep2: String
     @Binding var orderListStep1: String
     @Binding var orderListStep2: String
+    @Binding var orderItemsHeading: String
+    @Binding var companyNumbersJSON: String
     @Binding var invLabel1: String
     @Binding var invLabel2: String
     @Binding var invLabel3: String
@@ -12731,6 +13363,7 @@ struct BlockHeadingsEditorSheet: View {
     var orderExtraNoteSectionsJSON: Binding<String>? = nil
 
     @State private var perOrderOriginIDs: Set<UUID> = []
+    @State private var companyNumbersDraft: [CompanyNumberSettingDTO] = []
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -12753,6 +13386,7 @@ struct BlockHeadingsEditorSheet: View {
     @State private var summaryStep2Draft: String = "Painting"
     @State private var orderListStep1Draft: String = "Design"
     @State private var orderListStep2Draft: String = "Painting"
+    @State private var orderItemsHeadingDraft: String = ""
     @State private var financialShowBaseCostDraft: Bool = true
     @State private var financialBaseCostLabelDraft: String = "Cost (Base)"
     @State private var communicationShowTelephoneDraft: Bool = true
@@ -12837,6 +13471,31 @@ struct BlockHeadingsEditorSheet: View {
                         Divider().padding(.vertical, 2)
                         EditorSectionTitle(title: t("Notes / Supplier Field", lang: seciliDil), systemImage: "note.text")
                         notesSupplierEditor
+                    } else if kartTipi == .invoiceItems {
+                        EditorSectionTitle(title: t("Company invoice numbers", lang: seciliDil), systemImage: "number")
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .top) {
+                                Text(t("VAT, EORI, company number or any reference you want to show on PDF invoices.", lang: seciliDil))
+                                    .font(.system(size: 11)).foregroundColor(.gray)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                                Button(action: { withAnimation { companyNumbersDraft.append(CompanyNumberSettingDTO(title: t("New Number", lang: seciliDil), value: "")) } }) {
+                                    HStack(spacing: 6) { Image(systemName: "plus.circle.fill"); Text(t("Add", lang: seciliDil)) }
+                                        .font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
+                                }.buttonStyle(.plain)
+                            }
+                            ForEach($companyNumbersDraft) { $item in
+                                HStack(spacing: 8) {
+                                    TextField(t("Label", lang: seciliDil), text: $item.title)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField(t("Number / value", lang: seciliDil), text: $item.value)
+                                        .textFieldStyle(.roundedBorder)
+                                    Button(action: { withAnimation { companyNumbersDraft.removeAll { $0.id == item.id } } }) {
+                                        Image(systemName: "trash.fill").foregroundColor(.red.opacity(0.8))
+                                    }.buttonStyle(.plain)
+                                }
+                            }
+                        }
                     } else if kartTipi == .customer {
                         EditorSectionTitle(title: t("Customer & Design Fields", lang: seciliDil), systemImage: "person.text.rectangle")
                         customerDesignFieldsEditor
@@ -13652,6 +14311,8 @@ private var notesSupplierEditor: some View {
     private func loadCurrentValues() {
         summaryStep1Draft = summaryStep1
         summaryStep2Draft = summaryStep2
+        orderItemsHeadingDraft = orderItemsHeading
+        companyNumbersDraft = (try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: Data(companyNumbersJSON.utf8))) ?? []
         orderListStep1Draft = orderListStep1
         orderListStep2Draft = orderListStep2
 
@@ -13902,6 +14563,10 @@ private var notesSupplierEditor: some View {
                 summaryStep2 = cleaned(summaryStep2Draft).isEmpty ? "Painting" : cleaned(summaryStep2Draft)
                 orderListStep1 = cleaned(orderListStep1Draft).isEmpty ? summaryStep1 : cleaned(orderListStep1Draft)
                 orderListStep2 = cleaned(orderListStep2Draft).isEmpty ? summaryStep2 : cleaned(orderListStep2Draft)
+            } else if kartTipi == .invoiceItems {
+                if let data = try? JSONEncoder().encode(companyNumbersDraft), let str = String(data: data, encoding: .utf8) {
+                    companyNumbersJSON = str
+                }
             } else if kartTipi == .customer {
                 customFieldsJSON = str
                 communicationShowTelephone = communicationShowTelephoneDraft
@@ -14280,8 +14945,135 @@ private extension Array where Element == String {
     }
 }
 
-struct PriorityMenuField: View { let label: String; @Binding var value: String; let options: [String]; @AppStorage("seciliDil") private var seciliDil: String = "English"; var body: some View { HStack { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading); Spacer(); Menu { ForEach(options, id: \.self) { option in Button(t(option, lang: seciliDil)) { value = option } } } label: { Text(t(value, lang: seciliDil)).font(.system(size: 12, weight: .bold)).foregroundColor(getColor()).padding(.horizontal, 12).padding(.vertical, 6).background(getColor().opacity(0.2)).cornerRadius(6) }.buttonStyle(.plain) } }; private func getColor() -> Color { switch value { case "Urgent": return .red; case "High": return studioWarningOrange; case "Normal": return .green; default: return .gray } } }
-struct StatusMenuField: View { let label: String; @Binding var value: String; let options: [String]; @AppStorage("seciliDil") private var seciliDil: String = "English"; var body: some View { HStack { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading); Spacer(); Menu { ForEach(options, id: \.self) { option in Button(t(option, lang: seciliDil)) { value = option } } } label: { Text(t(value, lang: seciliDil)).font(.system(size: 12, weight: .bold)).foregroundColor(dinamikRenk(icin: value)).padding(.horizontal, 12).padding(.vertical, 6).background(dinamikRenk(icin: value).opacity(0.2)).cornerRadius(6) }.buttonStyle(.plain) } } }
+struct OrderMergeSelectedSheet: View {
+    let orders: [Siparis]
+    let companyId: String
+    let seciliDil: String
+    let onMerged: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var primaryId: String? = nil
+    @State private var merging = false
+    @State private var errorText: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text(t("Merge selected orders", lang: seciliDil))
+                    .font(.system(size: 18, weight: .bold))
+                Spacer()
+                Button(t("Cancel", lang: seciliDil)) { dismiss() }
+                    .disabled(merging)
+            }
+
+            Text(t("Pick the main order to keep. The other selected orders' payments move into it, then they go to Trash.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if orders.count < 2 {
+                Text(t("Select at least two orders to merge.", lang: seciliDil))
+                    .font(.system(size: 13))
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
+            } else {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(orders, id: \.id) { order in
+                            let isPrimary = primaryId == order.id
+                            Button {
+                                primaryId = order.id
+                            } label: {
+                                HStack {
+                                    Image(systemName: isPrimary ? "largecircle.fill.circle" : "circle")
+                                        .foregroundColor(isPrimary ? .blue : .gray)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(order.customerName)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.primary)
+                                        Text((order.designName.isEmpty ? "-" : order.designName) + " · " + order.paymentDate.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                    if isPrimary {
+                                        Text(t("Main", lang: seciliDil))
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .padding(10)
+                                .background(isPrimary ? Color.blue.opacity(0.10) : Color.gray.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(isPrimary ? Color.blue : Color.gray.opacity(0.2), lineWidth: isPrimary ? 2 : 1)
+                                )
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+            }
+
+            if let errorText {
+                Text(errorText).font(.system(size: 12)).foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Spacer()
+                Button {
+                    performMerge()
+                } label: {
+                    Text(merging ? t("Merging…", lang: seciliDil) : t("Merge", lang: seciliDil))
+                        .fontWeight(.bold)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(primaryId == nil || merging || orders.count < 2)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 380, minHeight: 360)
+        .onAppear {
+            if primaryId == nil { primaryId = orders.first?.id }
+        }
+    }
+
+    private func performMerge() {
+        #if canImport(FirebaseFunctions)
+        guard let primary = primaryId, !companyId.isEmpty, !primary.isEmpty else { return }
+        let sourceIds = orders.compactMap { $0.id }.filter { $0 != primary && !$0.isEmpty }
+        guard !sourceIds.isEmpty else { return }
+        merging = true
+        errorText = nil
+        let payload: [String: Any] = [
+            "companyId": companyId,
+            "primaryOrderId": primary,
+            "sourceOrderIds": sourceIds
+        ]
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("mergeOrders")
+            .call(payload) { _, error in
+                DispatchQueue.main.async {
+                    merging = false
+                    if let error {
+                        errorText = error.localizedDescription
+                        return
+                    }
+                    onMerged()
+                }
+            }
+        #else
+        errorText = "Firebase Functions unavailable."
+        #endif
+    }
+}
+
+struct PriorityMenuField: View { let label: String; @Binding var value: String; let options: [String]; var editableLabelRaw: String? = nil; var onLabelCommit: ((String) -> Void)? = nil; @AppStorage("seciliDil") private var seciliDil: String = "English"; @ViewBuilder private var labelView: some View { if let editableLabelRaw, let onLabelCommit { InlineEditableLabel(display: label, rawValue: editableLabelRaw, helpText: t("Rename", lang: seciliDil), onCommit: onLabelCommit).frame(width: 110, alignment: .leading) } else { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading) } }; var body: some View { HStack { labelView; Spacer(); Menu { ForEach(options, id: \.self) { option in Button(t(option, lang: seciliDil)) { value = option } } } label: { Text(t(value, lang: seciliDil)).font(.system(size: 12, weight: .bold)).foregroundColor(getColor()).padding(.horizontal, 12).padding(.vertical, 6).background(getColor().opacity(0.2)).cornerRadius(6) }.buttonStyle(.plain) } }; private func getColor() -> Color { switch value { case "Urgent": return .red; case "High": return studioWarningOrange; case "Normal": return .green; default: return .gray } } }
+struct StatusMenuField: View { let label: String; @Binding var value: String; let options: [String]; var editableLabelRaw: String? = nil; var onLabelCommit: ((String) -> Void)? = nil; @AppStorage("seciliDil") private var seciliDil: String = "English"; @ViewBuilder private var labelView: some View { if let editableLabelRaw, let onLabelCommit { InlineEditableLabel(display: label, rawValue: editableLabelRaw, helpText: t("Rename", lang: seciliDil), onCommit: onLabelCommit).frame(width: 110, alignment: .leading) } else { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading) } }; var body: some View { HStack { labelView; Spacer(); Menu { ForEach(options, id: \.self) { option in Button(t(option, lang: seciliDil)) { value = option } } } label: { Text(t(value, lang: seciliDil)).font(.system(size: 12, weight: .bold)).foregroundColor(dinamikRenk(icin: value)).padding(.horizontal, 12).padding(.vertical, 6).background(dinamikRenk(icin: value).opacity(0.2)).cornerRadius(6) }.buttonStyle(.plain) } } }
 func dinamikRenk(icin value: String) -> Color {
     let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     let yesiller: Set<String> = ["none", "done", "completed", "delivered", "approved", "deposit paid", "shipped", "ready to ship"]
@@ -14292,7 +15084,7 @@ func dinamikRenk(icin value: String) -> Color {
     if griler.contains(normalized) { return .gray }
     return studioWarningOrange
 }
-struct YesNoField: View { let label: String; @Binding var value: Bool; @AppStorage("seciliDil") private var seciliDil: String = "English"; var body: some View { HStack { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading); Spacer(); HStack(spacing: 6) { Button(action: { value = true }) { Text(t("Yes", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(value ? .green : .gray).padding(.horizontal, 14).padding(.vertical, 6).background(value ? Color.green.opacity(0.2) : Color.primary.opacity(0.05)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(value ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1)) }; Button(action: { value = false }) { Text(t("No", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(!value ? .red : .gray).padding(.horizontal, 14).padding(.vertical, 6).background(!value ? Color.red.opacity(0.2) : Color.primary.opacity(0.05)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(!value ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)) } }.buttonStyle(.plain) } } }
+struct YesNoField: View { let label: String; @Binding var value: Bool; var editableLabelRaw: String? = nil; var onLabelCommit: ((String) -> Void)? = nil; @AppStorage("seciliDil") private var seciliDil: String = "English"; @ViewBuilder private var labelView: some View { if let editableLabelRaw, let onLabelCommit { InlineEditableLabel(display: label, rawValue: editableLabelRaw, helpText: t("Rename", lang: seciliDil), onCommit: onLabelCommit).frame(width: 110, alignment: .leading) } else { Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading) } }; var body: some View { HStack { labelView; Spacer(); HStack(spacing: 6) { Button(action: { value = true }) { Text(t("Yes", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(value ? .green : .gray).padding(.horizontal, 14).padding(.vertical, 6).background(value ? Color.green.opacity(0.2) : Color.primary.opacity(0.05)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(value ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1)) }; Button(action: { value = false }) { Text(t("No", lang: seciliDil)).font(.system(size: 11, weight: .bold)).foregroundColor(!value ? .red : .gray).padding(.horizontal, 14).padding(.vertical, 6).background(!value ? Color.red.opacity(0.2) : Color.primary.opacity(0.05)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(!value ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)) } }.buttonStyle(.plain) } } }
 
 private func colorSchemeFieldSurface(isReadOnly: Bool = false) -> some View {
     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -14342,10 +15134,22 @@ struct NoteSupplierField: View {
 struct DetailField: View {
     let label: String
     @Binding var value: String
+    var editableLabelRaw: String? = nil
+    var onLabelCommit: ((String) -> Void)? = nil
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+
+    @ViewBuilder private var labelView: some View {
+        if let editableLabelRaw, let onLabelCommit {
+            InlineEditableLabel(display: label, rawValue: editableLabelRaw, helpText: t("Rename", lang: seciliDil), onCommit: onLabelCommit)
+                .frame(width: 110, alignment: .leading)
+        } else {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+        }
+    }
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            labelView
             TextField("", text: $value)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
@@ -14411,6 +15215,107 @@ struct CommitDetailField: View {
         }
     }
 }
+// Inline-rename label: lets a card heading be renamed in place instead of
+// opening the Edit Block Headings sheet. macOS reveals a subtle highlight +
+// pencil on hover and edits on click; iPhone edits on long-press (with a
+// haptic). Return / tapping away commits; Escape cancels (macOS).
+private struct InlineEditableLabel: View {
+    let display: String
+    let rawValue: String
+    var helpText: String = ""
+    let onCommit: (String) -> Void
+
+    @State private var isEditing = false
+    @State private var draft = ""
+    @State private var isHovering = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Group {
+            if isEditing {
+                editingField
+            } else {
+                staticLabel
+            }
+        }
+    }
+
+    private var editingField: some View {
+        TextField("", text: $draft)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .foregroundColor(.primary)
+            .focused($focused)
+            .onSubmit(commit)
+            .onChange(of: focused) { _, nowFocused in
+                if !nowFocused { commit() }
+            }
+            .onAppear { focused = true }
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 1.5)
+                    )
+                    .padding(EdgeInsets(top: -3, leading: -6, bottom: -3, trailing: -6))
+            )
+            #if os(macOS)
+            .onExitCommand(perform: cancel)
+            #endif
+    }
+
+    private var staticLabel: some View {
+        let labelContent = HStack(spacing: 4) {
+            Text(display)
+                .font(.system(size: 13))
+                .foregroundColor(.gray)
+                .lineLimit(1)
+            Image(systemName: "pencil")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.secondary)
+                .opacity(isHovering ? 0.9 : 0)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isHovering ? Color.primary.opacity(0.07) : Color.clear)
+                .padding(EdgeInsets(top: -3, leading: -6, bottom: -3, trailing: -6))
+        )
+        .contentShape(Rectangle())
+
+        #if os(macOS)
+        return labelContent
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+            }
+            .onTapGesture(perform: beginEditing)
+            .help(helpText)
+        #else
+        return labelContent
+            .onLongPressGesture(minimumDuration: 0.4) {
+                PlatformHaptics.lightSelection()
+                beginEditing()
+            }
+        #endif
+    }
+
+    private func beginEditing() {
+        draft = rawValue
+        isEditing = true
+    }
+
+    private func commit() {
+        guard isEditing else { return }
+        isEditing = false
+        let cleaned = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleaned.isEmpty && cleaned != rawValue { onCommit(cleaned) }
+    }
+
+    private func cancel() {
+        isEditing = false
+    }
+}
+
 struct CurrencyField: View {
     let label: String
     @Binding var value: Double
@@ -14419,13 +15324,26 @@ struct CurrencyField: View {
     var sembol: String = "£"
     var ondalik: String = "."
     var onCommit: (() -> Void)? = nil
+    // When both are set (macOS), the label becomes an inline-editable heading.
+    var editableLabelRaw: String? = nil
+    var onLabelCommit: ((String) -> Void)? = nil
     @State private var textValue: String = ""
     @FocusState private var isFocused: Bool
     @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+
+    @ViewBuilder private var labelView: some View {
+        if let editableLabelRaw, let onLabelCommit {
+            InlineEditableLabel(display: label, rawValue: editableLabelRaw, helpText: t("Rename", lang: seciliDil), onCommit: onLabelCommit)
+                .frame(width: 110, alignment: .leading)
+        } else {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+        }
+    }
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(label).font(.system(size: 13)).foregroundColor(.gray).frame(width: 110, alignment: .leading)
+            labelView
             HStack(spacing: 2) {
                 Text(sembol).font(.system(size: 13, weight: .bold)).foregroundColor(isCost ? .red : .green)
                 if hideSensitiveNumbers {

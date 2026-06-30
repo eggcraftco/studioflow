@@ -28,6 +28,8 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.business</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>NivaDesk uses Apple Calendar to create and update order timeline events from the created date to the delivery due date.</string>
 	<key>NSCalendarsUsageDescription</key>

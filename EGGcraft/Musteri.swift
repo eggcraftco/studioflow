@@ -14,6 +14,15 @@ struct Musteri: Identifiable, Codable, Equatable {
     var city: String?
     var postalCode: String?
     var country: String?
+    // Latest per-order shipping destination (populated by the WooCommerce/Shopify/inbound
+    // webhooks). Optional so existing customers without these keys still decode. Read-only
+    // in the app — the editable source of truth is each order's shipping fields.
+    var shippingAddress: String?
+    var shippingStreetAddress: String?
+    var shippingCity: String?
+    var shippingPostalCode: String?
+    var shippingCountry: String?
+    var shippingPhone: String?
     var notes: String
     var lastContactDate: Date
     var profileImageUrl: String // Profile photo URL

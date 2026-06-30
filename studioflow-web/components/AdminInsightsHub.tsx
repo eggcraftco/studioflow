@@ -8,7 +8,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
 
-export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com"]);
+export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
 
 export function isNivaDeskAdminEmail(email: string | null | undefined) {
   return Boolean(email && NIVADESK_ADMIN_EMAILS.has(email.trim().toLowerCase()));
@@ -326,6 +326,181 @@ function LiveOnSiteCard() {
   );
 }
 
+type LandingDay = {
+  date: string;
+  views: number;
+  ctaClicks: number;
+  howItWorksClicks: number;
+  signupVisits: number;
+  signupsCompleted: number;
+};
+
+type LandingStats = {
+  ok: boolean;
+  days: LandingDay[];
+  totals: { views: number; ctaClicks: number; howItWorksClicks: number; signupVisits: number; signupsCompleted: number };
+  devices: Record<string, number>;
+  sources: Record<string, number>;
+};
+
+function landingRate(numerator: number, denominator: number): string {
+  if (!denominator) return "—";
+  return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
+
+function LandingMetricTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: 14, padding: "14px 16px", background: "var(--surface, #fff)" }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 950, marginTop: 4 }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 2 }}>{sub}</div> : null}
+    </div>
+  );
+}
+
+function AdminCustomOrderLandingSection() {
+  const [days, setDays] = useState<number>(30);
+  const [data, setData] = useState<LandingStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ days: number }, LandingStats>(functions, "getCustomOrderLandingStats");
+    callable({ days })
+      .then(result => { if (!cancelled) setData(result.data); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load landing-page statistics."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [days]);
+
+  const totals = data?.totals ?? { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0 };
+  const rangeDays = data?.days ?? [];
+  const deviceEntries = Object.entries(data?.devices ?? {}).sort((a, b) => b[1] - a[1]);
+  const sourceEntries = Object.entries(data?.sources ?? {}).sort((a, b) => b[1] - a[1]);
+  const deviceTotal = deviceEntries.reduce((sum, [, value]) => sum + value, 0);
+  const sourceTotal = sourceEntries.reduce((sum, [, value]) => sum + value, 0);
+
+  const rangeButton = (option: number, label: string) => (
+    <button
+      key={option}
+      type="button"
+      className="button"
+      onClick={() => setDays(option)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: 999,
+        fontSize: 13,
+        fontWeight: 700,
+        background: days === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        color: days === option ? "#fff" : "var(--text)"
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Custom Order Landing Page" />
+        <p className="muted-copy">
+          Anonymous, aggregate-only stats for <strong>/custom-order-management</strong>. No cookies or personal data —
+          event counts, device class and traffic source only.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0" }}>
+          {rangeButton(7, "Last 7 days")}
+          {rangeButton(30, "Last 30 days")}
+        </div>
+        {loading ? <p className="muted-copy" style={{ marginTop: 8 }}>Loading…</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{error}</p> : null}
+      </section>
+
+      {!loading && !error ? (
+        <>
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow={`Last ${days} days`} title="Key metrics" />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 10 }}>
+              <LandingMetricTile label="Landing page views" value={totals.views.toLocaleString()} />
+              <LandingMetricTile label="Start Free Trial clicks" value={totals.ctaClicks.toLocaleString()} />
+              <LandingMetricTile label="CTA click-through rate" value={landingRate(totals.ctaClicks, totals.views)} sub="clicks ÷ views" />
+              <LandingMetricTile label="See How It Works clicks" value={totals.howItWorksClicks.toLocaleString()} />
+              <LandingMetricTile label="Signup page visits" value={totals.signupVisits.toLocaleString()} sub="from this landing page" />
+              <LandingMetricTile label="Signups completed" value={totals.signupsCompleted.toLocaleString()} sub="from this landing page" />
+              <LandingMetricTile label="Landing → signup conversion" value={landingRate(totals.signupsCompleted, totals.views)} sub="completed ÷ views" />
+            </div>
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Daily" title={`Daily breakdown — last ${days} days`} />
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
+                    <th style={{ padding: "7px 8px" }}>Date</th>
+                    <th style={{ padding: "7px 8px" }}>Views</th>
+                    <th style={{ padding: "7px 8px" }}>CTA clicks</th>
+                    <th style={{ padding: "7px 8px" }}>How it works</th>
+                    <th style={{ padding: "7px 8px" }}>Signup visits</th>
+                    <th style={{ padding: "7px 8px" }}>Signups</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...rangeDays].reverse().map(day => (
+                    <tr key={day.date} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{day.date}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.views}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.ctaClicks}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.howItWorksClicks}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.signupVisits}</td>
+                      <td style={{ padding: "7px 8px" }}>{day.signupsCompleted}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div className="site-stats-grid">
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Traffic" title="Device breakdown" />
+              {deviceEntries.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {deviceEntries.map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                      <span style={{ textTransform: "capitalize" }}>{key}</span>
+                      <span>{value.toLocaleString()} · {landingRate(value, deviceTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Traffic" title="Source / referrer" />
+              {sourceEntries.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {sourceEntries.map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                      <span style={{ textTransform: "capitalize" }}>{key}</span>
+                      <span>{value.toLocaleString()} · {landingRate(value, sourceTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function AdminSiteStatsSection() {
   const todayKey = new Date().toISOString().slice(0, 10);
   const [rangeMode, setRangeMode] = useState<number>(30); // 7 / 30 / 90, -1 = custom
@@ -476,7 +651,7 @@ function AdminSiteStatsSection() {
             </section>
             <section className="card app-card">
               <CardTitle icon="dashboard" eyebrow="Visitors" title="Traffic Sources (hosts)" />
-              <StatsRankedList entries={topStatsEntries(current, "referrers")} />
+              <StatsRankedList entries={topStatsEntries(current, "referrers", 10)} />
             </section>
           </div>
 
@@ -489,6 +664,397 @@ function AdminSiteStatsSection() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Google Search — Search Console rankings (queries, position, day-over-day change)
+// ---------------------------------------------------------------------------
+
+type SearchConsoleQuery = {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  prevPosition: number | null;
+  positionDelta: number | null;
+  impressionsDelta: number | null;
+  isNew: boolean;
+};
+
+type SearchConsoleDay = { date: string; clicks: number; impressions: number; ctr: number; position: number };
+type SearchConsolePage = { page: string; clicks: number; impressions: number; ctr: number; position: number };
+type SearchConsoleCountry = { country: string; clicks: number; impressions: number };
+type SearchConsoleDevice = { device: string; clicks: number; impressions: number };
+
+type SearchConsoleResult = {
+  ok: boolean;
+  needsAccess?: boolean;
+  serviceAccountEmail?: string;
+  accessibleSites?: string[];
+  property?: string;
+  message?: string;
+  range?: { startDate: string; endDate: string };
+  previousRange?: { startDate: string; endDate: string };
+  totals?: {
+    current: { clicks: number; impressions: number; ctr: number; position: number };
+    previous: { clicks: number; impressions: number; ctr: number; position: number };
+  };
+  queries?: SearchConsoleQuery[];
+  byDate?: SearchConsoleDay[];
+  pages?: SearchConsolePage[];
+  countries?: SearchConsoleCountry[];
+  devices?: SearchConsoleDevice[];
+};
+
+// GSC reports countries as ISO alpha-3; map the common ones to alpha-2 so we can
+// reuse the flag + localized name helpers. Unknown codes fall back to the code.
+const ALPHA3_TO_ALPHA2: Record<string, string> = {
+  GBR: "GB", USA: "US", IRL: "IE", DEU: "DE", FRA: "FR", NLD: "NL", ESP: "ES", ITA: "IT",
+  CAN: "CA", AUS: "AU", IND: "IN", TUR: "TR", BEL: "BE", CHE: "CH", AUT: "AT", SWE: "SE",
+  NOR: "NO", DNK: "DK", FIN: "FI", POL: "PL", PRT: "PT", GRC: "GR", ROU: "RO", CZE: "CZ",
+  NZL: "NZ", ZAF: "ZA", BRA: "BR", MEX: "MX", ARE: "AE", SAU: "SA", JPN: "JP", KOR: "KR",
+  CHN: "CN", RUS: "RU", UKR: "UA", HUN: "HU", BGR: "BG", HRV: "HR", SRB: "RS", SVK: "SK"
+};
+
+function searchCountryLabel(alpha3: string) {
+  const a2 = ALPHA3_TO_ALPHA2[alpha3];
+  if (!a2) return { flag: "🌍", name: alpha3 };
+  return { flag: flagEmoji(a2), name: countryName(a2) };
+}
+
+const SEARCH_DEVICE_LABELS: Record<string, string> = { DESKTOP: "Desktop", MOBILE: "Mobile", TABLET: "Tablet" };
+const SEARCH_DEVICE_COLORS: Record<string, string> = { DESKTOP: "#0a84ff", MOBILE: "#8a5cf6", TABLET: "#30b0c7" };
+
+// Clicks + impressions over time (impressions as area, clicks as line).
+function SearchTrendChart({ data }: { data: SearchConsoleDay[] }) {
+  if (data.length < 2) return <p className="muted-copy">Not enough days to chart yet.</p>;
+  const width = 600;
+  const height = 200;
+  const pad = 10;
+  const maxImpr = Math.max(...data.map(d => d.impressions), 1);
+  const maxClk = Math.max(...data.map(d => d.clicks), 1);
+  const x = (i: number) => pad + (i / Math.max(data.length - 1, 1)) * (width - pad * 2);
+  const yI = (v: number) => height - pad - (v / maxImpr) * (height - pad * 2);
+  const yC = (v: number) => height - pad - (v / maxClk) * (height - pad * 2);
+  const imprLine = data.map((d, i) => `${x(i)},${yI(d.impressions)}`).join(" ");
+  const imprArea = `${pad},${height - pad} ${imprLine} ${width - pad},${height - pad}`;
+  const clkLine = data.map((d, i) => `${x(i)},${yC(d.clicks)}`).join(" ");
+  return (
+    <>
+      <div style={{ display: "flex", gap: 16, fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: "#8a5cf6" }} />Impressions</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: "#0a84ff" }} />Clicks</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <polygon points={imprArea} fill="rgba(138, 92, 246, 0.16)" />
+        <polyline points={imprLine} fill="none" stroke="#8a5cf6" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={clkLine} fill="none" stroke="#0a84ff" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => (
+          <circle key={d.date} cx={x(i)} cy={yI(d.impressions)} r="2.5" fill="#8a5cf6">
+            <title>{`${d.date}: ${d.impressions} impressions, ${d.clicks} clicks`}</title>
+          </circle>
+        ))}
+      </svg>
+    </>
+  );
+}
+
+// Average position over time. Y is inverted (1 = best at the top); a line that
+// climbs means we rose toward #1.
+function SearchPositionChart({ data }: { data: SearchConsoleDay[] }) {
+  const pts = data.filter(d => d.position > 0);
+  if (pts.length < 2) return <p className="muted-copy">Not enough ranked days to chart yet.</p>;
+  const width = 600;
+  const height = 150;
+  const pad = 10;
+  const maxPos = Math.max(...pts.map(d => d.position));
+  const minPos = Math.min(...pts.map(d => d.position));
+  const span = Math.max(maxPos - minPos, 1);
+  const x = (i: number) => pad + (i / Math.max(pts.length - 1, 1)) * (width - pad * 2);
+  // Higher on screen = better (smaller position number).
+  const y = (v: number) => pad + ((v - minPos) / span) * (height - pad * 2);
+  const line = pts.map((d, i) => `${x(i)},${y(d.position)}`).join(" ");
+  return (
+    <>
+      <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 6px" }}>Higher line = better rank (closer to #1). Best {minPos.toFixed(1)} · worst {maxPos.toFixed(1)}.</p>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <polyline points={line} fill="none" stroke="#ff9f0a" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((d, i) => (
+          <circle key={d.date} cx={x(i)} cy={y(d.position)} r="2.5" fill="#ff9f0a">
+            <title>{`${d.date}: position ${d.position.toFixed(1)}`}</title>
+          </circle>
+        ))}
+      </svg>
+    </>
+  );
+}
+
+// Shows the rank shift vs the previous period. A larger position number is
+// worse, so positionDelta > 0 (we rose toward #1) is good → green ▲.
+function PositionDeltaBadge({ delta, isNew }: { delta: number | null; isNew?: boolean }) {
+  if (isNew) {
+    return <span style={{ fontSize: 11, fontWeight: 800, color: "#1d8f43", background: "rgba(29,143,67,0.12)", borderRadius: 6, padding: "2px 6px" }}>New</span>;
+  }
+  if (delta === null || Math.abs(delta) < 0.05) {
+    return <span style={{ fontSize: 12, color: "var(--muted)" }}>–</span>;
+  }
+  const improved = delta > 0;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 800, color: improved ? "#1d8f43" : "#d92d20" }}>
+      <span aria-hidden="true">{improved ? "▲" : "▼"}</span>
+      {Math.abs(delta).toFixed(1)}
+    </span>
+  );
+}
+
+function AdminSearchConsoleSection() {
+  const [rangeDays, setRangeDays] = useState<number>(28); // 7 / 28 / 90
+  const [result, setResult] = useState<SearchConsoleResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    // GSC data lags ~3 days; end the window there so positions are populated.
+    const endMs = Date.now() - 3 * 86400000;
+    const startMs = endMs - (rangeDays - 1) * 86400000;
+    const callable = httpsCallable<{ startDate: string; endDate: string }, SearchConsoleResult>(functions, "getSearchConsoleStats");
+    callable({ startDate: new Date(startMs).toISOString().slice(0, 10), endDate: new Date(endMs).toISOString().slice(0, 10) })
+      .then(res => {
+        if (!cancelled) setResult(res.data);
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load search rankings.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeDays]);
+
+  const rangeButton = (option: number, label: string) => (
+    <button
+      key={option}
+      type="button"
+      className="button"
+      onClick={() => setRangeDays(option)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: 999,
+        fontSize: 13,
+        fontWeight: 700,
+        background: rangeDays === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        color: rangeDays === option ? "#fff" : "var(--text)"
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  const totals = result?.totals;
+  const cur = totals?.current;
+  const prev = totals?.previous;
+  const queries = result?.queries ?? [];
+  const byDate = result?.byDate ?? [];
+  const pages = result?.pages ?? [];
+  const countries = result?.countries ?? [];
+  const devices = result?.devices ?? [];
+  const movers = queries
+    .filter(q => q.positionDelta !== null && !q.isNew && Math.abs(q.positionDelta) >= 0.5)
+    .sort((a, b) => Math.abs(b.positionDelta as number) - Math.abs(a.positionDelta as number))
+    .slice(0, 6);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Google Search rankings" />
+        <p className="muted-copy">What people search to find NivaDesk on Google, where we rank, and how positions changed vs the previous period. Data from Google Search Console (≈3-day lag).</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 4px" }}>
+          {rangeButton(7, "7d")}
+          {rangeButton(28, "28d")}
+          {rangeButton(90, "90d")}
+        </div>
+        {result?.property ? <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>Property: <strong>{result.property}</strong></p> : null}
+        {loading ? <p className="muted-copy">Loading search rankings…</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+      </section>
+
+      {!loading && result && result.ok === false ? (
+        <section className="card app-card" style={{ display: "grid", gap: 10 }}>
+          <CardTitle icon="lock" eyebrow="Setup required" title="Connect Google Search Console" />
+          <p className="muted-copy">{result.message || "Search Console access is not configured yet."}</p>
+          <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8, fontSize: 13.5, lineHeight: 1.5 }}>
+            <li>In Google Cloud Console, enable the <strong>Google Search Console API</strong> for project <code>eggcraft-studio</code>.</li>
+            <li>
+              In Search Console → <em>Settings → Users and permissions</em>, add this service account as a <strong>Full</strong> (or Restricted) user:
+              {result.serviceAccountEmail ? (
+                <div style={{ marginTop: 6 }}>
+                  <code style={{ display: "inline-block", padding: "4px 8px", borderRadius: 8, background: "rgba(17,24,39,0.06)", fontSize: 12.5, wordBreak: "break-all" }}>{result.serviceAccountEmail}</code>
+                </div>
+              ) : <em> (service account email unavailable — check function logs)</em>}
+            </li>
+            <li>Make sure the <code>{NIVADESK_DOMAIN_LABEL}</code> property is verified, then reload this page.</li>
+          </ol>
+          {result.accessibleSites && result.accessibleSites.length > 0 ? (
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: 0 }}>Currently visible properties: {result.accessibleSites.join(", ")}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {!loading && result?.ok && cur && prev ? (
+        <>
+          <div className="site-stats-grid">
+            <StatsCard title="Total Clicks" value={cur.clicks.toLocaleString()} delta={statsDeltaPercent(cur.clicks, prev.clicks)} spark={byDate.map(d => d.clicks)} color="#0a84ff" />
+            <StatsCard title="Impressions" value={cur.impressions.toLocaleString()} delta={statsDeltaPercent(cur.impressions, prev.impressions)} spark={byDate.map(d => d.impressions)} color="#8a5cf6" />
+            <StatsCard title="Avg. CTR" value={`${(cur.ctr * 100).toFixed(1)}%`} delta={statsDeltaPercent(cur.ctr, prev.ctr)} spark={byDate.map(d => d.ctr * 100)} color="#30d158" />
+            <StatsCard title="Avg. Position" value={cur.position.toFixed(1)} delta={statsDeltaPercent(cur.position, prev.position)} invertGood spark={byDate.map(d => d.position)} color="#ff9f0a" />
+          </div>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Search" title="Clicks & impressions over time" />
+            <SearchTrendChart data={byDate} />
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Search" title="Average position over time" />
+            <SearchPositionChart data={byDate} />
+          </section>
+
+          {movers.length > 0 ? (
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Search" title="Biggest ranking movers" />
+              <div style={{ display: "grid" }}>
+                {movers.map((q, index) => (
+                  <div key={q.query} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                    <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{q.query}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{q.prevPosition?.toFixed(1)} → {q.position.toFixed(1)}</span>
+                    <PositionDeltaBadge delta={q.positionDelta} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Search" title="Top search queries" />
+            {queries.length === 0 ? (
+              <p className="muted-copy">No search impressions in this period yet.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, fontWeight: 800 }}>
+                      <th style={{ padding: "8px 6px", width: 28 }}>#</th>
+                      <th style={{ padding: "8px 6px" }}>Query</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Impr.</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Clicks</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>CTR</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Position</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Δ vs prev.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queries.map((q, index) => (
+                      <tr key={q.query} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                        <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
+                        <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.query}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}>{q.impressions.toLocaleString()}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}>{q.clicks.toLocaleString()}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}>{(q.ctr * 100).toFixed(1)}%</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800 }}>{q.position.toFixed(1)}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "right" }}><PositionDeltaBadge delta={q.positionDelta} isNew={q.isNew} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p style={{ fontSize: 11, color: "var(--muted)", margin: "10px 0 0" }}>Δ shows the average-position change vs the previous {result.previousRange ? `${result.previousRange.startDate} – ${result.previousRange.endDate}` : "period"}. ▲ green = moved up toward #1.</p>
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="files" eyebrow="Search" title="Top pages" />
+            {pages.length === 0 ? (
+              <p className="muted-copy">No pages have search impressions in this period yet.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, fontWeight: 800 }}>
+                      <th style={{ padding: "8px 6px", width: 28 }}>#</th>
+                      <th style={{ padding: "8px 6px" }}>Page</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Impr.</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Clicks</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>CTR</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Position</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pages.map((p, index) => {
+                      let label = p.page;
+                      try { label = new URL(p.page).pathname || "/"; } catch { /* keep raw */ }
+                      return (
+                        <tr key={p.page} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                          <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
+                          <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span title={p.page}>{label === "/" ? "Home page" : label}</span></td>
+                          <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.impressions.toLocaleString()}</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.clicks.toLocaleString()}</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right" }}>{(p.ctr * 100).toFixed(1)}%</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800 }}>{p.position.toFixed(1)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <div className="site-stats-panels">
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Search" title="Search by country" />
+              {countries.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <div style={{ display: "grid" }}>
+                  {countries.slice(0, 8).map((c, index) => {
+                    const { flag, name } = searchCountryLabel(c.country);
+                    const max = Math.max(...countries.map(x => x.impressions), 1);
+                    return (
+                      <div key={c.country} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                        <span aria-hidden="true">{flag}</span>
+                        <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>{((c.impressions / max) * 100).toFixed(0)}%</span>
+                        <strong style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>{c.impressions.toLocaleString()}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Search" title="Search by device" />
+              {devices.length === 0 ? (
+                <p className="muted-copy">No data yet.</p>
+              ) : (
+                <StatsDonut
+                  slices={devices.map(d => ({ label: SEARCH_DEVICE_LABELS[d.device] || d.device, value: d.impressions, color: SEARCH_DEVICE_COLORS[d.device] || "#9ca3af" }))}
+                  centerLabel="Impr."
+                />
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+const NIVADESK_DOMAIN_LABEL = "nivadesk.app";
 
 type AdminInsights = {
   generatedAtMs: number;
@@ -549,6 +1115,7 @@ type AdminUsersDetail = {
   workspaces: { total: number; active30d: number; inactive: number; planCounts: Record<string, number> };
   quick: { avgWorkspacesPerUser: number; usersWithMultipleWorkspaces: number };
   topWorkspaces: { id: string; name: string; ownerEmail: string; plan: string; members: number | null; orders30d: number; ordersTotal: number | null; lastOrderAtMs: number }[];
+  recentUsers: { uid: string; email: string; displayName: string; createdAtMs: number; lastSignInMs: number; plan: string }[];
   heatmap: number[][];
 };
 
@@ -732,6 +1299,43 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="Users" title="Recent signups" />
+        {(() => {
+          const recent = (data.recentUsers ?? []).slice(0, 50);
+          if (recent.length === 0) return <p className="muted-copy">No recent signups.</p>;
+          return (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                    <th style={{ padding: "6px 8px" }}>#</th>
+                    <th style={{ padding: "6px 8px" }}>Email</th>
+                    <th style={{ padding: "6px 8px" }}>Name</th>
+                    <th style={{ padding: "6px 8px" }}>Signed up</th>
+                    <th style={{ padding: "6px 8px" }}>Last sign-in</th>
+                    <th style={{ padding: "6px 8px" }}>Plan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((u, index) => (
+                    <tr key={u.uid} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{u.email || "—"}</td>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.displayName || "—"}</td>
+                      <td style={{ padding: "7px 8px" }}>{u.createdAtMs ? new Date(u.createdAtMs).toLocaleDateString() : "—"}</td>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.lastSignInMs ? new Date(u.lastSignInMs).toLocaleDateString() : "never"}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[u.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[u.plan] || u.plan}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+        <p className="muted-copy" style={{ marginTop: 8 }}>Newest first (latest 50).</p>
       </section>
 
       <section className="card app-card">
@@ -1972,7 +2576,9 @@ type AdminHubPage =
   | "features"
   | "storage"
   | "lookup"
-  | "sitestats";
+  | "sitestats"
+  | "searchconsole"
+  | "customorderlanding";
 
 const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -1983,7 +2589,9 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "features", label: "Feature Usage" },
   { id: "storage", label: "Storage" },
   { id: "lookup", label: "User Lookup" },
-  { id: "sitestats", label: "Global Statistics" }
+  { id: "sitestats", label: "Global Statistics" },
+  { id: "searchconsole", label: "Google Search" },
+  { id: "customorderlanding", label: "Custom Order Landing Page" }
 ];
 
 export function AdminInsightsHub() {
@@ -2014,6 +2622,8 @@ export function AdminInsightsHub() {
         {page === "storage" ? <AdminStorageDetail onBack={goOverview} /> : null}
         {page === "lookup" ? <AdminUserLookupDetail onBack={goOverview} /> : null}
         {page === "sitestats" ? <AdminSiteStatsSection /> : null}
+        {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
+        {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
       </div>
     </div>
   );

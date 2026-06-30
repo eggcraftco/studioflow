@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseCore
+import FirebaseAppCheck
 import FirebaseFirestore
 import UserNotifications
 #if os(iOS)
@@ -14,6 +15,20 @@ import GoogleSignIn
 #endif
 
 
+// Firebase App Check: attests that requests come from the genuine app so
+// bot/scripted traffic can be rejected once enforcement is enabled. Uses App
+// Attest in release; a debug provider during development (prints a token to
+// register in the console).
+final class StudioAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+        #if DEBUG
+        return AppCheckDebugProvider(app: app)
+        #else
+        return AppAttestProvider(app: app)
+        #endif
+    }
+}
+
 @main
 struct StudioManagerApp: App {
     #if os(iOS)
@@ -23,12 +38,14 @@ struct StudioManagerApp: App {
     @StateObject var authVM: AuthViewModel
     @StateObject var firebaseManager: FirebaseManager
     @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         #if os(macOS) && DEBUG
         Self.closeOlderDebugInstancesBeforeFirebaseStarts()
         #endif
 
+        AppCheck.setAppCheckProviderFactory(StudioAppCheckProviderFactory())
         FirebaseApp.configure()
         #if os(iOS)
         UNUserNotificationCenter.current().delegate = PushNotificationManager.shared
@@ -126,6 +143,19 @@ struct StudioManagerApp: App {
             }
             .onChange(of: authVM.currentWorkspaceAccess) { _, _ in
                 syncFirebaseWorkspace()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                switch newPhase {
+                case .active:
+                    authVM.appBecameActive()
+                    #if os(iOS)
+                    PushNotificationManager.shared.clearAppIconBadge()
+                    #endif
+                case .background:
+                    authVM.appMovedToBackground()
+                default:
+                    break
+                }
             }
             .onOpenURL { url in
                 #if canImport(GoogleSignIn)

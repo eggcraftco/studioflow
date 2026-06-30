@@ -294,10 +294,14 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // Intentionally omit `.badge`: when a push arrives while the app is in the
+        // foreground the user is already looking at it, so there is no reason to put
+        // a red dot on the home-screen icon. (The server sends a fixed badge:1 on
+        // every push; see clearAppIconBadge() for why we also reset it on activate.)
         if #available(iOS 14.0, macOS 11.0, *) {
-            completionHandler([.banner, .list, .sound, .badge])
+            completionHandler([.banner, .list, .sound])
         } else {
-            completionHandler([.alert, .sound, .badge])
+            completionHandler([.alert, .sound])
         }
     }
 
@@ -307,11 +311,21 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         PushNotificationManager.shared.storeRoute(from: response.notification.request.content.userInfo)
+        PushNotificationManager.shared.clearAppIconBadge()
         completionHandler()
     }
 }
 
 extension PushNotificationManager {
+
+    /// Resets the home-screen app icon badge to zero. The push server attaches a
+    /// fixed `badge: 1` to every notification, and iOS keeps that red "1" on the
+    /// icon until the app explicitly clears it. Called when the app becomes active
+    /// and when a notification is opened, so the icon badge follows the in-app
+    /// state (the real source of truth) instead of sticking forever.
+    func clearAppIconBadge() {
+        UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
+    }
 
     func storeRoute(from userInfo: [AnyHashable: Any]) {
         let route = stringValue(userInfo["route"]).trimmingCharacters(in: .whitespacesAndNewlines)

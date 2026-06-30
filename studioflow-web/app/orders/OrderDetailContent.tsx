@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -41,6 +41,7 @@ import {
   type ScheduleHeadingItem
 } from "@/lib/studioflow/blockHeadings";
 import {
+  canDeleteOrdersForRole,
   canEditOrderDetailsForRole,
   canEditOrderFullyForRole,
   canEditOrderStatusForRole,
@@ -52,10 +53,17 @@ import {
   type UpdateOrderInput
 } from "@/lib/studioflow/orders";
 import {
+  savePdfExportSettings,
+  type PdfExportSettingsInput
+} from "@/lib/studioflow/settingsActions";
+import {
   loadWorkspaceStatusOptions,
   loadTeamAccessData,
+  normalizeWorkspaceRole,
   workspaceAccessAllows,
   type ClientFileDetail,
+  type CompanyNumberSetting,
+  type LineItemDetail,
   type OrderDetail,
   type TeamMemberDetail,
   type ToDoDetail,
@@ -65,6 +73,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { decodeFinancialItems } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
@@ -666,6 +675,8 @@ function orderPdfHtml(
   const showFinInternal = Boolean(options.canSeeAdvancedFinance && (settings?.pdfShowFinInternal ?? false));
   const showStatus = settings?.pdfShowStatus ?? true;
   const showShipping = settings?.pdfShowShipping ?? true;
+  const showAddress = settings?.pdfShowAddress ?? true;
+  const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
   const showMaterials = settings?.pdfShowMaterials ?? true;
   const showPriority = settings?.pdfShowPriority ?? true;
   const appSubtitle = settings?.appSubtitle?.trim() || workspaceName || "NivaDesk";
@@ -678,6 +689,10 @@ function orderPdfHtml(
   const customerSection = showCustomer ? orderPdfSectionHtml("Customer & Design", orderPdfRowsHtml([
     { title: "Customer Name", value: order.customerName },
     { title: "Design Name", value: designName },
+    ...order.lineItems.map((it) => ({
+      title: "  • " + (it.name || "-"),
+      value: it.quantity !== 1 ? "×" + (Number.isInteger(it.quantity) ? String(it.quantity) : it.quantity.toFixed(2)) : ""
+    })),
     { title: "Reference", value: order.watchRef || "-" },
     { title: "Placed On", value: formatDate(order.paymentDate) }
   ])) : "";
@@ -695,16 +710,23 @@ function orderPdfHtml(
 
   const contactRows: OrderPdfRow[] = [
     { title: "Email", value: order.emailAddress || "-" },
-    { title: "Telephone", value: order.whatsappNumber || "-" },
     { title: "Instagram", value: order.instagramUsername || "-" },
     { title: "Channel", value: order.communication.length > 0 ? order.communication.join(", ") : "-" }
   ];
   const address = order.customFields.communicationAddress || order.customFields.Address || "";
-  if (address.trim()) contactRows.push({ title: "Address", value: address });
   const contactSection = showContact ? orderPdfSectionHtml("Contact & Notes", [
     orderPdfRowsHtml(contactRows),
     `<div class="pdf-divider"></div><p><strong>Special Notes:</strong><br />${escapeHtml(order.notes || "No special notes provided.")}</p>`
   ].join("")) : "";
+  const billingAddressSection = showAddress ? orderPdfSectionHtml("Billing Address", orderPdfRowsHtml([
+    { title: "Address", value: address || "-" },
+    { title: "Telephone", value: order.whatsappNumber || "-" }
+  ])) : "";
+  const shippingAddressSection = showShippingAddress ? orderPdfSectionHtml("Shipping Address", orderPdfRowsHtml([
+    { title: "Recipient", value: order.shippingName || order.customerName || "-" },
+    { title: "Address", value: [order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry].filter(Boolean).join(", ") || "-" },
+    { title: "Shipping Phone", value: order.shippingPhone || "-" }
+  ])) : "";
 
   const previewSection = showPreview ? `
     <section class="pdf-section">
@@ -817,12 +839,14 @@ function orderPdfHtml(
               ${prioritySection}
               ${materialSection}
               ${contactSection}
+              ${billingAddressSection}
               ${previewSection}
             </div>
             <div>
               ${financeSection}
               ${statusSection}
               ${shippingSection}
+              ${shippingAddressSection}
             </div>
           </div>
           <footer>Generated automatically from NivaDesk</footer>
@@ -861,6 +885,16 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
     .map(n => `<div>${escapeHtml(n.title)}: ${escapeHtml(n.value)}</div>`).join("");
   const orderDate = order.paymentDate ? order.paymentDate.toLocaleDateString() : "";
   const description = order.designName?.trim() || order.customerName?.trim() || "Order";
+  const showAddress = settings?.pdfShowAddress ?? true;
+  const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
+  const billingAddr = (order.customFields.communicationAddress || order.customFields.Address || "").trim();
+  const shipLine = [order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry].filter(Boolean).join(", ");
+  const shipRecipient = order.shippingName || order.customerName || "";
+  const itemsHeading = "Description";
+  const fmtQty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(2));
+  const itemRows = order.lineItems.length > 0
+    ? order.lineItems.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#6b7280;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
+    : `<tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr>`;
 
   let vatRow = "";
   if (isMarginScheme) {
@@ -914,14 +948,24 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
       </div>
     </header>
     <hr/>
-    <div class="bill">
-      <div class="label">BILL TO</div>
-      <div class="who">${escapeHtml(order.customerName || "-")}</div>
-      ${order.emailAddress ? `<div class="email">${escapeHtml(order.emailAddress)}</div>` : ""}
+    <div class="bill" style="display:flex; gap:40px; align-items:flex-start;">
+      <div>
+        <div class="label">BILL TO</div>
+        <div class="who">${escapeHtml(order.customerName || "-")}</div>
+        ${showAddress && billingAddr ? `<div class="email">${escapeHtml(billingAddr)}</div>` : ""}
+        ${order.emailAddress ? `<div class="email">${escapeHtml(order.emailAddress)}</div>` : ""}
+        ${showAddress && order.whatsappNumber ? `<div class="email">${escapeHtml(order.whatsappNumber)}</div>` : ""}
+      </div>
+      ${showShippingAddress && shipLine ? `<div>
+        <div class="label">SHIP TO</div>
+        <div class="who">${escapeHtml(shipRecipient || "-")}</div>
+        <div class="email">${escapeHtml(shipLine)}</div>
+        ${order.shippingPhone ? `<div class="email">${escapeHtml(order.shippingPhone)}</div>` : ""}
+      </div>` : ""}
     </div>
     <table>
-      <thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
-      <tbody><tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr></tbody>
+      <thead><tr><th>${escapeHtml(itemsHeading)}</th><th class="r">Amount</th></tr></thead>
+      <tbody>${itemRows}</tbody>
     </table>
     <div class="totals">
       <div class="trow"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
@@ -930,6 +974,7 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
       <div class="trow"><span>Paid</span><strong class="paid">${money(order.paidAmount)}</strong></div>
       <div class="trow"><span>Balance Due</span><strong class="${order.remainingAmount > 0.005 ? "due" : "paid"}">${money(order.remainingAmount)}</strong></div>
     </div>
+    ${order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
     <div class="credit">Generated with NivaDesk</div>
   </div></body></html>`;
@@ -1056,6 +1101,7 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
   summary: "Order Summary",
   customer: "Customer & Communication",
+  invoiceItems: "Invoice Items",
   materials: "Materials & Inventory",
   priority: "Priority / Risk",
   delivery: "Timeline & Delivery",
@@ -1074,6 +1120,7 @@ const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   preview: "cardPreview",
   summary: "cardSummary",
   customer: "cardCustomer",
+  invoiceItems: "cardCustomer",
   materials: "cardMaterials",
   priority: "cardPriority",
   delivery: "cardDelivery",
@@ -1148,6 +1195,7 @@ const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   preview: 250,
   summary: 210,
   customer: 200,
+  invoiceItems: 220,
   materials: 200,
   priority: 200,
   delivery: 200,
@@ -1594,6 +1642,8 @@ export function OrderDetailContent({
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [customerGuideStyle, setCustomerGuideStyle] = useState<CSSProperties | null>(null);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
+  const [assignProjectMenuOpen, setAssignProjectMenuOpen] = useState(false);
+  const [savingAssignment, setSavingAssignment] = useState(false);
   const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [headerPreferencesLoaded, setHeaderPreferencesLoaded] = useState(false);
   const [headerShowDeliveryTime, setHeaderShowDeliveryTime] = useState(true);
@@ -1603,6 +1653,15 @@ export function OrderDetailContent({
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
+  // Scalar per-card heading labels read straight from companySettings (the
+  // structured headings come from the block-headings callable). Inline-renamed
+  // in place; written back with setDoc(merge) so the Mac/iPhone apps sync them.
+  const [cardLabels, setCardLabels] = useState<{ financialBaseCostLabel: string; designNameLabel: string; priorityCardLabel: string; riskCardLabel: string }>({
+    financialBaseCostLabel: "Cost (Base)",
+    designNameLabel: "Design Name",
+    priorityCardLabel: "Priority",
+    riskCardLabel: "Risk"
+  });
   const [savingLayout, setSavingLayout] = useState(false);
   const [layoutReadyOrderId, setLayoutReadyOrderId] = useState("");
   const savingLayoutRef = useRef(false);
@@ -1666,6 +1725,7 @@ export function OrderDetailContent({
   const [inlineStatus, setInlineStatus] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
+
   useEffect(() => {
     try {
       setCardsLocked(window.localStorage.getItem(WORKSPACE_CARDS_LOCKED_STORAGE_KEY) === "true");
@@ -1713,6 +1773,20 @@ export function OrderDetailContent({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [orderActionsOpen]);
+
+  useEffect(() => {
+    if (!assignProjectMenuOpen) return;
+    const closeMenu = () => setAssignProjectMenuOpen(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAssignProjectMenuOpen(false);
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [assignProjectMenuOpen]);
 
   useEffect(() => {
     try {
@@ -1817,6 +1891,12 @@ export function OrderDetailContent({
   const clientFileMaxUploadSizeMB = Math.min(Math.max(Math.round(moneySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
   const clientFileRequiresPolicyAcceptance = moneySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
   const canSeeTeamAssignment = Boolean(workspace.entitlements.features.team_access && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
+  // Mirror the orders-list assignment gate (normalizeWorkspaceAssignmentAccess):
+  // owner, or a delete-capable role granted manageProjectAssignments.
+  const canAssignProjects = Boolean(
+    normalizeWorkspaceRole(workspace.role) === "owner" ||
+      (canDeleteOrdersForRole(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "manageProjectAssignments"))
+  );
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
   // History/Log and Materials cards are open on every plan, including Free Demo.
@@ -2124,7 +2204,7 @@ export function OrderDetailContent({
   }, [order.id]);
 
   useEffect(() => {
-    if (!canSeeTeamAssignment) {
+    if (!canSeeTeamAssignment && !canAssignProjects) {
       setTeamMembers([]);
       return;
     }
@@ -2143,7 +2223,7 @@ export function OrderDetailContent({
     return () => {
       cancelled = true;
     };
-  }, [canSeeTeamAssignment, workspace]);
+  }, [canSeeTeamAssignment, canAssignProjects, workspace]);
 
   const todoAssigneeOptions = useMemo(() => {
     const options: Array<{ uid: string; label: string; email: string }> = [
@@ -2356,6 +2436,7 @@ export function OrderDetailContent({
       preview: "photo",
       summary: "docText",
       customer: "customer",
+      invoiceItems: "docText",
       materials: "shippingBox",
       priority: "warningTriangle",
       delivery: "calendarClock",
@@ -2530,7 +2611,16 @@ export function OrderDetailContent({
     void refreshBlockHeadings();
     const unsubscribe = onSnapshot(
       doc(db, "companySettings", workspace.id),
-      () => {
+      snapshot => {
+        const data = snapshot.data() ?? {};
+        const str = (key: string, fallback: string) =>
+          typeof data[key] === "string" && (data[key] as string).trim() ? (data[key] as string) : fallback;
+        setCardLabels({
+          financialBaseCostLabel: str("financialBaseCostLabel", "Cost (Base)"),
+          designNameLabel: str("designNameLabel", "Design Name"),
+          priorityCardLabel: str("priorityCardLabel", "Priority"),
+          riskCardLabel: str("riskCardLabel", "Risk")
+        });
         void refreshBlockHeadings();
       },
       () => {
@@ -3353,6 +3443,24 @@ export function OrderDetailContent({
       ];
     }
 
+    // Optimistically reflect custom Extra Spending / Remaining heading amounts in
+    // the order's customFields (keyed financialExpense::<title> / financialRemaining::<title>).
+    let customFields = order.customFields;
+    const applyCustomMap = (prefix: string, map?: Record<string, number>) => {
+      if (!map) return;
+      customFields = { ...customFields };
+      for (const [title, raw] of Object.entries(map)) {
+        const cleanTitle = title.trim();
+        if (!cleanTitle) continue;
+        const key = `${prefix}${cleanTitle}`;
+        const next = Math.max(0, Number(raw) || 0);
+        if (next > 0) customFields[key] = String(next);
+        else delete customFields[key];
+      }
+    };
+    applyCustomMap("financialExpense::", patch.financialExpenseValues);
+    applyCustomMap("financialRemaining::", patch.financialRemainingValues);
+
     onOptimisticOrderPatch?.({
       paidAmount,
       remainingAmount,
@@ -3364,7 +3472,8 @@ export function OrderDetailContent({
       taxAmount,
       netProfit,
       paymentMethod,
-      payments
+      payments,
+      customFields
     });
   }
 
@@ -3429,16 +3538,41 @@ export function OrderDetailContent({
     return saveFinancePatch({ [field]: parsed }, fieldLabel);
   }
 
+  function saveCustomFinanceValue(kind: "expense" | "remaining", title: string, value: string | number, fieldLabel: string) {
+    const parsed = parseFinanceNumber(value);
+    if (parsed === null) return;
+    const patch: FinancePatch = kind === "expense"
+      ? { financialExpenseValues: { [title]: parsed } }
+      : { financialRemainingValues: { [title]: parsed } };
+    return saveFinancePatch(patch, fieldLabel);
+  }
+
   function applyOptimisticDetailsPatch(patch: DetailsPatch) {
     const nextPatch: Partial<OrderDetail> = {};
 
     if (typeof patch.customerName === "string") nextPatch.customerName = normalizeOrderCustomerName(patch.customerName);
     if (typeof patch.designName === "string") nextPatch.designName = patch.designName;
+    if (typeof patch.invoiceNote === "string") nextPatch.invoiceNote = patch.invoiceNote;
+    if (Array.isArray(patch.lineItems)) {
+      const items = patch.lineItems.map((it) => ({ ...it }));
+      nextPatch.lineItems = items;
+      // Items drive the order total: remaining = total − already paid.
+      if (items.length > 0) {
+        const itemsTotal = Math.round(items.reduce((sum, it) => sum + it.lineTotal, 0) * 100) / 100;
+        nextPatch.remainingAmount = Math.max(0, Math.round((itemsTotal - order.paidAmount) * 100) / 100);
+      }
+    }
     if (typeof patch.watchRef === "string") nextPatch.watchRef = patch.watchRef;
     if (typeof patch.designLink === "string") nextPatch.designLink = patch.designLink;
     if (typeof patch.emailAddress === "string") nextPatch.emailAddress = patch.emailAddress;
     if (typeof patch.whatsappNumber === "string") nextPatch.whatsappNumber = patch.whatsappNumber;
     if (typeof patch.instagramUsername === "string") nextPatch.instagramUsername = patch.instagramUsername;
+    if (typeof patch.shippingName === "string") nextPatch.shippingName = patch.shippingName;
+    if (typeof patch.shippingStreetAddress === "string") nextPatch.shippingStreetAddress = patch.shippingStreetAddress;
+    if (typeof patch.shippingCity === "string") nextPatch.shippingCity = patch.shippingCity;
+    if (typeof patch.shippingPostalCode === "string") nextPatch.shippingPostalCode = patch.shippingPostalCode;
+    if (typeof patch.shippingCountry === "string") nextPatch.shippingCountry = patch.shippingCountry;
+    if (typeof patch.shippingPhone === "string") nextPatch.shippingPhone = patch.shippingPhone;
     if (typeof patch.notes === "string") nextPatch.notes = patch.notes;
     if (typeof patch.customerNotes === "string") {
       nextPatch.customFields = {
@@ -3534,6 +3668,60 @@ export function OrderDetailContent({
     }
   }
 
+  async function saveCardLabel(
+    key: "financialBaseCostLabel" | "designNameLabel" | "priorityCardLabel" | "riskCardLabel",
+    value: string
+  ) {
+    const cleaned = value.trim();
+    if (!cleaned || cleaned === cardLabels[key]) return;
+    setCardLabels(prev => ({ ...prev, [key]: cleaned }));
+    try {
+      await setDoc(doc(db, "companySettings", workspace.id), { [key]: cleaned }, { merge: true });
+    } catch {
+      // The companySettings snapshot listener re-syncs the label if the write fails.
+    }
+  }
+
+  async function renameStatusStep(index: number, newTitle: string) {
+    if (!blockHeadingSettings) return;
+    const cleaned = newTitle.trim();
+    if (!cleaned) return;
+    const current = productionSteps();
+    if (index < 0 || index >= current.length) return;
+    const updatedSteps = current.map((step, i) => ({
+      id: step.id || webHeadingId(),
+      title: i === index ? cleaned : step.title
+    }));
+    const updated = { ...blockHeadingSettings, customSteps: updatedSteps };
+    setBlockHeadingSettings(updated);
+    try {
+      const saved = await saveWorkspaceBlockHeadings(workspace, "status", updated);
+      setBlockHeadingSettings(saved);
+    } catch {
+      // Optimistic state stays; the next companySettings snapshot re-syncs.
+    }
+  }
+
+  async function renameMaterialCheck(index: number, newTitle: string) {
+    if (!blockHeadingSettings) return;
+    const cleaned = newTitle.trim();
+    if (!cleaned) return;
+    const current = materialDefaultCheckItems(blockHeadingSettings);
+    if (index < 0 || index >= current.length) return;
+    const updatedChecks = current.map((item, i) => ({
+      id: blockHeadingSettings.materialsDefaultChecks[i]?.id ?? webHeadingId(),
+      title: i === index ? cleaned : item.title
+    }));
+    const updated = { ...blockHeadingSettings, materialsDefaultChecks: updatedChecks };
+    setBlockHeadingSettings(updated);
+    try {
+      const saved = await saveWorkspaceBlockHeadings(workspace, "materials", updated);
+      setBlockHeadingSettings(saved);
+    } catch {
+      // Optimistic state stays; the next companySettings snapshot re-syncs.
+    }
+  }
+
   async function saveDetailsPatch(patch: DetailsPatch, fieldLabel: string) {
     if (!canInlineEditFullDetails) {
       setInlineError("Your workspace role cannot edit full order details.");
@@ -3555,6 +3743,48 @@ export function OrderDetailContent({
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update order detail.");
     } finally {
       setSavingInlineField(null);
+    }
+  }
+
+  // Assignable members for the order-detail "Assign Project" control. Mirrors the
+  // orders-list menu: workspace team members minus the owner, plus an Unassigned row.
+  const assignableMembers = useMemo(
+    () => teamMembers.filter(member => !member.isOwner),
+    [teamMembers]
+  );
+
+  const currentAssignee = useMemo(() => {
+    const assignedUid = order.assignedToUid?.trim() ?? "";
+    const assignedEmail = order.assignedToEmail?.trim().toLowerCase() ?? "";
+    if (!assignedUid && !assignedEmail) return null;
+    const member = teamMembers.find(item => assignedUid && item.id === assignedUid)
+      ?? teamMembers.find(item => assignedEmail && item.email.trim().toLowerCase() === assignedEmail)
+      ?? null;
+    if (member) return member.displayName.trim() || member.email.trim() || member.id;
+    return order.assignedToEmail?.trim() || assignedUid;
+  }, [order.assignedToUid, order.assignedToEmail, teamMembers]);
+
+  async function assignProjectToMember(member: TeamMemberDetail | null) {
+    if (!canAssignProjects) {
+      setOrderActionError("Your workspace role cannot assign projects.");
+      return;
+    }
+    const assignedToUid = member?.id ?? "";
+    const assignedToEmail = member?.email ?? "";
+    setAssignProjectMenuOpen(false);
+    setOrderActionError(null);
+    setSavingAssignment(true);
+    onOptimisticOrderPatch?.({ assignedToUid, assignedToEmail });
+    try {
+      await updateOrderFromWeb(workspace, {
+        orderId: order.id,
+        details: { assignedToUid, assignedToEmail }
+      });
+    } catch (assignFailure) {
+      await onReloadOrder();
+      setOrderActionError(assignFailure instanceof Error ? assignFailure.message : "Could not update project assignment.");
+    } finally {
+      setSavingAssignment(false);
     }
   }
 
@@ -4544,6 +4774,8 @@ export function OrderDetailContent({
                     <InlineYesNoRow
                       key={item.id}
                       label={item.title}
+                      labelRaw={item.title}
+                      onLabelSave={canInlineEditFullDetails ? value => renameMaterialCheck(index, value) : undefined}
                       value={materialDefaultCheckValue(order, index, item.title)}
                       disabled={!canInlineEditFullDetails}
                       saving={savingInlineField === fieldKey}
@@ -4596,7 +4828,9 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel">
               <InlineSelectRow
-                label="Priority"
+                label={cardLabels.priorityCardLabel}
+                labelRaw={cardLabels.priorityCardLabel}
+                onLabelSave={canInlineEditFullDetails ? value => saveCardLabel("priorityCardLabel", value) : undefined}
                 value={order.priority || "Normal"}
                 options={PRIORITY_OPTIONS}
                 disabled={!canEditWorkflowFields}
@@ -4604,7 +4838,9 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ priority: value }, "Priority")}
               />
               <InlineSelectRow
-                label="Risk"
+                label={cardLabels.riskCardLabel}
+                labelRaw={cardLabels.riskCardLabel}
+                onLabelSave={canInlineEditFullDetails ? value => saveCardLabel("riskCardLabel", value) : undefined}
                 value={order.risk || "None"}
                 options={RISK_OPTIONS}
                 disabled={!canEditWorkflowFields}
@@ -4692,6 +4928,32 @@ export function OrderDetailContent({
           </section>
         );
       }
+      case "invoiceItems":
+        return (
+          <section key={cardId} className="card order-detail-card">
+            {renderCardTitle(cardId)}
+            <div className="app-card-panel">
+              <LineItemsEditor
+                items={order.lineItems}
+                disabled={!canInlineEditFullDetails}
+                formatMoney={value => money(value)}
+                onSave={items => saveDetailsPatch({ lineItems: items }, "Invoice items")}
+              />
+              <InvoiceFooterEditor
+                note={order.invoiceNote}
+                disabled={!canInlineEditFullDetails}
+                onSave={note => saveDetailsPatch({ invoiceNote: note }, "Invoice note")}
+              />
+              <button
+                type="button"
+                onClick={() => void handleExportInvoice()}
+                style={{ marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              >
+                Invoice PDF
+              </button>
+            </div>
+          </section>
+        );
       case "customer":
         return (
           <section key={cardId} className="card order-detail-card">
@@ -4706,7 +4968,9 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ customerName: normalizeOrderCustomerName(String(value)) }, "Customer Name")}
               />
               <InlineValueRow
-                label="Design Name"
+                label={cardLabels.designNameLabel}
+                labelRaw={cardLabels.designNameLabel}
+                onLabelSave={canInlineEditFullDetails ? value => saveCardLabel("designNameLabel", value) : undefined}
                 value={order.designName || ""}
                 disabled={!canInlineEditFullDetails}
                 saving={savingInlineField === "Design Name"}
@@ -4802,6 +5066,50 @@ export function OrderDetailContent({
                   />
                 </>
               ) : null}
+              <div className="app-card-divider" />
+              <div className="app-subsection-title"><span>▱</span><strong>Shipping address</strong></div>
+              <InlineValueRow
+                label="Recipient"
+                value={order.shippingName || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping recipient"}
+                onSave={value => saveDetailsPatch({ shippingName: String(value) }, "Shipping recipient")}
+              />
+              <InlineValueRow
+                label="Street"
+                value={order.shippingStreetAddress || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping street"}
+                onSave={value => saveDetailsPatch({ shippingStreetAddress: String(value) }, "Shipping street")}
+              />
+              <InlineValueRow
+                label="City"
+                value={order.shippingCity || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping city"}
+                onSave={value => saveDetailsPatch({ shippingCity: String(value) }, "Shipping city")}
+              />
+              <InlineValueRow
+                label="Postcode"
+                value={order.shippingPostalCode || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping postcode"}
+                onSave={value => saveDetailsPatch({ shippingPostalCode: String(value) }, "Shipping postcode")}
+              />
+              <InlineValueRow
+                label="Country"
+                value={order.shippingCountry || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping country"}
+                onSave={value => saveDetailsPatch({ shippingCountry: String(value) }, "Shipping country")}
+              />
+              <InlineValueRow
+                label="Shipping phone"
+                value={order.shippingPhone || ""}
+                disabled={!canInlineEditFullDetails}
+                saving={savingInlineField === "Shipping phone"}
+                onSave={value => saveDetailsPatch({ shippingPhone: String(value) }, "Shipping phone")}
+              />
             </div>
           </section>
         );
@@ -4924,7 +5232,9 @@ export function OrderDetailContent({
                     />
                     <div className="app-card-divider" />
                     <FinanceInlineRow
-                      label="Cost (Base)"
+                      label={cardLabels.financialBaseCostLabel}
+                      labelRaw={cardLabels.financialBaseCostLabel}
+                      onLabelSave={canInlineEditFinance ? value => saveCardLabel("financialBaseCostLabel", value) : undefined}
                       displayValue={money(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
@@ -4950,6 +5260,36 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Shipping Cost"}
                       onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
                     />
+                    {decodeFinancialItems(moneySettings?.financialExpenseItemsJSON ?? "").map(item => {
+                      const amount = Number(String(order.customFields[`financialExpense::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                      return (
+                        <FinanceInlineRow
+                          key={`expense-${item.title}`}
+                          label={item.title}
+                          displayValue={money(amount, hideNumbers)}
+                          value={amount}
+                          tone="negative"
+                          disabled={!canInlineEditFinance}
+                          saving={savingFinanceField === `Expense: ${item.title}`}
+                          onSave={value => saveCustomFinanceValue("expense", item.title, value, `Expense: ${item.title}`)}
+                        />
+                      );
+                    })}
+                    {decodeFinancialItems(moneySettings?.financialRemainingItemsJSON ?? "").map(item => {
+                      const amount = Number(String(order.customFields[`financialRemaining::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                      return (
+                        <FinanceInlineRow
+                          key={`remaining-${item.title}`}
+                          label={item.title}
+                          displayValue={money(amount, hideNumbers)}
+                          value={amount}
+                          tone="negative-soft"
+                          disabled={!canInlineEditFinance}
+                          saving={savingFinanceField === `Remaining: ${item.title}`}
+                          onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
+                        />
+                      );
+                    })}
                     <div className="app-card-divider" />
                     <FinanceInlineRow
                       label="VAT Rule"
@@ -5035,6 +5375,8 @@ export function OrderDetailContent({
                     <InlineSelectRow
                       key={`${stepTitle}-${index}`}
                       label={stepTitle}
+                      labelRaw={stepTitle}
+                      onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                       value={order.designStatus || "Not Yet"}
                       options={statusOptions}
                       disabled={!canEditOrderStatus}
@@ -5049,6 +5391,8 @@ export function OrderDetailContent({
                     <InlineSelectRow
                       key={`${stepTitle}-${index}`}
                       label={stepTitle}
+                      labelRaw={stepTitle}
+                      onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                       value={order.status || "Not Yet"}
                       options={statusOptions}
                       disabled={!canEditOrderStatus}
@@ -5062,6 +5406,8 @@ export function OrderDetailContent({
                   <InlineSelectRow
                     key={step.id || `${stepTitle}-${index}`}
                     label={stepTitle}
+                    labelRaw={stepTitle}
+                    onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                     value={statusStepValue(step)}
                     options={statusOptions}
                     disabled={!canEditOrderStatus}
@@ -6398,6 +6744,48 @@ export function OrderDetailContent({
         </div>
         {renderHeaderMeta()}
         <div className="order-toolbar-pills">
+          {canAssignProjects ? (
+            <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
+              <button
+                className="button secondary order-actions-button"
+                type="button"
+                disabled={savingAssignment}
+                onClick={event => {
+                  event.stopPropagation();
+                  setOrderActionsOpen(false);
+                  setAssignProjectMenuOpen(open => !open);
+                }}
+              >
+                {currentAssignee ? `${t("Assigned to")} ${currentAssignee}` : t("Unassigned")}
+              </button>
+              {assignProjectMenuOpen ? (
+                <div className="order-actions-menu-panel" style={{ zIndex: 130 }}>
+                  <div className="order-actions-menu-section-title">{t("Assign Project")}</div>
+                  <button
+                    type="button"
+                    disabled={!order.assignedToUid && !order.assignedToEmail}
+                    onClick={() => void assignProjectToMember(null)}
+                  >
+                    <span aria-hidden="true">{!order.assignedToUid && !order.assignedToEmail ? "✓" : "○"}</span>
+                    {t("Unassigned")}
+                  </button>
+                  {assignableMembers.map(member => {
+                    const isCurrent = order.assignedToUid?.trim() === member.id;
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={() => void assignProjectToMember(member)}
+                      >
+                        <span aria-hidden="true">{isCurrent ? "✓" : "○"}</span>
+                        {member.displayName.trim() || member.email.trim() || member.id}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <button
             className={["card-layout-lock-button", cardsLocked ? "is-locked" : "is-unlocked"].join(" ")}
             type="button"
@@ -6547,6 +6935,7 @@ export function OrderDetailContent({
         onError={setOrderActionError}
       />
 
+
       <BlockHeadingsModal
         cardId={headingEditorCardId}
         workspace={workspace}
@@ -6554,6 +6943,10 @@ export function OrderDetailContent({
         canSave={canEditCardLayout}
         perOrderExtraNoteSections={perOrderExtraNoteSections}
         onSavePerOrderExtraNoteSections={savePerOrderExtraNoteSections}
+        companyNumbers={moneySettings?.companyNumbers ?? []}
+        onSaveCompanyNumbers={numbers => {
+          if (moneySettings) void savePdfExportSettings(workspace, pdfInputFrom(moneySettings, numbers));
+        }}
         onClose={() => setHeadingEditorCardId(null)}
         onSaved={settings => {
           setBlockHeadingSettings(settings);
@@ -7095,6 +7488,8 @@ function BlockHeadingsModal({
   canSave,
   perOrderExtraNoteSections,
   onSavePerOrderExtraNoteSections,
+  companyNumbers,
+  onSaveCompanyNumbers,
   onClose,
   onSaved
 }: {
@@ -7104,6 +7499,8 @@ function BlockHeadingsModal({
   canSave: boolean;
   perOrderExtraNoteSections?: HeadingItem[];
   onSavePerOrderExtraNoteSections?: (next: HeadingItem[]) => void;
+  companyNumbers?: CompanyNumberSetting[];
+  onSaveCompanyNumbers?: (numbers: CompanyNumberSetting[]) => void;
   onClose: () => void;
   onSaved?: (settings: BlockHeadingSettings) => void;
 }) {
@@ -7125,6 +7522,9 @@ function BlockHeadingsModal({
     setError("");
 
     if (!supported) return;
+    // invoiceItems has no renamable headings — the dialog only edits the workspace
+    // company invoice numbers, which CompanyNumbersEditor self-saves. Skip the load.
+    if (cardId === "invoiceItems") { setLoading(false); return; }
 
     let cancelled = false;
     async function run() {
@@ -7438,6 +7838,14 @@ function BlockHeadingsModal({
         return renderList("Special Note Fields", "specialNoteSections", "Special Note", true);
       case "schedule":
         return renderList("Quick reminders", "scheduleQuickReminders", "Custom reminder");
+      case "invoiceItems":
+        return (
+          <CompanyNumbersEditor
+            numbers={companyNumbers ?? []}
+            disabled={!canSave}
+            onSave={next => onSaveCompanyNumbers?.(next)}
+          />
+        );
       default:
         return null;
     }
@@ -7472,7 +7880,7 @@ function BlockHeadingsModal({
 
         <div className="add-order-actions">
           <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Close</button>
-          {supported ? (
+          {supported && cardId !== "invoiceItems" ? (
             <button className="button" type="button" onClick={handleSave} disabled={saving || loading || !settings || !canSave}>
               {saving ? "Saving..." : "Save Headings"}
             </button>
@@ -7544,6 +7952,319 @@ function AppValueRow({
   );
 }
 
+function pdfInputFrom(s: WorkspaceSettingsOverview, companyNumbers: CompanyNumberSetting[]): PdfExportSettingsInput {
+  return {
+    pdfShowCustomer: s.pdfShowCustomer,
+    pdfShowContact: s.pdfShowContact,
+    pdfShowPreview: s.pdfShowPreview,
+    pdfShowFinCustomer: s.pdfShowFinCustomer,
+    pdfShowPaymentMethod: s.pdfShowPaymentMethod,
+    pdfShowFinInternal: s.pdfShowFinInternal,
+    pdfShowStatus: s.pdfShowStatus,
+    pdfShowShipping: s.pdfShowShipping,
+    pdfShowMaterials: s.pdfShowMaterials,
+    pdfShowPriority: s.pdfShowPriority,
+    pdfShowAddress: s.pdfShowAddress,
+    pdfShowShippingAddress: s.pdfShowShippingAddress,
+    companyNumbers
+  };
+}
+
+function CompanyNumbersEditor({
+  numbers,
+  disabled,
+  onSave
+}: {
+  numbers: CompanyNumberSetting[];
+  disabled: boolean;
+  onSave: (numbers: CompanyNumberSetting[]) => void;
+}) {
+  const [draft, setDraft] = useState<CompanyNumberSetting[]>(numbers);
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  const sig = JSON.stringify(numbers);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setDraft(numbers);
+  }, [sig]);
+
+  const commit = (next?: CompanyNumberSetting[]) => {
+    const base = next ?? draftRef.current;
+    setDraft(base);
+    onSave(base);
+  };
+  const updateRow = (index: number, patch: Partial<CompanyNumberSetting>) =>
+    setDraft(prev => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Company invoice numbers</span>
+        {!disabled ? (
+          <button
+            type="button"
+            onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), title: "New Number", value: "" }])}
+            style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            + Add
+          </button>
+        ) : null}
+      </div>
+      {draft.map((it, index) => (
+        <div key={it.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+          <input
+            className="input"
+            style={{ flex: "1 1 100px", minWidth: 80 }}
+            placeholder="Label"
+            value={it.title}
+            disabled={disabled}
+            onChange={e => updateRow(index, { title: e.target.value })}
+            onBlur={() => commit()}
+          />
+          <input
+            className="input"
+            style={{ flex: "1 1 110px", minWidth: 90 }}
+            placeholder="Number / value"
+            value={it.value}
+            disabled={disabled}
+            onChange={e => updateRow(index, { value: e.target.value })}
+            onBlur={() => commit()}
+          />
+          {!disabled ? (
+            <button
+              type="button"
+              onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
+              aria-label="Remove"
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InvoiceFooterEditor({
+  note,
+  disabled,
+  onSave
+}: {
+  note: string;
+  disabled: boolean;
+  onSave: (note: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(note.trim().length > 0);
+  const [draft, setDraft] = useState(note);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setDraft(note);
+    // Auto-expand when a note arrives (e.g. synced live from another device), so the
+    // user actually sees it instead of a collapsed "+ Invoice Note" button.
+    if (note.trim().length > 0) setExpanded(true);
+  }, [note]);
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => setExpanded(value => !value)}
+        style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: 0.8 }}
+      >
+        <span style={{ fontSize: 16, lineHeight: 1 }}>{expanded ? "−" : "+"}</span>
+        Invoice Note
+      </button>
+      {expanded ? (
+        <textarea
+          className="input"
+          style={{ width: "100%", minHeight: 70, marginTop: 8, resize: "vertical" }}
+          placeholder="Bank details, payment terms, thank-you note…"
+          value={draft}
+          disabled={disabled}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => {
+            if (draft !== note) onSave(draft);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LineItemsEditor({
+  items,
+  disabled,
+  formatMoney,
+  onSave
+}: {
+  items: LineItemDetail[];
+  disabled: boolean;
+  formatMoney: (value: number) => string;
+  onSave: (items: LineItemDetail[]) => void;
+}) {
+  const [draft, setDraft] = useState<LineItemDetail[]>(items);
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  const itemsSig = JSON.stringify(items);
+  // Resync the local draft when the order's items change on the server / via optimistic update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setDraft(items);
+  }, [itemsSig]);
+
+  const lineTotalOf = (it: LineItemDetail) => Math.round(it.quantity * it.unitPrice * 100) / 100;
+  const commit = (next: LineItemDetail[]) => {
+    const normalized = next.map(it => ({ ...it, lineTotal: lineTotalOf(it) }));
+    setDraft(normalized);
+    onSave(normalized);
+  };
+  const updateRow = (index: number, patch: Partial<LineItemDetail>) =>
+    setDraft(prev => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+
+  const runningTotal = Math.round(draft.reduce((sum, it) => sum + lineTotalOf(it), 0) * 100) / 100;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Invoice Items</span>
+        {draft.length > 0 ? <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
+      </div>
+      {draft.map((it, index) => (
+        <div key={it.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+          <input
+            className="input"
+            style={{ flex: "1 1 130px", minWidth: 110 }}
+            placeholder="Item"
+            value={it.name}
+            disabled={disabled}
+            onChange={e => updateRow(index, { name: e.target.value })}
+            onBlur={() => commit(draftRef.current)}
+          />
+          <input
+            className="input"
+            style={{ width: 64 }}
+            type="number"
+            min={0}
+            value={it.quantity}
+            disabled={disabled}
+            onChange={e => updateRow(index, { quantity: Number(e.target.value) || 0 })}
+            onBlur={() => commit(draftRef.current)}
+          />
+          <input
+            className="input"
+            style={{ width: 88 }}
+            type="number"
+            min={0}
+            step="0.01"
+            value={it.unitPrice}
+            disabled={disabled}
+            onChange={e => updateRow(index, { unitPrice: Number(e.target.value) || 0 })}
+            onBlur={() => commit(draftRef.current)}
+          />
+          <span style={{ minWidth: 72, textAlign: "right", fontSize: 13, fontWeight: 600 }}>{formatMoney(lineTotalOf(it))}</span>
+          {!disabled ? (
+            <button
+              type="button"
+              onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
+              aria-label="Remove item"
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+      {!disabled ? (
+        <button
+          type="button"
+          onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), name: "", quantity: 1, unitPrice: 0, lineTotal: 0 }])}
+          style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+        >
+          + Add Item
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+// Inline-rename for a card heading: shows `display`, reveals a hover highlight +
+// pencil, and edits in place on click (Enter / blur commits, Escape cancels) —
+// the same Finder-style rename the Mac/iPhone apps use instead of the
+// "Edit Block Headings" dialog.
+function InlineEditableLabel({
+  display,
+  rawValue,
+  editable,
+  onSave
+}: {
+  display: string;
+  rawValue: string;
+  editable: boolean;
+  onSave: (value: string) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(rawValue);
+  const cancellingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(rawValue);
+  }, [editing, rawValue]);
+
+  if (!editable) return <span>{display}</span>;
+
+  function commit() {
+    if (cancellingRef.current) return;
+    setEditing(false);
+    const cleaned = draft.trim();
+    if (cleaned && cleaned !== rawValue) void onSave(cleaned);
+  }
+  function cancel() {
+    cancellingRef.current = true;
+    setDraft(rawValue);
+    setEditing(false);
+    window.setTimeout(() => {
+      cancellingRef.current = false;
+    }, 0);
+  }
+
+  if (editing) {
+    return (
+      <input
+        className="app-inline-label-input"
+        autoFocus
+        value={draft}
+        onChange={event => setDraft(event.target.value)}
+        onFocus={event => event.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={event => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            cancel();
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <button type="button" className="app-inline-label" title="Rename" onClick={() => setEditing(true)}>
+      <span>{display}</span>
+      <svg className="app-inline-label-pencil" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    </button>
+  );
+}
+
 function InlineValueRow({
   label,
   value,
@@ -7552,7 +8273,9 @@ function InlineValueRow({
   tone,
   disabled,
   saving,
-  onSave
+  onSave,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   value: string;
@@ -7562,6 +8285,8 @@ function InlineValueRow({
   disabled: boolean;
   saving: boolean;
   onSave: (value: string | number) => Promise<void> | void;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -7598,7 +8323,7 @@ function InlineValueRow({
 
   return (
     <div className="app-value-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
       {editing && !disabled ? (
         <form
           className="app-value-edit-form"
@@ -7721,7 +8446,9 @@ function InlineSelectRow({
   disabled,
   saving,
   onSave,
-  statusColor = false
+  statusColor = false,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   value: string;
@@ -7730,6 +8457,8 @@ function InlineSelectRow({
   saving: boolean;
   onSave: (value: string) => Promise<void> | void;
   statusColor?: boolean;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   const selectOptions = useMemo(() => {
     const cleanedValue = value.trim();
@@ -7739,7 +8468,7 @@ function InlineSelectRow({
 
   return (
     <div className="app-value-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
       <select
         className={[
           "app-value-pill app-inline-select",
@@ -7764,17 +8493,21 @@ function InlineYesNoRow({
   value,
   disabled,
   saving,
-  onSave
+  onSave,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   value: boolean;
   disabled: boolean;
   saving: boolean;
   onSave: (value: boolean) => Promise<void> | void;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   return (
     <div className="app-value-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave)} onSave={onLabelSave ?? (() => {})} />
       <div className="finance-binary-row">
         <button
           className={value ? "is-selected" : ""}
@@ -7841,7 +8574,9 @@ function FinanceInlineRow({
   options = [],
   disabled,
   saving,
-  onSave
+  onSave,
+  labelRaw,
+  onLabelSave
 }: {
   label: string;
   displayValue: string;
@@ -7852,6 +8587,8 @@ function FinanceInlineRow({
   disabled: boolean;
   saving: boolean;
   onSave: (value: string | number) => Promise<void> | void;
+  labelRaw?: string;
+  onLabelSave?: (value: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
@@ -7895,7 +8632,7 @@ function FinanceInlineRow({
 
   return (
     <div className="detail-row finance-inline-row">
-      <span>{label}</span>
+      <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave) && !disabled} onSave={onLabelSave ?? (() => {})} />
       {editing && !disabled ? (
         mode === "select" ? (
           <select

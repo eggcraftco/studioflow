@@ -168,6 +168,7 @@ export type WorkspaceSettingsOverview = {
   selectedDecimalSeparator: string;
   feePercentage: number;
   defaultTaxRate: number;
+  defaultDeliveryTime: number;
   taxCalculationType: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
@@ -182,6 +183,9 @@ export type WorkspaceSettingsOverview = {
   pdfShowShipping: boolean;
   pdfShowMaterials: boolean;
   pdfShowPriority: boolean;
+  pdfShowAddress: boolean;
+  pdfShowShippingAddress: boolean;
+  orderItemsHeading: string;
   financialExpenseItemsJSON: string;
   financialRemainingItemsJSON: string;
   financialShowBaseCost: boolean;
@@ -315,6 +319,12 @@ export type CustomerDirectoryItem = {
   city: string;
   postalCode: string;
   country: string;
+  shippingAddress: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  shippingPhone: string;
   notes: string;
   profileImageUrl: string;
   lastContactDate: Date | null;
@@ -403,6 +413,16 @@ export type PaymentEntryDetail = {
   createdByEmail: string;
 };
 
+// One billable invoice line (gross / VAT-inclusive). When present, their sum drives the
+// order total. Mirrors the Swift LineItem, Android StudioLineItem, and backend webhook schema.
+export type LineItemDetail = {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
 export type OrderDetail = {
   id: string;
   companyId: string;
@@ -433,8 +453,15 @@ export type OrderDetail = {
   emailAddress: string;
   instagramUsername: string;
   whatsappNumber: string;
+  shippingName: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  shippingPhone: string;
   communication: string[];
   notes: string;
+  invoiceNote: string;
   invBool1: boolean;
   invBool2: boolean;
   invBool3: boolean;
@@ -452,6 +479,7 @@ export type OrderDetail = {
   workSessions: WorkSessionDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
+  lineItems: LineItemDetail[];
   invoiceNumber: string;
 };
 
@@ -896,7 +924,7 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
 
 export async function loadDashboardFinanceOrders(companyId: string): Promise<DashboardFinanceOrder[]> {
   const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
-  return snapshot.docs.map(orderDocument => {
+  return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
       id: orderDocument.id,
@@ -938,6 +966,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
     feePercentage: numberValue(data.feePercentage, 3),
     defaultTaxRate: numberValue(data.defaultTaxRate, 20),
+    defaultDeliveryTime: numberValue(data.defaultDeliveryTime, 30),
     taxCalculationType: stringValue(data.taxCalculationType, "Revenue"),
     taxMilestoneEnabled: booleanValue(data.taxMilestoneEnabled, false),
     taxMilestoneDate: numberValue(data.taxMilestoneDate, Date.now() / 1000),
@@ -951,6 +980,9 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     pdfShowStatus: booleanValue(data.pdfShowStatus, true),
     pdfShowShipping: booleanValue(data.pdfShowShipping, true),
     pdfShowMaterials: booleanValue(data.pdfShowMaterials, true),
+    pdfShowAddress: booleanValue(data.pdfShowAddress, true),
+    pdfShowShippingAddress: booleanValue(data.pdfShowShippingAddress, true),
+    orderItemsHeading: stringValue(data.orderItemsHeading, ""),
     pdfShowPriority: booleanValue(data.pdfShowPriority, true),
     financialExpenseItemsJSON: stringValue(data.financialExpenseItemsJSON, ""),
     financialRemainingItemsJSON: stringValue(data.financialRemainingItemsJSON, ""),
@@ -1104,12 +1136,12 @@ function workspaceOrderDoc(companyId: string, orderId: string, workspace?: Works
     : doc(db, "siparisler", orderId);
 }
 
-export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderListItem[]> {
+export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = "", trashedOnly = false): Promise<OrderListItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   // No limit: load every order in the workspace scope so the web list matches
   // the Mac and Android apps (which load the full set).
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.map(orderDocument => {
+  const orders = snapshot.docs.filter(orderDocument => booleanValue(orderDocument.data().isDeleted, false) === trashedOnly).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1166,7 +1198,7 @@ export async function loadRecentOrders(companyId: string, workspace?: WorkspaceC
 export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.map(orderDocument => {
+  const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1221,7 +1253,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
 export async function loadWorkspaceOrderOptions(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderOptionItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.map(orderDocument => {
+  const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
       id: orderDocument.id,
@@ -1245,7 +1277,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
     getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)))
   ]);
 
-  const orders = ordersSnapshot.docs.map(orderDocument => {
+  const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1303,6 +1335,12 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       city: firstStringValue(data.city, data.town),
       postalCode: firstStringValue(data.postalCode, data.postcode, data.zipCode, data.zip),
       country: stringValue(data.country, ""),
+      shippingAddress: stringValue(data.shippingAddress, ""),
+      shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
+      shippingCity: stringValue(data.shippingCity, ""),
+      shippingPostalCode: stringValue(data.shippingPostalCode, ""),
+      shippingCountry: stringValue(data.shippingCountry, ""),
+      shippingPhone: stringValue(data.shippingPhone, ""),
       notes: stringValue(data.notes, ""),
       profileImageUrl: stringValue(data.profileImageUrl, ""),
       lastContactDate: dateValue(data.lastContactDate),
@@ -1352,7 +1390,7 @@ export async function loadWorkspaceExportData(workspace: WorkspaceContext): Prom
     getDoc(doc(db, "companySettings", workspace.id))
   ]);
 
-  const orders = ordersSnapshot.docs.map(orderDocument => serializableDocument(orderDocument.id, orderDocument.data()));
+  const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => serializableDocument(orderDocument.id, orderDocument.data()));
   const customers = customersSnapshot.docs.map(customerDocument => serializableDocument(customerDocument.id, customerDocument.data()));
 
   return {
@@ -1536,6 +1574,19 @@ function mapPayments(value: unknown): PaymentEntryDetail[] {
   }).sort((first, second) => (second.date?.getTime() ?? 0) - (first.date?.getTime() ?? 0));
 }
 
+function mapLineItems(value: unknown): LineItemDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `item-${index}`),
+      name: stringValue(entry.name, ""),
+      quantity: numberValue(entry.quantity, 1),
+      unitPrice: numberValue(entry.unitPrice),
+      lineTotal: numberValue(entry.lineTotal)
+    };
+  });
+}
+
 function mapOrderDetailSnapshot(
   snapshot: DocumentSnapshot<DocumentData>,
   companyId: string,
@@ -1594,6 +1645,12 @@ function mapOrderDetailSnapshot(
     emailAddress: stringValue(data.emailAddress, ""),
     instagramUsername: stringValue(data.instagramUsername, ""),
     whatsappNumber: stringValue(data.whatsappNumber, ""),
+    shippingName: stringValue(data.shippingName, ""),
+    shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
+    shippingCity: stringValue(data.shippingCity, ""),
+    shippingPostalCode: stringValue(data.shippingPostalCode, ""),
+    shippingCountry: stringValue(data.shippingCountry, ""),
+    shippingPhone: stringValue(data.shippingPhone, ""),
     communication: stringArrayValue(data.communication),
     notes: stringValue(data.notes, ""),
     invBool1: booleanValue(data.invBool1, false),
@@ -1617,6 +1674,8 @@ function mapOrderDetailSnapshot(
     workSessions: mapWorkSessions(data.workSessions),
     historyLog: mapHistoryLog(data.historyLog),
     payments: mapPayments(data.payments),
+    invoiceNote: stringValue(data.invoiceNote, ""),
+    lineItems: mapLineItems(data.lineItems),
     invoiceNumber: stringValue(data.invoiceNumber, "")
   };
 }

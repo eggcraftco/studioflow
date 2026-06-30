@@ -32,6 +32,8 @@ export type PdfExportSettingsInput = {
   pdfShowShipping: boolean;
   pdfShowMaterials: boolean;
   pdfShowPriority: boolean;
+  pdfShowAddress: boolean;
+  pdfShowShippingAddress: boolean;
   companyNumbers: CompanyNumberSetting[];
 };
 
@@ -48,6 +50,7 @@ export type FinancialSettingsInput = {
   taxRuleNameRevenue: string;
   taxRuleNameProfit: string;
   defaultTaxRate: number;
+  defaultDeliveryTime?: number;
   taxCalculationType: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
@@ -324,6 +327,28 @@ export async function recalculateFinancialSettingsForOrders(workspace: Workspace
   }
 }
 
+export type ClearAllOrdersTaxResult = {
+  ok?: boolean;
+  clearedCount?: number;
+  message?: string;
+};
+
+export async function clearAllOrdersTax(workspace: WorkspaceContext) {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot edit this settings section.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, ClearAllOrdersTaxResult>(functions, "clearAllOrdersTax");
+      const result = await callable({ companyId: workspace.id });
+      return result.data;
+    }, "Removing VAT from orders.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
 export async function importWorkspaceBackup(workspace: WorkspaceContext, backup: unknown) {
   if (!canEditWorkspaceSettingsForRole(workspace.role)) {
     throw new Error("Your workspace role cannot import workspace data.");
@@ -373,6 +398,8 @@ export type PersonalInterfaceSettings = {
   pdfShowPriority?: boolean;
   pdfShowStatus?: boolean;
   pdfShowShipping?: boolean;
+  pdfShowAddress?: boolean;
+  pdfShowShippingAddress?: boolean;
 };
 
 export async function getPersonalInterfaceSettings(workspace: WorkspaceContext) {

@@ -26,11 +26,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Business
@@ -58,12 +60,15 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Timeline
@@ -88,6 +93,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneOffset
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -195,7 +209,7 @@ fun SettingsScreen(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var selectedKey by rememberSaveable { mutableStateOf<String?>(initialSectionKey) }
+    var selectedKey by rememberSaveable { mutableStateOf<String?>(mapLegacySettingsKey(initialSectionKey)) }
     val currentPlan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
     val currentAccess = state.workspace?.memberAccess
     val currentRole = state.workspace?.role.orEmpty()
@@ -216,7 +230,7 @@ fun SettingsScreen(
 
     LaunchedEffect(initialSectionKey) {
         if (!initialSectionKey.isNullOrBlank()) {
-            selectedKey = initialSectionKey
+            selectedKey = mapLegacySettingsKey(initialSectionKey)
         }
     }
     BoxWithConstraints(
@@ -238,7 +252,10 @@ fun SettingsScreen(
                 ) {
                     SectionHeader(title = t("Settings"), subtitle = "Choose a section to edit.")
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                        items(sections, key = { it.key }) { section ->
+                        itemsIndexed(sections, key = { _, it -> it.key }) { index, section ->
+                            if (index == 0 || sections[index - 1].group != section.group) {
+                                SettingsGroupLabel(title = t(section.group), topPadding = if (index == 0) 0.dp else 12.dp)
+                            }
                             SettingsRow(
                                 section = section,
                                 selected = section.key == selected?.key,
@@ -340,7 +357,10 @@ fun SettingsScreen(
         ) {
             SectionHeader(title = t("Settings"), subtitle = "Choose a section to edit.")
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                items(sections, key = { it.key }) { section ->
+                itemsIndexed(sections, key = { _, it -> it.key }) { index, section ->
+                    if (index == 0 || sections[index - 1].group != section.group) {
+                        SettingsGroupLabel(title = t(section.group), topPadding = if (index == 0) 2.dp else 14.dp)
+                    }
                     SettingsRow(
                         section = section,
                         unreadCount = if (section.key == "support") supportUnreadCount else 0,
@@ -358,24 +378,31 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
     val normalizedRole = role.lowercase().replace("_", "").replace("-", "").replace(" ", "")
     val isWorkflowOnly = normalizedRole == "workflow" || normalizedRole == "workflowonly"
     listOf(
-        SettingsSection("general", "General", "Appearance, language, profile and workspace identity.", Icons.Filled.Settings),
-        SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline),
-        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description),
-        SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome),
-        SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat),
-        SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent),
-        SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart),
-        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security),
-        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage),
-        SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email),
-        SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard),
-        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People),
-        SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel)
+        // Account — personal settings that follow the signed-in user.
+        SettingsSection("profileSecurity", "Profile & Security", "Your name, photo, sign-in email and password.", Icons.Filled.AccountCircle, "Account"),
+        SettingsSection("preferences", "Preferences", "Your personal theme and language.", Icons.Filled.Tune, "Account"),
+        SettingsSection("about", "About", "App version and product information.", Icons.Filled.Info, "Account"),
+        // Workspace — settings shared by every member of the workspace.
+        SettingsSection("branding", "Branding", "Workspace name, logo and subtitle.", Icons.Filled.Palette, "Workspace"),
+        SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline, "Workspace"),
+        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace"),
+        SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome, "Workspace"),
+        SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat, "Workspace"),
+        SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent, "Workspace"),
+        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security, "Workspace"),
+        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage, "Workspace"),
+        SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email, "Workspace"),
+        SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard, "Workspace"),
+        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People, "Workspace"),
+        SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel, "Workspace"),
+        SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart, "Integrations"),
+        SettingsSection("shopify", "Shopify Integration", "Live Shopify orders and webhook setup.", Icons.Filled.ShoppingBag, "Integrations"),
+        SettingsSection("inbound", "Other Platforms", "Connect any store via Zapier, Make or a custom webhook.", Icons.Filled.Link, "Integrations")
     ).filter { section ->
         if (isWorkflowOnly) {
             when (section.key) {
                 // Keep operational tools only; hide workspace configuration.
-                "general" -> access?.settingsGeneral != false
+                "profileSecurity", "preferences", "about" -> access?.settingsGeneral != false
                 "pdf" -> access?.exportData != false && access?.settingsPdf != false
                 "quickReply" -> access?.quickReply != false && access?.settingsQuickReply != false
                 "support" -> access?.settingsSupport != false
@@ -389,7 +416,8 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
             // individual settings screens without also enabling the broader nav
             // permission. Unknown sections default to FALSE for safety.
             when (section.key) {
-                "general" -> access?.settingsGeneral != false
+                "profileSecurity", "preferences", "about" -> access?.settingsGeneral != false
+                "branding" -> access?.settingsGeneral != false
                 "workflow" -> access?.settingsWorkflow != false
                 "pdf" -> access?.settingsPdf != false
                 "quickReply" -> access?.settingsQuickReply != false
@@ -397,17 +425,30 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "financial" -> plan.hasAdvancedFinance && access?.settingsFinancial != false
                 "safety" -> access?.settingsSafetyUploads != false
                 "data" -> access?.settingsData != false
-                "woo" -> access?.settingsWorkflow != false
-                "account" -> access?.settingsGeneral != false
+                "woo", "shopify", "inbound" -> access?.settingsWorkflow != false
                 "plan" -> access?.settingsPlanAccess != false
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
-                "about" -> access?.settingsGeneral != false
                 "legal" -> true
                 else -> false
             }
         }
     }
+}
+
+// Uppercase group heading for the settings list (Account / Workspace).
+@Composable
+private fun SettingsGroupLabel(title: String, topPadding: androidx.compose.ui.unit.Dp = 14.dp) {
+    Text(
+        text = title.uppercase(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Black,
+        letterSpacing = 0.8.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = topPadding, bottom = 2.dp, start = 6.dp)
+    )
 }
 
 @Composable
@@ -498,24 +539,59 @@ private fun SettingsDetailScreen(
         item { DetailTopBar(section = section, onBack = onBack, showBack = showBack) }
         item {
             when (section.key) {
-                "general" -> GeneralSettingsDetail(
+                "profileSecurity" -> AccountDetail(
                     state = state,
-                    onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                    requireDeviceUnlock = requireDeviceUnlock,
+                    onSetRequireDeviceUnlock = onSetRequireDeviceUnlock,
                     onUpdateAccountProfile = onUpdateAccountProfile,
                     onUploadAccountAvatar = onUploadAccountAvatar,
                     onRemoveAccountAvatar = onRemoveAccountAvatar,
                     onUploadWorkspaceLogo = onUploadWorkspaceLogo,
                     onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
-                    onChangeAccountEmail = onChangeAccountEmail
+                    onChangeAccountEmail = onChangeAccountEmail,
+                    onSendPasswordResetEmail = onSendPasswordResetEmail,
+                    onSignOut = onSignOut,
+                    includeHeader = false,
+                    includeProfile = true,
+                    includeLogo = false,
+                    includeSecurity = true,
+                    includeWorkspaceIdentity = false
                 )
-                "theme" -> ThemeBrandingDetail(state, onUpdateWorkspaceSettings)
-                "language" -> LanguageLabelsDetail(state, onUpdateWorkspaceSettings)
+                "preferences" -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    ThemeBrandingDetail(state, onUpdateWorkspaceSettings, showTheme = true, showBranding = false)
+                    LanguageLabelsDetail(state, onUpdateWorkspaceSettings, personalOnly = true)
+                }
+                "about" -> AboutDetail()
+                "branding" -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    ThemeBrandingDetail(state, onUpdateWorkspaceSettings, showTheme = false, showBranding = true)
+                    AccountDetail(
+                        state = state,
+                        requireDeviceUnlock = false,
+                        onSetRequireDeviceUnlock = {},
+                        onUpdateAccountProfile = onUpdateAccountProfile,
+                        onUploadAccountAvatar = onUploadAccountAvatar,
+                        onRemoveAccountAvatar = onRemoveAccountAvatar,
+                        onUploadWorkspaceLogo = onUploadWorkspaceLogo,
+                        onRemoveWorkspaceLogo = onRemoveWorkspaceLogo,
+                        onChangeAccountEmail = onChangeAccountEmail,
+                        onSendPasswordResetEmail = {},
+                        onSignOut = {},
+                        includeHeader = false,
+                        includeProfile = false,
+                        includeLogo = true,
+                        includeSecurity = false,
+                        includeWorkspaceIdentity = false,
+                        includeWorkspaceIdentityCard = true
+                    )
+                }
                 "workflow" -> WorkflowStepsDetail(state, onUpdateWorkspaceSettings)
                 "pdf" -> PdfExportDetail(state, onUpdateWorkspaceSettings)
                 "quickReply" -> QuickReplySettingsDetail(state, onUpdateWorkspaceSettings)
                 "messages" -> MessageSettingsDetail(state, onSaveMessageWorkspaceSettings, onReloadMessageWorkspaceSettings)
                 "financial" -> FinancialSettingsDetail(state, onUpdateWorkspaceSettings, onRecalculateFinancialSettings)
                 "woo" -> WooCommerceDetail(state)
+                "shopify" -> ShopifyDetail(state)
+                "inbound" -> InboundDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
                 "data" -> DataManagementDetail(state, onImportBackup, onDeleteWorkspaceData)
                 "account" -> AccountDetail(
@@ -596,7 +672,7 @@ private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack:
 }
 
 @Composable
-private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit, personalTheme: Boolean = true, showBranding: Boolean = false) {
+private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit, personalTheme: Boolean = true, showBranding: Boolean = false, showTheme: Boolean = true) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
@@ -607,7 +683,7 @@ private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, A
         else -> t("System")
     }
     DetailColumn {
-        DetailCard(title = t("Theme"), icon = Icons.Filled.Palette) {
+        if (showTheme) DetailCard(title = t("Theme"), icon = Icons.Filled.Palette) {
             MenuField(
                 label = t("Theme"),
                 value = displayedTheme,
@@ -636,7 +712,6 @@ private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, A
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Text(t("Workspace logo is managed from Account > Workspace Logo."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -998,7 +1073,9 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
                         SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "personalPdfShowMaterials"),
                         SwitchSpec("Priority / Risk", settings.pdfShowPriority, "personalPdfShowPriority"),
                         SwitchSpec("Production Status", settings.pdfShowStatus, "personalPdfShowStatus"),
-                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "personalPdfShowShipping")
+                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "personalPdfShowShipping"),
+                        SwitchSpec("Billing Address", settings.pdfShowAddress, "personalPdfShowAddress"),
+                        SwitchSpec("Shipping Address", settings.pdfShowShippingAddress, "personalPdfShowShippingAddress")
                     ),
                     onSave = { key, value -> onSave(mapOf(key to value), "Personal PDF preference saved.") }
                 )
@@ -1014,7 +1091,9 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
                         SwitchSpec("Payment Method", settings.pdfShowPaymentMethod, "pdfShowPaymentMethod"),
                         SwitchSpec("Internal Financials", settings.pdfShowFinInternal, "pdfShowFinInternal"),
                         SwitchSpec("Production Status", settings.pdfShowStatus, "pdfShowStatus"),
-                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping")
+                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping"),
+                        SwitchSpec("Billing Address", settings.pdfShowAddress, "pdfShowAddress"),
+                        SwitchSpec("Shipping Address", settings.pdfShowShippingAddress, "pdfShowShippingAddress")
                     ),
                     onSave = { key, value -> onSave(mapOf(key to value), "PDF settings saved.") }
                 )
@@ -1358,12 +1437,18 @@ private fun FinancialSettingsDetail(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val settings = state.workspaceSettings
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val financeCompanyId = state.workspace?.id ?: ""
+    var showClearTaxConfirm by remember { mutableStateOf(false) }
+    var clearingTax by remember { mutableStateOf(false) }
     var selectedCurrency by rememberSaveable(settings.selectedCurrency) { mutableStateOf(settings.selectedCurrency) }
     var selectedDecimalSeparator by rememberSaveable(settings.selectedDecimalSeparator) { mutableStateOf(settings.selectedDecimalSeparator) }
     var feePercentage by rememberSaveable(settings.feePercentage) { mutableStateOf(settingsNumberText(settings.feePercentage)) }
     var taxRuleNameRevenue by rememberSaveable(settings.taxRuleNameRevenue) { mutableStateOf(settings.taxRuleNameRevenue) }
     var taxRuleNameProfit by rememberSaveable(settings.taxRuleNameProfit) { mutableStateOf(settings.taxRuleNameProfit) }
     var defaultTaxRate by rememberSaveable(settings.defaultTaxRate) { mutableStateOf(settingsNumberText(settings.defaultTaxRate)) }
+    var defaultDeliveryTime by rememberSaveable(settings.defaultDeliveryTime) { mutableStateOf(settingsNumberText(settings.defaultDeliveryTime)) }
     var taxCalculationType by rememberSaveable(settings.taxCalculationType) { mutableStateOf(settings.taxCalculationType) }
     var taxMilestoneEnabled by rememberSaveable(settings.taxMilestoneEnabled) { mutableStateOf(settings.taxMilestoneEnabled) }
     var taxMilestoneDate by rememberSaveable(settings.taxMilestoneDate) { mutableStateOf(settingsDateInput(settings.taxMilestoneDate)) }
@@ -1383,6 +1468,7 @@ private fun FinancialSettingsDetail(
             "taxRuleNameRevenue" to taxRuleNameRevenue.trim().ifBlank { "Standard Tax (Services/New)" },
             "taxRuleNameProfit" to taxRuleNameProfit.trim().ifBlank { "Margin Scheme (2nd Hand)" },
             "defaultTaxRate" to parseSettingsNumber(defaultTaxRate, settings.defaultTaxRate).coerceIn(0.0, 100.0),
+            "defaultDeliveryTime" to parseSettingsNumber(defaultDeliveryTime, settings.defaultDeliveryTime).coerceIn(1.0, 730.0),
             "taxCalculationType" to if (taxCalculationType == "Profit") "Profit" else "Revenue",
             "taxMilestoneEnabled" to taxMilestoneEnabled,
             "taxMilestoneDate" to settingsDateSeconds(taxMilestoneDate, settings.taxMilestoneDate),
@@ -1444,6 +1530,13 @@ private fun FinancialSettingsDetail(
                 value = defaultTaxRate,
                 enabled = !state.settingsSaving,
                 onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) }
+            )
+            PercentTextField(
+                label = t("Default delivery time for new orders (days)"),
+                value = defaultDeliveryTime,
+                enabled = !state.settingsSaving,
+                suffix = t("days"),
+                onValueChange = { defaultDeliveryTime = cleanSettingsNumberInput(it) }
             )
             MenuField(
                 label = t("Calculate Tax On"),
@@ -1536,7 +1629,49 @@ private fun FinancialSettingsDetail(
                     Text(t("Recalculate Taxes"), fontWeight = FontWeight.ExtraBold)
                 }
             }
+            Button(
+                onClick = { showClearTaxConfirm = true },
+                enabled = !clearingTax && financeCompanyId.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(if (clearingTax) t("Removing VAT...") else t("Remove VAT from all orders"), fontWeight = FontWeight.ExtraBold)
+            }
         }
+    }
+
+    if (showClearTaxConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearTaxConfirm = false },
+            title = { Text(t("Remove VAT?")) },
+            text = { Text(t("This sets VAT/tax to 0 on all orders. Use this when VAT does not apply (e.g. you export). This cannot be undone.")) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearTaxConfirm = false
+                        clearingTax = true
+                        scope.launch {
+                            try {
+                                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                                    .getHttpsCallable("clearAllOrdersTax")
+                                    .call(hashMapOf("companyId" to financeCompanyId))
+                                    .await()
+                                @Suppress("UNCHECKED_CAST")
+                                val data = result.data as? Map<String, Any?>
+                                val message = (data?.get("message") as? String) ?: t("VAT removed from all orders.")
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            } catch (error: Exception) {
+                                Toast.makeText(context, error.message ?: t("VAT could not be removed."), Toast.LENGTH_SHORT).show()
+                            }
+                            clearingTax = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
+                ) { Text(t("Remove")) }
+            },
+            dismissButton = { TextButton(onClick = { showClearTaxConfirm = false }) { Text(t("Cancel")) } }
+        )
     }
 }
 
@@ -1551,7 +1686,7 @@ private fun SettingsSectionTitle(title: String) {
 }
 
 @Composable
-private fun PercentTextField(label: String, value: String, enabled: Boolean, onValueChange: (String) -> Unit) {
+private fun PercentTextField(label: String, value: String, enabled: Boolean, suffix: String = "%", onValueChange: (String) -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1560,7 +1695,7 @@ private fun PercentTextField(label: String, value: String, enabled: Boolean, onV
             value = value,
             onValueChange = onValueChange,
             enabled = enabled,
-            suffix = { Text("%") },
+            suffix = { Text(suffix) },
             singleLine = true,
             modifier = Modifier.width(150.dp)
         )
@@ -1642,6 +1777,92 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
 }
 
 @Composable
+private fun ShopifyDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    var tokenizedDeliveryUrl by remember { mutableStateOf("") }
+    var deliveryUrlLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(state.workspace?.id) {
+        val workspace = state.workspace ?: return@LaunchedEffect
+        if (workspace.id.isEmpty()) return@LaunchedEffect
+        deliveryUrlLoading = true
+        tokenizedDeliveryUrl = runCatching { repository.getShopifyWebhookDeliveryUrl(workspace) }.getOrDefault("")
+        deliveryUrlLoading = false
+    }
+    val deliveryUrl = when {
+        tokenizedDeliveryUrl.isNotEmpty() -> tokenizedDeliveryUrl
+        deliveryUrlLoading -> t("Loading...")
+        else -> "—"
+    }
+    DetailColumn {
+        DetailCard(title = t("Connect Shopify"), icon = Icons.Filled.ShoppingBag) {
+            Text(t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders will appear in this workspace automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("This setup only needs to be done once in Shopify."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
+            CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
+            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
+        }
+        DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
+            StepRow("1", "Open Shopify webhooks", "In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).")
+            StepRow("2", "Create an order webhook", "Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.")
+            StepRow("3", "Paste the Delivery URL", "Paste the copied Delivery URL as the webhook URL and save it.")
+            StepRow("4", "Place a test order", "Place a paid test order in your store; it appears in Orders within seconds.")
+        }
+        DetailCard(title = t("What happens when it is active"), icon = Icons.Filled.CheckCircle) {
+            Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun InboundDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    var tokenizedDeliveryUrl by remember { mutableStateOf("") }
+    var deliveryUrlLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(state.workspace?.id) {
+        val workspace = state.workspace ?: return@LaunchedEffect
+        if (workspace.id.isEmpty()) return@LaunchedEffect
+        deliveryUrlLoading = true
+        tokenizedDeliveryUrl = runCatching { repository.getInboundWebhookDeliveryUrl(workspace) }.getOrDefault("")
+        deliveryUrlLoading = false
+    }
+    val deliveryUrl = when {
+        tokenizedDeliveryUrl.isNotEmpty() -> tokenizedDeliveryUrl
+        deliveryUrlLoading -> t("Loading...")
+        else -> "—"
+    }
+    DetailColumn {
+        DetailCard(title = t("Connect any store with one webhook"), icon = Icons.Filled.Link) {
+            Text(t("Use Zapier, Make or your own site to POST each new order to the Delivery URL below. Orders appear in Orders and Schedule automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Works with Wix, Squarespace, Etsy, BigCommerce, custom sites and more."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
+            CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
+            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
+        }
+        DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
+            StepRow("1", "Pick a connection method", "Most platforms connect through Zapier or Make (a 'Webhooks > POST' action). Developers can also POST directly from their own site.")
+            StepRow("2", "Send the order as JSON", "POST a JSON body to the Delivery URL on each new order. At minimum include orderId. Common fields: orderId, customerName, email, phone, total, currency, products, source.")
+            StepRow("3", "Order appears automatically", "Each posted order is added to Orders and Schedule, tagged with the source you send.")
+        }
+        DetailCard(title = t("Example JSON"), icon = Icons.Filled.Description) {
+            Text(
+                "{\n  \"orderId\": \"1001\",\n  \"customerName\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"total\": 120.50,\n  \"currency\": \"GBP\",\n  \"products\": \"Custom dial x1\",\n  \"source\": \"Wix\"\n}",
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>, String) -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -1689,6 +1910,7 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun DataManagementDetail(
     state: StudioFlowUiState,
     onImportBackup: (String) -> Unit,
@@ -1699,6 +1921,7 @@ private fun DataManagementDetail(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var deleteConfirmText by rememberSaveable { mutableStateOf("") }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -1711,6 +1934,37 @@ private fun DataManagementDetail(
         }
     }
 
+    val companyId = state.workspace?.id ?: ""
+    val canSeeFinance = state.workspace?.memberAccess?.financialInfo ?: true
+    val availableReports = ExportReport.values().filter { canSeeFinance || !it.isFinance }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var exportReport by remember { mutableStateOf(if (canSeeFinance) ExportReport.FINANCE else ExportReport.INVOICES) }
+    var exportRange by remember { mutableStateOf(ExportRange.THIS_MONTH) }
+    var customFrom by remember { mutableStateOf(LocalDate.now(ZoneOffset.UTC)) }
+    var customTo by remember { mutableStateOf(LocalDate.now(ZoneOffset.UTC)) }
+    var includeTrash by remember { mutableStateOf(false) }
+    var bomEnabled by remember { mutableStateOf(true) }
+    var useSemicolon by remember { mutableStateOf(false) }
+    var exportBusy by remember { mutableStateOf(false) }
+    var exportStatus by remember { mutableStateOf("") }
+    var exportError by remember { mutableStateOf("") }
+    var pendingCsv by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingName by remember { mutableStateOf("export.csv") }
+    var showFromPicker by remember { mutableStateOf(false) }
+    var showToPicker by remember { mutableStateOf(false) }
+    val exportSaveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val bytes = pendingCsv
+        if (uri != null && bytes != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                Toast.makeText(context, t("CSV saved."), Toast.LENGTH_SHORT).show()
+                showExportDialog = false
+            } catch (e: Exception) {
+                Toast.makeText(context, t("Could not save the file."), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     DetailColumn {
         DetailCard(title = t("Data Management"), icon = Icons.Filled.Storage) {
             Text(t("Create a backup before importing or deleting data."), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1718,7 +1972,7 @@ private fun DataManagementDetail(
                 shareText(context, "StudioManager_Backup.json", backupJson(state.orders, state.workspaceSettings))
             }
             ActionButton("Export CSV", Icons.Filled.TableChart, StudioBlue) {
-                shareText(context, "Orders_Export.csv", ordersCsv(state.orders))
+                showExportDialog = true
             }
             ActionButton("Import Backup", Icons.Filled.Upload, StudioGreen) {
                 importLauncher.launch("application/json")
@@ -1730,21 +1984,210 @@ private fun DataManagementDetail(
     }
 
     if (confirmDelete) {
+        val canDeleteData = deleteConfirmText.trim().uppercase() == "DELETE DATA"
         AlertDialog(
-            onDismissRequest = { confirmDelete = false },
+            onDismissRequest = { confirmDelete = false; deleteConfirmText = "" },
             title = { Text(t("Delete all data?")) },
-            text = { Text(t("All orders and customers in this workspace will be permanently deleted. Export a backup first if you are unsure.")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(t("All orders and customers in this workspace will be permanently deleted. Export a backup first if you are unsure."))
+                    OutlinedTextField(
+                        value = deleteConfirmText,
+                        onValueChange = { deleteConfirmText = it },
+                        label = { Text(t("Type DELETE DATA to confirm")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
                         confirmDelete = false
+                        deleteConfirmText = ""
                         onDeleteWorkspaceData()
                     },
+                    enabled = canDeleteData,
                     colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
                 ) { Text(t(t("Yes, Delete All"))) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(t("Cancel")) } }
+            dismissButton = { TextButton(onClick = { confirmDelete = false; deleteConfirmText = "" }) { Text(t("Cancel")) } }
         )
+    }
+
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!exportBusy) showExportDialog = false },
+            title = { Text(t("Export invoices to CSV")) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    ExportSelectorRow(t("Report"), exportReport.label, availableReports.map { it.label }) { i -> exportReport = availableReports[i] }
+                    Text(exportReport.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ExportSelectorRow(t("Date range"), exportRange.label, ExportRange.values().map { it.label }) { i -> exportRange = ExportRange.values()[i] }
+                    if (exportRange == ExportRange.CUSTOM) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(onClick = { showFromPicker = true }, modifier = Modifier.weight(1f)) { Text("${t("From")}: $customFrom") }
+                            OutlinedButton(onClick = { showToPicker = true }, modifier = Modifier.weight(1f)) { Text("${t("To")}: $customTo") }
+                        }
+                    }
+                    ExportSwitchRow(t("Include trashed invoices"), includeTrash) { includeTrash = it }
+                    ExportSwitchRow(t("Excel-friendly (UTF-8 BOM)"), bomEnabled) { bomEnabled = it }
+                    ExportSwitchRow(t("Semicolon separator ( ; )"), useSemicolon) { useSemicolon = it }
+                    if (exportStatus.isNotEmpty()) Text(exportStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (exportError.isNotEmpty()) Text(exportError, style = MaterialTheme.typography.bodySmall, color = DangerRed)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        exportBusy = true; exportStatus = ""; exportError = ""
+                        val (from, to) = exportRangeDates(exportRange, customFrom, customTo)
+                        scope.launch {
+                            try {
+                                val (bytes, name, rowCount) = performOrderExport(
+                                    companyId, exportReport.id, from, to, includeTrash,
+                                    if (useSemicolon) ";" else ",", bomEnabled
+                                )
+                                pendingCsv = bytes
+                                pendingName = name
+                                exportBusy = false
+                                exportStatus = if (rowCount > 0) "$rowCount " + t("rows ready.") else t("No invoices matched this date range.")
+                                exportSaveLauncher.launch(name)
+                            } catch (e: Exception) {
+                                exportBusy = false
+                                exportError = e.message ?: t("Export failed.")
+                            }
+                        }
+                    },
+                    enabled = !exportBusy && companyId.isNotEmpty()
+                ) {
+                    if (exportBusy) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (exportBusy) t("Preparing…") else t("Download CSV"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text(t("Close")) } }
+        )
+    }
+
+    if (showFromPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = customFrom.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { showFromPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { customFrom = java.time.Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                    showFromPicker = false
+                }) { Text(t("OK")) }
+            },
+            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text(t("Cancel")) } }
+        ) { DatePicker(state = pickerState) }
+    }
+    if (showToPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = customTo.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { showToPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { customTo = java.time.Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                    showToPicker = false
+                }) { Text(t("OK")) }
+            },
+            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text(t("Cancel")) } }
+        ) { DatePicker(state = pickerState) }
+    }
+}
+
+// One server-side generator (exportOrders callable) backs web, Mac and Android.
+private enum class ExportReport(val id: String, val label: String, val detail: String, val isFinance: Boolean) {
+    INVOICES("orders", "Invoices", "One row per invoice — status, dates, contact and totals.", false),
+    LINE_ITEMS("lineItems", "Line items", "One row per product/service line on each invoice.", false),
+    PAYMENTS("payments", "Payments", "One row per payment received — the cash ledger.", true),
+    FINANCE("finance", "Finance", "One row per invoice with accountant columns (revenue, cost, VAT, net profit).", true)
+}
+
+private enum class ExportRange(val label: String) {
+    THIS_MONTH("This month"), LAST_MONTH("Last month"), THIS_QUARTER("This quarter"),
+    THIS_YEAR("This year"), LAST_YEAR("Last year"), ALL("All time"), CUSTOM("Custom range")
+}
+
+// Resolve a preset into inclusive from/to ISO days (UTC, matching the backend).
+private fun exportRangeDates(range: ExportRange, customFrom: LocalDate, customTo: LocalDate): Pair<String?, String?> {
+    val today = LocalDate.now(ZoneOffset.UTC)
+    return when (range) {
+        ExportRange.THIS_MONTH -> { val ym = YearMonth.from(today); ym.atDay(1).toString() to ym.atEndOfMonth().toString() }
+        ExportRange.LAST_MONTH -> { val ym = YearMonth.from(today).minusMonths(1); ym.atDay(1).toString() to ym.atEndOfMonth().toString() }
+        ExportRange.THIS_QUARTER -> {
+            val q = (today.monthValue - 1) / 3
+            YearMonth.of(today.year, q * 3 + 1).atDay(1).toString() to YearMonth.of(today.year, q * 3 + 3).atEndOfMonth().toString()
+        }
+        ExportRange.THIS_YEAR -> "${today.year}-01-01" to "${today.year}-12-31"
+        ExportRange.LAST_YEAR -> "${today.year - 1}-01-01" to "${today.year - 1}-12-31"
+        ExportRange.CUSTOM -> customFrom.toString() to customTo.toString()
+        ExportRange.ALL -> null to null
+    }
+}
+
+private suspend fun performOrderExport(
+    companyId: String,
+    template: String,
+    from: String?,
+    to: String?,
+    includeTrash: Boolean,
+    delimiter: String,
+    bom: Boolean
+): Triple<ByteArray, String, Int> {
+    val payload = hashMapOf<String, Any?>(
+        "companyId" to companyId,
+        "template" to template,
+        "from" to from,
+        "to" to to,
+        "includeTrash" to includeTrash,
+        "delimiter" to delimiter,
+        "bom" to bom
+    )
+    val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+        .getHttpsCallable("exportOrders")
+        .call(payload)
+        .await()
+    @Suppress("UNCHECKED_CAST")
+    val data = result.data as? Map<String, Any?> ?: throw Exception("Export failed.")
+    val b64 = data["base64"] as? String ?: throw Exception("Export failed.")
+    val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+    val filename = (data["filename"] as? String) ?: "export.csv"
+    val rowCount = (data["rowCount"] as? Number)?.toInt() ?: 0
+    return Triple(bytes, filename, rowCount)
+}
+
+@Composable
+private fun ExportSelectorRow(label: String, value: String, options: List<String>, onSelect: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(value, modifier = Modifier.weight(1f))
+                Text("▾")
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEachIndexed { i, opt ->
+                    DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(i); open = false })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportSwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
@@ -1765,12 +2208,30 @@ private fun AccountDetail(
     includeProfile: Boolean = true,
     includeLogo: Boolean = true,
     includeSecurity: Boolean = true,
-    includeWorkspaceIdentity: Boolean = true
+    includeWorkspaceIdentity: Boolean = true,
+    includeWorkspaceIdentityCard: Boolean = false
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val securityPrefs = remember {
+        context.getSharedPreferences(
+            uk.co.eggcraft.studioflow.features.shell.LocalSecurityPrefs,
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+    var autoLockMinutes by rememberSaveable {
+        mutableStateOf(securityPrefs.getInt(uk.co.eggcraft.studioflow.features.shell.AutoLockMinutesKey, 1))
+    }
+    var autoLockMenuOpen by remember { mutableStateOf(false) }
+    fun autoLockLabel(minutes: Int): String = when (minutes) {
+        1 -> t("After 1 minute")
+        5 -> t("After 5 minutes")
+        15 -> t("After 15 minutes")
+        60 -> t("After 1 hour")
+        else -> t("Immediately")
+    }
     val workspace = state.workspace
     val user = state.user
     val settings = state.workspaceSettings
@@ -1860,13 +2321,28 @@ private fun AccountDetail(
                     }
                 }
             }
-            OutlinedTextField(value = emailDraft, onValueChange = { emailDraft = it }, label = { Text(t("Email")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            TextButton(onClick = { onChangeAccountEmail(emailDraft) }, enabled = emailDraft.trim().lowercase() != user?.email.orEmpty().trim().lowercase()) {
-                Icon(Icons.Filled.Email, contentDescription = null)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(t("Change Email"))
+            // OAuth-only accounts (Google / Apple, no password provider) can't change
+            // their sign-in email — it's owned by the provider.
+            val isOAuthOnlyAccount = user != null && user.providerData.none { it.providerId == "password" }
+            OutlinedTextField(
+                value = if (isOAuthOnlyAccount) user?.email.orEmpty() else emailDraft,
+                onValueChange = { emailDraft = it },
+                label = { Text(t("Email")) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                enabled = !isOAuthOnlyAccount,
+                readOnly = isOAuthOnlyAccount
+            )
+            if (isOAuthOnlyAccount) {
+                Text(t("Your sign-in email is managed by Google or Apple and can't be changed here."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                TextButton(onClick = { onChangeAccountEmail(emailDraft) }, enabled = emailDraft.trim().lowercase() != user?.email.orEmpty().trim().lowercase()) {
+                    Icon(Icons.Filled.Email, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(t("Change Email"))
+                }
+                Text(t("After changing your sign-in email, you can change it again after 10 days."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(t("After changing your sign-in email, you can change it again after 10 days."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text(t("Your Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             if (includeWorkspaceIdentity) {
                 OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(t("Company / Studio Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1883,6 +2359,18 @@ private fun AccountDetail(
                     displayName = workspace?.accountDisplayName.orEmpty()
                     companyName = workspace?.name ?: "NivaDesk"
                 }) { Text(t("Reset")) }
+            }
+        }
+        if (includeWorkspaceIdentityCard) DetailCard(title = t("Workspace"), icon = Icons.Filled.Business) {
+            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(t("Company / Studio Name")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            CopyableValue("Company ID", workspace?.id.orEmpty(), "Copy")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = { onUpdateAccountProfile(displayName, companyName) }) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(t("Save"))
+                }
+                TextButton(onClick = { companyName = workspace?.name ?: "NivaDesk" }) { Text(t("Reset")) }
             }
         }
         if (includeLogo) DetailCard(title = t("Workspace Logo"), icon = Icons.Filled.PhotoLibrary) {
@@ -1925,6 +2413,34 @@ private fun AccountDetail(
                     SettingSwitch("Require Face ID / device passcode on app launch", requireDeviceUnlock, onSetRequireDeviceUnlock)
                     Text(t("When enabled, NivaDesk asks for fingerprint, face unlock or your Android screen lock whenever the app opens with an existing session."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(t("This preference is saved locally on this Android device, matching the Apple app's per-device unlock setting."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (requireDeviceUnlock) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(t("Auto-lock"), fontWeight = FontWeight.Bold)
+                            Box {
+                                OutlinedButton(onClick = { autoLockMenuOpen = true }) {
+                                    Text(autoLockLabel(autoLockMinutes))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                                }
+                                DropdownMenu(expanded = autoLockMenuOpen, onDismissRequest = { autoLockMenuOpen = false }) {
+                                    listOf(0, 1, 5, 15, 60).forEach { minutes ->
+                                        DropdownMenuItem(
+                                            text = { Text(autoLockLabel(minutes)) },
+                                            onClick = {
+                                                autoLockMinutes = minutes
+                                                securityPrefs.edit()
+                                                    .putInt(uk.co.eggcraft.studioflow.features.shell.AutoLockMinutesKey, minutes)
+                                                    .apply()
+                                                uk.co.eggcraft.studioflow.features.shell.AppLockGuard.autoLockMinutes = minutes
+                                                autoLockMenuOpen = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            Text(t("Choose how long NivaDesk can stay in the background before it asks to unlock again."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
             Text(t("Password changes are handled securely by Firebase. We send a reset link to your account email instead of storing or editing your password inside the app."), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -4941,7 +5457,14 @@ private fun initials(value: String): String {
     return parts.take(2).map { it.first().uppercaseChar() }.joinToString("").ifBlank { "?" }
 }
 
-private data class SettingsSection(val key: String, val title: String, val subtitle: String, val icon: ImageVector)
+private data class SettingsSection(val key: String, val title: String, val subtitle: String, val icon: ImageVector, val group: String = "Workspace")
+
+// Map legacy / deep-link section keys onto the new Account / Workspace structure.
+private fun mapLegacySettingsKey(key: String?): String? = when (key) {
+    "general", "account", "profile" -> "profileSecurity"
+    "theme", "appearance", "language" -> "preferences"
+    else -> key
+}
 
 private data class SwitchSpec(val label: String, val checked: Boolean, val key: String)
 
@@ -5088,7 +5611,7 @@ private fun MessageSettingsToggle(
 private fun isNivaDeskAdminAccount(): Boolean {
     val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
         ?.trim()?.lowercase() ?: return false
-    return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
+    return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com" || email == "contact@eggcraft.co.uk"
 }
 
 private data class SiteStatsDay(
@@ -5211,7 +5734,7 @@ private fun SiteStatsAdminDetail() {
                     t("Top pages") to mergeTopEntries(days, { it.pages }),
                     t("Devices") to mergeTopEntries(days, { it.devices }, 3),
                     t("Visitor languages") to mergeTopEntries(days, { it.languages }),
-                    t("Traffic sources") to mergeTopEntries(days, { it.referrers })
+                    t("Traffic sources") to mergeTopEntries(days, { it.referrers }, 10)
                 ).forEach { (title, entries) ->
                     Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -5231,6 +5754,384 @@ private fun SiteStatsAdminDetail() {
                                             modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(99.dp))
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- NivaDesk admin: Google Search (Search Console) rankings --------------
+
+private data class ScDay(val date: String, val clicks: Int, val impressions: Int, val ctr: Double, val position: Double)
+private data class ScQuery(val query: String, val clicks: Int, val impressions: Int, val ctr: Double, val position: Double, val positionDelta: Double?, val isNew: Boolean)
+private data class ScPage(val page: String, val clicks: Int, val impressions: Int, val ctr: Double, val position: Double)
+private data class ScCountry(val country: String, val impressions: Int)
+private data class ScDevice(val device: String, val impressions: Int)
+
+private fun scDouble(value: Any?): Double = (value as? Number)?.toDouble() ?: 0.0
+private fun scDoubleOpt(value: Any?): Double? = (value as? Number)?.toDouble()
+
+private val SC_ALPHA3_TO_2 = mapOf(
+    "GBR" to "GB", "USA" to "US", "IRL" to "IE", "DEU" to "DE", "FRA" to "FR", "NLD" to "NL", "ESP" to "ES",
+    "ITA" to "IT", "CAN" to "CA", "AUS" to "AU", "IND" to "IN", "TUR" to "TR", "BEL" to "BE", "CHE" to "CH",
+    "AUT" to "AT", "SWE" to "SE", "NOR" to "NO", "DNK" to "DK", "FIN" to "FI", "POL" to "PL", "PRT" to "PT",
+    "GRC" to "GR", "ROU" to "RO", "CZE" to "CZ", "NZL" to "NZ", "ZAF" to "ZA", "BRA" to "BR", "MEX" to "MX",
+    "ARE" to "AE", "SAU" to "SA", "JPN" to "JP", "KOR" to "KR", "CHN" to "CN", "RUS" to "RU", "UKR" to "UA",
+    "HUN" to "HU", "BGR" to "BG", "HRV" to "HR", "SRB" to "RS", "SVK" to "SK"
+)
+
+private fun scFlagEmoji(alpha2: String): String {
+    if (alpha2.length != 2) return "🌍"
+    val base = 0x1F1E6
+    val sb = StringBuilder()
+    for (c in alpha2.uppercase()) sb.appendCodePoint(base + (c.code - 'A'.code))
+    return sb.toString()
+}
+
+private fun scCountryDisplay(alpha3: String): Pair<String, String> {
+    val a2 = SC_ALPHA3_TO_2[alpha3] ?: return "🌍" to alpha3
+    val name = java.util.Locale("", a2).displayCountry.ifEmpty { a2 }
+    return scFlagEmoji(a2) to name
+}
+
+private fun scDeltaPercent(current: Double, previous: Double): Double? =
+    if (previous > 0) (current - previous) / previous * 100 else null
+
+private fun scPagePathLabel(url: String): String = try {
+    val path = java.net.URI(url).path ?: url
+    if (path.isEmpty() || path == "/") "Home page" else path
+} catch (e: Exception) { url }
+
+@Composable
+private fun ScDeltaText(delta: Double?, invertGood: Boolean) {
+    if (delta == null) return
+    val good = if (invertGood) delta <= 0 else delta >= 0
+    val arrow = if (delta >= 0) "▲" else "▼"
+    Text(
+        "$arrow ${"%.1f".format(kotlin.math.abs(delta))}%",
+        color = if (good) Color(0xFF1D8F43) else Color(0xFFD92D20),
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.labelMedium
+    )
+}
+
+@Composable
+private fun ScPositionDelta(delta: Double?, isNew: Boolean) {
+    when {
+        isNew -> Text("New", color = Color(0xFF1D8F43), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+        delta != null && kotlin.math.abs(delta) >= 0.05 -> {
+            val improved = delta > 0
+            Text(
+                "${if (improved) "▲" else "▼"} ${"%.1f".format(kotlin.math.abs(delta))}",
+                color = if (improved) Color(0xFF1D8F43) else Color(0xFFD92D20),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
+        else -> Text("–", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun ScTrendCanvas(days: List<ScDay>) {
+    val purple = Color(0xFF8A5CF6)
+    val blue = Color(0xFF0A84FF)
+    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+        val maxImpr = (days.maxOfOrNull { it.impressions } ?: 1).coerceAtLeast(1).toFloat()
+        val pad = 10f
+        val w = size.width
+        val h = size.height
+        fun px(i: Int) = pad + (i.toFloat() / (days.size - 1).coerceAtLeast(1)) * (w - pad * 2)
+        fun py(v: Int) = h - pad - (v.toFloat() / maxImpr) * (h - pad * 2)
+        for (i in 0 until days.size - 1) {
+            drawLine(purple, androidx.compose.ui.geometry.Offset(px(i), py(days[i].impressions)), androidx.compose.ui.geometry.Offset(px(i + 1), py(days[i + 1].impressions)), strokeWidth = 4f)
+            drawLine(blue, androidx.compose.ui.geometry.Offset(px(i), py(days[i].clicks)), androidx.compose.ui.geometry.Offset(px(i + 1), py(days[i + 1].clicks)), strokeWidth = 4f)
+        }
+    }
+}
+
+@Composable
+private fun ScPositionCanvas(days: List<ScDay>) {
+    val orange = Color(0xFFFF9F0A)
+    val pts = days.filter { it.position > 0 }
+    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+        if (pts.size < 2) return@Canvas
+        val maxPos = pts.maxOf { it.position }
+        val minPos = pts.minOf { it.position }
+        val span = (maxPos - minPos).coerceAtLeast(1.0)
+        val pad = 10f
+        val w = size.width
+        val h = size.height
+        fun px(i: Int) = pad + (i.toFloat() / (pts.size - 1).coerceAtLeast(1)) * (w - pad * 2)
+        // Higher on screen = better (smaller position number).
+        fun py(v: Double) = pad + (((v - minPos) / span).toFloat()) * (h - pad * 2)
+        for (i in 0 until pts.size - 1) {
+            drawLine(orange, androidx.compose.ui.geometry.Offset(px(i), py(pts[i].position)), androidx.compose.ui.geometry.Offset(px(i + 1), py(pts[i + 1].position)), strokeWidth = 4f)
+        }
+    }
+}
+
+@Composable
+private fun SearchConsoleAdminDetail() {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+
+    var range by remember { mutableStateOf(28) }
+    var loading by remember { mutableStateOf(true) }
+    var errorText by remember { mutableStateOf("") }
+    var ok by remember { mutableStateOf(false) }
+    var needsAccess by remember { mutableStateOf(false) }
+    var serviceAccountEmail by remember { mutableStateOf("") }
+    var property by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    var curTotals by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var prevTotals by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var queries by remember { mutableStateOf<List<ScQuery>>(emptyList()) }
+    var byDate by remember { mutableStateOf<List<ScDay>>(emptyList()) }
+    var pages by remember { mutableStateOf<List<ScPage>>(emptyList()) }
+    var countries by remember { mutableStateOf<List<ScCountry>>(emptyList()) }
+    var devices by remember { mutableStateOf<List<ScDevice>>(emptyList()) }
+
+    LaunchedEffect(range) {
+        loading = true
+        errorText = ""
+        try {
+            val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Europe/London"))
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -3)
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            fmt.timeZone = java.util.TimeZone.getTimeZone("Europe/London")
+            val endStr = fmt.format(cal.time)
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -(range - 1))
+            val startStr = fmt.format(cal.time)
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                .getHttpsCallable("getSearchConsoleStats")
+                .call(mapOf("startDate" to startStr, "endDate" to endStr))
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val data = result.data as? Map<String, Any?> ?: emptyMap()
+            ok = data["ok"] as? Boolean ?: false
+            needsAccess = data["needsAccess"] as? Boolean ?: false
+            serviceAccountEmail = data["serviceAccountEmail"] as? String ?: ""
+            property = data["property"] as? String ?: ""
+            message = data["message"] as? String ?: ""
+            @Suppress("UNCHECKED_CAST")
+            val totals = data["totals"] as? Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            curTotals = (totals?.get("current") as? Map<String, Any?>)?.mapValues { scDouble(it.value) } ?: emptyMap()
+            @Suppress("UNCHECKED_CAST")
+            prevTotals = (totals?.get("previous") as? Map<String, Any?>)?.mapValues { scDouble(it.value) } ?: emptyMap()
+            @Suppress("UNCHECKED_CAST")
+            byDate = (data["byDate"] as? List<Map<String, Any?>> ?: emptyList()).map {
+                ScDay(it["date"] as? String ?: "", scDouble(it["clicks"]).toInt(), scDouble(it["impressions"]).toInt(), scDouble(it["ctr"]), scDouble(it["position"]))
+            }
+            @Suppress("UNCHECKED_CAST")
+            queries = (data["queries"] as? List<Map<String, Any?>> ?: emptyList()).map {
+                ScQuery(it["query"] as? String ?: "", scDouble(it["clicks"]).toInt(), scDouble(it["impressions"]).toInt(), scDouble(it["ctr"]), scDouble(it["position"]), scDoubleOpt(it["positionDelta"]), it["isNew"] as? Boolean ?: false)
+            }
+            @Suppress("UNCHECKED_CAST")
+            pages = (data["pages"] as? List<Map<String, Any?>> ?: emptyList()).map {
+                ScPage(it["page"] as? String ?: "", scDouble(it["clicks"]).toInt(), scDouble(it["impressions"]).toInt(), scDouble(it["ctr"]), scDouble(it["position"]))
+            }
+            @Suppress("UNCHECKED_CAST")
+            countries = (data["countries"] as? List<Map<String, Any?>> ?: emptyList()).map {
+                ScCountry(it["country"] as? String ?: "", scDouble(it["impressions"]).toInt())
+            }
+            @Suppress("UNCHECKED_CAST")
+            devices = (data["devices"] as? List<Map<String, Any?>> ?: emptyList()).map {
+                ScDevice(it["device"] as? String ?: "", scDouble(it["impressions"]).toInt())
+            }
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not load search rankings."
+        }
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(t("Google Search rankings"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            t("What people search to find NivaDesk on Google, where we rank, and how positions changed. Data from Google Search Console (≈3-day lag)."),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(7, 28, 90).forEach { option ->
+                FilterChip(selected = range == option, onClick = { range = option }, label = { Text("${option}d") })
+            }
+        }
+        if (property.isNotEmpty()) {
+            Text("Property: $property", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        when {
+            loading -> CircularProgressIndicator(modifier = Modifier.padding(vertical = 12.dp))
+            errorText.isNotEmpty() -> Text(errorText, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            !ok && (needsAccess || message.isNotEmpty()) -> {
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(t("Connect Google Search Console"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (message.isNotEmpty()) Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("1.  " + t("Enable the Google Search Console API in Google Cloud (project eggcraft-studio)."), style = MaterialTheme.typography.bodySmall)
+                        Text("2.  " + t("In Search Console → Settings → Users and permissions, add this service account as a Full user:"), style = MaterialTheme.typography.bodySmall)
+                        if (serviceAccountEmail.isNotEmpty()) {
+                            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Text(serviceAccountEmail, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Text("3.  " + t("Make sure nivadesk.app is verified, then reload."), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            ok -> {
+                val summary = listOf(
+                    Triple(t("Total Clicks"), "${(curTotals["clicks"] ?: 0.0).toInt()}", scDeltaPercent(curTotals["clicks"] ?: 0.0, prevTotals["clicks"] ?: 0.0)) to false,
+                    Triple(t("Impressions"), "${(curTotals["impressions"] ?: 0.0).toInt()}", scDeltaPercent(curTotals["impressions"] ?: 0.0, prevTotals["impressions"] ?: 0.0)) to false,
+                    Triple(t("Avg. CTR"), "%.1f%%".format((curTotals["ctr"] ?: 0.0) * 100), scDeltaPercent(curTotals["ctr"] ?: 0.0, prevTotals["ctr"] ?: 0.0)) to false,
+                    Triple(t("Avg. Position"), "%.1f".format(curTotals["position"] ?: 0.0), scDeltaPercent(curTotals["position"] ?: 0.0, prevTotals["position"] ?: 0.0)) to true
+                )
+                summary.chunked(2).forEach { rowTiles ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowTiles.forEach { (triple, invert) ->
+                            val (label, value, delta) = triple
+                            Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                                        ScDeltaText(delta, invert)
+                                    }
+                                    Text(t("vs previous period"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Clicks & impressions over time"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (byDate.size < 2) {
+                            Text(t("Not enough days to chart yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Box(modifier = Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF8A5CF6)))
+                                    Text(t("Impressions"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Box(modifier = Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF0A84FF)))
+                                    Text(t("Clicks"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            ScTrendCanvas(byDate)
+                        }
+                    }
+                }
+
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Average position over time"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (byDate.count { it.position > 0 } < 2) {
+                            Text(t("Not enough ranked days to chart yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text(t("Higher line = better rank (closer to #1)."), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ScPositionCanvas(byDate)
+                        }
+                    }
+                }
+
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Top search queries"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (queries.isEmpty()) {
+                            Text(t("No search impressions in this period yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            queries.forEachIndexed { index, q ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("${index + 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(q.query, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                        Text("${q.impressions} " + t("impr") + " · ${q.clicks} " + t("clicks") + " · " + "%.1f%%".format(q.ctr * 100), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("%.1f".format(q.position), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
+                                        ScPositionDelta(q.positionDelta, q.isNew)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Top pages"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (pages.isEmpty()) {
+                            Text(t("No data yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            pages.forEachIndexed { index, p ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("${index + 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(scPagePathLabel(p.page), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                        Text("${p.impressions} " + t("impr") + " · ${p.clicks} " + t("clicks") + " · " + "%.1f%%".format(p.ctr * 100), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text("%.1f".format(p.position), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Search by country"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (countries.isEmpty()) {
+                            Text(t("No data yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            val maxC = countries.maxOfOrNull { it.impressions } ?: 1
+                            countries.take(8).forEach { c ->
+                                val (flag, name) = scCountryDisplay(c.country)
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(flag)
+                                        Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                                        Text("${c.impressions}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { if (maxC > 0) c.impressions.toFloat() / maxC.toFloat() else 0f },
+                                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(99.dp))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Search by device"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        if (devices.isEmpty()) {
+                            Text(t("No data yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            val deviceLabels = mapOf("DESKTOP" to t("Desktop"), "MOBILE" to t("Mobile"), "TABLET" to t("Tablet"))
+                            val maxD = devices.maxOfOrNull { it.impressions } ?: 1
+                            devices.forEach { d ->
+                                Column {
+                                    Row {
+                                        Text(deviceLabels[d.device] ?: d.device, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                                        Text("${d.impressions}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { if (maxD > 0) d.impressions.toFloat() / maxD.toFloat() else 0f },
+                                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(99.dp))
+                                    )
                                 }
                             }
                         }
@@ -5439,6 +6340,24 @@ private fun AIHubRow(label: String, value: String, dot: Color? = null) {
     }
 }
 
+// Two-line person row: name on top, email beneath, plan + date trailing.
+@Composable
+private fun AIHubUserRow(name: String, email: String, planLabel: String, planColor: Color?, date: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 3.dp)) {
+        Surface(color = planColor ?: MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(50), modifier = Modifier.size(8.dp)) {}
+        Column(modifier = Modifier.weight(1f)) {
+            Text(if (name.isBlank()) email.ifBlank { "—" } else name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            if (name.isNotBlank() && email.isNotBlank()) {
+                Text(email, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(planLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = planColor ?: MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(date, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 @Composable
 private fun AIHubTiles(tiles: List<Triple<String, String, String>>) {
     tiles.chunked(2).forEach { rowTiles ->
@@ -5491,7 +6410,7 @@ private fun AIHubLoader(functionName: String, content: @Composable (Map<String, 
 fun AdminInsightsHubScreen() {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val pages = listOf("Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics")
+    val pages = listOf("Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics", "Google Search")
     var selection by remember { mutableStateOf("Overview") }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -5520,6 +6439,7 @@ fun AdminInsightsHubScreen() {
                 "Storage" -> AIHubStoragePage(t)
                 "User Lookup" -> AIHubLookupPage(t)
                 "Global Statistics" -> SiteStatsAdminDetail()
+                "Google Search" -> SearchConsoleAdminDetail()
                 else -> AdminInsightsDetail()
             }
             Spacer(modifier = Modifier.height(20.dp))
@@ -5529,6 +6449,8 @@ fun AdminInsightsHubScreen() {
 
 @Composable
 private fun AIHubUsersPage(t: (String) -> String) {
+    var recentSort by remember { mutableStateOf("date") }
+    var recentPage by remember { mutableStateOf(0) }
     Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(t("Users & Workspaces"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         AIHubLoader("getAdminUsersWorkspacesDetail") { data ->
@@ -5552,6 +6474,77 @@ private fun AIHubUsersPage(t: (String) -> String) {
                             "${insightsInt(workspace, "orders30d")} " + t("orders"),
                             aiHubPlanColors[plan]
                         )
+                    }
+                }
+
+                AIHubCard(t("Recent Signups")) {
+                    val all = insightsList(insightsMap(data)["recentUsers"])
+                    if (all.isEmpty()) {
+                        Text(t("No data yet."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        val sorted = if (recentSort == "name") {
+                            all.sortedBy { ((it["displayName"] as? String ?: "").ifBlank { it["email"] as? String ?: "" }).lowercase() }
+                        } else {
+                            all.sortedByDescending { insightsInt(it, "createdAtMs") }
+                        }
+                        val pageSize = 20
+                        val pageCount = maxOf(1, (sorted.size + pageSize - 1) / pageSize)
+                        val page = recentPage.coerceIn(0, pageCount - 1)
+                        val slice = sorted.drop(page * pageSize).take(pageSize)
+
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("date" to t("Newest"), "name" to t("Name A–Z")).forEach { (mode, label) ->
+                                val selected = recentSort == mode
+                                Surface(
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.clickable { recentSort = mode; recentPage = 0 }
+                                ) {
+                                    Text(
+                                        label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text("${sorted.size} " + t("users"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        slice.forEach { user ->
+                            val plan = (user["plan"] as? String ?: "demo").ifBlank { "demo" }
+                            AIHubUserRow(
+                                name = user["displayName"] as? String ?: "",
+                                email = user["email"] as? String ?: "",
+                                planLabel = aiHubPlanLabels[plan] ?: plan,
+                                planColor = aiHubPlanColors[plan],
+                                date = aiHubDate(insightsInt(user, "createdAtMs"))
+                            )
+                        }
+
+                        if (pageCount > 1) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    "‹",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (page > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.clickable(enabled = page > 0) { recentPage = page - 1 }.padding(horizontal = 6.dp)
+                                )
+                                Text(t("Page") + " ${page + 1} / $pageCount", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "›",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (page < pageCount - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.clickable(enabled = page < pageCount - 1) { recentPage = page + 1 }.padding(horizontal = 6.dp)
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }

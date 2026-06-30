@@ -23,6 +23,10 @@ struct AyarlarView: View {
     @State private var wooCommerceCopyFeedback: String = ""
     @State private var wooCommerceDeliveryURL: String = ""
     @State private var wooCommerceTokenLoading: Bool = false
+    @State private var shopifyDeliveryURL: String = ""
+    @State private var shopifyTokenLoading: Bool = false
+    @State private var inboundDeliveryURL: String = ""
+    @State private var inboundTokenLoading: Bool = false
     @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
     @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
     @AppStorage("uploadSafetyMaxFileSizeMBV1") private var uploadSafetyMaxFileSizeMB: Double = 10.0
@@ -53,24 +57,23 @@ struct AyarlarView: View {
     @State private var messageWorkspaceSettingsStatus: String = ""
     private let canEditWorkspace: Bool
 
-    init(startSection: String = "General", canEditWorkspace: Bool = true) {
+    init(startSection: String = "Profile & Security", canEditWorkspace: Bool = true) {
         self.canEditWorkspace = canEditWorkspace
         let mappedSection: String
-        var initialGeneralSubsection: String? = nil
         switch startSection {
-        case "Theme & Brand", "Language & Labels", "About":
-            mappedSection = "General"
-        case "Account", "Sign-in & Security":
-            // Route legacy entries to General → Profile & Security.
-            mappedSection = "General"
-            initialGeneralSubsection = "account"
+        case "General", "Account", "Sign-in & Security", "profile", "account":
+            // Legacy entries (old General drill-down) → personal account page.
+            mappedSection = "Profile & Security"
+        case "Theme & Brand", "Language & Labels", "appearance", "language":
+            // Theme + language now live together under Preferences.
+            mappedSection = "Preferences"
         default:
             mappedSection = startSection
         }
-        let allowedForReadOnly = ["General", "Plan & Access", "Team Access", "Support", "Legal"]
-        let initialSection = canEditWorkspace || allowedForReadOnly.contains(mappedSection) ? mappedSection : "General"
+        let allowedForReadOnly = ["Profile & Security", "Preferences", "About", "Plan & Access", "Team Access", "Support", "Legal"]
+        let initialSection = canEditWorkspace || allowedForReadOnly.contains(mappedSection) ? mappedSection : "Profile & Security"
         _seciliAyarSekmesi = State(initialValue: initialSection)
-        _selectedGeneralSection = State(initialValue: initialGeneralSubsection)
+        _selectedGeneralSection = State(initialValue: nil)
     }
     
     @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
@@ -120,7 +123,9 @@ struct AyarlarView: View {
     @AppStorage("pdfShowShipping") private var pdfShowShipping: Bool = true
     @AppStorage("pdfShowMaterials") private var pdfShowMaterials = true
     @AppStorage("pdfShowPriority") private var pdfShowPriority: Bool = true
-    
+    @AppStorage("pdfShowAddress") private var pdfShowAddress: Bool = true
+    @AppStorage("pdfShowShippingAddress") private var pdfShowShippingAddress: Bool = true
+
     @AppStorage("appLogoUrl") private var appLogoUrl: String = ""
     @AppStorage("appSubtitle") private var appSubtitle: String = "Bespoke Hand-Painted Dials"
     @AppStorage("companyNumbersJSON") private var companyNumbersJSON: String = ""
@@ -129,6 +134,7 @@ struct AyarlarView: View {
     @AppStorage("appTheme") private var appTheme: String = "System"
     @AppStorage("feePercentage") private var feePercentage: Double = 3.0
     @AppStorage("defaultTaxRate") private var defaultTaxRate: Double = 20.0
+    @AppStorage("defaultDeliveryTime") private var defaultDeliveryTime: Double = 30.0
     @AppStorage("taxCalculationType") private var taxCalculationType: String = "Revenue"
     @AppStorage("taxMilestoneEnabled") private var taxMilestoneEnabled: Bool = false
     @AppStorage("taxMilestoneDate") private var taxMilestoneDate: Double = Date().timeIntervalSince1970
@@ -156,6 +162,9 @@ struct AyarlarView: View {
     
     @State private var isRecalculating = false
     @State private var showRecalcAlert = false
+    @State private var isClearingTax = false
+    @State private var showClearTaxConfirm = false
+    @State private var showClearTaxAlert = false
     @AppStorage("replyMode") private var replyMode: String = "AI"
     @AppStorage("openAIKey") private var openAIKey: String = ""
     @State private var quickReplyHasOpenAIKey: Bool = false
@@ -181,6 +190,7 @@ struct AyarlarView: View {
     @AppStorage("summaryStep2") private var summaryStep2: String = "Painting"
     @AppStorage("orderListStep1") private var orderListStep1: String = "Design"
     @AppStorage("orderListStep2") private var orderListStep2: String = "Painting"
+    @AppStorage("orderItemsHeading") private var orderItemsHeading: String = ""
     @AppStorage("specialNoteSectionsJSONV1") private var specialNoteSectionsJSON: String = ""
     @State private var disariAktariliyor = false
     @State private var iceriAktariliyor = false
@@ -188,7 +198,9 @@ struct AyarlarView: View {
     @State private var backupShareURL: ShareableFileURL?
     @State private var csvDisariAktariliyor = false
     @State private var csvExportBelgesi: CSVExportBelgesi?
+    @State private var showOrderExportSheet = false
     @State private var silmeOnayiGosteriliyor = false
+    @State private var deleteDataConfirmText = ""
     @State private var importUyarisiGosteriliyor = false
     @State private var importSonucGosteriliyor = false
     @State private var importSonucMesaji = ""
@@ -242,6 +254,7 @@ struct AyarlarView: View {
             summaryStep2,
             orderListStep1,
             orderListStep2,
+            orderItemsHeading,
             specialNoteSectionsJSON,
             invLabel1,
             invLabel2,
@@ -282,6 +295,8 @@ struct AyarlarView: View {
             String(pdfShowShipping),
             String(pdfShowMaterials),
             String(pdfShowPriority),
+            String(pdfShowAddress),
+            String(pdfShowShippingAddress),
             companyNumbersJSON,
             invoiceFooterNote
         ].joined(separator: "||")
@@ -293,6 +308,7 @@ struct AyarlarView: View {
             seciliOndalik,
             String(feePercentage),
             String(defaultTaxRate),
+            String(defaultDeliveryTime),
             taxCalculationType,
             String(taxMilestoneEnabled),
             String(taxMilestoneDate),
@@ -314,8 +330,12 @@ struct AyarlarView: View {
         // flag so an owner can grant individual screens (e.g. only Quick Reply) without
         // also having to enable the broader Settings nav access. Mirrors Web / Android.
         switch key {
-        case "General":
+        case "Profile & Security", "Preferences", "About":
+            // Personal Account screens — visible to anyone with General access.
             return workspaceAccessAllows("settingsGeneral")
+        case "Branding":
+            // Workspace identity/branding — hidden from workflow-only members.
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsGeneral")
         case "Workflow":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
         case "PDF":
@@ -329,7 +349,7 @@ struct AyarlarView: View {
             return !isWorkflowOnlySettingsRole && authVM.currentPlanEntitlements.advancedDashboardEnabled && workspaceAccessAllows("settingsFinancial")
         case "Plan & Access":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsPlanAccess")
-        case "WooCommerce":
+        case "WooCommerce", "Shopify", "Inbound":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
         case "Upload Safety":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsSafetyUploads")
@@ -353,21 +373,28 @@ struct AyarlarView: View {
         }
     }
 
-    private var settingsSections: [(key: String, title: String, icon: String)] {
-        let allSections: [(key: String, title: String, icon: String)] = [
-            ("General", t("General", lang: seciliDil), "gearshape.fill"),
-            ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch"),
-            ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext"),
-            ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill"),
-            ("Financial", t("Financial Settings", lang: seciliDil), "percent"),
-            ("WooCommerce", t("WooCommerce Integration", lang: seciliDil), "cart.badge.plus"),
-            ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled"),
-            ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill"),
-            ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill"),
-            ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill"),
-            ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill"),
-            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill"),
-            ("Legal", t("Legal", lang: seciliDil), "doc.text.fill")
+    private var settingsSections: [(key: String, title: String, icon: String, group: String)] {
+        let allSections: [(key: String, title: String, icon: String, group: String)] = [
+            // Account — personal settings that follow the signed-in user.
+            ("Profile & Security", t("Profile & Security", lang: seciliDil), "person.crop.circle", "Account"),
+            ("Preferences", t("Preferences", lang: seciliDil), "slider.horizontal.3", "Account"),
+            ("About", t("About", lang: seciliDil), "info.circle.fill", "Account"),
+            // Workspace — settings shared by every member of the workspace.
+            ("Branding", t("Branding", lang: seciliDil), "paintpalette.fill", "Workspace"),
+            ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch", "Workspace"),
+            ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace"),
+            ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill", "Workspace"),
+            ("Financial", t("Financial Settings", lang: seciliDil), "percent", "Workspace"),
+            ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled", "Workspace"),
+            ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill", "Workspace"),
+            ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill", "Workspace"),
+            ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill", "Workspace"),
+            ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill", "Workspace"),
+            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill", "Workspace"),
+            ("Legal", t("Legal", lang: seciliDil), "doc.text.fill", "Workspace"),
+            ("WooCommerce", t("WooCommerce Integration", lang: seciliDil), "cart.badge.plus", "Integrations"),
+            ("Shopify", t("Shopify Integration", lang: seciliDil), "bag.fill", "Integrations"),
+            ("Inbound", t("Other Platforms", lang: seciliDil), "link", "Integrations")
         ]
 
         return allSections.filter { canShowSettingsSection($0.key) }
@@ -390,18 +417,26 @@ struct AyarlarView: View {
                     .padding(.bottom, 20)
                     .padding(.leading, 10)
 
-                ForEach(settingsSections, id: \.key) { section in
-                    AyarMenuButonu(
-                        title: section.title,
-                        icon: section.icon,
-                        isSelected: seciliAyarSekmesi == section.key,
-                        badgeCount: supportSectionUnreadBadgeCount(section)
-                    ) {
-                        seciliAyarSekmesi = section.key
+                // The section list (now grouped Account / Workspace) can be taller
+                // than the window, so it scrolls on its own instead of overflowing
+                // and pushing the whole sidebar up.
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(settingsSections.enumerated()), id: \.element.key) { index, section in
+                            if index == 0 || settingsSections[index - 1].group != section.group {
+                                SettingsGroupLabel(title: t(section.group, lang: seciliDil), topPadding: index == 0 ? 0 : 14)
+                            }
+                            AyarMenuButonu(
+                                title: section.title,
+                                icon: section.icon,
+                                isSelected: seciliAyarSekmesi == section.key,
+                                badgeCount: supportSectionUnreadBadgeCount(section.key)
+                            ) {
+                                seciliAyarSekmesi = section.key
+                            }
+                        }
                     }
                 }
-
-                Spacer()
             }
             .padding(20)
             .frame(width: 260)
@@ -488,7 +523,10 @@ struct AyarlarView: View {
 
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(settingsSections, id: \.key) { section in
+                    ForEach(Array(settingsSections.enumerated()), id: \.element.key) { index, section in
+                        if index == 0 || settingsSections[index - 1].group != section.group {
+                            SettingsGroupLabel(title: t(section.group, lang: seciliDil), topPadding: index == 0 ? 2 : 12)
+                        }
                         Button {
                             seciliAyarSekmesi = section.key
                             withAnimation(.snappy) {
@@ -517,8 +555,8 @@ struct AyarlarView: View {
 
                                 Spacer()
 
-                                if supportSectionUnreadBadgeCount(section) > 0 {
-                                    Text("\(supportSectionUnreadBadgeCount(section))")
+                                if supportSectionUnreadBadgeCount(section.key) > 0 {
+                                    Text("\(supportSectionUnreadBadgeCount(section.key))")
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 9)
@@ -526,7 +564,7 @@ struct AyarlarView: View {
                                         .background(Color.red)
                                         .clipShape(Capsule())
                                         .shadow(color: Color.red.opacity(0.25), radius: 4, y: 2)
-                                        .accessibilityLabel(Text("\(supportSectionUnreadBadgeCount(section)) new support tickets"))
+                                        .accessibilityLabel(Text("\(supportSectionUnreadBadgeCount(section.key)) new support tickets"))
                                 }
 
                                 Image(systemName: "chevron.right")
@@ -549,8 +587,14 @@ struct AyarlarView: View {
 
     private func settingsSectionDescription(_ key: String) -> String {
         switch key {
-        case "General":
-            return t("Appearance, language, profile and workspace identity.", lang: seciliDil)
+        case "Profile & Security":
+            return t("Your name, photo, sign-in email and password.", lang: seciliDil)
+        case "Preferences":
+            return t("Your personal theme and language.", lang: seciliDil)
+        case "About":
+            return t("App version and product information.", lang: seciliDil)
+        case "Branding":
+            return t("Workspace name, logo and subtitle.", lang: seciliDil)
         case "Workflow":
             return t("Order steps and custom fields.", lang: seciliDil)
         case "PDF":
@@ -561,6 +605,10 @@ struct AyarlarView: View {
             return t("Fees, tax and calculations.", lang: seciliDil)
         case "WooCommerce":
             return t("Live website orders and webhook setup.", lang: seciliDil)
+        case "Shopify":
+            return t("Live Shopify orders and webhook setup.", lang: seciliDil)
+        case "Inbound":
+            return t("Connect any store via Zapier, Make or a custom webhook.", lang: seciliDil)
         case "Upload Safety":
             return t("Upload rules, file limits and audit protection.", lang: seciliDil)
         case "Data":
@@ -585,7 +633,18 @@ struct AyarlarView: View {
         VStack(alignment: .leading, spacing: isPhoneLayout ? 18 : 25) {
             if !settingsSections.contains(where: { $0.key == seciliAyarSekmesi }) {
                 restrictedSettingsSection
-            } else if seciliAyarSekmesi == "General" { generalAyari }
+            } else if seciliAyarSekmesi == "Profile & Security" { AccountProfileView(sectionMode: .account, hideWorkspaceIdentity: true) }
+            else if seciliAyarSekmesi == "Preferences" {
+                temaAyari
+                dilAyari
+            }
+            else if seciliAyarSekmesi == "About" { aboutAyari }
+            else if seciliAyarSekmesi == "Branding" {
+                if canEditWorkspace {
+                    markaAyari
+                    AccountProfileView(sectionMode: .workspaceBranding)
+                }
+            }
             else if seciliAyarSekmesi == "Workflow" { if canEditWorkspace { islemAdimlariAyari } }
             else if seciliAyarSekmesi == "PDF" {
                 if isWorkflowOnlySettingsRole { workflowOnlyPdfAyari }
@@ -598,6 +657,8 @@ struct AyarlarView: View {
             }
             else if seciliAyarSekmesi == "Financial" { if canEditWorkspace { finansalAyar } }
             else if seciliAyarSekmesi == "WooCommerce" { if canEditWorkspace { wooCommerceIntegrationAyari } }
+            else if seciliAyarSekmesi == "Shopify" { if canEditWorkspace { shopifyIntegrationAyari } }
+            else if seciliAyarSekmesi == "Inbound" { if canEditWorkspace { inboundIntegrationAyari } }
             else if seciliAyarSekmesi == "Upload Safety" { if canEditWorkspace { uploadSafetyAyari } }
             else if seciliAyarSekmesi == "Data" { if canEditWorkspace { veriYonetimiAyari } }
             else if seciliAyarSekmesi == "Sign-in & Security" { AccountProfileView(sectionMode: .signInSecurity) }
@@ -979,7 +1040,7 @@ struct AyarlarView: View {
 
     private var isNivaDeskSupportAdmin: Bool {
         let email = authVM.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com"
+        return email == "nivadesk@gmail.com" || email == "eggcraftco@gmail.com" || email == "contact@eggcraft.co.uk"
     }
 
     private var isWorkspaceOwnerOrAdmin: Bool {
@@ -1334,8 +1395,8 @@ struct AyarlarView: View {
         ticket.isUnread(for: authVM.currentUserId ?? "")
     }
 
-    private func supportSectionUnreadBadgeCount(_ section: (key: String, title: String, icon: String)) -> Int {
-        section.key == "Support" ? supportSettingsUnreadCount : 0
+    private func supportSectionUnreadBadgeCount(_ key: String) -> Int {
+        key == "Support" ? supportSettingsUnreadCount : 0
     }
 
     private var supportTicketsAyari: some View {
@@ -1345,41 +1406,19 @@ struct AyarlarView: View {
                     Text(t("Where should this ticket go?", lang: seciliDil))
                         .font(.system(size: 17, weight: .bold))
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 12) {
-                            supportDestinationCard(
-                                key: "workspace",
-                                title: t("Contact Workspace Owner", lang: seciliDil),
-                                subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: seciliDil),
-                                icon: "person.2.badge.gearshape.fill"
-                            )
-                            .frame(minWidth: 320)
-
-                            supportDestinationCard(
-                                key: "appSupport",
-                                title: t("Contact NivaDesk Support", lang: seciliDil),
-                                subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: seciliDil),
-                                icon: "lifepreserver.fill"
-                            )
-                            .frame(minWidth: 320)
-                        }
-
-                        VStack(spacing: 10) {
-                            supportDestinationCard(
-                                key: "workspace",
-                                title: t("Contact Workspace Owner", lang: seciliDil),
-                                subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: seciliDil),
-                                icon: "person.2.badge.gearshape.fill"
-                            )
-
-                            supportDestinationCard(
-                                key: "appSupport",
-                                title: t("Contact NivaDesk Support", lang: seciliDil),
-                                subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: seciliDil),
-                                icon: "lifepreserver.fill"
-                            )
-                        }
-                    }
+                    // Extracted into its own View struct so the Swift runtime does not
+                    // have to instantiate one gigantic nested-generic type for the whole
+                    // Support screen. Inlining this here (with ViewThatFits) made the
+                    // mangled type so deep that on-device metadata instantiation blew the
+                    // stack (EXC_BAD_ACCESS / stack-guard), crashing only on real devices.
+                    SupportDestinationCardsView(
+                        destination: $supportTicketDestination,
+                        category: $supportTicketCategory,
+                        workspaceCategories: workspaceTicketCategories,
+                        appCategories: appSupportTicketCategories,
+                        isPhone: isPhoneLayout,
+                        lang: seciliDil
+                    )
                 }
             }
 
@@ -2202,47 +2241,76 @@ struct AyarlarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func supportDestinationCard(key: String, title: String, subtitle: String, icon: String) -> some View {
-        let selected = supportTicketDestination == key
-        return Button {
-            supportTicketDestination = key
-            if key == "workspace" && !workspaceTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
-                supportTicketCategory = "project"
-            }
-            if key == "appSupport" && !appSupportTicketCategories.contains(where: { $0.key == supportTicketCategory }) {
-                supportTicketCategory = "bug"
-            }
-        } label: {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(selected ? .white : .blue)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(selected ? Color.blue : Color.blue.opacity(0.12)))
+    // Standalone View (not an inlined `some View` helper) so its body becomes its
+    // own metadata boundary. This keeps `supportTicketsAyari`'s opaque type small
+    // enough that the Swift runtime can instantiate it on-device without overflowing
+    // the stack while demangling a giant nested-generic type.
+    private struct SupportDestinationCardsView: View {
+        @Binding var destination: String
+        @Binding var category: String
+        let workspaceCategories: [(key: String, title: String)]
+        let appCategories: [(key: String, title: String)]
+        let isPhone: Bool
+        let lang: String
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
-                        .font(.system(size: isPhoneLayout ? 15 : 14, weight: .bold))
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(subtitle)
-                        .font(.system(size: isPhoneLayout ? 12 : 12))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(isPhoneLayout ? 3 : 4)
-                        .fixedSize(horizontal: false, vertical: true)
+        var body: some View {
+            if isPhone {
+                VStack(spacing: 10) {
+                    card(key: "workspace", title: t("Contact Workspace Owner", lang: lang), subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: lang), icon: "person.2.badge.gearshape.fill")
+                    card(key: "appSupport", title: t("Contact NivaDesk Support", lang: lang), subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: lang), icon: "lifepreserver.fill")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 12) {
+                    card(key: "workspace", title: t("Contact Workspace Owner", lang: lang), subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: lang), icon: "person.2.badge.gearshape.fill")
+                        .frame(minWidth: 320)
+                    card(key: "appSupport", title: t("Contact NivaDesk Support", lang: lang), subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: lang), icon: "lifepreserver.fill")
+                        .frame(minWidth: 320)
+                }
             }
-            .padding(isPhoneLayout ? 12 : 14)
-            .frame(maxWidth: .infinity, minHeight: isPhoneLayout ? 96 : 112, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 18).fill(selected ? Color.blue.opacity(0.10) : Color.primary.opacity(0.035)))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(selected ? Color.blue : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
         }
-        .buttonStyle(.plain)
+
+        private func card(key: String, title: String, subtitle: String, icon: String) -> some View {
+            let selected = destination == key
+            return Button {
+                destination = key
+                if key == "workspace" && !workspaceCategories.contains(where: { $0.key == category }) {
+                    category = "project"
+                }
+                if key == "appSupport" && !appCategories.contains(where: { $0.key == category }) {
+                    category = "bug"
+                }
+            } label: {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(selected ? .white : .blue)
+                        .frame(width: 42, height: 42)
+                        .background(Circle().fill(selected ? Color.blue : Color.blue.opacity(0.12)))
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(title)
+                            .font(.system(size: isPhone ? 15 : 14, weight: .bold))
+                            .foregroundColor(.primary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(subtitle)
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(isPhone ? 3 : 4)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(isPhone ? 12 : 14)
+                .frame(maxWidth: .infinity, minHeight: isPhone ? 96 : 112, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 18).fill(selected ? Color.blue.opacity(0.10) : Color.primary.opacity(0.035)))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(selected ? Color.blue : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
 
@@ -3059,11 +3127,18 @@ struct AyarlarView: View {
     private func applyAlertHandlers(_ view: AnyView) -> AnyView {
         AnyView(
             view
-                .alert("Are you sure?", isPresented: $silmeOnayiGosteriliyor) {
-                    Button("Yes, Delete All", role: .destructive) { tumVerileriSil() }
-                    Button("Cancel", role: .cancel) { }
+                .alert(t("Delete Data", lang: seciliDil), isPresented: $silmeOnayiGosteriliyor) {
+                    TextField(t("Type DELETE DATA to confirm", lang: seciliDil), text: $deleteDataConfirmText)
+                    Button(t("Yes, Delete All", lang: seciliDil), role: .destructive) {
+                        if deleteDataConfirmText.trimmingCharacters(in: .whitespaces).uppercased() == "DELETE DATA" {
+                            tumVerileriSil()
+                        }
+                        deleteDataConfirmText = ""
+                    }
+                    .disabled(deleteDataConfirmText.trimmingCharacters(in: .whitespaces).uppercased() != "DELETE DATA")
+                    Button(t("Cancel", lang: seciliDil), role: .cancel) { deleteDataConfirmText = "" }
                 } message: {
-                    Text(t("All orders and customers will be permanently deleted.", lang: seciliDil))
+                    Text(t("All orders and customers will be permanently deleted. Type DELETE DATA to confirm.", lang: seciliDil))
                 }
                 .alert("Import Backup", isPresented: $importUyarisiGosteriliyor) {
                     Button("Choose Backup File") { iceriAktariliyor = true }
@@ -3173,6 +3248,7 @@ struct AyarlarView: View {
                 applyString("seciliOndalik", { seciliOndalik = $0 }, seciliOndalik)
                 applyDouble("feePercentage", { feePercentage = min(max($0, 0), 100) }, feePercentage)
                 applyDouble("defaultTaxRate", { defaultTaxRate = min(max($0, 0), 100) }, defaultTaxRate)
+                applyDouble("defaultDeliveryTime", { defaultDeliveryTime = min(max($0.rounded(), 1), 730) }, defaultDeliveryTime)
                 applyString("taxCalculationType", { taxCalculationType = $0 == "Profit" ? "Profit" : "Revenue" }, taxCalculationType)
                 applyBool("taxMilestoneEnabled", { taxMilestoneEnabled = $0 }, taxMilestoneEnabled)
                 applyDouble("taxMilestoneDate", { taxMilestoneDate = $0 }, taxMilestoneDate)
@@ -3196,6 +3272,7 @@ struct AyarlarView: View {
                 applyString("summaryStep2", { summaryStep2 = $0 }, summaryStep2)
                 applyString("orderListStep1", { orderListStep1 = $0 }, orderListStep1)
                 applyString("orderListStep2", { orderListStep2 = $0 }, orderListStep2)
+                applyString("orderItemsHeading", { orderItemsHeading = $0 }, orderItemsHeading)
 
                 applyString("invLabel1", { invLabel1 = $0 }, invLabel1)
                 applyString("invLabel2", { invLabel2 = $0 }, invLabel2)
@@ -3223,6 +3300,8 @@ struct AyarlarView: View {
                 applyBool("pdfShowShipping", { pdfShowShipping = $0 }, pdfShowShipping)
                 applyBool("pdfShowMaterials", { pdfShowMaterials = $0 }, pdfShowMaterials)
                 applyBool("pdfShowPriority", { pdfShowPriority = $0 }, pdfShowPriority)
+                applyBool("pdfShowAddress", { pdfShowAddress = $0 }, pdfShowAddress)
+                applyBool("pdfShowShippingAddress", { pdfShowShippingAddress = $0 }, pdfShowShippingAddress)
                 applyString("companyNumbersJSON", {
                     companyNumbersJSON = $0
                     if let decoded = try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: Data($0.utf8)) { companyNumbers = decoded }
@@ -3308,6 +3387,7 @@ struct AyarlarView: View {
         let latestDecimalSeparator = seciliOndalik
         let latestFeePercentage = min(max(feePercentage, 0), 100)
         let latestDefaultTaxRate = min(max(defaultTaxRate, 0), 100)
+        let latestDefaultDeliveryTime = min(max(defaultDeliveryTime.rounded(), 1), 730)
         let latestTaxCalculationType = taxCalculationType == "Profit" ? "Profit" : "Revenue"
         let latestTaxMilestoneEnabled = taxMilestoneEnabled
         let latestTaxMilestoneDate = taxMilestoneDate
@@ -3330,6 +3410,7 @@ struct AyarlarView: View {
         let latestSummaryStep2 = summaryStep2
         let latestOrderListStep1 = orderListStep1
         let latestOrderListStep2 = orderListStep2
+        let latestOrderItemsHeading = orderItemsHeading
         let latestSpecialNoteSectionsJSON = specialNoteSectionsJSON
         let latestInvLabel1 = invLabel1
         let latestInvLabel2 = invLabel2
@@ -3348,6 +3429,8 @@ struct AyarlarView: View {
         let latestPdfShowShipping = pdfShowShipping
         let latestPdfShowMaterials = pdfShowMaterials
         let latestPdfShowPriority = pdfShowPriority
+        let latestPdfShowAddress = pdfShowAddress
+        let latestPdfShowShippingAddress = pdfShowShippingAddress
         let latestCompanyNumbersJSON = companyNumbersJSON
 
         let latestShowCardCustomerNotes = showCardCustomerNotes
@@ -3412,6 +3495,7 @@ struct AyarlarView: View {
                     "seciliOndalik": latestDecimalSeparator,
                     "feePercentage": latestFeePercentage,
                     "defaultTaxRate": latestDefaultTaxRate,
+                    "defaultDeliveryTime": latestDefaultDeliveryTime,
                     "taxCalculationType": latestTaxCalculationType,
                     "taxMilestoneEnabled": latestTaxMilestoneEnabled,
                     "taxMilestoneDate": latestTaxMilestoneDate,
@@ -3434,6 +3518,7 @@ struct AyarlarView: View {
                     "summaryStep2": latestSummaryStep2,
                     "orderListStep1": latestOrderListStep1,
                     "orderListStep2": latestOrderListStep2,
+                    "orderItemsHeading": latestOrderItemsHeading,
                     "specialNoteSectionsJSON": latestSpecialNoteSectionsJSON,
                     "invLabel1": latestInvLabel1,
                     "invLabel2": latestInvLabel2,
@@ -3454,6 +3539,8 @@ struct AyarlarView: View {
                     "pdfShowShipping": latestPdfShowShipping,
                     "pdfShowMaterials": latestPdfShowMaterials,
                     "pdfShowPriority": latestPdfShowPriority,
+                    "pdfShowAddress": latestPdfShowAddress,
+                    "pdfShowShippingAddress": latestPdfShowShippingAddress,
                     "companyNumbersJSON": latestCompanyNumbersJSON,
 
                     "showCardCustomerNotes": latestShowCardCustomerNotes,
@@ -3510,9 +3597,6 @@ struct AyarlarView: View {
         SettingsCard(title: t("Theme & Branding", lang: seciliDil), iconName: "paintpalette.fill") {
             VStack(alignment: .leading, spacing: 15) {
                 SettingsTextField(label: t("Brand Subtitle", lang: seciliDil), text: $appSubtitle)
-                Text(t("Workspace logo is managed from Account > Workspace Logo.", lang: seciliDil))
-                    .font(.system(size: 11))
-                    .foregroundColor(.gray)
             }
         }
     }
@@ -3592,6 +3676,8 @@ struct AyarlarView: View {
                     if let value = values["pdfShowPriority"] as? Bool { pdfShowPriority = value }
                     if let value = values["pdfShowStatus"] as? Bool { pdfShowStatus = value }
                     if let value = values["pdfShowShipping"] as? Bool { pdfShowShipping = value }
+                    if let value = values["pdfShowAddress"] as? Bool { pdfShowAddress = value }
+                    if let value = values["pdfShowShippingAddress"] as? Bool { pdfShowShippingAddress = value }
                 }
             }
         }
@@ -3638,7 +3724,7 @@ struct AyarlarView: View {
         guard isWorkflowOnlySettingsRole, !firebaseManager.currentCompanyId.isEmpty else { return }
         Functions.functions(region: "europe-west2").httpsCallable("savePersonalInterfaceSettings").call([
             "companyId": firebaseManager.currentCompanyId,
-            "settings": ["appTheme": appTheme, "selectedLanguage": seciliDil, "pdfShowCustomer": pdfShowCustomer, "pdfShowContact": pdfShowContact, "pdfShowPreview": pdfShowPreview, "pdfShowMaterials": pdfShowMaterials, "pdfShowPriority": pdfShowPriority, "pdfShowStatus": pdfShowStatus, "pdfShowShipping": pdfShowShipping]
+            "settings": ["appTheme": appTheme, "selectedLanguage": seciliDil, "pdfShowCustomer": pdfShowCustomer, "pdfShowContact": pdfShowContact, "pdfShowPreview": pdfShowPreview, "pdfShowMaterials": pdfShowMaterials, "pdfShowPriority": pdfShowPriority, "pdfShowStatus": pdfShowStatus, "pdfShowShipping": pdfShowShipping, "pdfShowAddress": pdfShowAddress, "pdfShowShippingAddress": pdfShowShippingAddress]
         ]) { _, _ in }
     }
 
@@ -3655,6 +3741,8 @@ struct AyarlarView: View {
                 Toggle("Priority / Risk", isOn: $pdfShowPriority)
                 Toggle("Production Status", isOn: $pdfShowStatus)
                 Toggle("Shipping & Tracking", isOn: $pdfShowShipping)
+                Toggle("Billing Address", isOn: $pdfShowAddress)
+                Toggle("Shipping Address", isOn: $pdfShowShippingAddress)
                 Button("Save Personal PDF Preferences") { saveWorkflowOnlyPersonalInterfaceSettings() }.buttonStyle(.borderedProminent)
             }
         }
@@ -3675,6 +3763,8 @@ struct AyarlarView: View {
                     Toggle(isOn: $pdfShowFinInternal) { Text(t("Internal Financials", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $pdfShowStatus) { Text(t("Production Status", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                     Toggle(isOn: $pdfShowShipping) { Text(t("Shipping & Tracking", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowAddress) { Text(t("Billing Address", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+                    Toggle(isOn: $pdfShowShippingAddress) { Text(t("Shipping Address", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -5674,6 +5764,19 @@ struct AyarlarView: View {
                     .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420, accent: studioWarningOrange)
                 }
 
+                financialSettingsRow(t("Default delivery time for new orders (days)", lang: seciliDil)) {
+                    HStack(spacing: 8) {
+                        TextField("30", value: $defaultDeliveryTime, format: .number)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.primary)
+                        Text(t("days", lang: seciliDil))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420, accent: studioWarningOrange)
+                }
+
                 financialSettingsRow(t("Calculate Tax On", lang: seciliDil)) {
                     Picker("", selection: $taxCalculationType) {
                         Text(taxRuleNameRevenue).tag("Revenue")
@@ -5745,6 +5848,31 @@ struct AyarlarView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(isRecalculating)
                 .alert(t("Done", lang: seciliDil), isPresented: $showRecalcAlert) { Button("OK", role: .cancel) { } } message: { Text(t("Tax recalculation completed!", lang: seciliDil)) }
+
+                Button(action: { showClearTaxConfirm = true }) {
+                    HStack(spacing: 10) {
+                        if isClearingTax {
+                            ProgressView().controlSize(.small).tint(.white)
+                        } else {
+                            Image(systemName: "xmark.circle")
+                        }
+                        Text(t("Remove VAT from all orders", lang: seciliDil))
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(maxWidth: 420)
+                    .padding(.vertical, 12)
+                    .background(Color.red.opacity(0.85))
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .disabled(isClearingTax)
+                .alert(t("Remove VAT?", lang: seciliDil), isPresented: $showClearTaxConfirm) {
+                    Button(t("Remove", lang: seciliDil), role: .destructive) { tumVatleriSil() }
+                    Button(t("Cancel", lang: seciliDil), role: .cancel) { }
+                } message: { Text(t("This sets VAT/tax to 0 on all orders. Use this when VAT does not apply (e.g. you export). This cannot be undone.", lang: seciliDil)) }
+                .alert(t("Done", lang: seciliDil), isPresented: $showClearTaxAlert) { Button("OK", role: .cancel) { } } message: { Text(t("VAT removed from all orders.", lang: seciliDil)) }
             }
         }
     }
@@ -5797,6 +5925,18 @@ struct AyarlarView: View {
                 DispatchQueue.main.async { firebaseManager.updateSiparis(s) }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { isRecalculating = false; showRecalcAlert = true }
+        }
+    }
+
+    private func tumVatleriSil() {
+        let companyId = activeSettingsCompanyId
+        guard !companyId.isEmpty else { return }
+        isClearingTax = true
+        Functions.functions(region: "europe-west2").httpsCallable("clearAllOrdersTax").call(["companyId": companyId]) { _, _ in
+            DispatchQueue.main.async {
+                isClearingTax = false
+                showClearTaxAlert = true
+            }
         }
     }
     
@@ -5972,6 +6112,192 @@ struct AyarlarView: View {
             }
     }
 
+    private var shopifyIntegrationAyari: some View {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedCompanyId = companyId.isEmpty ? "YOUR_COMPANY_ID" : companyId
+        let deliveryURL = shopifyDeliveryURL
+
+        return VStack(alignment: .leading, spacing: 18) {
+            SettingsCard(title: t("Connect Shopify", lang: seciliDil), iconName: "bag.fill", footerText: t("This setup only needs to be done once in Shopify.", lang: seciliDil)) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders will appear in this workspace automatically.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if companyId.isEmpty {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(studioWarningOrange)
+                            Text(t("Company ID is not available yet. Sign in or reconnect your workspace first.", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(10)
+                        .background(studioWarningOrange.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+
+            SettingsCard(title: t("Copy Setup Details", lang: seciliDil), iconName: "doc.on.doc") {
+                VStack(alignment: .leading, spacing: 12) {
+                    copyableIntegrationValue(
+                        title: t("Your Company ID", lang: seciliDil),
+                        value: resolvedCompanyId,
+                        buttonTitle: t("Copy Company ID", lang: seciliDil),
+                        canCopy: !companyId.isEmpty
+                    )
+
+                    copyableIntegrationValue(
+                        title: t("Delivery URL with Company ID", lang: seciliDil),
+                        value: deliveryURL.isEmpty ? (shopifyTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
+                        buttonTitle: t("Copy Delivery URL", lang: seciliDil),
+                        canCopy: !deliveryURL.isEmpty
+                    )
+
+                    if !wooCommerceCopyFeedback.isEmpty {
+                        Text(wooCommerceCopyFeedback)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.green)
+                            .transition(.opacity)
+                    }
+                }
+            }
+
+            SettingsCard(title: t("What you need to do", lang: seciliDil), iconName: "checklist") {
+                VStack(alignment: .leading, spacing: 10) {
+                    integrationInfoRow(number: "1", title: t("Open Shopify webhooks", lang: seciliDil), detail: t("In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).", lang: seciliDil))
+                    integrationInfoRow(number: "2", title: t("Create an order webhook", lang: seciliDil), detail: t("Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.", lang: seciliDil))
+                    integrationInfoRow(number: "3", title: t("Paste the Delivery URL", lang: seciliDil), detail: t("Paste the copied Delivery URL as the webhook URL and save it.", lang: seciliDil))
+                    integrationInfoRow(number: "4", title: t("Place a test order", lang: seciliDil), detail: t("Place a paid test order in your store; it appears in Orders within seconds.", lang: seciliDil))
+                }
+            }
+
+            SettingsCard(title: t("What happens when it is active", lang: seciliDil), iconName: "bolt.horizontal.circle.fill") {
+                Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.", lang: seciliDil))
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear { loadShopifyWebhookSetup() }
+    }
+
+    private var inboundIntegrationAyari: some View {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedCompanyId = companyId.isEmpty ? "YOUR_COMPANY_ID" : companyId
+        let deliveryURL = inboundDeliveryURL
+        let jsonExample = "{\n  \"orderId\": \"1001\",\n  \"customerName\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"total\": 120.50,\n  \"currency\": \"GBP\",\n  \"products\": \"Custom dial x1\",\n  \"source\": \"Wix\"\n}"
+
+        return VStack(alignment: .leading, spacing: 18) {
+            SettingsCard(title: t("Connect any store with one webhook", lang: seciliDil), iconName: "link", footerText: t("Works with Wix, Squarespace, Etsy, BigCommerce, custom sites and more.", lang: seciliDil)) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(t("Use Zapier, Make or your own site to POST each new order to the Delivery URL below. Orders appear in Orders and Schedule automatically.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if companyId.isEmpty {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(studioWarningOrange)
+                            Text(t("Company ID is not available yet. Sign in or reconnect your workspace first.", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(10)
+                        .background(studioWarningOrange.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+
+            SettingsCard(title: t("Copy Setup Details", lang: seciliDil), iconName: "doc.on.doc") {
+                VStack(alignment: .leading, spacing: 12) {
+                    copyableIntegrationValue(
+                        title: t("Your Company ID", lang: seciliDil),
+                        value: resolvedCompanyId,
+                        buttonTitle: t("Copy Company ID", lang: seciliDil),
+                        canCopy: !companyId.isEmpty
+                    )
+
+                    copyableIntegrationValue(
+                        title: t("Delivery URL with Company ID", lang: seciliDil),
+                        value: deliveryURL.isEmpty ? (inboundTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
+                        buttonTitle: t("Copy Delivery URL", lang: seciliDil),
+                        canCopy: !deliveryURL.isEmpty
+                    )
+
+                    if !wooCommerceCopyFeedback.isEmpty {
+                        Text(wooCommerceCopyFeedback)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.green)
+                            .transition(.opacity)
+                    }
+                }
+            }
+
+            SettingsCard(title: t("What you need to do", lang: seciliDil), iconName: "checklist") {
+                VStack(alignment: .leading, spacing: 10) {
+                    integrationInfoRow(number: "1", title: t("Pick a connection method", lang: seciliDil), detail: t("Most platforms connect through Zapier or Make (a 'Webhooks > POST' action). Developers can also POST directly from their own site.", lang: seciliDil))
+                    integrationInfoRow(number: "2", title: t("Send the order as JSON", lang: seciliDil), detail: t("POST a JSON body to the Delivery URL on each new order. At minimum include orderId. Common fields: orderId, customerName, email, phone, total, currency, products, source.", lang: seciliDil))
+                    integrationInfoRow(number: "3", title: t("Order appears automatically", lang: seciliDil), detail: t("Each posted order is added to Orders and Schedule, tagged with the source you send.", lang: seciliDil))
+                }
+            }
+
+            SettingsCard(title: t("Example JSON", lang: seciliDil), iconName: "curlybraces") {
+                Text(jsonExample)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .textSelection(.enabled)
+            }
+        }
+        .onAppear { loadInboundWebhookSetup() }
+    }
+
+    private func loadShopifyWebhookSetup() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty, shopifyDeliveryURL.isEmpty, !shopifyTokenLoading else { return }
+        shopifyTokenLoading = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("getShopifyWebhookToken")
+            .call(["companyId": companyId]) { result, _ in
+                DispatchQueue.main.async {
+                    shopifyTokenLoading = false
+                    if let data = result?.data as? [String: Any],
+                       let url = data["deliveryUrl"] as? String, !url.isEmpty {
+                        shopifyDeliveryURL = url
+                    }
+                }
+            }
+    }
+
+    private func loadInboundWebhookSetup() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty, inboundDeliveryURL.isEmpty, !inboundTokenLoading else { return }
+        inboundTokenLoading = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("getInboundWebhookToken")
+            .call(["companyId": companyId]) { result, _ in
+                DispatchQueue.main.async {
+                    inboundTokenLoading = false
+                    if let data = result?.data as? [String: Any],
+                       let url = data["deliveryUrl"] as? String, !url.isEmpty {
+                        inboundDeliveryURL = url
+                    }
+                }
+            }
+    }
+
 
     private func integrationInfoRow(number: String, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
@@ -6078,8 +6404,15 @@ struct AyarlarView: View {
                 Button(action: { silmeOnayiGosteriliyor = true }) { HStack { Image(systemName: "trash.fill"); Text(t("Delete Data", lang: seciliDil)) }.font(.system(size: 12, weight: .bold)).padding(.horizontal, 12).padding(.vertical, 8).background(Color.red.opacity(0.8)).foregroundColor(.white).cornerRadius(6) }.buttonStyle(.plain)
             }
         }
+        .sheet(isPresented: $showOrderExportSheet) {
+            OrderExportSheet(
+                companyId: activeSettingsCompanyId,
+                canSeeFinance: authVM.currentWorkspaceAccess["financialInfo"] ?? true,
+                isPresented: $showOrderExportSheet
+            )
+        }
     }
-    
+
     private var exportBackupButton: some View {
         Button(action: hazirlaVeDisariAktar) {
             HStack {
@@ -6097,7 +6430,7 @@ struct AyarlarView: View {
     }
 
     private var exportCSVButton: some View {
-        Button(action: exportToCSV) {
+        Button(action: { showOrderExportSheet = true }) {
             HStack {
                 Image(systemName: "tablecells")
                 Text(t("Export CSV", lang: seciliDil))
@@ -6385,6 +6718,8 @@ struct AyarlarView: View {
             ("pdfShowShipping", true),
             ("pdfShowMaterials", true),
             ("pdfShowPriority", true),
+            ("pdfShowAddress", true),
+            ("pdfShowShippingAddress", true),
             ("financialShowBaseCost", true),
             ("taxMilestoneEnabled", false),
             ("corporationTaxEnabled", false),
@@ -6398,6 +6733,7 @@ struct AyarlarView: View {
         let doubleKeys: [(String, Double)] = [
             ("feePercentage", 3.0),
             ("defaultTaxRate", 20.0),
+            ("defaultDeliveryTime", 30.0),
             ("corporationTaxRate", 19.0),
             ("taxMilestoneDate", Date().timeIntervalSince1970),
             ("ordersSidebarWidth", 380),
@@ -6491,12 +6827,15 @@ struct AyarlarView: View {
         pdfShowShipping = settings.bools["pdfShowShipping"] ?? pdfShowShipping
         pdfShowMaterials = settings.bools["pdfShowMaterials"] ?? pdfShowMaterials
         pdfShowPriority = settings.bools["pdfShowPriority"] ?? pdfShowPriority
+        pdfShowAddress = settings.bools["pdfShowAddress"] ?? pdfShowAddress
+        pdfShowShippingAddress = settings.bools["pdfShowShippingAddress"] ?? pdfShowShippingAddress
         financialShowBaseCost = settings.bools["financialShowBaseCost"] ?? financialShowBaseCost
         taxMilestoneEnabled = settings.bools["taxMilestoneEnabled"] ?? taxMilestoneEnabled
         corporationTaxEnabled = settings.bools["corporationTaxEnabled"] ?? corporationTaxEnabled
 
         feePercentage = settings.doubles["feePercentage"] ?? feePercentage
         defaultTaxRate = settings.doubles["defaultTaxRate"] ?? defaultTaxRate
+        defaultDeliveryTime = settings.doubles["defaultDeliveryTime"] ?? defaultDeliveryTime
         corporationTaxRate = settings.doubles["corporationTaxRate"] ?? corporationTaxRate
         taxMilestoneDate = settings.doubles["taxMilestoneDate"] ?? taxMilestoneDate
 
@@ -6591,6 +6930,23 @@ struct AyarMenuButonu: View {
             .cornerRadius(8)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// Small uppercase group heading for the settings sidebar (Account / Workspace).
+private struct SettingsGroupLabel: View {
+    let title: String
+    var topPadding: CGFloat = 14
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .heavy))
+            .foregroundColor(.secondary)
+            .tracking(0.6)
+            .padding(.top, topPadding)
+            .padding(.bottom, 2)
+            .padding(.leading, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -6750,6 +7106,209 @@ struct CSVExportBelgesi: FileDocument {
     }
 }
 
+// Cross-platform (Mac + iPhone) CSV export sheet. Calls the server-side
+// exportOrders callable so the file matches web and Android exactly, then saves
+// it via .fileExporter (NSSavePanel on Mac, the Files picker on iPhone).
+struct OrderExportSheet: View {
+    let companyId: String
+    let canSeeFinance: Bool
+    @Binding var isPresented: Bool
+
+    enum Report: String, CaseIterable, Identifiable {
+        case invoices = "orders"
+        case lineItems = "lineItems"
+        case payments = "payments"
+        case finance = "finance"
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .invoices: return "Invoices"
+            case .lineItems: return "Line items"
+            case .payments: return "Payments"
+            case .finance: return "Finance"
+            }
+        }
+        var detail: String {
+            switch self {
+            case .invoices: return "One row per invoice — status, dates, contact and totals."
+            case .lineItems: return "One row per product/service line on each invoice."
+            case .payments: return "One row per payment received — the cash ledger."
+            case .finance: return "One row per invoice with accountant columns (revenue, cost, VAT, net profit)."
+            }
+        }
+        var isFinance: Bool { self == .payments || self == .finance }
+    }
+
+    enum RangePreset: String, CaseIterable, Identifiable {
+        case thisMonth, lastMonth, thisQuarter, thisYear, lastYear, all, custom
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .thisMonth: return "This month"
+            case .lastMonth: return "Last month"
+            case .thisQuarter: return "This quarter"
+            case .thisYear: return "This year"
+            case .lastYear: return "Last year"
+            case .all: return "All time"
+            case .custom: return "Custom range"
+            }
+        }
+    }
+
+    @State private var report: Report = .finance
+    @State private var preset: RangePreset = .thisMonth
+    @State private var customFrom = Date()
+    @State private var customTo = Date()
+    @State private var includeTrash = false
+    @State private var bom = true
+    @State private var useSemicolon = false
+    @State private var busy = false
+    @State private var status = ""
+    @State private var errorText = ""
+    @State private var exportDoc: CSVExportBelgesi?
+    @State private var showExporter = false
+    @State private var exportFilename = "export.csv"
+
+    private var availableReports: [Report] {
+        Report.allCases.filter { canSeeFinance || !$0.isFinance }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Export invoices to CSV").font(.headline)
+                Spacer()
+                Button("Done") { isPresented = false }
+            }
+            .padding()
+            Divider()
+
+            Form {
+                Section("Report") {
+                    Picker("Report", selection: $report) {
+                        ForEach(availableReports) { item in Text(item.label).tag(item) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    Text(report.detail).font(.system(size: 12)).foregroundColor(.secondary)
+                }
+
+                Section("Date range") {
+                    Picker("Range", selection: $preset) {
+                        ForEach(RangePreset.allCases) { item in Text(item.label).tag(item) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    if preset == .custom {
+                        DatePicker("From", selection: $customFrom, displayedComponents: .date)
+                        DatePicker("To", selection: $customTo, displayedComponents: .date)
+                    }
+                }
+
+                Section("Options") {
+                    Toggle("Include trashed invoices", isOn: $includeTrash)
+                    Toggle("Excel-friendly (UTF-8 BOM)", isOn: $bom)
+                    Toggle("Semicolon separator ( ; )", isOn: $useSemicolon)
+                }
+
+                Section {
+                    Button(action: { Task { await runExport() } }) {
+                        HStack {
+                            if busy { ProgressView().controlSize(.small) }
+                            Image(systemName: "square.and.arrow.down")
+                            Text(busy ? "Preparing…" : "Download CSV")
+                        }
+                    }
+                    .disabled(busy || companyId.isEmpty)
+                    if !status.isEmpty { Text(status).font(.system(size: 12)).foregroundColor(.secondary) }
+                    if !errorText.isEmpty { Text(errorText).font(.system(size: 12)).foregroundColor(.red) }
+                }
+            }
+        }
+        .frame(minWidth: 380, minHeight: 480)
+        .onAppear { if !canSeeFinance && report.isFinance { report = .invoices } }
+        .fileExporter(isPresented: $showExporter, document: exportDoc, contentType: .commaSeparatedText, defaultFilename: exportFilename) { _ in }
+    }
+
+    private func runExport() async {
+        busy = true; status = ""; errorText = ""
+        let (from, to) = rangeDates()
+        var payload: [String: Any] = [
+            "companyId": companyId,
+            "template": report.rawValue,
+            "includeTrash": includeTrash,
+            "delimiter": useSemicolon ? ";" : ",",
+            "bom": bom
+        ]
+        payload["from"] = from ?? NSNull()
+        payload["to"] = to ?? NSNull()
+        do {
+            let result = try await Functions.functions(region: "europe-west2").httpsCallable("exportOrders").call(payload)
+            let dict = result.data as? [String: Any]
+            guard let b64 = dict?["base64"] as? String,
+                  let data = Data(base64Encoded: b64),
+                  let csv = String(data: data, encoding: .utf8) else {
+                errorText = "Export failed. Please try again."
+                busy = false
+                return
+            }
+            exportFilename = (dict?["filename"] as? String) ?? "export.csv"
+            let rowCount = (dict?["rowCount"] as? Int) ?? 0
+            exportDoc = CSVExportBelgesi(text: csv)
+            busy = false
+            status = rowCount > 0 ? "\(rowCount) row\(rowCount == 1 ? "" : "s") ready." : "No invoices matched this date range."
+            showExporter = true
+        } catch {
+            errorText = error.localizedDescription
+            busy = false
+        }
+    }
+
+    // Resolve the preset into inclusive from/to ISO days (UTC, matching the backend).
+    private func rangeDates() -> (String?, String?) {
+        if preset == .all { return (nil, nil) }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        let now = Date()
+        func iso(_ date: Date) -> String {
+            let formatter = DateFormatter()
+            formatter.calendar = cal
+            formatter.timeZone = cal.timeZone
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: date)
+        }
+        if preset == .custom { return (iso(customFrom), iso(customTo)) }
+        let comps = cal.dateComponents([.year, .month], from: now)
+        let year = comps.year ?? 2026
+        let month = comps.month ?? 1
+        func startOfMonth(_ y: Int, _ m: Int) -> Date {
+            cal.date(from: DateComponents(year: y, month: m, day: 1)) ?? now
+        }
+        func endOfMonth(_ y: Int, _ m: Int) -> Date {
+            let start = startOfMonth(y, m)
+            return cal.date(byAdding: DateComponents(month: 1, day: -1), to: start) ?? start
+        }
+        switch preset {
+        case .thisMonth:
+            return (iso(startOfMonth(year, month)), iso(endOfMonth(year, month)))
+        case .lastMonth:
+            let prev = cal.date(byAdding: .month, value: -1, to: startOfMonth(year, month)) ?? now
+            let pc = cal.dateComponents([.year, .month], from: prev)
+            return (iso(startOfMonth(pc.year ?? year, pc.month ?? month)), iso(endOfMonth(pc.year ?? year, pc.month ?? month)))
+        case .thisQuarter:
+            let qStart = ((month - 1) / 3) * 3 + 1
+            return (iso(startOfMonth(year, qStart)), iso(endOfMonth(year, qStart + 2)))
+        case .thisYear:
+            return (iso(startOfMonth(year, 1)), iso(endOfMonth(year, 12)))
+        case .lastYear:
+            return (iso(startOfMonth(year - 1, 1)), iso(endOfMonth(year - 1, 12)))
+        default:
+            return (nil, nil)
+        }
+    }
+}
+
 
 extension Array where Element: Hashable {
     func removingDuplicates() -> [Element] {
@@ -6810,7 +7369,16 @@ struct SettingsLogoURLField: View {
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }
-                requestSafeLogoUpload(url: url)
+                // Copy the picked file to our own temp file NOW, while the document
+                // picker's security-scoped access is still valid. The logo upload then
+                // runs an async plan check before reading, by which point that access
+                // would have lapsed and the read would fail silently on iPhone/iPad.
+                guard let localURL = copyPickedFileToTemp(url) else {
+                    uploadSafetyErrorMessage = t("Upload blocked. Please check Upload Safety settings and try again.", lang: seciliDil)
+                    showUploadSafetyError = true
+                    return
+                }
+                requestSafeLogoUpload(url: localURL)
             case .failure(let error):
                 uploadSafetyErrorMessage = error.localizedDescription
                 showUploadSafetyError = true
@@ -6960,6 +7528,29 @@ struct SettingsLogoURLField: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .disabled(isUploadingLogo)
+    }
+
+    // iOS document-picker URLs are security-scoped and only readable while access is
+    // held. The workspace-logo upload runs an async plan check
+    // (validateWorkspacePlanAction) BEFORE reading the file, by which point that
+    // access has lapsed and Data(contentsOf:) fails — so the upload silently does
+    // nothing on iPhone/iPad. We copy the bytes into our own temp file up front,
+    // while access is still valid, and upload that instead. (macOS uses NSOpenPanel
+    // and is not affected, so this path only runs for the iOS fileImporter.)
+    private func copyPickedFileToTemp(_ url: URL) -> URL? {
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let ext = url.pathExtension.isEmpty ? "img" : url.pathExtension
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nivadesk-logo-\(UUID().uuidString)")
+            .appendingPathExtension(ext)
+        do {
+            try data.write(to: destination)
+            return destination
+        } catch {
+            return nil
+        }
     }
 
     private func requestSafeLogoUpload(url: URL) {
@@ -7677,7 +8268,7 @@ struct SiteStatsAdminView: View {
                             rankedList(topEntries({ $0.languages }, limit: 6))
                         }
                         panel(t("Traffic sources", lang: seciliDil)) {
-                            rankedList(topEntries({ $0.referrers }, limit: 6))
+                            rankedList(topEntries({ $0.referrers }, limit: 10))
                         }
                     }
 
@@ -7830,6 +8421,39 @@ private struct AIRowView: View {
             Text(label).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
             Spacer()
             Text(value).font(.system(size: 12.5, weight: .bold))
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+// Two-line row for people: name on top, email beneath, a date/value trailing.
+private struct AIUserRow: View {
+    let name: String
+    let email: String
+    let trailing: String
+    var dot: Color = .blue
+    var planLabel: String? = nil
+    var planColor: Color? = nil
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(planColor ?? dot).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name.isEmpty ? (email.isEmpty ? "—" : email) : name)
+                    .font(.system(size: 12.5, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                if !name.isEmpty && !email.isEmpty {
+                    Text(email).font(.system(size: 10.5)).foregroundColor(.gray).lineLimit(1)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 1) {
+                if let planLabel {
+                    Text(planLabel)
+                        .font(.system(size: 9.5, weight: .heavy))
+                        .foregroundColor(planColor ?? .secondary)
+                }
+                Text(trailing).font(.system(size: 11.5, weight: .bold)).foregroundColor(.secondary)
+            }
         }
         .padding(.vertical, 5)
     }
@@ -8044,6 +8668,8 @@ private struct AIUsersDetailView: View {
     @State private var loading = true
     @State private var errorText = ""
     @State private var data: [String: Any] = [:]
+    @State private var recentSort = "date"
+    @State private var recentPage = 0
 
     var body: some View {
         ScrollView {
@@ -8099,6 +8725,73 @@ private struct AIUsersDetailView: View {
                                     let rowValue: String = String(aiInt(workspace, "orders30d")) + " " + t("orders", lang: seciliDil) + " · " + aiDate(aiInt(workspace, "lastOrderAtMs"))
                                     AIRowView(label: rowLabel, value: rowValue, dot: aiPlanColors[plan] ?? .gray)
                                 }
+                            }
+                        }
+                    }
+
+                    AICard(title: t("Recent Signups", lang: seciliDil)) {
+                        let all = aiList(data, "recentUsers")
+                        if all.isEmpty {
+                            Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                        } else {
+                            let sorted: [[String: Any]] = recentSort == "name"
+                                ? all.sorted {
+                                    let l = (aiStr($0, "displayName").isEmpty ? aiStr($0, "email") : aiStr($0, "displayName")).lowercased()
+                                    let r = (aiStr($1, "displayName").isEmpty ? aiStr($1, "email") : aiStr($1, "displayName")).lowercased()
+                                    return l < r
+                                }
+                                : all.sorted { aiInt($0, "createdAtMs") > aiInt($1, "createdAtMs") }
+                            let pageSize = 20
+                            let pageCount = max(1, Int(ceil(Double(sorted.count) / Double(pageSize))))
+                            let page = min(recentPage, pageCount - 1)
+                            let slice = Array(sorted.dropFirst(page * pageSize).prefix(pageSize))
+
+                            HStack(spacing: 6) {
+                                ForEach([("date", t("Newest", lang: seciliDil)), ("name", t("Name A–Z", lang: seciliDil))], id: \.0) { mode, label in
+                                    Button(action: { recentSort = mode; recentPage = 0 }) {
+                                        Text(label)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(recentSort == mode ? .white : .secondary)
+                                            .padding(.vertical, 5).padding(.horizontal, 11)
+                                            .background(recentSort == mode ? Color.blue : Color.primary.opacity(0.06))
+                                            .cornerRadius(8)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                Spacer()
+                                Text("\(sorted.count) " + t("users", lang: seciliDil)).font(.system(size: 10.5)).foregroundColor(.gray)
+                            }
+                            .padding(.bottom, 6)
+
+                            VStack(spacing: 0) {
+                                ForEach(Array(slice.enumerated()), id: \.offset) { _, user in
+                                    let plan = aiStr(user, "plan").isEmpty ? "demo" : aiStr(user, "plan")
+                                    AIUserRow(
+                                        name: aiStr(user, "displayName"),
+                                        email: aiStr(user, "email"),
+                                        trailing: aiDate(aiInt(user, "createdAtMs")),
+                                        dot: .purple,
+                                        planLabel: aiPlanLabels[plan] ?? plan,
+                                        planColor: aiPlanColors[plan] ?? .gray
+                                    )
+                                }
+                            }
+
+                            if pageCount > 1 {
+                                HStack(spacing: 12) {
+                                    Button(action: { if page > 0 { recentPage = page - 1 } }) {
+                                        Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(page > 0 ? .blue : .gray.opacity(0.4))
+                                    }.buttonStyle(.plain).disabled(page <= 0)
+                                    Text(t("Page", lang: seciliDil) + " \(page + 1) / \(pageCount)")
+                                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+                                    Button(action: { if page < pageCount - 1 { recentPage = page + 1 } }) {
+                                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(page < pageCount - 1 ? .blue : .gray.opacity(0.4))
+                                    }.buttonStyle(.plain).disabled(page >= pageCount - 1)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 8)
                             }
                         }
                     }
@@ -8629,7 +9322,12 @@ private struct AILookupDetailView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(users.enumerated()), id: \.offset) { _, user in
                                     Button(action: { openDetail(kind: "user", id: aiStr(user, "uid")) }) {
-                                        AIRowView(label: aiStr(user, "email"), value: aiDate(aiInt(user, "lastSignInMs")), dot: .blue)
+                                        AIUserRow(
+                                            name: aiStr(user, "displayName"),
+                                            email: aiStr(user, "email"),
+                                            trailing: aiDate(aiInt(user, "lastSignInMs")),
+                                            dot: .blue
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -8727,6 +9425,445 @@ private struct AILookupDetailView: View {
 }
 
 
+// MARK: - NivaDesk admin: Google Search (Search Console) rankings
+
+private struct SCDayStat: Identifiable { let id: String; let date: Date; let clicks: Int; let impressions: Int; let ctr: Double; let position: Double }
+private struct SCQueryStat: Identifiable { let id: String; let query: String; let clicks: Int; let impressions: Int; let ctr: Double; let position: Double; let positionDelta: Double?; let isNew: Bool }
+private struct SCPageStat: Identifiable { let id: String; let page: String; let clicks: Int; let impressions: Int; let ctr: Double; let position: Double }
+private struct SCCountryStat: Identifiable { let id: String; let country: String; let clicks: Int; let impressions: Int }
+private struct SCDeviceStat: Identifiable { let id: String; let device: String; let clicks: Int; let impressions: Int }
+
+struct SearchConsoleAdminView: View {
+    @Environment(\.colorScheme) var colorScheme
+    let seciliDil: String
+
+    @State private var rangeDays = 28 // 7 / 28 / 90
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var ok = false
+    @State private var needsAccess = false
+    @State private var serviceAccountEmail = ""
+    @State private var property = ""
+    @State private var message = ""
+    @State private var curTotals: [String: Double] = [:]
+    @State private var prevTotals: [String: Double] = [:]
+    @State private var queries: [SCQueryStat] = []
+    @State private var byDate: [SCDayStat] = []
+    @State private var pages: [SCPageStat] = []
+    @State private var countries: [SCCountryStat] = []
+    @State private var devices: [SCDeviceStat] = []
+    @State private var previousRangeLabel = ""
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var isCompactLayout: Bool { horizontalSizeClass == .compact }
+    #else
+    private var isCompactLayout: Bool { false }
+    #endif
+
+    private static let alpha3to2: [String: String] = ["GBR": "GB", "USA": "US", "IRL": "IE", "DEU": "DE", "FRA": "FR", "NLD": "NL", "ESP": "ES", "ITA": "IT", "CAN": "CA", "AUS": "AU", "IND": "IN", "TUR": "TR", "BEL": "BE", "CHE": "CH", "AUT": "AT", "SWE": "SE", "NOR": "NO", "DNK": "DK", "FIN": "FI", "POL": "PL", "PRT": "PT", "GRC": "GR", "ROU": "RO", "CZE": "CZ", "NZL": "NZ", "ZAF": "ZA", "BRA": "BR", "MEX": "MX", "ARE": "AE", "SAU": "SA", "JPN": "JP", "KOR": "KR", "CHN": "CN", "RUS": "RU", "UKR": "UA", "HUN": "HU", "BGR": "BG", "HRV": "HR", "SRB": "RS", "SVK": "SK"]
+
+    private static let deviceLabels: [String: String] = ["DESKTOP": "Desktop", "MOBILE": "Mobile", "TABLET": "Tablet"]
+    private static let deviceColors: [String: Color] = ["DESKTOP": .blue, "MOBILE": .purple, "TABLET": .teal]
+
+    // MARK: helpers
+
+    private var cardBackground: Color { colorScheme == .dark ? Color.white.opacity(0.05) : Color.white }
+
+    private func dbl(_ value: Any?) -> Double {
+        if let n = value as? Double { return n }
+        if let n = value as? Int { return Double(n) }
+        if let n = value as? NSNumber { return n.doubleValue }
+        return 0
+    }
+    private func intv(_ value: Any?) -> Int { Int(dbl(value).rounded()) }
+    private func dblOpt(_ value: Any?) -> Double? {
+        if value is NSNull || value == nil { return nil }
+        if let n = value as? Double { return n }
+        if let n = value as? NSNumber { return n.doubleValue }
+        return nil
+    }
+    private func deltaPercent(_ current: Double, _ previous: Double) -> Double? {
+        guard previous > 0 else { return nil }
+        return (current - previous) / previous * 100
+    }
+
+    private func flagEmoji(_ countryCode: String) -> String {
+        let base: UInt32 = 127397
+        var flag = ""
+        for scalar in countryCode.uppercased().unicodeScalars {
+            if let emojiScalar = UnicodeScalar(base + scalar.value) { flag.unicodeScalars.append(emojiScalar) }
+        }
+        return flag.isEmpty ? "🌍" : flag
+    }
+    private func countryDisplay(_ alpha3: String) -> (flag: String, name: String) {
+        if let a2 = Self.alpha3to2[alpha3] {
+            return (flagEmoji(a2), Locale.current.localizedString(forRegionCode: a2) ?? a2)
+        }
+        return ("🌍", alpha3)
+    }
+    private func pagePathLabel(_ urlStr: String) -> String {
+        if let u = URL(string: urlStr) {
+            let p = u.path
+            return p.isEmpty || p == "/" ? "Home page" : p
+        }
+        return urlStr
+    }
+
+    // MARK: data
+
+    private func load() {
+        loading = true
+        errorText = ""
+        let cal = Calendar.current
+        let end = cal.date(byAdding: .day, value: -3, to: cal.startOfDay(for: Date())) ?? Date()
+        let start = cal.date(byAdding: .day, value: -(rangeDays - 1), to: end) ?? end
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "Europe/London")
+        let payload: [String: Any] = ["startDate": f.string(from: start), "endDate": f.string(from: end)]
+        Functions.functions(region: "europe-west2").httpsCallable("getSearchConsoleStats").call(payload) { result, error in
+            DispatchQueue.main.async {
+                loading = false
+                if let error = error { errorText = error.localizedDescription; return }
+                guard let data = result?.data as? [String: Any] else { errorText = "No data."; return }
+                parse(data)
+            }
+        }
+    }
+
+    private func parse(_ data: [String: Any]) {
+        ok = (data["ok"] as? Bool) ?? false
+        needsAccess = (data["needsAccess"] as? Bool) ?? false
+        serviceAccountEmail = data["serviceAccountEmail"] as? String ?? ""
+        property = data["property"] as? String ?? ""
+        message = data["message"] as? String ?? ""
+        if let totals = data["totals"] as? [String: Any] {
+            curTotals = (totals["current"] as? [String: Any])?.mapValues { dbl($0) } ?? [:]
+            prevTotals = (totals["previous"] as? [String: Any])?.mapValues { dbl($0) } ?? [:]
+        }
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "Europe/London")
+        byDate = (data["byDate"] as? [[String: Any]] ?? []).map {
+            let ds = $0["date"] as? String ?? ""
+            return SCDayStat(id: ds, date: f.date(from: ds) ?? Date(), clicks: intv($0["clicks"]), impressions: intv($0["impressions"]), ctr: dbl($0["ctr"]), position: dbl($0["position"]))
+        }
+        queries = (data["queries"] as? [[String: Any]] ?? []).enumerated().map { idx, row in
+            SCQueryStat(id: (row["query"] as? String).map { "\($0)#\(idx)" } ?? "q\(idx)", query: row["query"] as? String ?? "", clicks: intv(row["clicks"]), impressions: intv(row["impressions"]), ctr: dbl(row["ctr"]), position: dbl(row["position"]), positionDelta: dblOpt(row["positionDelta"]), isNew: (row["isNew"] as? Bool) ?? false)
+        }
+        pages = (data["pages"] as? [[String: Any]] ?? []).enumerated().map { idx, row in
+            SCPageStat(id: (row["page"] as? String).map { "\($0)#\(idx)" } ?? "p\(idx)", page: row["page"] as? String ?? "", clicks: intv(row["clicks"]), impressions: intv(row["impressions"]), ctr: dbl(row["ctr"]), position: dbl(row["position"]))
+        }
+        countries = (data["countries"] as? [[String: Any]] ?? []).enumerated().map { idx, row in
+            SCCountryStat(id: (row["country"] as? String).map { "\($0)#\(idx)" } ?? "c\(idx)", country: row["country"] as? String ?? "", clicks: intv(row["clicks"]), impressions: intv(row["impressions"]))
+        }
+        devices = (data["devices"] as? [[String: Any]] ?? []).enumerated().map { idx, row in
+            SCDeviceStat(id: (row["device"] as? String).map { "\($0)#\(idx)" } ?? "d\(idx)", device: row["device"] as? String ?? "", clicks: intv(row["clicks"]), impressions: intv(row["impressions"]))
+        }
+        if let pr = data["previousRange"] as? [String: Any] {
+            previousRangeLabel = "\(pr["startDate"] as? String ?? "") – \(pr["endDate"] as? String ?? "")"
+        }
+    }
+
+    private var movers: [SCQueryStat] {
+        queries.filter { !$0.isNew && ($0.positionDelta.map { abs($0) >= 0.5 } ?? false) }
+            .sorted { abs($0.positionDelta ?? 0) > abs($1.positionDelta ?? 0) }
+            .prefix(6).map { $0 }
+    }
+
+    // MARK: subviews
+
+    private func rangeButton(_ days: Int, _ label: String) -> some View {
+        Button(action: { rangeDays = days; load() }) {
+            Text(label)
+                .font(.system(size: 13, weight: .bold))
+                .padding(.vertical, 7).padding(.horizontal, 14)
+                .background(rangeDays == days ? Color.blue : Color.gray.opacity(0.12))
+                .foregroundColor(rangeDays == days ? .white : .primary)
+                .clipShape(Capsule())
+        }.buttonStyle(.plain)
+    }
+
+    private func deltaBadge(_ delta: Double?, invertGood: Bool = false) -> some View {
+        Group {
+            if let delta {
+                let isGood = invertGood ? delta <= 0 : delta >= 0
+                HStack(spacing: 2) {
+                    Image(systemName: delta >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8, weight: .bold))
+                    Text(String(format: "%.1f%%", abs(delta))).font(.system(size: 11, weight: .bold))
+                }.foregroundColor(isGood ? .green : .red)
+            }
+        }
+    }
+
+    private func positionDeltaBadge(_ delta: Double?, isNew: Bool) -> some View {
+        Group {
+            if isNew {
+                Text(t("New", lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(.green)
+            } else if let delta, abs(delta) >= 0.05 {
+                let improved = delta > 0
+                HStack(spacing: 2) {
+                    Image(systemName: improved ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8, weight: .bold))
+                    Text(String(format: "%.1f", abs(delta))).font(.system(size: 11, weight: .bold))
+                }.foregroundColor(improved ? .green : .red)
+            } else {
+                Text("–").font(.system(size: 12)).foregroundColor(.gray)
+            }
+        }
+    }
+
+    private func sparkline(_ values: [Double], color: Color) -> some View {
+        Chart(Array(values.enumerated()), id: \.offset) { item in
+            LineMark(x: .value("i", item.offset), y: .value("v", item.element))
+                .foregroundStyle(color).interpolationMethod(.linear).lineStyle(StrokeStyle(lineWidth: 1.6))
+        }.chartXAxis(.hidden).chartYAxis(.hidden).frame(height: 30)
+    }
+
+    private func statCard(icon: String, iconColor: Color, title: String, value: String, delta: Double?, invertGood: Bool, spark: [Double], sparkColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundColor(iconColor)
+                    .frame(width: 32, height: 32).background(iconColor.opacity(0.13)).cornerRadius(9)
+                Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(.gray).lineLimit(1)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value).font(.system(size: 24, weight: .heavy)).foregroundColor(.primary)
+                deltaBadge(delta, invertGood: invertGood)
+            }
+            Text(t("vs previous period", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray.opacity(0.7))
+            sparkline(spark, color: sparkColor)
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading).background(cardBackground).cornerRadius(14)
+    }
+
+    private func panel<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title).font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+            content()
+        }
+        .padding(18).frame(maxWidth: .infinity, alignment: .topLeading).background(cardBackground).cornerRadius(14)
+    }
+
+    private func donutWithLegend(_ slices: [SiteStatSlice], centerTitle: String) -> some View {
+        let totalValue = max(slices.reduce(0) { $0 + $1.value }, 1)
+        return HStack(alignment: .center, spacing: 18) {
+            Chart(slices) { slice in
+                SectorMark(angle: .value("v", slice.value), innerRadius: .ratio(0.62), angularInset: 1.5)
+                    .foregroundStyle(slice.color).cornerRadius(3)
+            }
+            .frame(width: 120, height: 120)
+            .overlay(VStack(spacing: 1) {
+                Text(centerTitle).font(.system(size: 9, weight: .semibold)).foregroundColor(.gray)
+                Text("\(totalValue)").font(.system(size: 15, weight: .heavy))
+            })
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(slices) { slice in
+                    HStack(spacing: 8) {
+                        Circle().fill(slice.color).frame(width: 8, height: 8)
+                        Text(slice.label).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(String(format: "%%%.1f", Double(slice.value) / Double(totalValue) * 100)).font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
+                        Text("\(slice.value)").font(.system(size: 12, weight: .bold)).frame(minWidth: 44, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private var setupCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(t("Connect Google Search Console", lang: seciliDil)).font(.system(size: 16, weight: .bold))
+            if !message.isEmpty { Text(message).font(.system(size: 13)).foregroundColor(.gray) }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("1.  " + t("Enable the Google Search Console API in Google Cloud (project eggcraft-studio).", lang: seciliDil)).font(.system(size: 13))
+                Text("2.  " + t("In Search Console → Settings → Users and permissions, add this service account as a Full user:", lang: seciliDil)).font(.system(size: 13))
+                if !serviceAccountEmail.isEmpty {
+                    Text(serviceAccountEmail)
+                        .font(.system(size: 12, weight: .semibold).monospaced())
+                        .textSelection(.enabled)
+                        .padding(8).background(Color.gray.opacity(0.12)).cornerRadius(8)
+                }
+                Text("3.  " + t("Make sure nivadesk.app is verified, then reload.", lang: seciliDil)).font(.system(size: 13))
+            }
+        }
+        .padding(18).frame(maxWidth: .infinity, alignment: .leading).background(cardBackground).cornerRadius(14)
+    }
+
+    private var summaryGrid: some View {
+        let cur = curTotals, prev = prevTotals
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 12)], spacing: 12) {
+            statCard(icon: "cursorarrow.click", iconColor: .blue, title: t("Total Clicks", lang: seciliDil), value: "\(Int((cur["clicks"] ?? 0).rounded()))", delta: deltaPercent(cur["clicks"] ?? 0, prev["clicks"] ?? 0), invertGood: false, spark: byDate.map { Double($0.clicks) }, sparkColor: .blue)
+            statCard(icon: "eye", iconColor: .purple, title: t("Impressions", lang: seciliDil), value: "\(Int((cur["impressions"] ?? 0).rounded()))", delta: deltaPercent(cur["impressions"] ?? 0, prev["impressions"] ?? 0), invertGood: false, spark: byDate.map { Double($0.impressions) }, sparkColor: .purple)
+            statCard(icon: "percent", iconColor: .green, title: t("Avg. CTR", lang: seciliDil), value: String(format: "%.1f%%", (cur["ctr"] ?? 0) * 100), delta: deltaPercent(cur["ctr"] ?? 0, prev["ctr"] ?? 0), invertGood: false, spark: byDate.map { $0.ctr * 100 }, sparkColor: .green)
+            statCard(icon: "number", iconColor: .orange, title: t("Avg. Position", lang: seciliDil), value: String(format: "%.1f", cur["position"] ?? 0), delta: deltaPercent(cur["position"] ?? 0, prev["position"] ?? 0), invertGood: true, spark: byDate.map { $0.position }, sparkColor: .orange)
+        }
+    }
+
+    private var trendPanel: some View {
+        panel(t("Clicks & impressions over time", lang: seciliDil)) {
+            if byDate.count < 2 {
+                Text(t("Not enough days to chart yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 16) {
+                        HStack(spacing: 5) { RoundedRectangle(cornerRadius: 2).fill(Color.purple).frame(width: 9, height: 9); Text(t("Impressions", lang: seciliDil)).font(.system(size: 11, weight: .semibold)).foregroundColor(.gray) }
+                        HStack(spacing: 5) { RoundedRectangle(cornerRadius: 2).fill(Color.blue).frame(width: 9, height: 9); Text(t("Clicks", lang: seciliDil)).font(.system(size: 11, weight: .semibold)).foregroundColor(.gray) }
+                    }
+                    Chart {
+                        ForEach(byDate) { d in
+                            AreaMark(x: .value("Date", d.date), y: .value("Impressions", d.impressions)).foregroundStyle(Color.purple.opacity(0.15))
+                        }
+                        ForEach(byDate) { d in
+                            LineMark(x: .value("Date", d.date), y: .value("Impressions", d.impressions)).foregroundStyle(Color.purple).lineStyle(StrokeStyle(lineWidth: 2.2))
+                        }
+                        ForEach(byDate) { d in
+                            LineMark(x: .value("Clk", d.date), y: .value("Clicks", d.clicks)).foregroundStyle(Color.blue).lineStyle(StrokeStyle(lineWidth: 2.2))
+                        }
+                    }.frame(height: 180)
+                }
+            }
+        }
+    }
+
+    private var positionPanel: some View {
+        let pts = byDate.filter { $0.position > 0 }
+        return panel(t("Average position over time", lang: seciliDil)) {
+            if pts.count < 2 {
+                Text(t("Not enough ranked days to chart yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("Higher line = better rank (closer to #1).", lang: seciliDil)).font(.system(size: 11)).foregroundColor(.gray)
+                    Chart(pts) { d in
+                        LineMark(x: .value("Date", d.date), y: .value("Position", d.position)).foregroundStyle(Color.orange).lineStyle(StrokeStyle(lineWidth: 2.2))
+                    }
+                    .chartYScale(domain: .automatic(includesZero: false, reversed: true))
+                    .frame(height: 140)
+                }
+            }
+        }
+    }
+
+    private func queryRow(_ index: Int, _ q: SCQueryStat) -> some View {
+        HStack(spacing: 10) {
+            Text("\(index + 1)").font(.system(size: 11, weight: .bold)).foregroundColor(.gray).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(q.query).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text("\(q.impressions) " + t("impr", lang: seciliDil) + " · \(q.clicks) " + t("clicks", lang: seciliDil) + " · " + String(format: "%.1f%%", q.ctr * 100)).font(.system(size: 11)).foregroundColor(.gray)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(String(format: "%.1f", q.position)).font(.system(size: 14, weight: .heavy))
+                positionDeltaBadge(q.positionDelta, isNew: q.isNew)
+            }
+        }.padding(.vertical, 7)
+    }
+
+    private func pageRow(_ index: Int, _ p: SCPageStat) -> some View {
+        HStack(spacing: 10) {
+            Text("\(index + 1)").font(.system(size: 11, weight: .bold)).foregroundColor(.gray).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pagePathLabel(p.page)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text("\(p.impressions) " + t("impr", lang: seciliDil) + " · \(p.clicks) " + t("clicks", lang: seciliDil) + " · " + String(format: "%.1f%%", p.ctr * 100)).font(.system(size: 11)).foregroundColor(.gray)
+            }
+            Spacer(minLength: 8)
+            Text(String(format: "%.1f", p.position)).font(.system(size: 14, weight: .heavy))
+        }.padding(.vertical, 7)
+    }
+
+    @ViewBuilder
+    private var resultsBody: some View {
+        summaryGrid
+        trendPanel
+        positionPanel
+        if !movers.isEmpty {
+            panel(t("Biggest ranking movers", lang: seciliDil)) {
+                VStack(spacing: 0) {
+                    ForEach(Array(movers.enumerated()), id: \.element.id) { _, q in
+                        HStack(spacing: 10) {
+                            Text(q.query).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                            Spacer(minLength: 8)
+                            if let prev = q.positionDelta { Text(String(format: "%.1f → %.1f", q.position + prev, q.position)).font(.system(size: 11)).foregroundColor(.gray) }
+                            positionDeltaBadge(q.positionDelta, isNew: q.isNew)
+                        }.padding(.vertical, 7)
+                    }
+                }
+            }
+        }
+        panel(t("Top search queries", lang: seciliDil)) {
+            if queries.isEmpty {
+                Text(t("No search impressions in this period yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(queries.enumerated()), id: \.element.id) { idx, q in
+                        queryRow(idx, q)
+                        if idx < queries.count - 1 { Divider().opacity(0.35) }
+                    }
+                }
+            }
+        }
+        panel(t("Top pages", lang: seciliDil)) {
+            if pages.isEmpty {
+                Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(pages.enumerated()), id: \.element.id) { idx, p in
+                        pageRow(idx, p)
+                        if idx < pages.count - 1 { Divider().opacity(0.35) }
+                    }
+                }
+            }
+        }
+        let panelsLayout: AnyLayout = isCompactLayout ? AnyLayout(VStackLayout(spacing: 14)) : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+        panelsLayout {
+            panel(t("Search by country", lang: seciliDil)) {
+                if countries.isEmpty {
+                    Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                } else {
+                    let maxImpr = max(countries.map { $0.impressions }.max() ?? 1, 1)
+                    VStack(spacing: 0) {
+                        ForEach(Array(countries.prefix(8).enumerated()), id: \.element.id) { idx, c in
+                            let disp = countryDisplay(c.country)
+                            HStack(spacing: 10) {
+                                Text(disp.flag)
+                                Text(disp.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                Spacer()
+                                Text("\(c.impressions * 100 / maxImpr)%").font(.system(size: 11)).foregroundColor(.gray)
+                                Text("\(c.impressions)").font(.system(size: 12, weight: .bold)).frame(minWidth: 44, alignment: .trailing)
+                            }.padding(.vertical, 8)
+                            if idx < min(countries.count, 8) - 1 { Divider().opacity(0.35) }
+                        }
+                    }
+                }
+            }
+            panel(t("Search by device", lang: seciliDil)) {
+                if devices.isEmpty {
+                    Text(t("No data yet.", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                } else {
+                    donutWithLegend(devices.map { SiteStatSlice(id: $0.device, label: t(Self.deviceLabels[$0.device] ?? $0.device, lang: seciliDil), value: $0.impressions, color: Self.deviceColors[$0.device] ?? .gray) }, centerTitle: t("Impr.", lang: seciliDil))
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(t("Google Search rankings", lang: seciliDil)).font(.system(size: 20, weight: .heavy))
+                    Text(t("What people search to find NivaDesk on Google, where we rank, and how positions changed. Data from Google Search Console (≈3-day lag).", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                    HStack(spacing: 8) { rangeButton(7, "7d"); rangeButton(28, "28d"); rangeButton(90, "90d") }
+                    if !property.isEmpty { Text("Property: \(property)").font(.system(size: 11)).foregroundColor(.gray) }
+                    if loading { Text(t("Loading…", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray) }
+                    if !errorText.isEmpty { Text(errorText).font(.system(size: 12)).foregroundColor(.red) }
+                }
+                .padding(18).frame(maxWidth: .infinity, alignment: .leading).background(cardBackground).cornerRadius(14)
+
+                if !loading && !ok && (needsAccess || !message.isEmpty) { setupCard }
+                if !loading && ok { resultsBody }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear { if byDate.isEmpty && loading { load() } }
+    }
+}
+
 // MARK: - Admin hub: top-level Insights area with left sidebar
 
 struct AdminHubView: View {
@@ -8743,7 +9880,7 @@ struct AdminHubView: View {
     #endif
 
     private var pages: [String] {
-        ["Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics"]
+        ["Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics", "Google Search"]
     }
 
     private func sidebarButton(_ item: String) -> some View {
@@ -8771,6 +9908,7 @@ struct AdminHubView: View {
         case "Storage": AIStorageDetailView(seciliDil: seciliDil) { selection = "Overview" }
         case "User Lookup": AILookupDetailView(seciliDil: seciliDil) { selection = "Overview" }
         case "Global Statistics": SiteStatsAdminView(seciliDil: seciliDil)
+        case "Google Search": SearchConsoleAdminView(seciliDil: seciliDil)
         default:
             AIOverviewView(seciliDil: seciliDil) { page in
                 selection = page.rawValue
