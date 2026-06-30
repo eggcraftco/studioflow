@@ -91,7 +91,7 @@ fun LoginScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
-                    alignment = Alignment.CenterStart,
+                    alignment = Alignment.Center,
                     contentScale = ContentScale.Fit
                 )
                 Spacer(modifier = Modifier.height(30.dp))
