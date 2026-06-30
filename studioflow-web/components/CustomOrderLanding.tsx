@@ -137,10 +137,10 @@ export function CustomOrderLanding() {
           <figure className="lp-hero-shot">
             <img
               className="lp-hero-shot-img"
-              src="/hero-app.webp"
+              src="/hero-app2.webp"
               alt="NivaDesk order management workspace showing client details, files, payments and delivery progress"
-              width={3744}
-              height={2612}
+              width={3456}
+              height={2168}
               loading="lazy"
               decoding="async"
             />

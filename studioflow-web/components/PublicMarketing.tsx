@@ -1028,7 +1028,7 @@ function ProductScene() {
     <div className="public-hero-visual" aria-hidden="true">
       <div className="hero-app-shot">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/hero-app.webp" alt="NivaDesk order workspace" loading="eager" />
+        <img src="/hero-app2.webp" alt="NivaDesk order workspace" loading="eager" />
       </div>
       <div className="hero-float hero-float-orders">
         <span className="hero-float-icon" data-tone="sage">
