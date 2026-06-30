@@ -3,10 +3,11 @@
 // Admin Insights hub: top-level admin-only analytics area with a left sidebar.
 // Hosts the cross-workspace insight pages and the public-site Global Statistics.
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
+import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
 
 export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
 
@@ -333,19 +334,50 @@ type LandingDay = {
   howItWorksClicks: number;
   signupVisits: number;
   signupsCompleted: number;
+  ctaDrivenSignupVisits: number;
+  uniqueViews: number;
+  uniqueCtaClicks: number;
+  uniqueSignupVisits: number;
+  uniqueSignupsCompleted: number;
+};
+
+type LandingCampaignRow = {
+  source: string;
+  medium: string;
+  campaign: string;
+  views: number;
+  ctaClicks: number;
+  signupVisits: number;
+  signupsCompleted: number;
 };
 
 type LandingStats = {
   ok: boolean;
   days: LandingDay[];
-  totals: { views: number; ctaClicks: number; howItWorksClicks: number; signupVisits: number; signupsCompleted: number };
+  totals: { views: number; ctaClicks: number; howItWorksClicks: number; signupVisits: number; signupsCompleted: number; ctaDrivenSignupVisits: number };
+  unique: { views: number; ctaClicks: number; signupVisits: number; signupsCompleted: number };
   devices: Record<string, number>;
   sources: Record<string, number>;
+  referrers: Record<string, number>;
+  utmTerms: Record<string, number>;
+  utmContents: Record<string, number>;
+  campaigns: LandingCampaignRow[];
+  reportFromDate?: string;
+  range?: { start: string; end: string };
 };
+
+type LandingRangeKey = "today" | "yesterday" | "7" | "30" | "custom";
 
 function landingRate(numerator: number, denominator: number): string {
   if (!denominator) return "—";
   return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
+
+// YYYY-MM-DD in the timezone the server buckets days in (Europe/London), so the
+// Today / Yesterday / custom buttons line up exactly with the stored daily docs.
+function landingDayStr(offsetDays = 0): string {
+  const d = new Date(Date.now() - offsetDays * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
 }
 
 function LandingMetricTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -359,61 +391,165 @@ function LandingMetricTile({ label, value, sub }: { label: string; value: string
 }
 
 function AdminCustomOrderLandingSection() {
-  const [days, setDays] = useState<number>(30);
+  const [rangeKey, setRangeKey] = useState<LandingRangeKey>("30");
+  const [customStart, setCustomStart] = useState<string>(() => landingDayStr(6));
+  const [customEnd, setCustomEnd] = useState<string>(() => landingDayStr(0));
   const [data, setData] = useState<LandingStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [excluded, setExcluded] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMsg, setResetMsg] = useState("");
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  // An admin viewing this panel is internal traffic, so auto opt-out their
+  // browser from landing analytics (plus a manual toggle below). The landing
+  // tracking is also never loaded inside the authenticated app.
+  useEffect(() => {
+    if (!isAnalyticsExcluded()) setAnalyticsExclusion(true);
+    setExcluded(isAnalyticsExcluded());
+  }, []);
+
+  const requestPayload = useMemo<{ days?: number; startDate?: string; endDate?: string }>(() => {
+    if (rangeKey === "today") return { days: 1 };
+    if (rangeKey === "7") return { days: 7 };
+    if (rangeKey === "30") return { days: 30 };
+    if (rangeKey === "yesterday") { const y = landingDayStr(1); return { startDate: y, endDate: y }; }
+    return { startDate: customStart, endDate: customEnd };
+  }, [rangeKey, customStart, customEnd]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError("");
-    const callable = httpsCallable<{ days: number }, LandingStats>(functions, "getCustomOrderLandingStats");
-    callable({ days })
+    const callable = httpsCallable<{ days?: number; startDate?: string; endDate?: string }, LandingStats>(functions, "getCustomOrderLandingStats");
+    callable(requestPayload)
       .then(result => { if (!cancelled) setData(result.data); })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load landing-page statistics."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [days]);
+  }, [requestPayload, refreshTick]);
 
-  const totals = data?.totals ?? { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0 };
+  const totals = data?.totals ?? { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0, ctaDrivenSignupVisits: 0 };
+  const unique = data?.unique ?? { views: 0, ctaClicks: 0, signupVisits: 0, signupsCompleted: 0 };
   const rangeDays = data?.days ?? [];
   const deviceEntries = Object.entries(data?.devices ?? {}).sort((a, b) => b[1] - a[1]);
   const sourceEntries = Object.entries(data?.sources ?? {}).sort((a, b) => b[1] - a[1]);
+  const referrerEntries = Object.entries(data?.referrers ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const termEntries = Object.entries(data?.utmTerms ?? {}).filter(([key]) => key !== "none").sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const contentEntries = Object.entries(data?.utmContents ?? {}).filter(([key]) => key !== "none").sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const campaigns = data?.campaigns ?? [];
   const deviceTotal = deviceEntries.reduce((sum, [, value]) => sum + value, 0);
   const sourceTotal = sourceEntries.reduce((sum, [, value]) => sum + value, 0);
+  const referrerTotal = referrerEntries.reduce((sum, [, value]) => sum + value, 0);
+  const reportFromDate = data?.reportFromDate || "";
 
-  const rangeButton = (option: number, label: string) => (
+  const rangeButton = (key: LandingRangeKey, label: string) => (
     <button
-      key={option}
+      key={key}
       type="button"
       className="button"
-      onClick={() => setDays(option)}
+      onClick={() => setRangeKey(key)}
       style={{
         padding: "7px 14px",
         borderRadius: 999,
         fontSize: 13,
         fontWeight: 700,
-        background: days === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
-        color: days === option ? "#fff" : "var(--text)"
+        background: rangeKey === key ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        color: rangeKey === key ? "#fff" : "var(--text)"
       }}
     >
       {label}
     </button>
   );
 
+  const toggleExclusion = () => {
+    const next = !excluded;
+    setAnalyticsExclusion(next);
+    setExcluded(next);
+  };
+
+  const applyReset = async (fromDate: "today" | "clear") => {
+    if (fromDate === "today" && typeof window !== "undefined" &&
+      !window.confirm("Start the landing-page report fresh from today?\n\nEarlier counters stay stored in Firestore but are hidden from this panel. You can show all history again at any time.")) {
+      return;
+    }
+    setResetBusy(true);
+    setResetMsg("");
+    try {
+      const callable = httpsCallable<{ fromDate: string }, { ok: boolean; reportFromDate: string }>(functions, "resetCustomOrderLandingStats");
+      const res = await callable({ fromDate });
+      setResetMsg(res.data.reportFromDate ? `Now reporting from ${res.data.reportFromDate}.` : "Showing all history again.");
+      setRefreshTick(tick => tick + 1);
+    } catch (err) {
+      setResetMsg(err instanceof Error ? err.message : "Could not update the reporting window.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const funnelSteps = [
+    { label: "Landing views", value: totals.views },
+    { label: "Start Free Trial clicks", value: totals.ctaClicks },
+    { label: "Signup page visits", value: totals.signupVisits },
+    { label: "Signups completed", value: totals.signupsCompleted }
+  ];
+  const maxFunnel = Math.max(1, ...funnelSteps.map(step => step.value));
+
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Custom Order Landing Page" />
         <p className="muted-copy">
-          Anonymous, aggregate-only stats for <strong>/custom-order-management</strong>. No cookies or personal data —
-          event counts, device class and traffic source only.
+          Anonymous, aggregate-only stats for <strong>/custom-order-management</strong>. No cookies that identify a person, no
+          email, name or IP — event counts, an anonymous random visitor id (used only to size unique counts), device class and
+          campaign attribution.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0" }}>
-          {rangeButton(7, "Last 7 days")}
-          {rangeButton(30, "Last 30 days")}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0", alignItems: "center" }}>
+          {rangeButton("today", "Today")}
+          {rangeButton("yesterday", "Yesterday")}
+          {rangeButton("7", "Last 7 days")}
+          {rangeButton("30", "Last 30 days")}
+          {rangeButton("custom", "Custom")}
         </div>
+        {rangeKey === "custom" ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0", alignItems: "center", fontSize: 13 }}>
+            <label style={{ fontWeight: 700, color: "var(--muted)" }}>From</label>
+            <input type="date" value={customStart} max={customEnd} onChange={event => setCustomStart(event.target.value)}
+              style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)" }} />
+            <label style={{ fontWeight: 700, color: "var(--muted)" }}>to</label>
+            <input type="date" value={customEnd} min={customStart} max={landingDayStr(0)} onChange={event => setCustomEnd(event.target.value)}
+              style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)" }} />
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, margin: "12px 0 0", alignItems: "center" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            <input type="checkbox" checked={excluded} onChange={toggleExclusion} />
+            Exclude my own visits from these stats
+          </label>
+          <span style={{ fontSize: 11, fontWeight: 700, color: excluded ? "var(--success, #1a7f37)" : "var(--danger)" }}>
+            {excluded ? "This browser is NOT counted." : "This browser IS being counted."}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0 0", alignItems: "center" }}>
+          <button type="button" className="button" disabled={resetBusy} onClick={() => applyReset("today")}
+            style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(220,38,38,0.08)", color: "#b91c1c" }}>
+            Start fresh from today
+          </button>
+          {reportFromDate ? (
+            <button type="button" className="button" disabled={resetBusy} onClick={() => applyReset("clear")}
+              style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(17,24,39,0.06)", color: "var(--text)" }}>
+              Show all history
+            </button>
+          ) : null}
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+            {reportFromDate ? `Reporting from ${reportFromDate} (older data hidden, not deleted).` : "Showing all stored history."}
+            {resetMsg ? ` · ${resetMsg}` : ""}
+          </span>
+        </div>
+
         {loading ? <p className="muted-copy" style={{ marginTop: 8 }}>Loading…</p> : null}
         {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{error}</p> : null}
       </section>
@@ -421,26 +557,99 @@ function AdminCustomOrderLandingSection() {
       {!loading && !error ? (
         <>
           <section className="card app-card">
-            <CardTitle icon="dashboard" eyebrow={`Last ${days} days`} title="Key metrics" />
+            <CardTitle icon="dashboard" eyebrow="Totals + unique visitors" title="Key metrics" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 10 }}>
-              <LandingMetricTile label="Landing page views" value={totals.views.toLocaleString()} />
-              <LandingMetricTile label="Start Free Trial clicks" value={totals.ctaClicks.toLocaleString()} />
+              <LandingMetricTile label="Landing page views" value={totals.views.toLocaleString()} sub={`${unique.views.toLocaleString()} unique visitors`} />
+              <LandingMetricTile label="Start Free Trial clicks" value={totals.ctaClicks.toLocaleString()} sub={`${unique.ctaClicks.toLocaleString()} unique`} />
               <LandingMetricTile label="CTA click-through rate" value={landingRate(totals.ctaClicks, totals.views)} sub="clicks ÷ views" />
               <LandingMetricTile label="See How It Works clicks" value={totals.howItWorksClicks.toLocaleString()} />
-              <LandingMetricTile label="Signup page visits" value={totals.signupVisits.toLocaleString()} sub="from this landing page" />
-              <LandingMetricTile label="Signups completed" value={totals.signupsCompleted.toLocaleString()} sub="from this landing page" />
+              <LandingMetricTile label="Signup page visits" value={totals.signupVisits.toLocaleString()} sub={`${unique.signupVisits.toLocaleString()} unique · from this landing page`} />
+              <LandingMetricTile label="CTA-driven signup visits" value={totals.ctaDrivenSignupVisits.toLocaleString()} sub="visited /signup right after a CTA click" />
+              <LandingMetricTile label="Signups completed" value={totals.signupsCompleted.toLocaleString()} sub={`${unique.signupsCompleted.toLocaleString()} unique · from this landing page`} />
               <LandingMetricTile label="Landing → signup conversion" value={landingRate(totals.signupsCompleted, totals.views)} sub="completed ÷ views" />
             </div>
+            <p className="muted-copy" style={{ fontSize: 11, marginTop: 10 }}>
+              Signup visits may include users who reached /signup after being attributed to this landing page, including refreshes
+              or direct return visits — so they can exceed CTA clicks. “CTA-driven signup visits” counts only visits immediately
+              after a Start Free Trial click.
+            </p>
           </section>
 
           <section className="card app-card">
-            <CardTitle icon="dashboard" eyebrow="Daily" title={`Daily breakdown — last ${days} days`} />
+            <CardTitle icon="dashboard" eyebrow="Funnel" title="Landing → signup funnel" />
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+              {funnelSteps.map((step, index) => {
+                const prev = index === 0 ? null : funnelSteps[index - 1];
+                return (
+                  <Fragment key={step.label}>
+                    {prev ? (
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", textAlign: "center" }}>
+                        ↓ {landingRate(step.value, prev.value)} of {prev.label.toLowerCase()}
+                      </div>
+                    ) : null}
+                    <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", position: "relative", background: "rgba(17,24,39,0.04)" }}>
+                      <div style={{ position: "absolute", inset: 0, width: `${Math.round((step.value / maxFunnel) * 100)}%`, background: "rgba(10,132,255,0.16)" }} />
+                      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "10px 14px", fontWeight: 800, fontSize: 14 }}>
+                        <span>{step.label}</span>
+                        <span>{step.value.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+            <p className="muted-copy" style={{ fontSize: 11, marginTop: 10 }}>
+              Overall landing view → completed signup: <strong>{landingRate(totals.signupsCompleted, totals.views)}</strong>.
+            </p>
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Attribution" title="UTM / campaign breakdown" />
+            {campaigns.length === 0 ? (
+              <p className="muted-copy">No campaign data yet. Tag your ad URLs with utm_source / utm_medium / utm_campaign.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
+                      <th style={{ padding: "7px 8px" }}>Source</th>
+                      <th style={{ padding: "7px 8px" }}>Medium</th>
+                      <th style={{ padding: "7px 8px" }}>Campaign</th>
+                      <th style={{ padding: "7px 8px" }}>Views</th>
+                      <th style={{ padding: "7px 8px" }}>CTA clicks</th>
+                      <th style={{ padding: "7px 8px" }}>Signup visits</th>
+                      <th style={{ padding: "7px 8px" }}>Signups</th>
+                      <th style={{ padding: "7px 8px" }}>Conv.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campaigns.map((row, index) => (
+                      <tr key={`${row.source}-${row.medium}-${row.campaign}-${index}`} style={{ borderTop: "1px solid var(--border)" }}>
+                        <td style={{ padding: "7px 8px", fontWeight: 700 }}>{row.source}</td>
+                        <td style={{ padding: "7px 8px" }}>{row.medium}</td>
+                        <td style={{ padding: "7px 8px" }}>{row.campaign}</td>
+                        <td style={{ padding: "7px 8px" }}>{row.views.toLocaleString()}</td>
+                        <td style={{ padding: "7px 8px" }}>{row.ctaClicks.toLocaleString()}</td>
+                        <td style={{ padding: "7px 8px" }}>{row.signupVisits.toLocaleString()}</td>
+                        <td style={{ padding: "7px 8px" }}>{row.signupsCompleted.toLocaleString()}</td>
+                        <td style={{ padding: "7px 8px" }}>{landingRate(row.signupsCompleted, row.views)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Daily" title="Daily breakdown" />
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
                     <th style={{ padding: "7px 8px" }}>Date</th>
                     <th style={{ padding: "7px 8px" }}>Views</th>
+                    <th style={{ padding: "7px 8px" }}>Unique</th>
                     <th style={{ padding: "7px 8px" }}>CTA clicks</th>
                     <th style={{ padding: "7px 8px" }}>How it works</th>
                     <th style={{ padding: "7px 8px" }}>Signup visits</th>
@@ -452,6 +661,7 @@ function AdminCustomOrderLandingSection() {
                     <tr key={day.date} style={{ borderTop: "1px solid var(--border)" }}>
                       <td style={{ padding: "7px 8px", fontWeight: 700 }}>{day.date}</td>
                       <td style={{ padding: "7px 8px" }}>{day.views}</td>
+                      <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{day.uniqueViews}</td>
                       <td style={{ padding: "7px 8px" }}>{day.ctaClicks}</td>
                       <td style={{ padding: "7px 8px" }}>{day.howItWorksClicks}</td>
                       <td style={{ padding: "7px 8px" }}>{day.signupVisits}</td>
@@ -480,7 +690,7 @@ function AdminCustomOrderLandingSection() {
               )}
             </section>
             <section className="card app-card">
-              <CardTitle icon="dashboard" eyebrow="Traffic" title="Source / referrer" />
+              <CardTitle icon="dashboard" eyebrow="Traffic" title="Source" />
               {sourceEntries.length === 0 ? (
                 <p className="muted-copy">No data yet.</p>
               ) : (
@@ -494,7 +704,51 @@ function AdminCustomOrderLandingSection() {
                 </div>
               )}
             </section>
+            <section className="card app-card">
+              <CardTitle icon="dashboard" eyebrow="Traffic" title="Referrer hostname" />
+              {referrerEntries.length === 0 ? (
+                <p className="muted-copy">No referrer data yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {referrerEntries.map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                      <span>{key}</span>
+                      <span>{value.toLocaleString()} · {landingRate(value, referrerTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
+
+          {(termEntries.length > 0 || contentEntries.length > 0) ? (
+            <div className="site-stats-grid">
+              <section className="card app-card">
+                <CardTitle icon="dashboard" eyebrow="Attribution" title="utm_term" />
+                {termEntries.length === 0 ? <p className="muted-copy">No utm_term data.</p> : (
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {termEntries.map(([key, value]) => (
+                      <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                        <span>{key}</span><span>{value.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <section className="card app-card">
+                <CardTitle icon="dashboard" eyebrow="Attribution" title="utm_content" />
+                {contentEntries.length === 0 ? <p className="muted-copy">No utm_content data.</p> : (
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {contentEntries.map(([key, value]) => (
+                      <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                        <span>{key}</span><span>{value.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

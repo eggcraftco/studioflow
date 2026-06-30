@@ -19170,13 +19170,63 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
           [landingField]: landingInc,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
-        // Device + source describe the visiting traffic — recorded on the view.
+
+        // Anonymous random visitor id → per-step de-dup maps. Stored only as an
+        // opaque key so the read side can count UNIQUE visitors across the
+        // window; these id maps are never returned to any browser. No email,
+        // account, IP or fingerprint is involved.
+        const landingVid = String(body.vid || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 32);
+        const VID_MAPS = {
+          views: "viewVids",
+          ctaClicks: "ctaVids",
+          signupVisits: "signupVisitVids",
+          signupsCompleted: "signupCompletedVids"
+        };
+        if (landingVid && VID_MAPS[landingField]) {
+          landingUpdate[VID_MAPS[landingField]] = { [landingVid]: true };
+        }
+
+        // Campaign attribution (utm_source / utm_medium / utm_campaign) → a
+        // per-campaign funnel counter map for the UTM breakdown table. Only
+        // attribution labels are stored, never anything identifying a person.
+        const landingCamp = body.campaign && typeof body.campaign === "object" ? body.campaign : null;
+        const CAMP_FIELDS = {
+          custom_order_landing_view: "views",
+          custom_order_landing_cta_click: "ctaClicks",
+          custom_order_landing_signup_visit: "signupVisits",
+          custom_order_landing_signup_completed: "signupsCompleted"
+        };
+        const campField = CAMP_FIELDS[String(body.event || "")];
+        if (landingCamp && campField) {
+          const campSource = siteStatsFieldKey(String(landingCamp.source || "").toLowerCase(), "direct", 50);
+          const campMedium = siteStatsFieldKey(String(landingCamp.medium || "").toLowerCase(), "none", 30);
+          const campName = siteStatsFieldKey(String(landingCamp.campaign || "").toLowerCase(), "none", 60);
+          const campKey = siteStatsFieldKey(`${campSource}_${campMedium}_${campName}`, "campaign", 120);
+          landingUpdate.campaigns = {
+            [campKey]: { source: campSource, medium: campMedium, campaign: campName, [campField]: landingInc }
+          };
+        }
+
+        // Stricter signup metric: only when the visit immediately followed a CTA
+        // click (the client flags ctaDriven within a short window).
+        if (landingField === "signupVisits" && body.ctaDriven === true) {
+          landingUpdate.ctaDrivenSignupVisits = landingInc;
+        }
+
+        // Device + source + utm term/content + referrer host describe the
+        // visiting traffic — recorded on the view.
         if (landingField === "views") {
           const landingDevice = ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop";
           const landingSource = siteStatsFieldKey(String(body.source || "").toLowerCase(), "direct", 40) || "direct";
           landingUpdate.devices = { [landingDevice]: landingInc };
           landingUpdate.sources = { [landingSource]: landingInc };
+          if (landingCamp) {
+            landingUpdate.utmTerms = { [siteStatsFieldKey(String(landingCamp.term || "").toLowerCase(), "none", 60)]: landingInc };
+            landingUpdate.utmContents = { [siteStatsFieldKey(String(landingCamp.content || "").toLowerCase(), "none", 60)]: landingInc };
+            landingUpdate.referrers = { [siteStatsFieldKey(String(landingCamp.referrerHost || "").toLowerCase(), "direct", 60)]: landingInc };
+          }
         }
+
         await admin.firestore().collection("customOrderLandingStats").doc(siteStatsDateKey()).set(landingUpdate, { merge: true });
       }
       res.status(200).json({ ok: true });
@@ -19258,45 +19308,158 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
     throw new HttpsError("permission-denied", "Landing-page statistics are restricted to NivaDesk admins.");
   }
 
-  const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 400);
+  // Date selection: an explicit YYYY-MM-DD range, or a rolling N-day window
+  // (mirrors getSiteStats so Today / Yesterday / 7 / 30 / custom all work).
+  const MAX_SPAN_DAYS = 400;
   const dateKeys = [];
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
-    dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
+  const startRaw = String(request.data?.startDate || "").trim();
+  const endRaw = String(request.data?.endDate || "").trim();
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (datePattern.test(startRaw) && datePattern.test(endRaw)) {
+    const startMs = Date.parse(`${startRaw}T12:00:00Z`);
+    const endMs = Math.min(Date.parse(`${endRaw}T12:00:00Z`), Date.now());
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
+      throw new HttpsError("invalid-argument", "Invalid date range.");
+    }
+    const span = Math.min(Math.round((endMs - startMs) / 86400000) + 1, MAX_SPAN_DAYS);
+    for (let offset = span - 1; offset >= 0; offset -= 1) dateKeys.push(siteStatsDateKey(new Date(endMs - offset * 86400000)));
+  } else {
+    const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), MAX_SPAN_DAYS);
+    for (let offset = days - 1; offset >= 0; offset -= 1) dateKeys.push(siteStatsDateKey(new Date(Date.now() - offset * 86400000)));
   }
 
-  const refs = dateKeys.map((key) => admin.firestore().collection("customOrderLandingStats").doc(key));
-  const snaps = await admin.firestore().getAll(...refs);
+  // Soft reset: an admin can set a "report from" date so older (test) data is
+  // hidden from the panel. No data is ever deleted — the days are just skipped.
+  let reportFromDate = "";
+  try {
+    const cfgSnap = await admin.firestore().collection("customOrderLandingStats").doc("_config").get();
+    reportFromDate = String((cfgSnap.exists ? cfgSnap.data() : {}).reportFromDate || "").trim();
+  } catch {
+    reportFromDate = "";
+  }
+  const effectiveKeys = datePattern.test(reportFromDate) ? dateKeys.filter((key) => key >= reportFromDate) : dateKeys;
+
+  const refs = effectiveKeys.map((key) => admin.firestore().collection("customOrderLandingStats").doc(key));
+  const snaps = refs.length ? await admin.firestore().getAll(...refs) : [];
 
   const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
   const mergeInto = (target, source) => {
     for (const [key, value] of Object.entries(source || {})) target[key] = (target[key] || 0) + num(value);
   };
 
-  const totals = { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0 };
+  const totals = { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0, ctaDrivenSignupVisits: 0 };
   const devices = {};
   const sources = {};
+  const referrers = {};
+  const utmTerms = {};
+  const utmContents = {};
+  // Window-unique counts: union of opaque visitor ids per funnel step. The ids
+  // are used only here to size the Sets and are NEVER returned to the client.
+  const uniqViews = new Set();
+  const uniqCta = new Set();
+  const uniqSignupVisit = new Set();
+  const uniqSignupDone = new Set();
+  // Per-campaign funnel for the UTM breakdown table.
+  const campaignAgg = {};
 
   const daysOut = snaps.map((snap, index) => {
     const data = snap.exists ? snap.data() : {};
+    const viewVids = Object.keys(data.viewVids || {});
+    const ctaVids = Object.keys(data.ctaVids || {});
+    const svVids = Object.keys(data.signupVisitVids || {});
+    const scVids = Object.keys(data.signupCompletedVids || {});
     const day = {
-      date: dateKeys[index],
+      date: effectiveKeys[index],
       views: num(data.views),
       ctaClicks: num(data.ctaClicks),
       howItWorksClicks: num(data.howItWorksClicks),
       signupVisits: num(data.signupVisits),
-      signupsCompleted: num(data.signupsCompleted)
+      signupsCompleted: num(data.signupsCompleted),
+      ctaDrivenSignupVisits: num(data.ctaDrivenSignupVisits),
+      uniqueViews: viewVids.length,
+      uniqueCtaClicks: ctaVids.length,
+      uniqueSignupVisits: svVids.length,
+      uniqueSignupsCompleted: scVids.length
     };
     totals.views += day.views;
     totals.ctaClicks += day.ctaClicks;
     totals.howItWorksClicks += day.howItWorksClicks;
     totals.signupVisits += day.signupVisits;
     totals.signupsCompleted += day.signupsCompleted;
+    totals.ctaDrivenSignupVisits += day.ctaDrivenSignupVisits;
     mergeInto(devices, data.devices);
     mergeInto(sources, data.sources);
-    return day;
+    mergeInto(referrers, data.referrers);
+    mergeInto(utmTerms, data.utmTerms);
+    mergeInto(utmContents, data.utmContents);
+    for (const v of viewVids) uniqViews.add(v);
+    for (const v of ctaVids) uniqCta.add(v);
+    for (const v of svVids) uniqSignupVisit.add(v);
+    for (const v of scVids) uniqSignupDone.add(v);
+    for (const [campKey, cv] of Object.entries(data.campaigns || {})) {
+      const agg = campaignAgg[campKey] || (campaignAgg[campKey] = {
+        source: String(cv.source || "direct"),
+        medium: String(cv.medium || "none"),
+        campaign: String(cv.campaign || "none"),
+        views: 0, ctaClicks: 0, signupVisits: 0, signupsCompleted: 0
+      });
+      if (cv.source) agg.source = String(cv.source);
+      if (cv.medium) agg.medium = String(cv.medium);
+      if (cv.campaign) agg.campaign = String(cv.campaign);
+      agg.views += num(cv.views);
+      agg.ctaClicks += num(cv.ctaClicks);
+      agg.signupVisits += num(cv.signupVisits);
+      agg.signupsCompleted += num(cv.signupsCompleted);
+    }
+    return day; // raw visitor-id maps are intentionally not included
   });
 
-  return { ok: true, days: daysOut, totals, devices, sources };
+  const unique = {
+    views: uniqViews.size,
+    ctaClicks: uniqCta.size,
+    signupVisits: uniqSignupVisit.size,
+    signupsCompleted: uniqSignupDone.size
+  };
+  const campaigns = Object.values(campaignAgg).sort((a, b) => (b.views - a.views) || (b.ctaClicks - a.ctaClicks));
+
+  return {
+    ok: true,
+    range: { start: effectiveKeys[0] || "", end: effectiveKeys[effectiveKeys.length - 1] || "" },
+    reportFromDate,
+    days: daysOut,
+    totals,
+    unique,
+    devices,
+    sources,
+    referrers,
+    utmTerms,
+    utmContents,
+    campaigns
+  };
+});
+
+// Admin-only SOFT reset for the landing-page panel. Never deletes counters; it
+// just sets (or clears) a "report from" date so the panel reports from that day
+// onward — used to drop earlier test traffic. No email/identity is stored.
+exports.resetCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Landing-page statistics are restricted to NivaDesk admins.");
+  }
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const raw = String(request.data?.fromDate || "").trim().toLowerCase();
+  let reportFromDate = "";
+  if (raw && raw !== "clear") {
+    reportFromDate = raw === "today" ? siteStatsDateKey() : raw;
+    if (!datePattern.test(reportFromDate)) {
+      throw new HttpsError("invalid-argument", "fromDate must be YYYY-MM-DD, 'today' or 'clear'.");
+    }
+  }
+  await admin.firestore().collection("customOrderLandingStats").doc("_config").set({
+    reportFromDate,
+    reportFromUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  return { ok: true, reportFromDate };
 });
 
 exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
