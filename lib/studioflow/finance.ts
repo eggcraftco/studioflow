@@ -4,6 +4,11 @@ type FinancialItem = {
   title: string;
 };
 
+export type FinancialItemWithId = {
+  id: string;
+  title: string;
+};
+
 type DashboardCostOptions = {
   showFee?: boolean;
   showShipping?: boolean;
@@ -30,6 +35,54 @@ export function decodeFinancialItems(json: string): FinancialItem[] {
   } catch {
     return [];
   }
+}
+
+// Same as decodeFinancialItems but keeps the stable id, needed so a per-order rename
+// can be matched by id on the backend (which moves the keyed amount to the new title).
+export function decodeFinancialItemsWithId(json: string): FinancialItemWithId[] {
+  if (!json.trim()) return [];
+  try {
+    const decoded = JSON.parse(json) as unknown;
+    if (!Array.isArray(decoded)) return [];
+    return decoded
+      .map(item => {
+        if (!item || typeof item !== "object") return null;
+        const rec = item as Record<string, unknown>;
+        const title = typeof rec.title === "string" ? rec.title.trim() : "";
+        if (!title || isAutoFinancialPlaceholder(title)) return null;
+        const id = typeof rec.id === "string" && rec.id.trim() ? rec.id.trim() : title;
+        return { id, title };
+      })
+      .filter((item): item is FinancialItemWithId => item !== null);
+  } catch {
+    return [];
+  }
+}
+
+// Per-order spending / remaining headings: the order's own list (customFields key)
+// when present, otherwise the workspace template. An explicit empty list ("[]") on the
+// order means "no headings" and does NOT fall back to the template.
+export function decodeOrderFinancialItems(
+  order: DashboardFinanceOrder,
+  key: "orderExpenseItemsJSON" | "orderRemainingItemsJSON",
+  workspaceJSON: string
+): FinancialItemWithId[] {
+  const raw = (order.customFields[key] ?? "").trim();
+  if (!raw) return decodeFinancialItemsWithId(workspaceJSON);
+  return decodeFinancialItemsWithId(raw);
+}
+
+export function orderBaseCostLabel(order: DashboardFinanceOrder, workspaceLabel: string): string {
+  const own = (order.customFields.orderBaseCostLabel ?? "").trim();
+  return own || workspaceLabel.trim() || "Cost (Base)";
+}
+
+// String-based variant (stable primitives), for components that receive the raw
+// per-order list JSON + the workspace template JSON as props.
+export function decodeOrderFinancialItemsFromRaw(orderRaw: string, workspaceJSON: string): FinancialItemWithId[] {
+  const raw = (orderRaw ?? "").trim();
+  if (!raw) return decodeFinancialItemsWithId(workspaceJSON);
+  return decodeFinancialItemsWithId(raw);
 }
 
 function isAutoFinancialPlaceholder(title: string) {
@@ -73,7 +126,7 @@ export function customExpenseTotal(order: DashboardFinanceOrder, settings: Works
   return customFinancialAmount(
     order,
     "financialExpense::",
-    decodeFinancialItems(settings.financialExpenseItemsJSON),
+    decodeOrderFinancialItems(order, "orderExpenseItemsJSON", settings.financialExpenseItemsJSON),
     settings.selectedCurrency
   );
 }
@@ -83,7 +136,7 @@ export function customPendingTotal(order: DashboardFinanceOrder, settings: Works
   return customFinancialAmount(
     order,
     "financialRemaining::",
-    decodeFinancialItems(settings.financialRemainingItemsJSON),
+    decodeOrderFinancialItems(order, "orderRemainingItemsJSON", settings.financialRemainingItemsJSON),
     settings.selectedCurrency
   );
 }
