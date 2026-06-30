@@ -5633,15 +5633,6 @@ private fun CustomerCard(order: StudioOrder, workspaceSettings: StudioWorkspaceS
         if (workspaceSettings.communicationShowEmail) InfoRow("Email", order.emailAddress.ifBlank { "-" })
         if (workspaceSettings.communicationShowTelephone) InfoRow("Telephone", order.whatsappNumber.ifBlank { "-" })
         if (workspaceSettings.communicationShowAddress) InfoRow("Address", customFieldValue(order, "communicationAddress").ifBlank { "-" })
-        run {
-            val shippingLine = listOf(order.shippingName, order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry)
-                .filter { it.isNotBlank() }
-                .joinToString(", ")
-            if (shippingLine.isNotBlank()) {
-                InfoRow(t("Shipping Address"), shippingLine)
-                if (order.shippingPhone.isNotBlank()) InfoRow(t("Shipping Phone"), order.shippingPhone)
-            }
-        }
         if (workspaceSettings.communicationShowChannel) {
             InfoRow(t("Channel"), order.communication.joinToString(" · ").ifBlank { "-" })
             channelLabels.filter { label -> order.communication.any { it.equals(label, ignoreCase = true) } }.forEach { channel ->

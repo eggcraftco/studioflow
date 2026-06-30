@@ -10800,25 +10800,6 @@ struct SiparisDetayView: View {
             onHide: { setCardVisibleWithUndo(.shipping, false) },
             onColorChange: { setKartColor(kart: .shipping, color: $0) }
         ) {
-            Text(t("Shipping Address", lang: seciliDil))
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            DetailField(label: t("Recipient", lang: seciliDil), value: Binding(get: { siparis.shippingName ?? "" }, set: { siparis.shippingName = $0 }))
-                .onChange(of: siparis.shippingName) { _, _ in firebaseManager.updateSiparis(siparis) }
-            DetailField(label: t("Street", lang: seciliDil), value: Binding(get: { siparis.shippingStreetAddress ?? "" }, set: { siparis.shippingStreetAddress = $0 }))
-                .onChange(of: siparis.shippingStreetAddress) { _, _ in firebaseManager.updateSiparis(siparis) }
-            DetailField(label: t("City", lang: seciliDil), value: Binding(get: { siparis.shippingCity ?? "" }, set: { siparis.shippingCity = $0 }))
-                .onChange(of: siparis.shippingCity) { _, _ in firebaseManager.updateSiparis(siparis) }
-            DetailField(label: t("Postcode", lang: seciliDil), value: Binding(get: { siparis.shippingPostalCode ?? "" }, set: { siparis.shippingPostalCode = $0 }))
-                .onChange(of: siparis.shippingPostalCode) { _, _ in firebaseManager.updateSiparis(siparis) }
-            DetailField(label: t("Country", lang: seciliDil), value: Binding(get: { siparis.shippingCountry ?? "" }, set: { siparis.shippingCountry = $0 }))
-                .onChange(of: siparis.shippingCountry) { _, _ in firebaseManager.updateSiparis(siparis) }
-            DetailField(label: t("Shipping Phone", lang: seciliDil), value: Binding(get: { siparis.shippingPhone ?? "" }, set: { siparis.shippingPhone = $0 }))
-                .onChange(of: siparis.shippingPhone) { _, _ in firebaseManager.updateSiparis(siparis) }
-
-            Divider().background(Color.primary.opacity(0.1))
-
             YesNoField(label: t("Dispatched", lang: seciliDil), value: $siparis.isDispatched)
                 .onChange(of: siparis.isDispatched) { _, isDispatched in
                     if isDispatched && siparis.status != "Cancelled" {

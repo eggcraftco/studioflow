@@ -5103,50 +5103,6 @@ export function OrderDetailContent({
                   />
                 </>
               ) : null}
-              <div className="app-card-divider" />
-              <div className="app-subsection-title"><span>▱</span><strong>Shipping address</strong></div>
-              <InlineValueRow
-                label="Recipient"
-                value={order.shippingName || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Shipping recipient"}
-                onSave={value => saveDetailsPatch({ shippingName: String(value) }, "Shipping recipient")}
-              />
-              <InlineValueRow
-                label="Street"
-                value={order.shippingStreetAddress || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Shipping street"}
-                onSave={value => saveDetailsPatch({ shippingStreetAddress: String(value) }, "Shipping street")}
-              />
-              <InlineValueRow
-                label="City"
-                value={order.shippingCity || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Shipping city"}
-                onSave={value => saveDetailsPatch({ shippingCity: String(value) }, "Shipping city")}
-              />
-              <InlineValueRow
-                label="Postcode"
-                value={order.shippingPostalCode || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Shipping postcode"}
-                onSave={value => saveDetailsPatch({ shippingPostalCode: String(value) }, "Shipping postcode")}
-              />
-              <InlineValueRow
-                label="Country"
-                value={order.shippingCountry || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Shipping country"}
-                onSave={value => saveDetailsPatch({ shippingCountry: String(value) }, "Shipping country")}
-              />
-              <InlineValueRow
-                label="Shipping phone"
-                value={order.shippingPhone || ""}
-                disabled={!canInlineEditFullDetails}
-                saving={savingInlineField === "Shipping phone"}
-                onSave={value => saveDetailsPatch({ shippingPhone: String(value) }, "Shipping phone")}
-              />
             </div>
           </section>
         );
