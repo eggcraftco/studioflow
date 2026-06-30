@@ -5179,6 +5179,32 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Remaining"}
                       onSave={value => saveMoneyFinanceValue("remainingAmount", value, "Remaining")}
                     />
+                    {(() => {
+                      const remainingHeadings = orderRemainingHeadings();
+                      return remainingHeadings.map(item => {
+                        const amount = Number(String(order.customFields[`financialRemaining::${item.title}`] ?? "").replace(/,/g, "")) || 0;
+                        return (
+                          <FinanceInlineRow
+                            key={`remaining-${item.id}`}
+                            label={item.title}
+                            labelRaw={item.title}
+                            onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id, value) : undefined}
+                            onRemove={canInlineEditFinance ? () => removeOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id) : undefined}
+                            displayValue={money(amount, hideNumbers)}
+                            value={amount}
+                            tone="negative-soft"
+                            disabled={!canInlineEditFinance}
+                            saving={savingFinanceField === `Remaining: ${item.title}`}
+                            onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
+                          />
+                        );
+                      });
+                    })()}
+                    {canInlineEditFinance ? (
+                      <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderRemainingItemsJSON", orderRemainingHeadings(), "Remaining")}>
+                        + Remaining
+                      </button>
+                    ) : null}
                     <FinancePaymentReceivedRow
                       remainingAmount={order.remainingAmount}
                       disabled={!canInlineEditFinance || order.remainingAmount <= 0}
@@ -5279,24 +5305,6 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Cost (Base)"}
                       onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
-                    <FinanceInlineRow
-                      label="Platform Fee"
-                      displayValue={money(order.paymentFee, hideNumbers)}
-                      value={order.paymentFee}
-                      tone="negative-soft"
-                      disabled={!canInlineEditFinance}
-                      saving={savingFinanceField === "Platform Fee"}
-                      onSave={value => saveMoneyFinanceValue("paymentFee", value, "Platform Fee")}
-                    />
-                    <FinanceInlineRow
-                      label="Shipping Cost"
-                      displayValue={money(order.deliveryCost, hideNumbers)}
-                      value={order.deliveryCost}
-                      tone="negative"
-                      disabled={!canInlineEditFinance}
-                      saving={savingFinanceField === "Shipping Cost"}
-                      onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
-                    />
                     {(() => {
                       const expenseHeadings = orderExpenseHeadings();
                       return expenseHeadings.map(item => {
@@ -5323,32 +5331,24 @@ export function OrderDetailContent({
                         + Spending
                       </button>
                     ) : null}
-                    {(() => {
-                      const remainingHeadings = orderRemainingHeadings();
-                      return remainingHeadings.map(item => {
-                        const amount = Number(String(order.customFields[`financialRemaining::${item.title}`] ?? "").replace(/,/g, "")) || 0;
-                        return (
-                          <FinanceInlineRow
-                            key={`remaining-${item.id}`}
-                            label={item.title}
-                            labelRaw={item.title}
-                            onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id, value) : undefined}
-                            onRemove={canInlineEditFinance ? () => removeOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id) : undefined}
-                            displayValue={money(amount, hideNumbers)}
-                            value={amount}
-                            tone="negative-soft"
-                            disabled={!canInlineEditFinance}
-                            saving={savingFinanceField === `Remaining: ${item.title}`}
-                            onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
-                          />
-                        );
-                      });
-                    })()}
-                    {canInlineEditFinance ? (
-                      <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderRemainingItemsJSON", orderRemainingHeadings(), "Remaining")}>
-                        + Remaining
-                      </button>
-                    ) : null}
+                    <FinanceInlineRow
+                      label="Platform Fee"
+                      displayValue={money(order.paymentFee, hideNumbers)}
+                      value={order.paymentFee}
+                      tone="negative-soft"
+                      disabled={!canInlineEditFinance}
+                      saving={savingFinanceField === "Platform Fee"}
+                      onSave={value => saveMoneyFinanceValue("paymentFee", value, "Platform Fee")}
+                    />
+                    <FinanceInlineRow
+                      label="Shipping Cost"
+                      displayValue={money(order.deliveryCost, hideNumbers)}
+                      value={order.deliveryCost}
+                      tone="negative"
+                      disabled={!canInlineEditFinance}
+                      saving={savingFinanceField === "Shipping Cost"}
+                      onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
+                    />
                     <div className="app-card-divider" />
                     <FinanceInlineRow
                       label="VAT Rule"
